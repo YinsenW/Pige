@@ -250,7 +250,7 @@ describe("registerReaderIpc", () => {
       operationId: "op_20260731_alias12345678", render }));
     const refreshed = vi.fn();
     const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(), undefined,
-      undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined, { change });
+      undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, { change });
     const sender = makeSender(51);
     await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
     await expect(handlers.get("notes.changeAlias")!({ sender } as IpcMainInvokeEvent, request))

@@ -487,7 +487,8 @@ base hash or Operation internals.
 Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.listRevisionHistory`,
 `notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
 `notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash`,
-`notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`.
+`notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`,
+`notes.changeAlias`.
 
 Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
 only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
@@ -507,6 +508,12 @@ only after commit, and refreshes derived indexes afterward. Stale/ineligible/fai
 preserves both renderer drafts; Activity/restart/Undo remain the editor-owned `update_page` lifecycle.
 
 `notes.rename` binds one active `note` to exact vault/page/render/revision and one canonical title. Main owns the path/filename, atomically preserves the old title as an alias, returns only closed path-free outcomes or the authoritative render, rebuilds indexes after commit, and records recoverable `rename_page`; conflict/stale/ineligible/failure retains the UI draft.
+
+`notes.changeAlias` binds one active `note` to exact vault/page/render/revision, `add | remove`, and
+one canonical alias. Main proves governed whole-Vault reference uniqueness, writes only the inline
+`aliases` and `updated_at` fields through the existing atomic editor, refreshes derived indexes only
+after commit, and returns a path/body-free closed outcome or authoritative render. The renderer
+never receives Markdown, paths, hashes, or uniqueness internals; closed outcomes retain the draft.
 
 Reader reference query contract:
 

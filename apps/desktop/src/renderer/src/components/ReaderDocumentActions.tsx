@@ -170,7 +170,7 @@ export interface ReaderDocumentActionsProps {
   readonly canRestore?: boolean;
   readonly canAddTag?: boolean; readonly existingTags?: readonly string[]; readonly existingTopics?: readonly string[]; readonly tagLabels?: ReaderNoteTagLabels;
   readonly canRename?: boolean; readonly renameLabels?: ReaderNoteRenameLabels;
-  readonly canManageAliases?: boolean; readonly aliases?: readonly string[]; readonly aliasLabels?: ReaderNoteAliasLabels;
+  readonly canManageAliases?: boolean; readonly canAddAlias?: boolean; readonly aliases?: readonly string[]; readonly aliasLabels?: ReaderNoteAliasLabels;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
@@ -447,7 +447,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     ) : null}
     {tagOpen && props.tagLabels && props.onAddTag ? <ReaderNoteTagDialog ownerIdentity={props.ownerIdentity} existingTags={props.existingTags ?? []} existingTopics={props.existingTopics ?? []} labels={props.tagLabels} returnFocusRef={triggerRef} onEdit={props.onAddTag} onCancel={() => setTagOpen(false)} onCommitted={(render) => { setTagOpen(false); props.onTagCommitted?.(render); }} /> : null}
     {renameOpen && props.renameLabels && props.onRename ? <ReaderNoteRenameDialog ownerIdentity={props.ownerIdentity} currentTitle={props.currentTitle} labels={props.renameLabels} returnFocusRef={triggerRef} onRename={props.onRename} onCancel={() => setRenameOpen(false)} onCommitted={(render) => { setRenameOpen(false); props.onRenameCommitted?.(render); }} /> : null}
-    {aliasOpen && props.aliasLabels && props.onAliasChange ? <ReaderNoteAliasDialog ownerIdentity={props.ownerIdentity} aliases={props.aliases ?? []} labels={props.aliasLabels} returnFocusRef={triggerRef} onChange={props.onAliasChange} onCancel={() => setAliasOpen(false)} onCommitted={(render) => { setAliasOpen(false); props.onAliasCommitted?.(render); }} /> : null}
+    {aliasOpen && props.aliasLabels && props.onAliasChange ? <ReaderNoteAliasDialog ownerIdentity={props.ownerIdentity} aliases={props.aliases ?? []} canAdd={props.canAddAlias === true} labels={props.aliasLabels} returnFocusRef={triggerRef} onChange={props.onAliasChange} onCancel={() => setAliasOpen(false)} onCommitted={(render) => { setAliasOpen(false); props.onAliasCommitted?.(render); }} /> : null}
     {confirmAction ? (
       <div className="confirmation-backdrop">
         <section

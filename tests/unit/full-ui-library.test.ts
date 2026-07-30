@@ -1889,6 +1889,14 @@ describe("full UI Library", () => {
     await clickButton(dom, buttonNamed(container, "Remove")); await waitFor(dom, () => adopted.length === 2);
     expect(requests.at(-1)).toMatchObject({ action: "remove", alias: "Second Name" });
     expect(adopted[1]?.aliasing?.aliases).toEqual([]);
+    selected = { ...selected, aliasing: { aliases: Array.from({ length: 64 }, (_, index) => `Alias ${index + 1}`),
+      canAdd: false, canRemove: true, revision: `noteeditrev_${"d".repeat(32)}` } };
+    await act(async () => { renderPanel(); await settle(dom); });
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Manage aliases"));
+    expect(requireElement(container.querySelector<HTMLInputElement>(".confirmation-dialog input")).disabled).toBe(true);
+    expect(buttonNamed(container, "Add alias").disabled).toBe(true);
+    expect(buttonNamed(container, "Remove").disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Remove"));
     await act(async () => root.unmount()); dom.window.close();
   });
 

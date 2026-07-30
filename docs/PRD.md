@@ -709,7 +709,9 @@ Navigation:
 - Knowledge Tree as a semantic tree of domains, topics, concepts, sources, fragments, and backlinks, distinct from the Library's category/folder tree.
 - Knowledge Tree visual encoding: trunk thickness represents domain weight, branch thickness represents topic weight, leaf count/size/color depth represents fragmented knowledge quantity and density.
 - Home knowledge retrieval with ranked results and grounded synthesis.
-- Note reader with source metadata and related pages; active notes can be renamed from Reader/Library without changing stable identity, while conflicts retain the draft and successful rename remains undoable.
+- Note reader with source metadata and related pages; active notes can be renamed and can manage
+  bounded aliases from Reader/Library without changing stable identity, while conflicts retain the
+  draft and successful changes remain undoable.
 - Note Agent side panel.
 - Selection actions in note content.
 - Skill Manager for pure Skills and capability-declared external/Web Skills.

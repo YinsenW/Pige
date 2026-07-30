@@ -56,10 +56,11 @@ describe("NoteAliasService", () => {
   });
 
   it("rejects cross-page title/alias/path ambiguity and preserves the draft target bytes", async () => {
-    for (const other of [noteMarkdown("Second Name", [], "page_20260731_otheralias01"),
-      noteMarkdown("Other", ["second name"], "page_20260731_otheralias02")]) {
+    for (const [otherPath, other] of [["other.md", noteMarkdown("Second Name", [], "page_20260731_otheralias01")],
+      ["other.md", noteMarkdown("Other", ["second name"], "page_20260731_otheralias02")],
+      ["second name.md", noteMarkdown("Other", [], "page_20260731_otheralias03")]] as const) {
       const fixture = makeFixture(), before = noteMarkdown("Primary Name", []); write(fixture, "wiki/current.md", before);
-      write(fixture, "wiki/other.md", other); const save = vi.fn(() => ({ status: "failed" as const }));
+      write(fixture, `wiki/${otherPath}`, other); const save = vi.fn(() => ({ status: "failed" as const }));
       await expect(makeService(fixture, { open: vi.fn(() => opened(before)), save } as never).change("reader_owner", baseRequest))
         .resolves.toMatchObject({ status: "conflict" });
       expect(save).not.toHaveBeenCalled(); expect(read(fixture, "wiki/current.md")).toBe(before);

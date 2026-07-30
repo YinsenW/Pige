@@ -145,7 +145,8 @@ describe("notes service", () => {
     const notes = new NotesService(vaults, undefined, undefined, editor);
     const rendered = await notes.render({ pageId }, OWNER_ID);
     expect(rendered.tagging).toEqual({
-      tags: ["draft"], canAdd: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u)
+      tags: ["draft"], topics: [], canAdd: true, canEdit: true,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u)
     });
     expect(rendered.aliasing).toEqual({ aliases: [], canAdd: true, canRemove: false,
       revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u) });

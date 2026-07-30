@@ -34,7 +34,7 @@ export async function submitReaderNoteAliasChange(input: { readonly note: NoteRe
   } catch { return { status: "retained" }; }
 }
 
-export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; readonly aliases: readonly string[];
+export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; readonly aliases: readonly string[]; readonly canAdd: boolean;
   readonly labels: ReaderNoteAliasLabels; readonly returnFocusRef: RefObject<HTMLButtonElement | null>;
   readonly onChange: (action: "add" | "remove", alias: string) => Promise<ReaderNoteAliasOutcome>;
   readonly onCancel: () => void; readonly onCommitted: (render: NoteRenderResult) => void;
@@ -42,8 +42,10 @@ export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; r
   const [draft, setDraft] = useState(""), [pendingAlias, setPendingAlias] = useState<string | null>(null), [failed, setFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null), dialogRef = useRef<HTMLElement>(null), sequenceRef = useRef(0), ownerRef = useRef(props.ownerIdentity);
   ownerRef.current = props.ownerIdentity;
-  useEffect(() => { sequenceRef.current += 1; setDraft(""); setPendingAlias(null); setFailed(false); inputRef.current?.focus(); }, [props.ownerIdentity]);
-  const alias = canonicalNoteAlias(draft), valid = Boolean(alias && alias.length <= 120 && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias));
+  useEffect(() => { sequenceRef.current += 1; setDraft(""); setPendingAlias(null); setFailed(false);
+    (props.canAdd ? inputRef.current : dialogRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
+  }, [props.ownerIdentity, props.canAdd]);
+  const alias = canonicalNoteAlias(draft), valid = Boolean(props.canAdd && alias && alias.length <= 120 && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias));
   const cancel = (): void => { if (pendingAlias) return; props.onCancel(); window.requestAnimationFrame(() => props.returnFocusRef.current?.focus({ preventScroll: true })); };
   const change = async (action: "add" | "remove", value: string): Promise<void> => {
     if (pendingAlias || (action === "add" && !valid)) return; const sequence = ++sequenceRef.current, owner = props.ownerIdentity;
@@ -63,11 +65,11 @@ export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; r
     {props.aliases.length ? <div>{props.aliases.map((current) => <div className="settings-row" key={current}><span>{current}</span>
       <button type="button" className="secondary" disabled={pendingAlias !== null} onClick={() => void change("remove", current)}>
         {pendingAlias === current ? props.labels.pending : props.labels.remove}</button></div>)}</div> : <p>{props.labels.empty}</p>}
-    <label>{props.labels.field}<input ref={inputRef} value={draft} maxLength={120} disabled={pendingAlias !== null} aria-invalid={failed}
+    <label>{props.labels.field}<input ref={inputRef} value={draft} maxLength={120} disabled={!props.canAdd || pendingAlias !== null} aria-invalid={failed}
       onChange={(event) => { setDraft(event.currentTarget.value); setFailed(false); }} /></label>
     {failed ? <p className="error" role="alert">{props.labels.failed}</p> : null}
     <div className="confirmation-actions"><button type="button" className="secondary" disabled={pendingAlias !== null} onClick={cancel}>{props.labels.cancel}</button>
-      <button type="button" className="primary" disabled={pendingAlias !== null || !valid} onClick={() => void change("add", alias)}>
+      <button type="button" className="primary" disabled={!props.canAdd || pendingAlias !== null || !valid} onClick={() => void change("add", alias)}>
         {pendingAlias === alias ? props.labels.pending : props.labels.add}</button></div>
   </section></div>;
 }

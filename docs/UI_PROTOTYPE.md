@@ -592,6 +592,11 @@ Editing mode:
 - Merge confirms a safe target and Undo restores both. Historical preview is read-only; explicit
   restore adopts the current render. Closed states retain Reader/dialog/focus.
 - Active notes offer one Rename action beside existing document actions. The focused dialog edits only the title; conflict/stale/failure retains draft and focus, success adopts Main's authoritative render, and Activity exposes Undo. Paths, filename rules, aliases, and revision internals stay hidden.
+- Active notes offer Manage aliases in the same overflow menu. Its focused dialog lists canonical
+  aliases, removes one at a time, and adds one canonical value while capacity remains; at 64 aliases
+  add is disabled but removal stays available. Conflict/stale/failure retains the entry and focus;
+  success adopts Main's authoritative render and remains Activity/Undo recoverable. Paths, Markdown,
+  hashes, reference-key proofs, and revision internals stay hidden.
 - Settings Trash lists safe notes and opens only Main's restored page. All mutations are recoverable;
   permanent/source deletion and restyle stay absent.
 

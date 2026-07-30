@@ -4275,6 +4275,37 @@ The renderer never receives paths. Conflict/stale/ineligible/failure retains dra
 
 References: `docs/MARKDOWN_SCHEMA.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
 
+### D-20260731-Exact-Note-Alias-Management
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Reader/Library may add or remove one canonical alias for one exact active note through Main-owned
+revision CAS. Markdown frontmatter remains durable truth; add is bounded to 64 aliases and proves
+the candidate unambiguous across governed title, alias, path, slug, and stable-ID reference keys.
+
+Rationale:
+
+Aliases improve human-readable lookup and multilingual naming, but hidden path authority or an
+ambiguous reference would weaken stable-ID navigation. One bounded exact mutation keeps the default
+Reader calm while Main retains uniqueness and durable-write authority.
+
+Consequences:
+
+- The renderer receives only stable identity, opaque currentness, bounded aliases, and closed status.
+- The atomic Markdown editor preserves body and unrelated frontmatter, records `update_page` for
+  Activity/Undo/restart, and derived indexes refresh only after commit.
+- Closed outcomes retain the draft; at capacity the UI keeps removal available and disables add.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
