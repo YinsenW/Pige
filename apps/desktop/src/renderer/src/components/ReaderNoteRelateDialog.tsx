@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteRelateRequest, NoteRelateResult, NoteRenderResult } from "@pige/contracts";
 import type { ReaderNoteMergeTarget } from "./ReaderNoteMergeDialog";
 
 export type ReaderNoteRelateOutcome =
@@ -16,6 +16,59 @@ export interface ReaderNoteRelateLabels {
   readonly confirm: string;
   readonly pending: string;
   readonly failed: string;
+}
+
+export interface ReaderNoteRelateSubmit {
+  readonly activeVaultId: string;
+  readonly currentPageId: string;
+  readonly renderContextId: string;
+  readonly expectedRevision: string;
+  readonly execute: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
+  readonly isCurrent?: () => boolean;
+}
+
+export async function submitReaderNoteRelation(
+  binding: ReaderNoteRelateSubmit,
+  target: ReaderNoteMergeTarget
+): Promise<ReaderNoteRelateOutcome> {
+  const request: NoteRelateRequest = {
+    apiVersion: 1,
+    requestId: `noterelatereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+    activeVaultId: binding.activeVaultId,
+    currentPageId: binding.currentPageId,
+    renderContextId: binding.renderContextId,
+    expectedRevision: binding.expectedRevision,
+    targetPageId: target.pageId,
+    expectedTargetUpdatedAt: target.updatedAt,
+  };
+  try {
+    const result = await binding.execute(request);
+    if (
+      binding.isCurrent?.() === false ||
+      !noteRelateIdentityMatches(request, result) ||
+      result.status !== "committed" ||
+      result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.pageType !== "note"
+    ) return { status: "retained" };
+    return { status: "committed", render: result.render };
+  } catch {
+    return { status: "retained" };
+  }
+}
+
+export function readerNoteRelateLabels(t: (key: string) => string): ReaderNoteRelateLabels {
+  return {
+    title: t("note.relate.title"), description: t("note.relate.description"), target: t("note.relate.target"),
+    loading: t("note.relate.loading"), empty: t("note.relate.empty"), cancel: t("note.relate.cancel"),
+    confirm: t("note.relate.confirm"), pending: t("note.relate.pending"), failed: t("note.relate.failed"),
+  };
+}
+
+function noteRelateIdentityMatches(request: NoteRelateRequest, result: NoteRelateResult): boolean {
+  return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId && result.renderContextId === request.renderContextId &&
+    result.expectedRevision === request.expectedRevision && result.targetPageId === request.targetPageId &&
+    result.expectedTargetUpdatedAt === request.expectedTargetUpdatedAt;
 }
 
 export function ReaderNoteRelateDialog(props: {

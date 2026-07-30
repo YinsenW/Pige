@@ -66,7 +66,7 @@ import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions, readerDocumentArchiveLabels, submitReaderNoteArchive, type ReaderNoteArchiveSubmit } from "./components/ReaderDocumentActions";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
-import type { ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
+import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
 import {
@@ -3394,31 +3394,11 @@ export function LibraryPanel(props: {
     const revision = note?.trashEligibility?.revision;
     const activeVaultId = props.activeVaultId;
     const renderContextId = note?.renderContextId;
-    if (!note || note.summary.pageType !== "note" || !revision || !activeVaultId || !renderContextId || !props.onRelateCurrentNote) {
-      return { status: "retained" };
-    }
-    const request: NoteRelateRequest = {
-      apiVersion: 1,
-      requestId: createNoteRelateRequestId(),
-      activeVaultId,
-      currentPageId: note.summary.pageId,
-      renderContextId,
-      expectedRevision: revision,
-      targetPageId: target.pageId,
-      expectedTargetUpdatedAt: target.updatedAt,
-    };
-    try {
-      const result = await props.onRelateCurrentNote(request);
-      if (
-        !noteRelateIdentityMatches(request, result) ||
-        result.status !== "committed" ||
-        result.render.summary.pageId !== request.currentPageId ||
-        result.render.summary.pageType !== "note"
-      ) return { status: "retained" };
-      return { status: "committed", render: result.render };
-    } catch {
-      return { status: "retained" };
-    }
+    if (!note || note.summary.pageType !== "note" || !revision || !activeVaultId || !renderContextId || !props.onRelateCurrentNote) return { status: "retained" };
+    return submitReaderNoteRelation({
+      activeVaultId, currentPageId: note.summary.pageId, renderContextId, expectedRevision: revision,
+      execute: props.onRelateCurrentNote,
+    }, target);
   };
 
   useEffect(() => {
@@ -6045,9 +6025,7 @@ function HomeComposer(props: {
     const activeVaultId = activeVaultIdRef.current;
     const renderContextId = note?.renderContextId;
     const revision = note?.trashEligibility?.revision;
-    if (!note || note.summary.pageType !== "note" || !activeVaultId || !renderContextId || !revision) {
-      return { status: "retained" };
-    }
+    if (!note || note.summary.pageType !== "note" || !activeVaultId || !renderContextId || !revision) return { status: "retained" };
     const request: NoteMergeRequest = {
       apiVersion: 1,
       requestId: createNoteMergeRequestId(),
@@ -6084,32 +6062,14 @@ function HomeComposer(props: {
     if (!note || note.summary.pageType !== "note" || !activeVaultId || !renderContextId || !revision) {
       return { status: "retained" };
     }
-    const request: NoteRelateRequest = {
-      apiVersion: 1,
-      requestId: createNoteRelateRequestId(),
-      activeVaultId,
-      currentPageId: note.summary.pageId,
-      renderContextId,
-      expectedRevision: revision,
-      targetPageId: target.pageId,
-      expectedTargetUpdatedAt: target.updatedAt,
-    };
-    try {
-      const result = await props.onRelateCurrentNote(request);
-      if (
-        !noteRelateIdentityMatches(request, result) ||
-        activeVaultIdRef.current !== request.activeVaultId ||
-        selectedNoteRef.current?.summary.pageId !== request.currentPageId ||
-        selectedNoteRef.current.renderContextId !== request.renderContextId ||
-        selectedNoteRef.current.trashEligibility?.revision !== request.expectedRevision ||
-        result.status !== "committed" ||
-        result.render.summary.pageId !== request.currentPageId ||
-        result.render.summary.pageType !== "note"
-      ) return { status: "retained" };
-      return { status: "committed", render: result.render };
-    } catch {
-      return { status: "retained" };
-    }
+    return submitReaderNoteRelation({
+      activeVaultId, currentPageId: note.summary.pageId, renderContextId, expectedRevision: revision,
+      execute: props.onRelateCurrentNote,
+      isCurrent: () => activeVaultIdRef.current === activeVaultId &&
+        selectedNoteRef.current?.summary.pageId === note.summary.pageId &&
+        selectedNoteRef.current.renderContextId === renderContextId &&
+        selectedNoteRef.current.trashEligibility?.revision === revision,
+    }, target);
   };
 
   const adoptMergedHomeNote = (render: NoteRenderResult): void => {
@@ -7173,25 +7133,11 @@ function createNoteMergeRequestId(): `notemergereq_${string}` {
   return `notemergereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
-function createNoteRelateRequestId(): `noterelatereq_${string}` {
-  return `noterelatereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
 function submitNoteRelation(request: NoteRelateRequest): Promise<NoteRelateResult> {
   return window.pige.notes.relate(request);
 }
 
 function noteMergeIdentityMatches(request: NoteMergeRequest, result: NoteMergeResult): boolean {
-  return result.requestId === request.requestId &&
-    result.activeVaultId === request.activeVaultId &&
-    result.currentPageId === request.currentPageId &&
-    result.renderContextId === request.renderContextId &&
-    result.expectedRevision === request.expectedRevision &&
-    result.targetPageId === request.targetPageId &&
-    result.expectedTargetUpdatedAt === request.expectedTargetUpdatedAt;
-}
-
-function noteRelateIdentityMatches(request: NoteRelateRequest, result: NoteRelateResult): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&
     result.currentPageId === request.currentPageId &&
@@ -7238,20 +7184,6 @@ function readerNoteMergeLabels(t: (key: string) => string) {
     confirm: t("note.merge.confirm"),
     pending: t("note.merge.pending"),
     failed: t("note.merge.failed")
-  };
-}
-
-function readerNoteRelateLabels(t: (key: string) => string) {
-  return {
-    title: t("note.relate.title"),
-    description: t("note.relate.description"),
-    target: t("note.relate.target"),
-    loading: t("note.relate.loading"),
-    empty: t("note.relate.empty"),
-    cancel: t("note.relate.cancel"),
-    confirm: t("note.relate.confirm"),
-    pending: t("note.relate.pending"),
-    failed: t("note.relate.failed"),
   };
 }
 
