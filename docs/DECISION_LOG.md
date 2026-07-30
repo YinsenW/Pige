@@ -3804,7 +3804,8 @@ Date: 2026-07-28
 
 Decision:
 
-Confirmed package/revision CAS trashes one verified disabled package; restart adopts once.
+Confirmed package/revision CAS trashes one verified disabled package; exact receipt-owned restore
+revalidates and CAS-adopts it disabled. Restart adopts either effect once.
 
 Rationale:
 
@@ -3812,7 +3813,7 @@ Remove without authority.
 
 Consequences:
 
-- No code/path/body or Restore UI; other lifecycle stays open.
+- No code/path/body, network, import or execution; enable/runtime stay open.
 
 References:
 
