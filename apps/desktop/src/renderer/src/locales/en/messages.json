@@ -967,6 +967,8 @@
   "note.metadata": "Note metadata",
   "note.moreActions": "More note actions",
   "note.moreSources": "{count} more saved sources",
+  "note.showFewerSources": "Show fewer saved sources",
+  "note.showMoreSources": "Show {count} more saved sources",
   "note.open": "Open",
   "note.opening": "Opening",
   "note.outgoingLinks": "Links to",
