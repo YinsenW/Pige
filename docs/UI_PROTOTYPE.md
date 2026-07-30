@@ -788,10 +788,9 @@ Current bounded slice:
   data owner.
 - Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
   color or thickness is never the only explanation.
-- Navigable nodes open the existing confined Note Reader. Back restores focus to the
-  invoking tree button when it is still rendered, otherwise to the Knowledge Tree heading.
-  Opaque source IDs without a navigable Source Page display only a localized
-  `Source evidence` label.
+- Navigable nodes open the confined Reader. Selection loads bounded outgoing/backlink groups and
+  opens only returned page IDs; drift/failure preserves tree/focus. Synthetic topics stay unavailable.
+  Back restores invoking tree focus; opaque source IDs show only `Source evidence`.
 - Loading, ready, empty, degraded, and error states are localized. Force graphs, manual
   taxonomy, editing, health workflows, and advanced graph analytics remain open.
 
