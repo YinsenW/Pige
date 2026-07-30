@@ -4028,6 +4028,29 @@ References:
 
 - `docs/SETTINGS_AND_PREFERENCES.md`
 
+### D-20260730-Reviewed-Current-Note-Replacement
+
+Status: Accepted
+Date: 2026-07-30
+
+Decision:
+
+Whole-note Replace requires same-turn read/review; Main target/CAS creates one `update_page`.
+
+Rationale:
+
+Model Markdown is content, not authority; replacement stays reversible and restart-safe.
+
+Consequences:
+
+- Inspection/policy/before-image bind one body/path/hash-free review and idempotent Undo.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

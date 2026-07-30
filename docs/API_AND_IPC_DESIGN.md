@@ -501,9 +501,11 @@ and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 - Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters. Decisions bind
   revision; private proposal details stay Main-only. Activity owns Undo.
 
-Current-note append stays under `agent.submitTurn`: Main accepts <=16 KiB with
-`evidenceRefs:["citation_1"]`, then CAS-writes `update_page` or returns a proposal. Its API exposes
-identity plus <=8 lines; drift conflicts and private data stay Main-only.
+Current-note append/replace stay under `agent.submitTurn`, accept <=16 KiB and cite `citation_1`.
+Replace needs authored intent plus same-turn read and always enters review.
+`agent.currentNoteReplaceProposal`/`agent.decideCurrentNoteReplaceProposal` expose only
+vault/Job/proposal/revision and <=8 redacted lines; Main owns CAS, one reversible `update_page`
+and restart convergence.
 
 Dataset boundary:
 

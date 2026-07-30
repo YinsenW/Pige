@@ -617,27 +617,14 @@ Current Phase 4 reader context foundation:
 
 When a note is open, the right side can host a contextual Agent panel.
 
-Prototype:
-
-```txt
-┌───────────────┬────────────────────────────┬─────────────────────┐
-│ Library       │ Agent-maintained Wiki      │ Note Agent          │
-│               │ #agent #markdown           │                     │
-│ Notes         │                            │ Ask about this note │
-│ Sources       │ Summary                    │                     │
-│ Topics        │ ...                        │ Related             │
-│ Tags          │                            │ BYOK                │
-│               │ Key Points                 │ Local-first         │
-│               │ ...                        │                     │
-│               │                            │ Suggested actions   │
-│               │ Sources                    │ Summarize           │
-│               │ ...                        │ Find contradictions │
-└───────────────┴────────────────────────────┴─────────────────────┘
-```
+Wide layout is Library | Reader | Note Agent; narrow uses the existing drawer/below-Reader rule.
+The panel shows scoped chat, related facts and actions without internals.
 
 Current production boundary:
 
 - Exact current-note owns timeline/citations/wait/egress; stale ownership and drafts fail closed.
+- Replace requires same-turn review. Apply refreshes Library/Home Reader; closed results retain
+  Reader/draft/review/focus. Activity owns Undo; renderer owns no target.
 - Selection uses exact identity/action presentation; writes gain Operation/Undo or bounded review.
 - Attachments, related/backlinks, memory and other mutations remain unavailable; reads do not write.
 
