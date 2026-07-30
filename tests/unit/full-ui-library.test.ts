@@ -19,8 +19,8 @@ import type {
   LibraryTagsResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
-  NoteAddTagRequest,
-  NoteAddTagResult,
+  NoteEditTaxonomyRequest,
+  NoteEditTaxonomyResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
   NoteRenderResult,
@@ -1758,14 +1758,14 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("adds one canonical tag to the exact active Reader note and retains the draft on stale", async () => {
+  it("corrects tags and topics on the exact Library Reader note and retains both drafts on stale", async () => {
     const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
-    const requests: NoteAddTagRequest[] = []; const adopted: NoteRenderResult[] = []; let mode: "stale" | "committed" = "stale";
-    let selected: NoteRenderResult = { ...readerNote(), tagging: { tags: ["research"], canAdd: true, revision: `noteeditrev_${"a".repeat(32)}` } };
-    const onAddNoteTag = async (request: NoteAddTagRequest): Promise<NoteAddTagResult> => {
+    const requests: NoteEditTaxonomyRequest[] = []; const adopted: NoteRenderResult[] = []; let mode: "stale" | "committed" = "stale";
+    let selected: NoteRenderResult = { ...readerNote(), tagging: { tags: ["research"], topics: ["PKM"], canAdd: true, canEdit: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const onAddNoteTag = async (request: NoteEditTaxonomyRequest): Promise<NoteEditTaxonomyResult> => {
       requests.push(request); return mode === "committed"
-        ? { ...request, status: "committed", operationId: "operation_note_add_tag_library", render: {
-            ...selected, tagging: { tags: ["research", request.tag], canAdd: true, revision: `noteeditrev_${"b".repeat(32)}` } } }
+        ? { ...request, status: "committed", operationId: "operation_note_taxonomy_library", render: {
+            ...selected, tagging: { tags: [...request.tags], topics: [...request.topics], canAdd: true, canEdit: true, revision: `noteeditrev_${"b".repeat(32)}` } } }
         : { ...request, status: "stale" };
     };
     const renderPanel = (): void => root.render(createElement(LibraryPanel, {
@@ -1778,16 +1778,27 @@ describe("full UI Library", () => {
     }));
     await act(async () => { renderPanel(); await settle(dom); });
     const container = dom.window.document.querySelector("#root")!;
-    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Add tag"));
-    const input = container.querySelector<HTMLInputElement>('input[placeholder="Enter a tag"]')!;
-    await inputText(dom, input, "  field   notes  "); await clickButton(dom, buttonNamed(container, "Add tag"));
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Edit tags and topics"));
+    const topicsInput = container.querySelector<HTMLInputElement>('input[placeholder="Knowledge management"]')!;
+    const tagsInput = container.querySelector<HTMLInputElement>('input[placeholder="research, reading"]')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+      setter?.call(tagsInput, "  field   notes , research  ");
+      tagsInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      setter?.call(topicsInput, "PKM, Knowledge   management");
+      topicsInput.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+      await settle(dom);
+    });
+    await clickButton(dom, buttonNamed(container, "Save categories"));
     expect(requests[0]).toMatchObject({ apiVersion: 1, activeVaultId: "vault_20260715_fullui01", currentPageId: selected.summary.pageId,
-      renderContextId: selected.renderContextId, expectedRevision: `noteeditrev_${"a".repeat(32)}`, tag: "field notes" });
-    expect(requests[0]?.requestId).toMatch(/^noteaddtagreq_[a-z0-9]{16,64}$/u);
-    expect(container.textContent).toContain("The tag was not added. Review it and try again.");
-    expect(input.value).toBe("  field   notes  "); expect(dom.window.document.activeElement).toBe(input); expect(adopted).toHaveLength(0);
-    mode = "committed"; await clickButton(dom, buttonNamed(container, "Add tag")); await waitFor(dom, () => adopted.length === 1);
-    expect(adopted[0]?.tagging?.tags).toContain("field notes"); expect(container.querySelector(".note-reader")).not.toBeNull();
+      renderContextId: selected.renderContextId, expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      tags: ["field notes", "research"], topics: ["PKM", "Knowledge management"] });
+    expect(requests[0]?.requestId).toMatch(/^notetaxonomyreq_[a-z0-9]{16,64}$/u);
+    expect(container.textContent).toContain("The categories were not changed. Your edits are preserved; review them and try again.");
+    expect(tagsInput.value).toBe("  field   notes , research  "); expect(topicsInput.value).toBe("PKM, Knowledge   management");
+    expect(dom.window.document.activeElement).toBe(tagsInput); expect(adopted).toHaveLength(0);
+    mode = "committed"; await clickButton(dom, buttonNamed(container, "Save categories")); await waitFor(dom, () => adopted.length === 1);
+    expect(adopted[0]?.tagging?.tags).toContain("field notes"); expect(adopted[0]?.tagging?.topics).toContain("Knowledge management"); expect(container.querySelector(".note-reader")).not.toBeNull();
     await act(async () => root.unmount()); dom.window.close();
   });
 

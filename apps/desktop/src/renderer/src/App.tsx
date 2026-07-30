@@ -2635,7 +2635,7 @@ export function App(): React.JSX.Element {
             onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
             onRevealSource={(request) => window.pige.notes.revealSource(request)}
             onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
-            onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.addTag(request)} onCurrentNoteTagged={adoptMergedNote}
+            onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.editTaxonomy(request)} onCurrentNoteTagged={adoptMergedNote}
             onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
             onLoadNoteMergeTargets={loadNoteMergeTargets}
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -2700,7 +2700,7 @@ export function App(): React.JSX.Element {
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
               onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
-              onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.addTag(request)} onCurrentNoteTagged={adoptMergedNote}
+              onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.editTaxonomy(request)} onCurrentNoteTagged={adoptMergedNote}
               onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
               onLoadNoteMergeTargets={loadNoteMergeTargets}
               onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
@@ -3409,7 +3409,7 @@ export function LibraryPanel(props: {
       return "retained";
     }
   };
-  const archiveSelectedNote = () => submitReaderNoteArchive({ note: props.selectedNote, activeVaultId: props.activeVaultId, submit: props.onArchiveCurrentNote }); const restoreSelectedNote = () => submitReaderNoteRestore({ note: props.selectedNote, activeVaultId: props.activeVaultId, submit: props.onRestoreArchivedNote }); const addTagToSelectedNote = (tag: string) => submitReaderNoteTag({ note: props.selectedNote, activeVaultId: props.activeVaultId, tag, submit: props.onAddNoteTag });
+  const archiveSelectedNote = () => submitReaderNoteArchive({ note: props.selectedNote, activeVaultId: props.activeVaultId, submit: props.onArchiveCurrentNote }); const restoreSelectedNote = () => submitReaderNoteRestore({ note: props.selectedNote, activeVaultId: props.activeVaultId, submit: props.onRestoreArchivedNote }); const addTagToSelectedNote = (tags: readonly string[], topics: readonly string[]) => submitReaderNoteTag({ note: props.selectedNote, activeVaultId: props.activeVaultId, tags, topics, submit: props.onAddNoteTag });
 
   const mergeSelectedNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
     const note = props.selectedNote;
@@ -3600,7 +3600,7 @@ export function LibraryPanel(props: {
               canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
               canMerge={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision)}
               canRelate={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision && props.onRelateCurrentNote)}
-              canArchive={props.selectedNote.archiveEligibility?.canArchive === true && Boolean(props.onArchiveCurrentNote)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={props.selectedNote.restoreEligibility?.canRestore === true && Boolean(props.onRestoreArchivedNote)} restoreLabels={readerDocumentRestoreLabels(props.t)} canAddTag={summary.status === "active" && props.selectedNote.tagging?.canAdd === true && Boolean(props.onAddNoteTag)} existingTags={props.selectedNote.tagging?.tags ?? []} tagLabels={readerNoteTagLabels(props.t)}
+              canArchive={props.selectedNote.archiveEligibility?.canArchive === true && Boolean(props.onArchiveCurrentNote)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={props.selectedNote.restoreEligibility?.canRestore === true && Boolean(props.onRestoreArchivedNote)} restoreLabels={readerDocumentRestoreLabels(props.t)} canAddTag={summary.status === "active" && props.selectedNote.tagging?.canEdit === true && Boolean(props.onAddNoteTag)} existingTags={props.selectedNote.tagging?.tags ?? []} existingTopics={props.selectedNote.tagging?.topics ?? []} tagLabels={readerNoteTagLabels(props.t)}
               currentTitle={summary.title}
               labels={readerDocumentActionLabels(props.t)}
               mergeLabels={readerNoteMergeLabels(props.t)}
@@ -6075,7 +6075,7 @@ function HomeComposer(props: {
     }
   };
 
-  const archiveSelectedHomeNote = () => submitReaderNoteArchive({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, submit: (request) => window.pige.notes.archiveCurrent(request), currentNote: () => selectedNoteRef.current }); const restoreSelectedHomeNote = () => submitReaderNoteRestore({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, submit: (request) => window.pige.notes.restoreArchived(request), currentNote: () => selectedNoteRef.current }); const addTagToSelectedHomeNote = (tag: string) => submitReaderNoteTag({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, tag, submit: (request) => window.pige.notes.addTag(request), currentNote: () => selectedNoteRef.current });
+  const archiveSelectedHomeNote = () => submitReaderNoteArchive({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, submit: (request) => window.pige.notes.archiveCurrent(request), currentNote: () => selectedNoteRef.current }); const restoreSelectedHomeNote = () => submitReaderNoteRestore({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, submit: (request) => window.pige.notes.restoreArchived(request), currentNote: () => selectedNoteRef.current }); const addTagToSelectedHomeNote = (tags: readonly string[], topics: readonly string[]) => submitReaderNoteTag({ note: selectedNoteRef.current, activeVaultId: activeVaultIdRef.current, tags, topics, submit: (request) => window.pige.notes.editTaxonomy(request), currentNote: () => selectedNoteRef.current });
 
   const mergeSelectedHomeNote = async (target: ReaderNoteMergeTarget): Promise<ReaderNoteMergeOutcome> => {
     const note = selectedNoteRef.current;
@@ -6596,7 +6596,7 @@ function HomeComposer(props: {
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
                   canMerge={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
                   canRelate={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
-                  canArchive={selectedNote.archiveEligibility?.canArchive === true && Boolean(props.activeVault && selectedNote.renderContextId)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={selectedNote.restoreEligibility?.canRestore === true && Boolean(props.activeVault && selectedNote.renderContextId)} restoreLabels={readerDocumentRestoreLabels(props.t)} canAddTag={selectedNote.summary.status === "active" && selectedNote.tagging?.canAdd === true && Boolean(props.activeVault && selectedNote.renderContextId)} existingTags={selectedNote.tagging?.tags ?? []} tagLabels={readerNoteTagLabels(props.t)}
+                  canArchive={selectedNote.archiveEligibility?.canArchive === true && Boolean(props.activeVault && selectedNote.renderContextId)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={selectedNote.restoreEligibility?.canRestore === true && Boolean(props.activeVault && selectedNote.renderContextId)} restoreLabels={readerDocumentRestoreLabels(props.t)} canAddTag={selectedNote.summary.status === "active" && selectedNote.tagging?.canEdit === true && Boolean(props.activeVault && selectedNote.renderContextId)} existingTags={selectedNote.tagging?.tags ?? []} existingTopics={selectedNote.tagging?.topics ?? []} tagLabels={readerNoteTagLabels(props.t)}
                   currentTitle={selectedNote.summary.title}
                   labels={readerDocumentActionLabels(props.t)}
                   mergeLabels={readerNoteMergeLabels(props.t)}

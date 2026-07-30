@@ -166,7 +166,7 @@ export interface ReaderDocumentActionsProps {
   readonly canRelate?: boolean;
   readonly canArchive?: boolean;
   readonly canRestore?: boolean;
-  readonly canAddTag?: boolean; readonly existingTags?: readonly string[]; readonly tagLabels?: ReaderNoteTagLabels;
+  readonly canAddTag?: boolean; readonly existingTags?: readonly string[]; readonly existingTopics?: readonly string[]; readonly tagLabels?: ReaderNoteTagLabels;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
@@ -180,7 +180,7 @@ export interface ReaderDocumentActionsProps {
   readonly onRelate?: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteRelateOutcome>;
   readonly onArchive?: () => Promise<ReaderDocumentArchiveOutcome>;
   readonly onRestore?: () => Promise<ReaderDocumentRestoreOutcome>;
-  readonly onAddTag?: (tag: string) => Promise<ReaderNoteTagOutcome>;
+  readonly onAddTag?: (tags: readonly string[], topics: readonly string[]) => Promise<ReaderNoteTagOutcome>;
   readonly onCommitted: () => void;
   readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onRelateCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
@@ -427,7 +427,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         }}
       />
     ) : null}
-    {tagOpen && props.tagLabels && props.onAddTag ? <ReaderNoteTagDialog ownerIdentity={props.ownerIdentity} existingTags={props.existingTags ?? []} labels={props.tagLabels} returnFocusRef={triggerRef} onAdd={props.onAddTag} onCancel={() => setTagOpen(false)} onCommitted={(render) => { setTagOpen(false); props.onTagCommitted?.(render); }} /> : null}
+    {tagOpen && props.tagLabels && props.onAddTag ? <ReaderNoteTagDialog ownerIdentity={props.ownerIdentity} existingTags={props.existingTags ?? []} existingTopics={props.existingTopics ?? []} labels={props.tagLabels} returnFocusRef={triggerRef} onEdit={props.onAddTag} onCancel={() => setTagOpen(false)} onCommitted={(render) => { setTagOpen(false); props.onTagCommitted?.(render); }} /> : null}
     {confirmAction ? (
       <div className="confirmation-backdrop">
         <section

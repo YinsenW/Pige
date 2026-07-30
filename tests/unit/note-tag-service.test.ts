@@ -10,8 +10,53 @@ const request = {
   expectedRevision: `noteeditrev_${"a".repeat(64)}`,
   tag: "Research note"
 };
+const editRequest = {
+  apiVersion: 1 as const,
+  requestId: "notetaxonomyreq_abcdefghijklmnop",
+  activeVaultId: request.activeVaultId,
+  currentPageId: request.currentPageId,
+  renderContextId: request.renderContextId,
+  expectedRevision: request.expectedRevision,
+  tags: ["Research", "Reading"],
+  topics: ["Knowledge management"]
+};
 
 describe("NoteTagService", () => {
+  it("atomically replaces the exact note tags and topics through one revision-bound editor operation", async () => {
+    const assertCurrent = vi.fn(() => true);
+    const save = vi.fn(() => ({ status: "committed" as const, requestId: "noteeditreq_internal",
+      activeVaultId: request.activeVaultId, pageId: request.currentPageId, revisionId: `sha256:${"b".repeat(64)}`,
+      renderIdentity: `sha256:${"c".repeat(64)}`, operationId: "op_20260731_taxonomy123456" }));
+    const service = new NoteTagService({ resolveTrashTarget: vi.fn(() => readyTarget(assertCurrent)),
+      render: vi.fn(async () => taxonomyRender()) } as never, { open: vi.fn(() => openedNote()), save } as never,
+      () => new Date("2026-07-31T12:00:00.000Z"));
+
+    await expect(service.edit("reader_owner", editRequest)).resolves.toMatchObject({
+      ...editRequest, status: "committed", operationId: "op_20260731_taxonomy123456"
+    });
+    expect(assertCurrent).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRevisionId: `sha256:${"a".repeat(64)}`,
+      markdown: expect.stringContaining('tags: ["Research","Reading"]')
+    }));
+    expect(save.mock.calls[0]?.[0].markdown).toContain('topics: ["Knowledge management"]');
+  });
+
+  it("fails closed before mutation for stale, non-note, source, inactive, and unchanged targets", async () => {
+    const cases = [
+      { target: readyTarget(() => false), markdown: openedNote().markdown, status: "stale" },
+      { target: readyTarget(() => true), markdown: openedNote().markdown.replace('type: "note"', 'type: "source"'), status: "ineligible" },
+      { target: readyTarget(() => true), markdown: openedNote().markdown.replace('status: "active"', 'status: "archived"'), status: "ineligible" },
+      { target: readyTarget(() => true), markdown: openedNote().markdown.replace("source_ids: []", 'tags: ["Research", "Reading"]\ntopics: ["Knowledge management"]\nsource_ids: []'), status: "ineligible" }
+    ] as const;
+    for (const fixture of cases) {
+      const save = vi.fn();
+      const service = new NoteTagService({ resolveTrashTarget: vi.fn(() => fixture.target), render: vi.fn() } as never,
+        { open: vi.fn(() => ({ ...openedNote(), markdown: fixture.markdown })), save } as never);
+      await expect(service.edit("reader_owner", editRequest)).resolves.toEqual({ ...editRequest, status: fixture.status });
+      expect(save).not.toHaveBeenCalled();
+    }
+  });
   it("adds one canonical tag through the current Reader revision and returns the authoritative render", async () => {
     const assertCurrent = vi.fn(() => true);
     const save = vi.fn(() => ({
@@ -128,6 +173,10 @@ function taggedRender() {
     renderContextId: "notectx_qrstuvwxyzabcdef",
     trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(64)}` },
     archiveEligibility: { canArchive: true, revision: `noteeditrev_${"b".repeat(64)}` },
-    tagging: { tags: ["Research note"], canAdd: true, revision: `noteeditrev_${"b".repeat(64)}` }
+    tagging: { tags: ["Research note"], topics: [], canAdd: true, canEdit: true, revision: `noteeditrev_${"b".repeat(64)}` }
   };
+}
+
+function taxonomyRender() {
+  return { ...taggedRender(), tagging: { ...taggedRender().tagging, tags: [...editRequest.tags], topics: [...editRequest.topics] } };
 }

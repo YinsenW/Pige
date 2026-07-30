@@ -167,6 +167,9 @@ import {
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
+  NOTE_EDIT_TAXONOMY_CHANNEL,
+  NoteEditTaxonomyRequestSchema,
+  NoteEditTaxonomyResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteTrashListRequestSchema,
@@ -4493,6 +4496,23 @@ describe("schemas", () => {
     expect(() => NoteAddTagRequestSchema.parse({ ...identity, tag: " Research note " })).toThrow();
     for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
       expect(() => NoteAddTagResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps bounded note tag/topic correction revision-bound and path/body-free", () => {
+    expect(NOTE_EDIT_TAXONOMY_CHANNEL).toBe("notes.editTaxonomy");
+    const identity = { apiVersion: 1, requestId: "notetaxonomyreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_abcdefgh", currentPageId: "page_20260731_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef", expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      tags: ["Research", "Reading"], topics: ["Knowledge management"] } as const;
+    expect(NoteEditTaxonomyRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteEditTaxonomyResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    expect(() => NoteEditTaxonomyRequestSchema.parse({ ...identity, tags: ["Research", "research"] })).toThrow();
+    expect(() => NoteEditTaxonomyRequestSchema.parse({ ...identity, topics: Array.from({ length: 9 }, (_, index) => `Topic ${index}`) })).toThrow();
+    for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteEditTaxonomyRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
     }
   });
 

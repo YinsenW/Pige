@@ -228,7 +228,7 @@ export class NotesService {
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
               historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) },
-              tagging: { tags: [...(frontmatter?.tags ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, revision: publicEditorRevision(stable.pageContentHash) }
+              tagging: { tags: [...(frontmatter?.tags ?? [])], topics: [...(frontmatter?.topics ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }
             }
           : {})
       } : {})

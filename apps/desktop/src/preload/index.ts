@@ -149,6 +149,8 @@ import type {
   NoteRestoreArchivedResult,
   NoteAddTagRequest,
   NoteAddTagResult,
+  NoteEditTaxonomyRequest,
+  NoteEditTaxonomyResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -555,6 +557,9 @@ import {
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
+  NOTE_EDIT_TAXONOMY_CHANNEL,
+  NoteEditTaxonomyRequestSchema,
+  NoteEditTaxonomyResultSchema,
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -1845,6 +1850,10 @@ const api: PigeDesktopApi = {
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(
         await ipcRenderer.invoke(NOTE_ADD_TAG_CHANNEL, NoteAddTagRequestSchema.parse(request))
+      ),
+    editTaxonomy: async (request: NoteEditTaxonomyRequest): Promise<NoteEditTaxonomyResult> =>
+      NoteEditTaxonomyResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_EDIT_TAXONOMY_CHANNEL, NoteEditTaxonomyRequestSchema.parse(request))
       ),
     trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
       NoteTrashCurrentResultSchema.parse(
