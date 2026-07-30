@@ -279,6 +279,7 @@ describe("backup restore service", () => {
     expect(fs.existsSync(path.join(restored.restoredVaultPath!, ".pige/indexes/index.bin"))).toBe(false);
     expect(readVaultManifestFixture(restored.restoredVaultPath!)).toMatchObject({
       vault_id: restored.resultVaultId,
+      display_name: "Backup Vault",
       origin_vault_id: preview.sourceVaultId,
       restored_from_backup_id: preview.backupId
     });

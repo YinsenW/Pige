@@ -15,6 +15,7 @@ import {
   type BackupDestinationReconnectOutcome
 } from "./BackupDestinationReconnectAction";
 import { VaultStorageRelocationAction } from "./VaultStorageRelocationAction";
+import { VaultDisplayNameEditor } from "./VaultDisplayNameEditor";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -790,7 +791,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     <section className="settings-section" aria-labelledby="vault-current-title">
       <h2 className="settings-section-title" id="vault-current-title">{props.t("vaultSettings.currentVault")}</h2>
       <div className="settings-card" aria-busy={relocationBusy || revealTarget ? "true" : undefined}>
-        <div className="settings-row tall"><div className="settings-row-copy"><strong>{props.vault.name}</strong><span>{props.vault.activeVaultPathDisplay}</span></div><span className="settings-status">{props.t("vaultSettings.connected")}</span></div>
+        <VaultDisplayNameEditor vault={props.vault} disabled={props.busy || relocationBusy || Boolean(revealTarget)} onRefresh={props.onRefresh} t={props.t} />
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("vaultSettings.relocate")}</strong><span>{props.t("vaultSettings.relocateDescription")}</span></div><VaultStorageRelocationAction activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || Boolean(revealTarget)} labels={{ action: props.t("vaultSettings.relocateAction"), pending: props.t("vaultSettings.relocating"), relocated: props.t("vaultSettings.relocated"), stale: props.t("vaultSettings.relocateStale"), blocked: props.t("vaultSettings.relocateBlocked"), destinationExists: props.t("vaultSettings.relocateDestinationExists"), failed: props.t("vaultSettings.relocateFailed") }} onPendingChange={setRelocationBusy} onRelocated={props.onRefresh} /></div>
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.noteStorage")}</strong><span>{props.vault.knowledgeRootDisplay}</span></div><button ref={knowledgeRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || relocationBusy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("knowledge_root")}>{props.t("vaultSettings.openInFinder")}</button></div>
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.sourceAssets")}</strong><span>{props.vault.sourceAssetRootDisplay}</span><span>{props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.external" : "vaultSettings.managedCopyRoot.insideVault")} · {props.t(`vaultSettings.managedCopyRoot.${props.vault.managedCopyRoot.availability}`)}</span><span>{props.t("vaultSettings.managedCopyRoot.futureOnly")}</span></div><div className="settings-row-control"><button ref={sourceAssetRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || relocationBusy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("source_asset_root")}>{props.t("vaultSettings.openSourceAssets")}</button><ManagedCopyRootSelectionAction

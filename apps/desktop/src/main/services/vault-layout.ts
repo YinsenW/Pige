@@ -166,6 +166,7 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
   const timestamp = now.toISOString();
   const manifest: VaultManifestV2 = CurrentVaultManifestSchema.parse({
     vault_id: createPigeVaultId(now, randomUUID()),
+    display_name: vaultName,
     vault_schema_version: PIGE_VAULT_SCHEMA_VERSION,
     durable_domain_versions: CURRENT_DURABLE_DOMAIN_VERSIONS,
     created_at: timestamp,
@@ -201,7 +202,8 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
 
   return {
     vaultId: manifest.vault_id,
-    name: path.basename(vaultPath),
+    name: manifest.display_name ?? normalizeVaultName(path.basename(vaultPath)),
+    metadataRevision: createVaultMetadataRevision(manifest),
     activeVaultPathDisplay: vaultPath,
     knowledgeRootDisplay: vaultPath,
     sourceAssetRootDisplay: sourceAssetRoot,
@@ -217,6 +219,10 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
     schemaVersion: manifest.vault_schema_version,
     counts: countVaultItems(vaultPath)
   };
+}
+
+export function createVaultMetadataRevision(manifest: VaultManifest): `vaultmeta_${string}` {
+  return `vaultmeta_${createHash("sha256").update(JSON.stringify(manifest)).digest("hex")}`;
 }
 
 export function updateVaultSourceAssetRootKind(

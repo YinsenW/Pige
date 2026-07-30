@@ -4020,8 +4020,28 @@ export const ConversationLanguageContinuitySchema = z.object({
   responseLanguage: ResponseLanguageFactSchema
 }).strict();
 
+export const VaultDisplayNameSchema = z.string()
+  .min(1)
+  .max(80)
+  .superRefine((value, context) => {
+    if (
+      value !== value.trim() ||
+      value === "." ||
+      value === ".." ||
+      /[\\/\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value) ||
+      /^[A-Za-z]:/u.test(value) ||
+      /^file:/iu.test(value)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A Vault display name must be a bounded safe label, not a path or URI."
+      });
+    }
+  });
+
 const VaultManifestBaseSchema = z.object({
   vault_id: VaultIdSchema,
+  display_name: VaultDisplayNameSchema.optional(),
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
   app_min_version: z.string().min(1),
@@ -4062,6 +4082,34 @@ export const VaultManifestCompatibilityHeaderSchema = z.object({
 }).passthrough();
 
 export const VAULT_APPLY_MIGRATION_CHANNEL = "vault.applyMigration" as const;
+export const VAULT_RENAME_DISPLAY_NAME_CHANNEL = "vault.renameDisplayName" as const;
+export const VaultMetadataRevisionSchema = z.string().regex(/^vaultmeta_[a-f0-9]{64}$/u);
+export const VaultRenameDisplayNameRequestIdSchema = z.string()
+  .regex(/^vaultrenamereq_[a-z0-9]{16,64}$/u);
+export const VaultRenameDisplayNameRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: VaultRenameDisplayNameRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedMetadataRevision: VaultMetadataRevisionSchema,
+  displayName: VaultDisplayNameSchema
+}).strict();
+export const VaultMetadataSummarySchema = z.object({
+  activeVaultId: VaultIdSchema,
+  displayName: VaultDisplayNameSchema,
+  revision: VaultMetadataRevisionSchema
+}).strict();
+export const VaultRenameDisplayNameResultSchema = z.discriminatedUnion("status", [
+  VaultRenameDisplayNameRequestSchema.extend({
+    status: z.literal("renamed"),
+    metadata: VaultMetadataSummarySchema
+  }).strict(),
+  VaultRenameDisplayNameRequestSchema.extend({
+    status: z.literal("stale"),
+    metadata: VaultMetadataSummarySchema
+  }).strict(),
+  VaultRenameDisplayNameRequestSchema.extend({ status: z.literal("not_found") }).strict(),
+  VaultRenameDisplayNameRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
 
 export const InVaultSourceAssetRootSchema = z.string()
   .min(1)
@@ -4414,7 +4462,8 @@ const ExternalManagedCopyRootDisplayLabelSchema = z.string()
 
 export const VaultSummaryProjectionSchema = z.object({
   vaultId: VaultIdSchema,
-  name: z.string().min(1),
+  name: VaultDisplayNameSchema,
+  metadataRevision: VaultMetadataRevisionSchema.optional(),
   activeVaultPathDisplay: z.string().min(1),
   knowledgeRootDisplay: z.string().min(1),
   sourceAssetRootDisplay: z.string().min(1),
@@ -10443,6 +10492,12 @@ export type VaultOpenInvalidReason = z.infer<typeof VaultOpenInvalidReasonSchema
 export type VaultMigrationCheckpoint = z.infer<typeof VaultMigrationCheckpointSchema>;
 export type VaultMigrationApplyRequest = z.infer<typeof VaultMigrationApplyRequestSchema>;
 export type VaultMigrationApplyResult = z.infer<typeof VaultMigrationApplyResultSchema>;
+export type VaultDisplayName = z.infer<typeof VaultDisplayNameSchema>;
+export type VaultMetadataRevision = z.infer<typeof VaultMetadataRevisionSchema>;
+export type VaultMetadataSummary = z.infer<typeof VaultMetadataSummarySchema>;
+export type VaultRenameDisplayNameRequestId = z.infer<typeof VaultRenameDisplayNameRequestIdSchema>;
+export type VaultRenameDisplayNameRequest = z.infer<typeof VaultRenameDisplayNameRequestSchema>;
+export type VaultRenameDisplayNameResult = z.infer<typeof VaultRenameDisplayNameResultSchema>;
 export type SourceStorageRevision = z.infer<typeof SourceStorageRevisionSchema>;
 export type ManagedCopyRootSummary = z.infer<typeof ManagedCopyRootSummarySchema>;
 export type ManagedCopyRootConfigureRequestId = z.infer<typeof ManagedCopyRootConfigureRequestIdSchema>;

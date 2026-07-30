@@ -373,6 +373,9 @@ import type {
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
   VaultMigrationPreview,
+  VaultMetadataRevision,
+  VaultRenameDisplayNameRequest,
+  VaultRenameDisplayNameResult,
   VaultOpenInvalidReason,
   VaultStorageRelocationRequest,
   VaultStorageRelocationRevision,
@@ -799,6 +802,9 @@ export type {
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
   VaultMigrationPreview,
+  VaultMetadataRevision,
+  VaultRenameDisplayNameRequest,
+  VaultRenameDisplayNameResult,
   VaultOpenInvalidReason,
   VaultStorageRelocationRequest,
   VaultStorageRelocationRevision,
@@ -824,6 +830,7 @@ export interface VaultCounts {
 export interface VaultSummary {
   readonly vaultId: string;
   readonly name: string;
+  readonly metadataRevision?: VaultMetadataRevision;
   readonly activeVaultPathDisplay: string;
   readonly knowledgeRootDisplay: string;
   readonly sourceAssetRootDisplay: string;
@@ -2301,6 +2308,9 @@ export interface PigeDesktopApi {
     readonly applyMigration: (
       request: VaultMigrationApplyRequest
     ) => Promise<VaultMigrationApplyResult>;
+    readonly renameDisplayName: (
+      request: VaultRenameDisplayNameRequest
+    ) => Promise<VaultRenameDisplayNameResult>;
     readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
     readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
     readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
