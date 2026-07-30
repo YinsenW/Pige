@@ -2041,6 +2041,10 @@ describe("desktop shell build contract", () => {
   it("exposes structured sources through unified Agent ingress and the bundled Dataset capability", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const captureDropZoneSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/HomeCaptureDropZone.tsx"),
+      "utf8"
+    );
     const buildSource = fs.readFileSync(path.resolve("apps/desktop/electron.vite.config.ts"), "utf8");
     const queryServiceSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/dataset-query-service.ts"),
@@ -2051,7 +2055,7 @@ describe("desktop shell build contract", () => {
       "utf8"
     );
 
-    expect(rendererSource).toContain(".csv,.xlsx,.sqlite,.sqlite3,.db");
+    expect(captureDropZoneSource).toContain(".csv,.xlsx,.sqlite,.sqlite3,.db");
     expect(rendererSource).toContain("function DatasetAnswerResult");
     expect(mainSource).toContain("new DatasetService(new DatasetIngestWorkerService())");
     expect(mainSource).toContain("new DatasetQueryService()");

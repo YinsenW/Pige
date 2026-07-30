@@ -40,6 +40,11 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HomeJobAction } from "./components/HomeJobAction";
+import {
+  HomeCaptureDropZone,
+  settleHomeCaptureBatch,
+  type HomeCaptureBatchStatus
+} from "./components/HomeCaptureDropZone";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
 import { useHomeSourceReconnect } from "./components/useHomeSourceReconnect";
 import { PermissionsPrivacySettingsPanel } from "./components/PermissionsPrivacySettingsPanel";
@@ -103,8 +108,6 @@ import type {
   AgentTurnDraftEvent,
   AgentSubmitTurnResult,
   AgentRuntimeStatus,
-  CaptureFileRejection,
-  CaptureFileRejectionReason,
   AppHealth,
   BackupRestoreStatus,
   DiagnosticsClearLocalResult,
@@ -4473,20 +4476,6 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
   );
 }
 
-function attachmentRejectionMessageKey(reason: CaptureFileRejectionReason): string {
-  switch (reason) {
-    case "empty_path": return "home.attachmentRejection.emptyPath";
-    case "missing": return "home.attachmentRejection.missing";
-    case "not_regular_file": return "home.attachmentRejection.notRegularFile";
-    case "unsupported_type": return "home.attachmentRejection.unsupportedType";
-    case "duplicate": return "home.attachmentRejection.duplicate";
-    case "too_many_files": return "home.attachmentRejection.tooManyFiles";
-    case "file_too_large": return "home.attachmentRejection.fileTooLarge";
-    case "total_size_exceeded": return "home.attachmentRejection.totalSizeExceeded";
-    case "copy_failed": return "home.attachmentRejection.copyFailed";
-  }
-}
-
 function HomeComposer(props: {
   readonly activeVault: VaultSummary | undefined;
   readonly agentRuntimeStatus: AgentRuntimeStatus | null;
@@ -4570,10 +4559,7 @@ function HomeComposer(props: {
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
   const [stagedComposerItems, setStagedComposerItems] = useState<readonly StagedComposerItem[]>([]);
   const [failedFileDropRecovery, setFailedFileDropRecovery] = useState<FailedFileDropRecovery | null>(null);
-  const [attachmentSubmissionNotice, setAttachmentSubmissionNotice] = useState<{
-    readonly acceptedCount: number;
-    readonly rejectedFiles: readonly CaptureFileRejection[];
-  } | null>(null);
+  const [captureBatchStatus, setCaptureBatchStatus] = useState<HomeCaptureBatchStatus | null>(null);
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [editorReady, setEditorReady] = useState<NoteMarkdownEditorReady | null>(null);
@@ -4591,7 +4577,6 @@ function HomeComposer(props: {
     props.onReaderSelectionContextChange(context);
     return () => props.onReaderSelectionContextChange(null);
   }, [props.activeVault?.vaultId, selectedNote?.summary.pageId, selectedNote?.summary.title]);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
   const homeSectionRef = useRef<HTMLElement | null>(null);
@@ -5550,7 +5535,9 @@ function HomeComposer(props: {
       followConversationRef.current = true;
       if (!beginComposerSubmission(clientTurnId)) return;
       setCaptureError(null);
-      setAttachmentSubmissionNotice(null);
+      if (submittedFiles.length > 0) {
+        setCaptureBatchStatus({ status: "submitting", queuedCount: 0, rejectedFiles: [] });
+      }
       setAgentError(null);
       setAgentAnswer(null);
       setLiveAnswerEventId(null);
@@ -5585,12 +5572,25 @@ function HomeComposer(props: {
             expectedTailEventId: followUpConversation.tailEventId
           } : {})
         }, submittedFiles);
+        if (activeVaultIdRef.current !== submittedVaultId) {
+          clearAgentDraft();
+          setActiveSourceTurn(null);
+          setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+          return;
+        }
         if (outcome.state !== "accepted") {
           clearAgentDraft();
           setActiveSourceTurn(null);
           setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
           setAgentError(outcome.error);
           setAgentRunState("failed");
+          if (submittedFiles.length > 0) {
+            setCaptureBatchStatus(settleHomeCaptureBatch(
+              outcome.sourceIds.length,
+              outcome.rejectedItems?.map((item) => ({ displayName: item.displayName, reason: item.reason })) ?? outcome.rejectedFiles ?? [],
+              true
+            ));
+          }
           void refreshConversation();
           return;
         }
@@ -5603,14 +5603,13 @@ function HomeComposer(props: {
           stagedAttachmentRevisionRef.current += 1;
           setStagedComposerItems([]);
         }
-        if (outcome.rejectedItems?.length) {
-          setAttachmentSubmissionNotice({
-            acceptedCount: outcome.acceptedItems?.length ?? outcome.sourceIds.length,
-            rejectedFiles: outcome.rejectedItems.map((item) => ({
-              displayName: item.displayName,
-              reason: item.reason
-            }))
-          });
+        if (submittedFiles.length > 0) {
+          setCaptureBatchStatus(settleHomeCaptureBatch(
+            outcome.acceptedItems?.filter((item) => item.kind === "file").length ?? outcome.sourceIds.length,
+            outcome.rejectedItems?.filter((item) => item.kind === "file")
+              .map((item) => ({ displayName: item.displayName, reason: item.reason })) ?? [],
+            false
+          ));
         }
         setActiveSourceTurn({
           clientTurnId,
@@ -5618,7 +5617,7 @@ function HomeComposer(props: {
           pending: false,
           sourceDisplayName
         });
-        if (activeVaultIdRef.current === submittedVaultId) {
+        if (submittedFiles.length > 0 && activeVaultIdRef.current === submittedVaultId) {
           acceptedTurnProjection.bind({
             activeVaultId: submittedVaultId,
             clientTurnId,
@@ -5643,6 +5642,9 @@ function HomeComposer(props: {
         clearAgentDraft();
         setActiveSourceTurn(null);
         setOptimisticConversationTurns((current) => current.filter((turn) => turn.clientTurnId !== clientTurnId));
+        if (activeVaultIdRef.current === submittedVaultId) {
+          setCaptureBatchStatus({ status: "failed", queuedCount: 0, rejectedFiles: [] });
+        }
         setAgentError({
           code: "model_provider.call_failed",
           domain: "model_provider",
@@ -5661,7 +5663,6 @@ function HomeComposer(props: {
     }
     followConversationRef.current = true;
     setCaptureError(null);
-    setAttachmentSubmissionNotice(null);
     setAgentError(null);
     setAgentRunState("idle");
     setAgentModelUsage("none");
@@ -5838,7 +5839,7 @@ function HomeComposer(props: {
     const submittedVaultId = activeVaultIdRef.current;
     const sourceDisplayName = files[0]?.name ?? null;
     setCaptureError(null);
-    setAttachmentSubmissionNotice(null);
+    setCaptureBatchStatus({ status: "submitting", queuedCount: 0, rejectedFiles: [] });
     setAgentAnswer(null);
     setLiveAnswerEventId(null);
     setAgentError(null);
@@ -5852,17 +5853,20 @@ function HomeComposer(props: {
       if (!result) {
         setActiveSourceTurn(null);
         setAgentRunState("failed");
+        if (activeVaultIdRef.current === submittedVaultId) {
+          setCaptureBatchStatus({ status: "failed", queuedCount: 0, rejectedFiles: [] });
+        }
         if (inputKind === "file_drop" && submittedVaultId && activeVaultIdRef.current === submittedVaultId) {
           setFailedFileDropRecovery({ activeVaultId: submittedVaultId, clientTurnId, files });
         }
         return;
       }
-      if (result.rejectedFiles?.length) {
-        setAttachmentSubmissionNotice({
-          acceptedCount: result.sourceIds.length,
-          rejectedFiles: result.rejectedFiles
-        });
-      }
+      if (activeVaultIdRef.current !== submittedVaultId) return;
+      setCaptureBatchStatus(settleHomeCaptureBatch(
+        result.sourceIds.length,
+        result.rejectedFiles ?? [],
+        result.state === "failed"
+      ));
       setActiveSourceTurn({
         clientTurnId,
         jobId: result.jobId ?? null,
@@ -5891,6 +5895,9 @@ function HomeComposer(props: {
       clearAgentDraft();
       setActiveSourceTurn(null);
       setAgentRunState("failed");
+      if (activeVaultIdRef.current === submittedVaultId) {
+        setCaptureBatchStatus({ status: "failed", queuedCount: 0, rejectedFiles: [] });
+      }
       if (inputKind === "file_drop" && submittedVaultId && activeVaultIdRef.current === submittedVaultId) {
         setFailedFileDropRecovery({ activeVaultId: submittedVaultId, clientTurnId, files });
       }
@@ -5911,6 +5918,48 @@ function HomeComposer(props: {
         restoreComposerFocus();
       });
   };
+
+  const stagePickedFiles = (files: readonly File[]): void => {
+    const acceptedItemCount = stagedComposerItems.filter((item) => item.kind !== "rejected_pasted_text").length;
+    const availableItemCount = Math.max(0, AGENT_STAGED_ITEM_MAX_COUNT - acceptedItemCount);
+    const acceptedFiles = files.slice(0, availableItemCount);
+    if (acceptedFiles.length === 0) {
+      setCaptureError(props.t("home.attachmentRejection.tooManyFiles"));
+      return;
+    }
+    stagedAttachmentRevisionRef.current += 1;
+    stagedComposerAttemptRef.current = null;
+    setStagedComposerItems((current) => [
+      ...current,
+      ...acceptedFiles.map((file) => ({
+        kind: "file" as const,
+        localId: createComposerItemId("file"),
+        file
+      }))
+    ]);
+    setCaptureError(acceptedFiles.length < files.length
+      ? props.t("home.attachmentRejection.tooManyFiles")
+      : null);
+    window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
+  };
+
+  const submitImmediateDrop = (files: readonly File[]): void => {
+    const activeVaultId = activeVaultIdRef.current;
+    if (!activeVaultId || files.length === 0) return;
+    const clientTurnId = createAgentClientTurnId();
+    if (!beginComposerSubmission(clientTurnId)) return;
+    selectedHistoryConversationIdRef.current = null;
+    setSelectedHistoryConversationId(null);
+    void submitHomeFiles(files, "file_drop", undefined, clientTurnId)
+      .finally(() => {
+        finishComposerSubmission(clientTurnId);
+        restoreComposerFocus();
+      });
+  };
+
+  useEffect(() => {
+    setCaptureBatchStatus(null);
+  }, [props.activeVault?.vaultId]);
 
   useEffect(() => {
     const request = props.fileDropRequest;
@@ -6804,7 +6853,6 @@ function HomeComposer(props: {
                     onClick={() => {
                       stagedAttachmentRevisionRef.current += 1;
                       stagedComposerAttemptRef.current = null;
-                      setAttachmentSubmissionNotice(null);
                       setCaptureError(null);
                       setStagedComposerItems((current) => current.filter((currentItem) => currentItem.localId !== item.localId));
                       window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
@@ -6818,26 +6866,13 @@ function HomeComposer(props: {
             </div>
           </div>
         ) : null}
-        {attachmentSubmissionNotice ? (
-          <section
-            className="attachment-submission-notice"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <strong>{props.t(attachmentSubmissionNotice.acceptedCount > 0
-              ? "home.attachmentsPartiallyAccepted"
-              : "home.attachmentsRejected")}</strong>
-            <ul>
-              {attachmentSubmissionNotice.rejectedFiles.map((rejection, index) => (
-                <li key={`${rejection.displayName}-${rejection.reason}-${index}`}>
-                  <span>{rejection.displayName}</span>
-                  <small>{props.t(attachmentRejectionMessageKey(rejection.reason))}</small>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+        <HomeCaptureDropZone
+          disabled={!props.activeVault || composerSubmitActive}
+          status={captureBatchStatus}
+          onPick={stagePickedFiles}
+          onDrop={submitImmediateDrop}
+          t={props.t}
+        />
         <textarea
           ref={composerInputRef}
           data-home-composer="true"
@@ -6848,7 +6883,6 @@ function HomeComposer(props: {
           onPaste={(event) => handleComposerPaste(event, text, stagedComposerItems, (classification) => {
             stagedAttachmentRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
-            setAttachmentSubmissionNotice(null);
             setCaptureError(null);
             setStagedComposerItems((current) => [...current, classification.kind === "staged"
               ? { kind: "pasted_text", ...classification.item }
@@ -6857,7 +6891,6 @@ function HomeComposer(props: {
           onChange={(event) => {
             draftRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
-            setAttachmentSubmissionNotice(null);
             props.onDraftChange(event.target.value);
           }}
           onCompositionStart={() => {
@@ -6972,40 +7005,6 @@ function HomeComposer(props: {
               </div>
             ) : null}
           </div>
-          <input
-            ref={fileInputRef}
-            className="visually-hidden"
-            type="file"
-            multiple
-            accept=".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*"
-            onChange={(event) => {
-              const files = Array.from(event.currentTarget.files ?? []);
-              event.currentTarget.value = "";
-              if (files.length === 0) return;
-              const acceptedItemCount = stagedComposerItems.filter((item) => item.kind !== "rejected_pasted_text").length;
-              const availableItemCount = Math.max(0, AGENT_STAGED_ITEM_MAX_COUNT - acceptedItemCount);
-              const acceptedFiles = files.slice(0, availableItemCount);
-              if (acceptedFiles.length === 0) {
-                setCaptureError(props.t("home.attachmentRejection.tooManyFiles"));
-                return;
-              }
-              stagedAttachmentRevisionRef.current += 1;
-              stagedComposerAttemptRef.current = null;
-              setAttachmentSubmissionNotice(null);
-              setStagedComposerItems((current) => [
-                ...current,
-                ...acceptedFiles.map((file) => ({
-                  kind: "file" as const,
-                  localId: createComposerItemId("file"),
-                  file
-                }))
-              ]);
-              setCaptureError(acceptedFiles.length < files.length
-                ? props.t("home.attachmentRejection.tooManyFiles")
-                : null);
-              window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
-            }}
-          />
           <button
             ref={voiceTriggerRef}
             className="round-button"
@@ -7015,15 +7014,6 @@ function HomeComposer(props: {
             onClick={() => void beginVoice()}
           >
             <PigeIcon name="voice" size={17} />
-          </button>
-          <button
-            className="round-button"
-            type="button"
-            title={props.t("home.attachToMessage")}
-            aria-label={props.t("home.attachToMessage")}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <PigeIcon name="attach" size={17} />
           </button>
           <button
             type="button"
