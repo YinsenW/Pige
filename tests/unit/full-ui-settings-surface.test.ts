@@ -1100,6 +1100,60 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("merges one exact duplicate-topic pair while preserving explicit survivor choice", async () => {
+    const dom = createDom();
+    const repairContextId = `knowledge_health_repair_context_${"7".repeat(32)}`;
+    const pageProofs = [
+      { pageId: "page_20260731_duplicateaa", revision: `noteeditrev_${"8".repeat(64)}`,
+        renderProof: `knowledge_health_render_${"9".repeat(64)}` },
+      { pageId: "page_20260731_duplicatebb", revision: `noteeditrev_${"a".repeat(64)}`,
+        renderProof: `knowledge_health_render_${"b".repeat(64)}` }
+    ] as const;
+    const runKnowledgeHealth = vi.fn()
+      .mockImplementationOnce(async (request) => ({ ...request, status: "ready", checkedAt: "2026-07-31T12:00:00.000Z",
+        indexGeneration: "index:duplicate:4", coverage: "complete", invalidPageCount: 0,
+        counts: { totalIssueCount: 1, brokenLinkPageCount: 0, unresolvedLinkCount: 0, orphanPageCount: 0,
+          duplicateTopicGroupCount: 1, unsourcedClaimCount: 0 }, issues: [{ kind: "duplicate_topic", candidatePageCount: 2,
+          pages: [{ pageId: pageProofs[0].pageId, title: "Alpha topic" }, { pageId: pageProofs[1].pageId, title: "Beta topic" }],
+          repairContextId, pageProofs }], truncated: false }))
+      .mockImplementationOnce(async (request) => ({ ...request, status: "ready", checkedAt: "2026-07-31T12:01:00.000Z",
+        indexGeneration: "index:duplicate:5", coverage: "complete", invalidPageCount: 0,
+        counts: { totalIssueCount: 0, brokenLinkPageCount: 0, unresolvedLinkCount: 0, orphanPageCount: 0,
+          duplicateTopicGroupCount: 0, unsourcedClaimCount: 0 }, issues: [], truncated: false }));
+    const repairKnowledgeHealthDuplicateTopic = vi.fn(async (request) => ({
+      ...request, status: "committed", operationId: "op_20260731_duplicatetopic123"
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { maintenance: {
+      runKnowledgeHealth, repairKnowledgeHealthDuplicateTopic, rebuildLocalDatabase: vi.fn(), resetLocalDatabase: vi.fn()
+    } } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, { activeVaultId: "vault_20260731_duplicate", locale: "en",
+        error: null, localDatabaseStatus: null, onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined), onOpenPage: vi.fn(async () => true),
+        onError: vi.fn(), t }));
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document, "Run Check").click();
+      await settle(dom);
+    });
+    await act(async () => { buttonNamed(dom.window.document, "Merge").click(); await settle(dom); });
+    const beta = [...dom.window.document.querySelectorAll<HTMLInputElement>('input[name="knowledge-health-topic-survivor"]')]
+      .find((input) => input.value === pageProofs[1].pageId)!;
+    await act(async () => { beta.click(); buttonNamed(dom.window.document, "Merge topics").click(); await settle(dom); });
+    expect(repairKnowledgeHealthDuplicateTopic).toHaveBeenCalledOnce();
+    expect(repairKnowledgeHealthDuplicateTopic.mock.calls[0]![0]).toMatchObject({
+      survivorPageId: pageProofs[1].pageId, absorbedPageId: pageProofs[0].pageId, repairContextId
+    });
+    expect(dom.window.document.body.textContent).toContain("The duplicate topics were merged");
+    expect(dom.window.document.body.textContent).toContain("No issues found");
+    expect(dom.window.document.body.textContent).not.toContain("op_20260731");
+    await act(async () => { await settle(dom); });
+    expect(dom.window.document.activeElement?.textContent).toBe("Run Check");
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
   it("lets the user choose one current parent for one repairable orphan", async () => {
     const dom = createDom();
     const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;

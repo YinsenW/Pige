@@ -76,6 +76,8 @@ import type {
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  KnowledgeHealthDuplicateTopicRepairRequest,
+  KnowledgeHealthDuplicateTopicRepairResult,
   KnowledgeHealthTargetSearchRequest,
   KnowledgeHealthTargetSearchResult,
   KnowledgeHealthOrphanParentSearchRequest,
@@ -446,6 +448,8 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  KnowledgeHealthDuplicateTopicRepairRequestSchema,
+  KnowledgeHealthDuplicateTopicRepairResultSchema,
   KnowledgeHealthTargetSearchRequestSchema,
   KnowledgeHealthTargetSearchResultSchema,
   KnowledgeHealthOrphanParentSearchRequestSchema,
@@ -2235,6 +2239,14 @@ const api: PigeDesktopApi = {
       const parsedRequest = KnowledgeHealthRepairRequestSchema.parse(request);
       return KnowledgeHealthRepairResultSchema.parse(
         await ipcRenderer.invoke("maintenance.repairKnowledgeHealth", parsedRequest)
+      );
+    },
+    repairKnowledgeHealthDuplicateTopic: async (
+      request: KnowledgeHealthDuplicateTopicRepairRequest
+    ): Promise<KnowledgeHealthDuplicateTopicRepairResult> => {
+      const parsedRequest = KnowledgeHealthDuplicateTopicRepairRequestSchema.parse(request);
+      return KnowledgeHealthDuplicateTopicRepairResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.repairKnowledgeHealthDuplicateTopic", parsedRequest)
       );
     }
   },

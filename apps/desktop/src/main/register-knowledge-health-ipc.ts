@@ -6,6 +6,8 @@ import type {
   KnowledgeHealthOrphanRepairResult,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  KnowledgeHealthDuplicateTopicRepairRequest,
+  KnowledgeHealthDuplicateTopicRepairResult,
   KnowledgeHealthRunRequest,
   KnowledgeHealthRunResult,
   KnowledgeHealthTargetSearchRequest,
@@ -18,6 +20,8 @@ import {
   KnowledgeHealthOrphanRepairResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  KnowledgeHealthDuplicateTopicRepairRequestSchema,
+  KnowledgeHealthDuplicateTopicRepairResultSchema,
   KnowledgeHealthRunRequestSchema,
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthTargetSearchRequestSchema,
@@ -40,6 +44,10 @@ interface RegisterKnowledgeHealthIpcOptions {
     vaultPath: string,
     request: KnowledgeHealthRepairRequest
   ) => KnowledgeHealthRepairResult | Promise<KnowledgeHealthRepairResult>;
+  readonly repairKnowledgeHealthDuplicateTopic: (
+    vaultPath: string,
+    request: KnowledgeHealthDuplicateTopicRepairRequest
+  ) => KnowledgeHealthDuplicateTopicRepairResult | Promise<KnowledgeHealthDuplicateTopicRepairResult>;
   readonly searchKnowledgeHealthTargets: (
     vaultPath: string,
     request: KnowledgeHealthTargetSearchRequest
@@ -116,6 +124,26 @@ export function registerKnowledgeHealthIpc(options: RegisterKnowledgeHealthIpcOp
         : repairNotFound(parsed);
     }
   });
+  options.ipcMain.handle("maintenance.repairKnowledgeHealthDuplicateTopic", async (_event, request: unknown) => {
+    const parsed = KnowledgeHealthDuplicateTopicRepairRequestSchema.parse(request);
+    const binding = options.getActiveVaultBinding();
+    if (!binding || binding.vaultId !== parsed.activeVaultId) return duplicateTopicNotFound(parsed);
+    try {
+      const result = KnowledgeHealthDuplicateTopicRepairResultSchema.parse(
+        await options.repairKnowledgeHealthDuplicateTopic(binding.vaultPath, parsed)
+      );
+      if (!sameDuplicateTopicIdentity(parsed, result)) return duplicateTopicFailed(parsed);
+      const current = options.getActiveVaultBinding();
+      return current?.vaultId === binding.vaultId && current.vaultPath === binding.vaultPath
+        ? result
+        : duplicateTopicNotFound(parsed);
+    } catch {
+      const current = options.getActiveVaultBinding();
+      return current?.vaultId === binding.vaultId && current.vaultPath === binding.vaultPath
+        ? duplicateTopicFailed(parsed)
+        : duplicateTopicNotFound(parsed);
+    }
+  });
   options.ipcMain.handle("maintenance.searchKnowledgeHealthOrphanParents", async (_event, request: unknown) => {
     const parsed = KnowledgeHealthOrphanParentSearchRequestSchema.parse(request);
     const binding = options.getActiveVaultBinding();
@@ -186,6 +214,19 @@ function sameRepairIdentity(
     result.targetRenderProof === request.targetRenderProof;
 }
 
+function sameDuplicateTopicIdentity(
+  request: KnowledgeHealthDuplicateTopicRepairRequest,
+  result: KnowledgeHealthDuplicateTopicRepairResult
+): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.reportRequestId === request.reportRequestId &&
+    result.indexGeneration === request.indexGeneration && result.issueKind === request.issueKind &&
+    result.repairContextId === request.repairContextId && result.survivorPageId === request.survivorPageId &&
+    result.survivorRevision === request.survivorRevision && result.survivorRenderProof === request.survivorRenderProof &&
+    result.absorbedPageId === request.absorbedPageId && result.absorbedRevision === request.absorbedRevision &&
+    result.absorbedRenderProof === request.absorbedRenderProof;
+}
+
 function sameTargetSearchIdentity(
   request: KnowledgeHealthTargetSearchRequest,
   result: KnowledgeHealthTargetSearchResult
@@ -239,6 +280,14 @@ function repairNotFound(request: KnowledgeHealthRepairRequest): KnowledgeHealthR
 
 function repairFailed(request: KnowledgeHealthRepairRequest): KnowledgeHealthRepairResult {
   return KnowledgeHealthRepairResultSchema.parse({ ...request, status: "failed" });
+}
+
+function duplicateTopicNotFound(request: KnowledgeHealthDuplicateTopicRepairRequest): KnowledgeHealthDuplicateTopicRepairResult {
+  return KnowledgeHealthDuplicateTopicRepairResultSchema.parse({ ...request, status: "not_found" });
+}
+
+function duplicateTopicFailed(request: KnowledgeHealthDuplicateTopicRepairRequest): KnowledgeHealthDuplicateTopicRepairResult {
+  return KnowledgeHealthDuplicateTopicRepairResultSchema.parse({ ...request, status: "failed" });
 }
 
 function targetSearchNotFound(request: KnowledgeHealthTargetSearchRequest): KnowledgeHealthTargetSearchResult {
