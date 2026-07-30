@@ -1740,6 +1740,7 @@ Waiver rules:
 | Node runtime bundled by Electron | required | Main-process runtime, filesystem, workers, IPC, local services. | https://nodejs.org | Controlled by Electron version. | Do not expose raw Node APIs to renderer. |
 | electron-vite (`build.electron-vite`) | recommended | Electron/Vite integration for v0.1 scaffold unless packaging tests reject it. | https://electron-vite.org/guide/ | Pin if adopted; keep config conventional enough to replace. | Build-time dependency only. |
 | Vitest (`test.vitest`) | required | Phase 0 unit test runner and package test baseline. | https://vitest.dev | Pin npm version per release. | Build-time/test dependency only. |
+| yaml (`governance.yaml-parser`) | required | Standards-compliant parsing and structural validation of every committed GitHub issue form and issue-template configuration. | https://eemeli.org/yaml/ | Pin `2.9.0`; retain all-template and malformed/duplicate/unsafe-contact negative coverage on update. | ISC build-only dependency; excluded from packaged runtime. |
 | Zod (`schema.zod`) | required | Shared schema validation for manifests and future DTO/frontmatter boundaries. | https://zod.dev | Pin npm version per release. | Local validation library; keep behind `packages/schemas`. |
 
 ### 16.2 Local Storage, Database, And Indexing

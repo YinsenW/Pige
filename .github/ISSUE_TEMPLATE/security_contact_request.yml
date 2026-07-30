@@ -1,5 +1,5 @@
 name: Security contact request
-description: Request a private channel when GitHub private vulnerability reporting is unavailable.
+description: Request a private channel if GitHub private vulnerability reporting is temporarily unavailable.
 title: "[Security contact request]"
 labels:
   - security
@@ -9,7 +9,7 @@ body:
       value: |
         Do not include vulnerability details, exploit steps, secrets, screenshots, logs, private files, or payloads in this public issue.
 
-        Use this only to request a private maintainer contact path when GitHub private vulnerability reporting is not available.
+        Use this fallback only if GitHub private vulnerability reporting is temporarily unavailable.
   - type: checkboxes
     id: confirmation
     attributes:
