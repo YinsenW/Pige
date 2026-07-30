@@ -8,6 +8,9 @@ import {
 } from "./ReaderNoteMergeDialog";
 
 export type ReaderDocumentTrashOutcome = "committed" | "retained";
+export type ReaderDocumentArchiveOutcome =
+  | { readonly status: "committed"; readonly render: import("@pige/contracts").NoteRenderResult }
+  | { readonly status: "retained" };
 
 export interface ReaderDocumentActionLabels {
   readonly more: string;
@@ -21,23 +24,38 @@ export interface ReaderDocumentActionLabels {
   readonly failed: string;
 }
 
+export interface ReaderDocumentArchiveLabels {
+  readonly action: string;
+  readonly title: string;
+  readonly description: string;
+  readonly cancel: string;
+  readonly confirm: string;
+  readonly pending: string;
+  readonly failed: string;
+}
+
 export interface ReaderDocumentActionsProps {
   readonly ownerIdentity: string;
   readonly canMoveToTrash: boolean;
   readonly canMerge: boolean;
+  readonly canArchive?: boolean;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
+  readonly archiveLabels?: ReaderDocumentArchiveLabels;
   readonly onMoveToTrash: () => Promise<ReaderDocumentTrashOutcome>;
   readonly onLoadMergeTargets: () => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMerge: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteMergeOutcome>;
+  readonly onArchive?: () => Promise<ReaderDocumentArchiveOutcome>;
   readonly onCommitted: () => void;
   readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
+  readonly onArchiveCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
 }
 
 export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.JSX.Element | null {
+  const canArchive = props.canArchive === true && Boolean(props.archiveLabels && props.onArchive);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"trash" | "archive" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -46,6 +64,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   const ownerIdentityRef = useRef(props.ownerIdentity);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
+  const archiveActionRef = useRef<HTMLButtonElement>(null);
   const mergeActionRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
@@ -55,21 +74,27 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     requestSequenceRef.current += 1;
     requestActiveRef.current = false;
     setMenuOpen(false);
-    setConfirmOpen(false);
+    setConfirmAction(null);
     setMergeOpen(false);
     setPending(false);
     setFailed(false);
-  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge]);
+  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive]);
 
   useEffect(() => {
-    if (menuOpen) (props.canMerge ? mergeActionRef.current : actionRef.current)?.focus({ preventScroll: true });
+    if (menuOpen) {
+      (props.canMerge
+        ? mergeActionRef.current
+        : canArchive
+          ? archiveActionRef.current
+          : actionRef.current)?.focus({ preventScroll: true });
+    }
   }, [menuOpen]);
 
   useEffect(() => {
-    if (confirmOpen) cancelRef.current?.focus({ preventScroll: true });
-  }, [confirmOpen]);
+    if (confirmAction) cancelRef.current?.focus({ preventScroll: true });
+  }, [confirmAction]);
 
-  if (!props.canMoveToTrash && !props.canMerge) return null;
+  if (!props.canMoveToTrash && !props.canMerge && !canArchive) return null;
 
   const restoreTriggerFocus = (): void => {
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -77,7 +102,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
 
   const cancel = (): void => {
     if (requestActiveRef.current) return;
-    setConfirmOpen(false);
+    setConfirmAction(null);
     setFailed(false);
     restoreTriggerFocus();
   };
@@ -90,10 +115,17 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setPending(true);
     setFailed(false);
     try {
-      const outcome = await props.onMoveToTrash();
+      const outcome = confirmAction === "archive" && props.onArchive
+        ? await props.onArchive()
+        : await props.onMoveToTrash();
       if (sequence !== requestSequenceRef.current || ownerIdentity !== ownerIdentityRef.current) return;
+      if (confirmAction === "archive" && typeof outcome === "object" && outcome.status === "committed") {
+        setConfirmAction(null);
+        props.onArchiveCommitted?.(outcome.render);
+        return;
+      }
       if (outcome === "committed") {
-        setConfirmOpen(false);
+        setConfirmAction(null);
         props.onCommitted();
         return;
       }
@@ -153,6 +185,20 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
             {props.mergeLabels.title}
           </button>
         ) : null}
+        {canArchive && props.archiveLabels ? (
+          <button
+            ref={archiveActionRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmAction("archive");
+              setFailed(false);
+            }}
+          >
+            {props.archiveLabels.action}
+          </button>
+        ) : null}
         {props.canMoveToTrash ? (
           <button
             ref={actionRef}
@@ -160,7 +206,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
             role="menuitem"
             onClick={() => {
               setMenuOpen(false);
-              setConfirmOpen(true);
+              setConfirmAction("trash");
               setFailed(false);
             }}
           >
@@ -184,15 +230,15 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         }}
       />
     ) : null}
-    {confirmOpen ? (
+    {confirmAction ? (
       <div className="confirmation-backdrop">
         <section
           ref={dialogRef}
           className="confirmation-dialog"
           role="alertdialog"
           aria-modal="true"
-          aria-labelledby="reader-document-trash-title"
-          aria-describedby="reader-document-trash-description"
+          aria-labelledby={`reader-document-${confirmAction}-title`}
+          aria-describedby={`reader-document-${confirmAction}-description`}
           aria-busy={pending}
           onKeyDown={(event) => {
             if (event.key === "Escape" && !pending) {
@@ -216,16 +262,24 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         >
           <div className="confirmation-icon" aria-hidden="true">!</div>
           <div className="confirmation-copy">
-            <h2 id="reader-document-trash-title">{props.labels.title}</h2>
-            <p id="reader-document-trash-description">{props.labels.description}</p>
+            <h2 id={`reader-document-${confirmAction}-title`}>
+              {confirmAction === "archive" ? props.archiveLabels?.title : props.labels.title}
+            </h2>
+            <p id={`reader-document-${confirmAction}-description`}>
+              {confirmAction === "archive" ? props.archiveLabels?.description : props.labels.description}
+            </p>
           </div>
-          {failed ? <p className="error" role="alert">{props.labels.failed}</p> : null}
+          {failed ? <p className="error" role="alert">
+            {confirmAction === "archive" ? props.archiveLabels?.failed : props.labels.failed}
+          </p> : null}
           <div className="confirmation-actions">
             <button ref={cancelRef} type="button" className="secondary" disabled={pending} onClick={cancel}>
-              {props.labels.cancel}
+              {confirmAction === "archive" ? props.archiveLabels?.cancel : props.labels.cancel}
             </button>
             <button type="button" className="primary" disabled={pending} onClick={() => void submit()}>
-              {pending ? props.labels.pending : props.labels.confirm}
+              {pending
+                ? confirmAction === "archive" ? props.archiveLabels?.pending : props.labels.pending
+                : confirmAction === "archive" ? props.archiveLabels?.confirm : props.labels.confirm}
             </button>
           </div>
         </section>
