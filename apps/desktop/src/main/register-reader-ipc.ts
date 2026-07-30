@@ -18,6 +18,8 @@ import type {
   NoteRenderRequest,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -53,6 +55,9 @@ import {
   NOTE_ARCHIVE_CURRENT_CHANNEL,
   NoteArchiveCurrentRequestSchema,
   NoteArchiveCurrentResultSchema,
+  NOTE_RESTORE_ARCHIVED_CHANNEL,
+  NoteRestoreArchivedRequestSchema,
+  NoteRestoreArchivedResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -247,6 +252,25 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    return result;
+  });
+  options.ipcMain.handle(NOTE_RESTORE_ARCHIVED_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteRestoreArchivedRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteRestoreArchivedResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteRestoreArchivedResult;
+    try {
+      rawResult = await options.getNoteArchiveService().restore(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteRestoreArchivedResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteRestoreArchivedResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
   });

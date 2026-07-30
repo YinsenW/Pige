@@ -9,6 +9,10 @@ const request = {
   renderContextId: "noterenderctx_abcdefghijklmnop",
   expectedRevision: `noteeditrev_${"a".repeat(64)}`
 };
+const restoreRequest = {
+  ...request,
+  requestId: "noterestorereq_abcdefghijklmnop"
+};
 
 describe("NoteArchiveService", () => {
   it("archives one exact current Reader note and returns only the authoritative archived render", async () => {
@@ -72,6 +76,51 @@ describe("NoteArchiveService", () => {
     } as never);
     await expect(mismatched.archive("reader_owner", request)).resolves.toEqual({ ...request, status: "failed" });
   });
+
+  it("restores one exact archived note with a restore_page Operation and no duplicate mutation", async () => {
+    const assertCurrent = vi.fn(() => true);
+    const save = vi.fn(() => ({
+      status: "committed" as const,
+      requestId: "noteeditreq_internalrestore",
+      activeVaultId: restoreRequest.activeVaultId,
+      pageId: restoreRequest.currentPageId,
+      revisionId: `sha256:${"b".repeat(64)}`,
+      renderIdentity: `sha256:${"c".repeat(64)}`,
+      operationId: "op_20260730_restorepage1234"
+    }));
+    const service = new NoteArchiveService({
+      resolveTrashTarget: vi.fn(() => readyTarget(assertCurrent)),
+      render: vi.fn(async () => activeRender())
+    } as never, { open: vi.fn(() => openedArchivedNote()), save } as never, () => new Date("2026-07-30T13:00:00.000Z"));
+
+    await expect(service.restore("reader_owner", restoreRequest)).resolves.toMatchObject({
+      ...restoreRequest,
+      status: "committed",
+      operationId: "op_20260730_restorepage1234",
+      render: { summary: { status: "active" }, restoreEligibility: { canRestore: false } }
+    });
+    expect(assertCurrent).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: expect.stringMatching(/^noteeditreq_[a-f0-9]{32}$/u),
+      expectedRevisionId: `sha256:${"a".repeat(64)}`,
+      markdown: expect.stringContaining("status: active")
+    }), "restore_page");
+  });
+
+  it("fails restore before mutation on stale identity or a non-archived source", async () => {
+    const save = vi.fn(() => ({ status: "failed" as const }));
+    const stale = new NoteArchiveService({
+      resolveTrashTarget: vi.fn(() => readyTarget(() => false)), render: vi.fn()
+    } as never, { open: vi.fn(() => openedArchivedNote()), save } as never);
+    await expect(stale.restore("reader_owner", restoreRequest)).resolves.toEqual({ ...restoreRequest, status: "stale" });
+    expect(save).not.toHaveBeenCalled();
+
+    const ineligible = new NoteArchiveService({
+      resolveTrashTarget: vi.fn(() => readyTarget(() => true)), render: vi.fn()
+    } as never, { open: vi.fn(() => openedNote()), save } as never);
+    await expect(ineligible.restore("reader_owner", restoreRequest)).resolves.toEqual({ ...restoreRequest, status: "ineligible" });
+    expect(save).not.toHaveBeenCalled();
+  });
 });
 
 function readyTarget(assertCurrent: () => boolean) {
@@ -99,6 +148,13 @@ function openedNote() {
   };
 }
 
+function openedArchivedNote() {
+  return {
+    ...openedNote(),
+    markdown: openedNote().markdown.replace("status: \"active\"", "status: archived")
+  };
+}
+
 function archivedRender() {
   return {
     summary: {
@@ -115,6 +171,16 @@ function archivedRender() {
     byteSize: 128,
     renderContextId: "noterenderctx_qrstuvwxyzabcdef",
     trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(64)}` },
-    archiveEligibility: { canArchive: false, revision: `noteeditrev_${"b".repeat(64)}` }
+    archiveEligibility: { canArchive: false, revision: `noteeditrev_${"b".repeat(64)}` },
+    restoreEligibility: { canRestore: true, revision: `noteeditrev_${"b".repeat(64)}` }
+  };
+}
+
+function activeRender() {
+  return {
+    ...archivedRender(),
+    summary: { ...archivedRender().summary, status: "active" as const },
+    archiveEligibility: { canArchive: true, revision: `noteeditrev_${"b".repeat(64)}` },
+    restoreEligibility: { canRestore: false, revision: `noteeditrev_${"b".repeat(64)}` }
   };
 }

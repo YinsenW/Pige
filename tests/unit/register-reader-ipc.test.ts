@@ -101,6 +101,7 @@ describe("registerReaderIpc", () => {
       "notes.saveEditor",
       "notes.trashCurrent",
       "notes.archiveCurrent",
+      "notes.restoreArchived",
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
@@ -194,6 +195,44 @@ describe("registerReaderIpc", () => {
     await expect(handlers.get("notes.archiveCurrent")!({ sender } as IpcMainInvokeEvent, identity))
       .resolves.toMatchObject({ status: "committed", operationId: "op_20260730_archivenote1234" });
     expect(archive).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds archived-note restore to the tracked Reader owner and refreshes Activity only after commit", async () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "noterestorereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_archivenote1",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    };
+    const renderResult = {
+      summary: {
+        pageId: identity.currentPageId, title: "Restored note", pageType: "note", status: "active",
+        pagePath: "wiki/archive-note.md", createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T13:00:00.000Z", sourceIds: []
+      },
+      html: "<h1>Restored note</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(32)}` },
+      archiveEligibility: { canArchive: true, revision: `noteeditrev_${"b".repeat(32)}` },
+      restoreEligibility: { canRestore: false, revision: `noteeditrev_${"b".repeat(32)}` }
+    } as const;
+    const restore = vi.fn(async () => ({
+      ...identity, status: "committed" as const,
+      operationId: "op_20260730_restorepage1234", render: renderResult
+    }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness(
+      { render: vi.fn(async () => renderResult) }, undefined, undefined, vi.fn(), undefined, undefined,
+      { restore }, refreshed
+    );
+    const sender = makeSender(35);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+    await expect(handlers.get("notes.restoreArchived")!({ sender } as IpcMainInvokeEvent, identity))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260730_restorepage1234" });
+    expect(restore).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
     expect(refreshed).toHaveBeenCalledTimes(1);
   });
 

@@ -1168,6 +1168,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "create_page",
     "update_page",
     "archive_page",
+    "restore_page",
     "trash_page",
     "update_collection_cell",
     "add_collection_row",
