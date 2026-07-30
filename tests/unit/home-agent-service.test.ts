@@ -147,7 +147,7 @@ describe("Home Pi Agent service", () => {
 
     expect(outcome).toMatchObject({ state: "completed" });
     expect(systemPrompt).toContain("newly generated durable knowledge in the configured app language fr");
-    expect(systemPrompt).toContain("never translate preserved source bodies");
+    expect(systemPrompt).toContain("do not translate preserved source bodies");
   });
 
   it("keeps all five citation namespaces disjoint and rejects conflicting identities", () => {

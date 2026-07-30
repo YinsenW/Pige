@@ -66,7 +66,7 @@ import {
   type AgentIngestToolOutput,
   type AgentIngestUpdateToolInput
 } from "./agent-ingest-tool-registry";
-import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext, knowledgeLanguagePolicyInstruction } from "./agent-policy-context";
 import {
   writeSingleWriterFileAtomic as writeFileAtomic,
   writeSingleWriterJsonAtomic as writeJsonAtomic
@@ -927,7 +927,7 @@ export class AgentIngestService {
     };
 
     await authorizeCurrentModelTurn();
-    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguageInstruction(policy.language)}` + (proposalStageAvailable
+    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguagePolicyInstruction(policy.language)}` + (proposalStageAvailable
       ? "\nUse pige_stage_knowledge_note_proposal when the generated note should wait for explicit human review. Staging does not apply or publish the proposed Markdown."
       : "");
     const userPrompt = createUserPrompt(currentPromptContext, hooks.userTurn);
@@ -2300,16 +2300,6 @@ function createSystemPrompt(proposalStageAvailable: boolean): string {
     "Use only evidence refs supplied by pige_inspect_source. Never place citation syntax inside statement text.",
     "confidence must be one of: low, medium, high."
   ].join("\n");
-}
-
-function knowledgeLanguageInstruction(language: AgentRuntimePolicyContext["language"]): string {
-  if (language.generatedKnowledgeLanguage === "app_locale") {
-    return `Write newly generated durable knowledge in the configured app language ${language.appLocale}; do not translate preserved source bodies.`;
-  }
-  if (language.generatedKnowledgeLanguage === "follow_query") {
-    return "Write newly generated durable knowledge in the current user's request language when clear; otherwise preserve the source language.";
-  }
-  return "Preserve the source language in newly generated durable knowledge unless the user explicitly requests translation.";
 }
 
 function createUserPrompt(
