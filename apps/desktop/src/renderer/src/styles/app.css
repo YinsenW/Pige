@@ -5723,6 +5723,42 @@ dd {
 .conversation-history-row small,
 .conversation-trash-confirm small {
   color: var(--text-secondary);
+.conversation-history-entry {
+  position: relative;
+}
+
+.conversation-history-entry:last-child > .settings-row {
+  border-bottom: 0;
+}
+
+.conversation-history-entry > .settings-row {
+  width: 100%;
+  padding-right: 88px;
+}
+
+.conversation-title-edit {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+}
+
+.conversation-title-form {
+  display: grid;
+  gap: 10px;
+  border-bottom: .5px solid var(--border-default);
+  padding: 12px 14px;
+  background: var(--surface-hover);
+}
+
+.conversation-history-entry:last-child > .conversation-title-form {
+  border-bottom: 0;
+}
+
+.conversation-title-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .permission-mode-fieldset {

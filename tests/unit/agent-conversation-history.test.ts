@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -146,6 +147,155 @@ describe("AgentConversationHistory", () => {
       activeVaultId: "vault_20260729_history01",
       vaultPath
     })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
+  });
+
+  it("sets, clears, and reloads a durable title without changing the append-only conversation", () => {
+    const vaultPath = createVaultRoot();
+    const conversations = new AgentTurnConversationStore();
+    const turn = conversations.appendUserTurn(
+      vaultPath,
+      "Original body that must stay only in JSONL",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_renamepersist001" }
+    );
+    const assistant = conversations.appendAssistantTurn(
+      vaultPath,
+      turn,
+      "job_20260731_renamepersist001",
+      "Assistant body and tool payload stay in JSONL"
+    );
+    const jsonlPath = path.join(vaultPath, ".pige/conversations/2026/07", `${turn.event.conversationId}.jsonl`);
+    const before = fs.readFileSync(jsonlPath);
+    const beforeHash = createHash("sha256").update(before).digest("hex");
+    const initial = new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_rename01",
+      vaultPath
+    }).conversations[0]!;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "conversation_title_request_renamepersist001",
+      activeVaultId: "vault_20260731_rename01",
+      conversationId: turn.event.conversationId,
+      expectedTailEventId: assistant.id,
+      expectedTitleRevision: 0,
+      title: "Research plan"
+    };
+
+    const owner = new AgentConversationHistory(128, () => new Date("2026-07-31T01:02:03.000Z"));
+    expect(owner.setTitle({ vaultPath, request })).toMatchObject({
+      status: "committed",
+      summary: { ...initial, title: "Research plan", titleRevision: 1 }
+    });
+    expect(owner.setTitle({ vaultPath, request })).toMatchObject({
+      status: "committed",
+      summary: { title: "Research plan", titleRevision: 1 }
+    });
+    expect(new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_rename01",
+      vaultPath
+    }).conversations[0]).toMatchObject({ title: "Research plan", titleRevision: 1 });
+
+    const metadataPath = path.join(vaultPath, ".pige/conversations/conversations-manifest.json");
+    const metadata = fs.readFileSync(metadataPath, "utf8");
+    expect(metadata).toContain('"title": "Research plan"');
+    for (const privateValue of [
+      "Original body", "Assistant body", vaultPath, "provider", "model", "tool", "secret"
+    ]) expect(metadata).not.toContain(privateValue);
+    expect(createHash("sha256").update(fs.readFileSync(jsonlPath)).digest("hex")).toBe(beforeHash);
+
+    expect(owner.setTitle({
+      vaultPath,
+      request: {
+        ...request,
+        requestId: "conversation_title_request_clearpersist0001",
+        expectedTitleRevision: 1,
+        title: null
+      }
+    })).toMatchObject({ status: "committed", summary: { titleRevision: 2 } });
+    const restarted = new AgentConversationHistory().list({
+      activeVaultId: "vault_20260731_rename01",
+      vaultPath
+    }).conversations[0]!;
+    expect(restarted.title).toBeUndefined();
+    expect(restarted.titleRevision).toBe(2);
+    expect(createHash("sha256").update(fs.readFileSync(jsonlPath)).digest("hex")).toBe(beforeHash);
+  });
+
+  it("returns the authoritative summary when the tail or title revision is stale", () => {
+    const vaultPath = createVaultRoot();
+    const conversations = new AgentTurnConversationStore();
+    const turn = conversations.appendUserTurn(
+      vaultPath,
+      "Initial turn",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_renamestale0001" }
+    );
+    const firstAssistant = conversations.appendAssistantTurn(
+      vaultPath, turn, "job_20260731_renamestale0001", "Initial answer"
+    );
+    const owner = new AgentConversationHistory();
+    expect(owner.setTitle({
+      vaultPath,
+      request: {
+        apiVersion: 1,
+        requestId: "conversation_title_request_firststale000100",
+        activeVaultId: "vault_20260731_rename01",
+        conversationId: turn.event.conversationId,
+        expectedTailEventId: firstAssistant.id,
+        expectedTitleRevision: 0,
+        title: "First title"
+      }
+    }).status).toBe("committed");
+
+    const nextTurn = conversations.appendUserTurn(
+      vaultPath,
+      "A later turn",
+      { inputKind: "follow_up", locale: "en" },
+      {
+        clientTurnId: "turn_20260731_renamestale0002",
+        conversationId: turn.event.conversationId,
+        expectedTailEventId: firstAssistant.id
+      }
+    );
+    const stale = owner.setTitle({
+      vaultPath,
+      request: {
+        apiVersion: 1,
+        requestId: "conversation_title_request_secondstale00100",
+        activeVaultId: "vault_20260731_rename01",
+        conversationId: turn.event.conversationId,
+        expectedTailEventId: firstAssistant.id,
+        expectedTitleRevision: 0,
+        title: "Draft title"
+      }
+    });
+    expect(stale).toMatchObject({
+      status: "stale",
+      summary: { title: "First title", titleRevision: 1, tailEventId: nextTurn.event.id }
+    });
+  });
+
+  it("rejects secret-like titles before writing metadata", () => {
+    const vaultPath = createVaultRoot();
+    const turn = new AgentTurnConversationStore().appendUserTurn(
+      vaultPath,
+      "Keep this local",
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260731_renamesecret001" }
+    );
+    expect(() => new AgentConversationHistory().setTitle({
+      vaultPath,
+      request: {
+        apiVersion: 1,
+        requestId: "conversation_title_request_secretblocked010",
+        activeVaultId: "vault_20260731_rename01",
+        conversationId: turn.event.conversationId,
+        expectedTailEventId: turn.event.id,
+        expectedTitleRevision: 0,
+        title: "sk-abcdefghijklmnop"
+      }
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_unavailable" }));
+    expect(fs.existsSync(path.join(vaultPath, ".pige/conversations/conversations-manifest.json"))).toBe(false);
   });
 });
 

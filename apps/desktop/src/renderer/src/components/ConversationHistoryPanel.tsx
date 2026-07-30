@@ -14,6 +14,15 @@ type HistoryState = {
   readonly nextCursor?: AgentConversationHistoryCursor;
 };
 
+type TitleEditorState = {
+  readonly conversationId: string;
+  readonly draft: string;
+  readonly expectedTailEventId: string;
+  readonly expectedTitleRevision: number;
+  readonly saving: boolean;
+  readonly failed: boolean;
+};
+
 const EMPTY_HISTORY: HistoryState = { conversations: [], hasMore: false };
 
 export function ConversationHistoryPanel(props: {
@@ -38,6 +47,7 @@ export function ConversationHistoryPanel(props: {
   const [lifecycleNotice, setLifecycleNotice] = useState<"trashed" | "restored" | "failed" | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<{ readonly conversationId: string; readonly status: "exported" | "stale" | "not_found" | "failed" } | null>(null);
+  const [titleEditor, setTitleEditor] = useState<TitleEditorState | null>(null);
   const requestSequenceRef = useRef(0);
   const operationRef = useRef(false);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -59,6 +69,7 @@ export function ConversationHistoryPanel(props: {
     setLifecycleNotice(null);
     setExportingId(null);
     setExportNotice(null);
+    setTitleEditor(null);
   }, [props.activeVaultId]);
 
   const loadHistory = async (cursor?: AgentConversationHistoryCursor): Promise<HistoryState | null> => {
@@ -281,6 +292,67 @@ export function ConversationHistoryPanel(props: {
     });
   };
 
+  const editTitle = (conversation: AgentConversationHistorySummary): void => {
+    if (operationRef.current || props.disabled) return;
+    setTitleEditor({
+      conversationId: conversation.conversationId,
+      draft: conversation.title ?? "",
+      expectedTailEventId: conversation.tailEventId,
+      expectedTitleRevision: conversation.titleRevision ?? 0,
+      saving: false,
+      failed: false
+    });
+  };
+
+  const setTitle = async (title: string | null): Promise<void> => {
+    if (!titleEditor || titleEditor.saving || operationRef.current || props.disabled) return;
+    const editor = titleEditor;
+    const vaultId = props.activeVaultId;
+    operationRef.current = true;
+    setTitleEditor({ ...editor, saving: true, failed: false });
+    try {
+      const requestId = createConversationTitleRequestId();
+      const result = await window.pige.agent.setConversationTitle({
+        apiVersion: 1,
+        requestId,
+        activeVaultId: vaultId,
+        conversationId: editor.conversationId,
+        expectedTailEventId: editor.expectedTailEventId,
+        expectedTitleRevision: editor.expectedTitleRevision,
+        title
+      });
+      if (activeVaultIdRef.current !== vaultId || result.requestId !== requestId ||
+        result.activeVaultId !== vaultId || result.conversationId !== editor.conversationId) return;
+      if (result.status === "committed" || result.status === "stale") {
+        setHistory((current) => ({
+          ...current,
+          conversations: current.conversations.map((conversation) =>
+            conversation.conversationId === result.summary.conversationId ? result.summary : conversation)
+        }));
+      }
+      if (result.status === "committed") {
+        setTitleEditor(null);
+        window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(
+          `[data-conversation-title-edit="${editor.conversationId}"]`
+        )?.focus({ preventScroll: true }));
+      } else if (result.status === "stale") {
+        setTitleEditor({
+          ...editor,
+          expectedTailEventId: result.summary.tailEventId,
+          expectedTitleRevision: result.summary.titleRevision,
+          saving: false,
+          failed: true
+        });
+      } else {
+        setTitleEditor({ ...editor, saving: false, failed: true });
+      }
+    } catch {
+      if (activeVaultIdRef.current === vaultId) setTitleEditor({ ...editor, saving: false, failed: true });
+    } finally {
+      operationRef.current = false;
+    }
+  };
+
   return (
     <div data-conversation-history-panel="true">
       <div className="settings-inline-actions">
@@ -312,26 +384,65 @@ export function ConversationHistoryPanel(props: {
       {expanded ? (
         <div className="settings-card" aria-label={props.t("conversation.history")}>
           {history.conversations.map((conversation) => (
-            <div className="settings-row conversation-history-row" key={conversation.conversationId}>
+            <div className="settings-row conversation-history-row conversation-history-entry" key={conversation.conversationId}>
               <button
                 type="button"
-                className="settings-row conversation-history-open"
+                className="conversation-history-open"
                 aria-current={props.selectedConversationId === conversation.conversationId ? "true" : undefined}
-                disabled={props.disabled || loading || exportingId !== null}
+                disabled={props.disabled || loading || titleEditor?.saving}
                 onClick={(event) => void open(conversation.conversationId, "history", event.currentTarget)}
               >
-                <span><strong>{conversation.safePreview || props.t("conversation.previewUnavailable")}</strong><small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small></span>
+                <span>
+                  <strong>{conversation.title ?? (conversation.safePreview || props.t("conversation.previewUnavailable"))}</strong>
+                  <small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small>
+                </span>
               </button>
-              {conversation.revision && props.selectedConversationId !== conversation.conversationId ? (
-                <button type="button" className="quiet-button" disabled={props.disabled || loading || exportingId !== null} onClick={() => { setPendingTrash(conversation); setLifecycleNotice(null); }}>
-                  {props.t("conversation.moveToTrash")}
+              <div className="settings-inline-actions">
+                <button type="button" className="quiet-button conversation-title-edit"
+                  data-conversation-title-edit={conversation.conversationId}
+                  aria-label={`${props.t("conversation.rename")}: ${conversation.title ?? (conversation.safePreview || props.t("conversation.previewUnavailable"))}`}
+                  disabled={props.disabled || loading || titleEditor?.saving || exportingId !== null}
+                  onClick={() => editTitle(conversation)}>{props.t("conversation.rename")}</button>
+                {conversation.revision && props.selectedConversationId !== conversation.conversationId ? (
+                  <button type="button" className="quiet-button"
+                    disabled={props.disabled || loading || titleEditor?.saving || exportingId !== null}
+                    onClick={() => { setPendingTrash(conversation); setLifecycleNotice(null); }}>
+                    {props.t("conversation.moveToTrash")}
+                  </button>
+                ) : null}
+                <button type="button" className="quiet-button"
+                  disabled={props.disabled || loading || titleEditor?.saving || exportingId !== null}
+                  onClick={() => void exportConversation(conversation)}>
+                  {props.t(exportingId === conversation.conversationId ? "conversation.exporting" : "conversation.export")}
                 </button>
+              </div>
+              {titleEditor?.conversationId === conversation.conversationId ? (
+                <form className="conversation-title-form" onSubmit={(event) => {
+                  event.preventDefault();
+                  void setTitle(titleEditor.draft.trim());
+                }}>
+                  <label>
+                    <span>{props.t("conversation.titleLabel")}</span>
+                    <input autoFocus className="settings-input" maxLength={480} value={titleEditor.draft}
+                      disabled={titleEditor.saving} onChange={(event) => setTitleEditor({
+                        ...titleEditor, draft: event.currentTarget.value, failed: false
+                      })} />
+                  </label>
+                  <div className="settings-inline-actions">
+                    <button className="quiet-button" type="submit"
+                      disabled={titleEditor.saving || titleEditor.draft.trim().length === 0}>
+                      {props.t(titleEditor.saving ? "conversation.titleSaving" : "conversation.titleSave")}
+                    </button>
+                    {conversation.title ? <button className="quiet-button" type="button"
+                      disabled={titleEditor.saving} onClick={() => void setTitle(null)}>
+                      {props.t("conversation.titleClear")}
+                    </button> : null}
+                    <button className="quiet-button" type="button" disabled={titleEditor.saving}
+                      onClick={() => setTitleEditor(null)}>{props.t("conversation.titleCancel")}</button>
+                  </div>
+                  {titleEditor.failed ? <p className="error" role="alert">{props.t("conversation.titleFailed")}</p> : null}
+                </form>
               ) : null}
-              <button type="button" className="quiet-button"
-                disabled={props.disabled || loading || exportingId !== null}
-                onClick={() => void exportConversation(conversation)}>
-                {props.t(exportingId === conversation.conversationId ? "conversation.exporting" : "conversation.export")}
-              </button>
             </div>
           ))}
           {pendingTrash ? (
@@ -380,6 +491,10 @@ export function ConversationHistoryPanel(props: {
       {lifecycleNotice ? <p className={lifecycleNotice === "failed" ? "error" : "settings-note"} role={lifecycleNotice === "failed" ? "alert" : "status"}>{props.t(`conversation.lifecycle.${lifecycleNotice}`)}</p> : null}
     </div>
   );
+}
+
+function createConversationTitleRequestId(): `conversation_title_request_${string}` {
+  return `conversation_title_request_${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
 function appendUnique(

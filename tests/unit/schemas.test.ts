@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX,
   AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
+  AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
   ConversationRestoreRequestSchema,
@@ -9,6 +10,9 @@ import {
   ConversationTrashListResultSchema,
   ConversationTrashRequestSchema,
   ConversationTrashResultSchema,
+  AgentConversationSetTitleRequestSchema,
+  AgentConversationSetTitleResultSchema,
+  AgentConversationTitleSchema,
   AgentConversationTurnSummarySchema,
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
@@ -462,6 +466,55 @@ describe("schemas", () => {
       expect(() => ConversationTrashRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
       expect(() => ConversationRestoreRequestSchema.parse({ ...restore, [privateField]: "private" })).toThrow();
     }
+  });
+
+  it("strictly binds bounded pathless conversation title mutations to the exact tail and revision", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "conversation_title_request_1234567890abcdef",
+      activeVaultId: "vault_20260731_rename01",
+      conversationId: "conv_20260731_rename01",
+      expectedTailEventId: "evt_20260731_renametail01",
+      expectedTitleRevision: 4,
+      title: "A calm title"
+    };
+    expect(AgentConversationSetTitleRequestSchema.parse(request)).toEqual(request);
+    expect(AgentConversationTitleSchema.parse("😀".repeat(AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS)))
+      .toBe("😀".repeat(AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS));
+    expect(() => AgentConversationTitleSchema.parse("😀".repeat(AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS + 1)))
+      .toThrow();
+    for (const title of [" title", "title ", "title\nbody", "title\u202e"]) {
+      expect(() => AgentConversationTitleSchema.parse(title)).toThrow();
+    }
+    for (const privateField of ["path", "body", "providerId", "modelId", "toolPayload", "secret"]) {
+      expect(() => AgentConversationSetTitleRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
+    }
+    expect(AgentConversationSetTitleRequestSchema.parse({ ...request, title: null }).title).toBeNull();
+
+    const summary = {
+      conversationId: request.conversationId,
+      updatedAt: "2026-07-31T01:02:03.000Z",
+      safePreview: "Original preview",
+      tailEventId: request.expectedTailEventId,
+      title: request.title,
+      titleRevision: 5
+    };
+    expect(AgentConversationSetTitleResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      conversationId: request.conversationId,
+      status: "committed",
+      summary
+    })).toMatchObject({ status: "committed", summary });
+    expect(() => AgentConversationSetTitleResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      conversationId: request.conversationId,
+      status: "stale",
+      summary: { ...summary, titleRevision: undefined }
+    })).toThrow();
   });
 
   it("fences current-note append review and completion projections to exact states", () => {
