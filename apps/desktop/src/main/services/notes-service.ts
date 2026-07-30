@@ -224,7 +224,7 @@ export class NotesService {
         renderContextId,
         ...(stable.document.summary.pageType === "note"
           ? {
-              trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) },
+              trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) }, renameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
               historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) },

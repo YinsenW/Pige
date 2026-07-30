@@ -227,6 +227,8 @@ import type {
   NoteRestoreArchivedResult,
   NoteAddTagRequest,
   NoteAddTagResult,
+  NoteRenameRequest,
+  NoteRenameResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -598,6 +600,8 @@ export type {
   NoteRestoreArchivedResult,
   NoteAddTagRequest,
   NoteAddTagResult,
+  NoteRenameRequest,
+  NoteRenameResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -1273,6 +1277,7 @@ export interface KnowledgeActivitySummary {
   readonly kind:
     | "create_page"
     | "update_page"
+    | "rename_page"
     | "archive_page"
     | "restore_page"
     | "trash_page"
@@ -2184,6 +2189,7 @@ export interface PigeDesktopApi {
       request: NoteRestoreArchivedRequest
     ) => Promise<NoteRestoreArchivedResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
+    readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;

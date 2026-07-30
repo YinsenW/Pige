@@ -41,6 +41,8 @@ import type {
   NoteArchiveCurrentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
+  NoteRenameRequest,
+  NoteRenameResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
   NoteOpenSourceReferenceRequest,
@@ -4785,6 +4787,34 @@ describe("Home durable Agent conversation UI", () => {
     await act(async () => mount.root.unmount()); dom.window.close();
   });
 
+  it("renames the exact Home-opened Reader note and retains the title draft on conflict", async () => {
+    const dom = createDom(), harness = createHarness(completedGroundedTimeline()), revision = `noteeditrev_${"d".repeat(32)}`;
+    let mode: "conflict" | "committed" = "conflict";
+    harness.renderNote = async (pageId) => ({ ...testRenderedNote(pageId), renameEligibility: { canRename: true, revision } });
+    harness.renameNote = async (request) => mode === "conflict" ? { ...request, status: "conflict" } : { ...request, status: "committed",
+      operationId: "op_20260731_home_rename123", render: { ...testRenderedNote(request.currentPageId),
+        summary: { ...testRenderedNote(request.currentPageId).summary, title: request.title, pagePath: "wiki/renamed-home-note--note0001.md" },
+        html: "<p>Renamed Home note.</p>", renderContextId: `notectx_${"e".repeat(32)}`,
+        renameEligibility: { canRename: true, revision: `noteeditrev_${"e".repeat(32)}` } } };
+    const mount = await mountHome(dom, makePigeApi(harness));
+    await clickElement(dom, requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+    await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]); await clickButton(dom, mount.container, enMessages["note.rename.action"]);
+    const input = requireElement(mount.container.querySelector<HTMLInputElement>(".confirmation-dialog input"));
+    await act(async () => { setInputValue(dom, input, "  Renamed   Home Note  "); await settle(dom); });
+    await clickButton(dom, mount.container, enMessages["note.rename.confirm"]);
+    await waitFor(dom, () => harness.noteRenameRequests.length === 1);
+    expect(harness.noteRenameRequests[0]).toMatchObject({ activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001", renderContextId: `notectx_${"a".repeat(32)}`,
+      expectedRevision: revision, title: "Renamed Home Note" });
+    expect(mount.container.textContent).toContain(enMessages["note.rename.failed"]);
+    expect(input.value).toBe("  Renamed   Home Note  ");
+    mode = "committed"; await clickButton(dom, mount.container, enMessages["note.rename.confirm"]);
+    await waitFor(dom, () => mount.container.textContent?.includes("Renamed Home note.") === true);
+    expect(harness.noteRenameRequests).toHaveLength(2); expect(mount.container.querySelector(".note-reader")).not.toBeNull();
+    await act(async () => mount.root.unmount()); dom.window.close();
+  });
+
   it("merges a selected note into the Home-opened Reader and adopts the authoritative survivor", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());
@@ -5564,10 +5594,10 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("labels created and updated knowledge Activity distinctly and undoes an updated page", async () => {
+  it("labels created, updated, and renamed knowledge Activity distinctly and undoes an updated page", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
-    harness.activities = [reversibleActivity(), reversibleUpdatedActivity()];
+    harness.activities = [reversibleActivity(), reversibleUpdatedActivity(), reversibleRenamedActivity()];
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
     expect(container.querySelector('[aria-label="Activity"]')).toBeNull();
@@ -5579,10 +5609,13 @@ describe("Home durable Agent conversation UI", () => {
     const activityRegion = container.querySelector(".settings-history-page");
     expect(activityRegion?.textContent).toContain("Knowledge note created: Grounded boundary");
     expect(activityRegion?.textContent).toContain("Knowledge note updated: Refined boundary");
+    expect(activityRegion?.textContent).toContain("Knowledge note renamed: Renamed boundary");
     expect(container.querySelector('[data-activity-row-id="op_20260712_activityfixture"]')?.getAttribute("aria-label"))
       .toBe("Knowledge note created: Grounded boundary (1)");
     expect(container.querySelector('[data-activity-row-id="op_20260712_updateactivity"]')?.getAttribute("aria-label"))
       .toBe("Knowledge note updated: Refined boundary (2)");
+    expect(container.querySelector('[data-activity-row-id="op_20260712_renameactivity"]')?.getAttribute("aria-label"))
+      .toBe("Knowledge note renamed: Renamed boundary (3)");
     expect(buttonsByAriaLabel(container, createOpenLabel)).toHaveLength(1);
     expect(buttonsByAriaLabel(container, updateOpenLabel)).toHaveLength(1);
 
@@ -5891,6 +5924,7 @@ interface ConversationHarness {
   readonly noteTrashRequests: NoteTrashCurrentRequest[];
   readonly noteArchiveRequests: NoteArchiveCurrentRequest[];
   readonly noteAddTagRequests: NoteAddTagRequest[];
+  readonly noteRenameRequests: NoteRenameRequest[];
   readonly noteRestoreRequests: NoteRestoreArchivedRequest[];
   readonly noteMergeRequests: NoteMergeRequest[];
   readonly noteRelateRequests: NoteRelateRequest[];
@@ -5900,6 +5934,7 @@ interface ConversationHarness {
   trashCurrent: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   archiveCurrent: (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
   addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
+  renameNote: (request: NoteRenameRequest) => Promise<NoteRenameResult>;
   restoreArchived: (request: NoteRestoreArchivedRequest) => Promise<NoteRestoreArchivedResult>;
   mergeCurrent: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   relateCurrent: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
@@ -6024,6 +6059,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     noteTrashRequests: [],
     noteArchiveRequests: [],
     noteAddTagRequests: [],
+    noteRenameRequests: [],
     noteRestoreRequests: [],
     noteMergeRequests: [],
     noteRelateRequests: [],
@@ -6048,6 +6084,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     trashCurrent: async (request) => ({ ...request, status: "failed" }),
     archiveCurrent: async (request) => ({ ...request, status: "failed" }),
     addTag: async (request) => ({ ...request, status: "failed" }),
+    renameNote: async (request) => ({ ...request, status: "failed" }),
     restoreArchived: async (request) => ({ ...request, status: "failed" }),
     mergeCurrent: async (request) => ({ ...request, status: "failed" }),
     relateCurrent: async (request) => ({ ...request, status: "failed" }),
@@ -6714,6 +6751,10 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.noteAddTagRequests.push(request);
         return harness.addTag(request);
       },
+      rename: async (request: NoteRenameRequest) => {
+        harness.noteRenameRequests.push(request);
+        return harness.renameNote(request);
+      },
       restoreArchived: async (request: NoteRestoreArchivedRequest) => {
         harness.noteRestoreRequests.push(request);
         return harness.restoreArchived(request);
@@ -6891,6 +6932,18 @@ function reversibleUpdatedActivity(): KnowledgeActivitySummary {
     createdAt: "2026-07-12T08:01:00.000Z",
     targetLabel: "Refined boundary",
     target: { kind: "page", pageId: "page_20260715_note0002" },
+    status: "applied",
+    canUndo: true
+  };
+}
+
+function reversibleRenamedActivity(): KnowledgeActivitySummary {
+  return {
+    operationId: "op_20260712_renameactivity",
+    kind: "rename_page",
+    createdAt: "2026-07-12T08:02:00.000Z",
+    targetLabel: "Renamed boundary",
+    target: { kind: "page", pageId: "page_20260715_note0001" },
     status: "applied",
     canUndo: true
   };
@@ -7504,6 +7557,12 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
     textarea.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
     await settle(dom);
   });
+}
+
+function setInputValue(dom: JSDOM, input: HTMLInputElement, value: string): void {
+  Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, value);
+  input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+  input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 }
 
 async function dispatchComposerKey(

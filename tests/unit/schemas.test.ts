@@ -161,6 +161,9 @@ import {
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
+  NOTE_RENAME_CHANNEL,
+  NoteRenameRequestSchema,
+  NoteRenameResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteTrashListRequestSchema,
@@ -4356,6 +4359,25 @@ describe("schemas", () => {
     expect(() => NoteAddTagRequestSchema.parse({ ...identity, tag: " Research note " })).toThrow();
     for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
       expect(() => NoteAddTagResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps note rename revision-bound, canonical, and renderer-path-free", () => {
+    expect(NOTE_RENAME_CHANNEL).toBe("notes.rename");
+    const identity = { apiVersion: 1, requestId: "noterenamereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_rename01", currentPageId: "page_20260731_rename123456",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`, title: "Renamed Note" } as const;
+    expect(NoteRenameRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "conflict", "failed"] as const) {
+      expect(NoteRenameResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    for (const title of [" Renamed Note ", "", "bad\nname", "x".repeat(121)]) {
+      expect(() => NoteRenameRequestSchema.parse({ ...identity, title })).toThrow();
+    }
+    for (const privateField of ["pagePath", "oldPath", "newPath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteRenameRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteRenameResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 
