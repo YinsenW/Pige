@@ -54,6 +54,26 @@ describe("agent runtime policy context", () => {
     expect(after).not.toBe(before);
   });
 
+  it("binds generated knowledge and app language preferences into each new policy snapshot", () => {
+    const vaultPath = makeVault();
+    const preserved = buildAgentRuntimePolicyContext(vaultPath);
+    const configured = buildAgentRuntimePolicyContext(vaultPath, {
+      appLocale: "fr",
+      generatedKnowledgeLanguage: "app_locale"
+    });
+
+    expect(preserved.language).toMatchObject({
+      generatedKnowledgeLanguage: "preserve_source",
+      preserveSourceLanguage: true
+    });
+    expect(configured.language).toMatchObject({
+      appLocale: "fr",
+      generatedKnowledgeLanguage: "app_locale",
+      preserveSourceLanguage: true
+    });
+    expect(configured.policyHash).not.toBe(preserved.policyHash);
+  });
+
   it.each(["local_only"] as const)(
     "accepts the explicit %s cloud-send policy and binds it into the policy hash",
     (cloudSendPolicy) => {

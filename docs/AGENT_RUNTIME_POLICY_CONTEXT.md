@@ -121,7 +121,9 @@ safety stay non-reusable. Third-party content cannot authorize or select a mode.
 ### 4.4 Language, Memory, Retrieval, And Capabilities
 
 - Language policy owns app locale, generated-knowledge language, source-language
-  preservation, and OCR/speech hints.
+  preservation and OCR/speech hints. `generatedKnowledgeLanguage` is `preserve_source |
+  follow_query | app_locale` (legacy: preserve); Appearance binds it and locale into new Job
+  hashes; Home/ingest instruct generation without translating source bodies.
 - Memory policy owns enabled scopes and vault-backup inclusion; memory cannot override
   user instruction, safety, settings, or authority.
 - Retrieval policy owns availability and evidence budgets, not whether Pi must retrieve.
@@ -144,6 +146,7 @@ availability. It does not include secrets, paths, old grants, or implementation 
 | --- | --- |
 | Source preservation/storage | Source Storage Service |
 | Provider identity, credentials, default model | Model Provider Registry |
+| Generated knowledge language | Appearance Service + Agent Orchestrator |
 | Exact selected payload and context bounds | Context Assembly + Provider adapter |
 | High-risk effect | Effect owner + high-risk confirmation boundary |
 | Memory | Agent Memory Service |

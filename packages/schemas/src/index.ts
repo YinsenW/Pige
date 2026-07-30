@@ -6,6 +6,7 @@ export const RequirementIdSchema = z.string().regex(PIGE_REQUIREMENT_ID_PATTERN)
 export const LocaleSchema = z.enum(["zh-Hans", "en", "ja", "ko", "fr", "de"]);
 
 export const AppearanceThemePreferenceSchema = z.enum(["system", "light", "dark"]);
+export const GeneratedKnowledgeLanguageSchema = z.enum(["preserve_source", "follow_query", "app_locale"]);
 
 export const EffectiveAppearanceThemeSchema = z.enum(["light", "dark"]);
 
@@ -13,7 +14,8 @@ export const AppearanceSettingsRevisionSchema = z.number().int().nonnegative().m
 
 export const AppearanceMachineSettingsSchema = z.object({
   revision: AppearanceSettingsRevisionSchema,
-  themePreference: AppearanceThemePreferenceSchema
+  themePreference: AppearanceThemePreferenceSchema,
+  generatedKnowledgeLanguage: GeneratedKnowledgeLanguageSchema.optional()
 }).strict();
 
 export const AppearanceSettingsSummarySchema = z.object({
@@ -22,6 +24,7 @@ export const AppearanceSettingsSummarySchema = z.object({
   availableLocales: z.array(LocaleSchema).min(1),
   themePreference: AppearanceThemePreferenceSchema,
   effectiveTheme: EffectiveAppearanceThemeSchema,
+  generatedKnowledgeLanguage: GeneratedKnowledgeLanguageSchema,
   revision: AppearanceSettingsRevisionSchema
 }).strict();
 
@@ -35,6 +38,17 @@ export const SetThemeRequestSchema = z.object({
 }).strict();
 
 export const AppearanceThemeMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), settings: AppearanceSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), settings: AppearanceSettingsSummarySchema }).strict(),
+  z.object({ status: z.literal("failed"), settings: AppearanceSettingsSummarySchema }).strict()
+]);
+
+export const SetKnowledgeLanguageRequestSchema = z.object({
+  generatedKnowledgeLanguage: GeneratedKnowledgeLanguageSchema,
+  expectedRevision: AppearanceSettingsRevisionSchema
+}).strict();
+
+export const KnowledgeLanguageMutationResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("committed"), settings: AppearanceSettingsSummarySchema }).strict(),
   z.object({ status: z.literal("stale"), settings: AppearanceSettingsSummarySchema }).strict(),
   z.object({ status: z.literal("failed"), settings: AppearanceSettingsSummarySchema }).strict()
@@ -8535,12 +8549,15 @@ export type UpdateApplyRequest = z.infer<typeof UpdateApplyRequestSchema>;
 export type UpdateApplyResult = z.infer<typeof UpdateApplyResultSchema>;
 export type UpdateMachineSettings = z.infer<typeof UpdateMachineSettingsSchema>;
 export type AppearanceThemePreference = z.infer<typeof AppearanceThemePreferenceSchema>;
+export type GeneratedKnowledgeLanguage = z.infer<typeof GeneratedKnowledgeLanguageSchema>;
 export type EffectiveAppearanceTheme = z.infer<typeof EffectiveAppearanceThemeSchema>;
 export type AppearanceMachineSettings = z.infer<typeof AppearanceMachineSettingsSchema>;
 export type AppearanceSettingsSummary = z.infer<typeof AppearanceSettingsSummarySchema>;
 export type SetLocaleRequest = z.infer<typeof SetLocaleRequestSchema>;
 export type SetThemeRequest = z.infer<typeof SetThemeRequestSchema>;
 export type AppearanceThemeMutationResult = z.infer<typeof AppearanceThemeMutationResultSchema>;
+export type SetKnowledgeLanguageRequest = z.infer<typeof SetKnowledgeLanguageRequestSchema>;
+export type KnowledgeLanguageMutationResult = z.infer<typeof KnowledgeLanguageMutationResultSchema>;
 export type StartupDestination = z.infer<typeof StartupDestinationSchema>;
 export type StartupDestinationRevision = z.infer<typeof StartupDestinationRevisionSchema>;
 export type StartupDestinationSummary = z.infer<typeof StartupDestinationSummarySchema>;

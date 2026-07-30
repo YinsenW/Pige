@@ -66,7 +66,7 @@ import {
   type AgentIngestToolOutput,
   type AgentIngestUpdateToolInput
 } from "./agent-ingest-tool-registry";
-import { buildAgentRuntimePolicyContext } from "./agent-policy-context";
+import { buildAgentRuntimePolicyContext, knowledgeLanguagePolicyInstruction } from "./agent-policy-context";
 import {
   writeSingleWriterFileAtomic as writeFileAtomic,
   writeSingleWriterJsonAtomic as writeJsonAtomic
@@ -137,6 +137,8 @@ export interface AgentIngestCapabilitySnapshot {
   readonly datasetToolchainReady?: boolean;
   readonly ocrEngines: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
   readonly ocrLanguageHints?: readonly string[];
+  readonly appLocale?: AgentRuntimePolicyContext["language"]["appLocale"];
+  readonly generatedKnowledgeLanguage?: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"];
   readonly speechInputAvailable: boolean;
   readonly embeddingModelInstalled: boolean;
   readonly lexicalSearchAvailable: boolean;
@@ -925,7 +927,7 @@ export class AgentIngestService {
     };
 
     await authorizeCurrentModelTurn();
-    const systemPrompt = createSystemPrompt(proposalStageAvailable) + (proposalStageAvailable
+    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguagePolicyInstruction(policy.language)}` + (proposalStageAvailable
       ? "\nUse pige_stage_knowledge_note_proposal when the generated note should wait for explicit human review. Staging does not apply or publish the proposed Markdown."
       : "");
     const userPrompt = createUserPrompt(currentPromptContext, hooks.userTurn);

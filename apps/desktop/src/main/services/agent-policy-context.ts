@@ -11,6 +11,8 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly parserToolchainReady?: boolean;
   readonly ocrEngines?: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
   readonly ocrLanguageHints?: readonly string[];
+  readonly appLocale?: AgentRuntimePolicyContext["language"]["appLocale"];
+  readonly generatedKnowledgeLanguage?: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"];
   readonly speechInputAvailable?: boolean;
   readonly embeddingModelInstalled?: boolean;
   readonly lexicalSearchAvailable?: boolean;
@@ -53,8 +55,8 @@ export function buildAgentRuntimePolicyContext(
       includeMemoryInBackup: config.backup.includeVaultMemory
     },
     language: {
-      appLocale: manifest.default_locale,
-      generatedKnowledgeLanguage: "preserve_source" as const,
+      appLocale: options.appLocale ?? manifest.default_locale,
+      generatedKnowledgeLanguage: options.generatedKnowledgeLanguage ?? "preserve_source",
       preserveSourceLanguage: true,
       ocrLanguageHints: options.ocrLanguageHints ?? [manifest.default_locale]
     },
@@ -81,4 +83,14 @@ export function buildAgentRuntimePolicyContext(
     builtAt: new Date().toISOString(),
     ...policyWithoutHash
   };
+}
+
+export function knowledgeLanguagePolicyInstruction(language: AgentRuntimePolicyContext["language"]): string {
+  if (language.generatedKnowledgeLanguage === "app_locale") {
+    return `Write newly generated durable knowledge in the configured app language ${language.appLocale}; do not translate preserved source bodies.`;
+  }
+  if (language.generatedKnowledgeLanguage === "follow_query") {
+    return "Write newly generated durable knowledge in the current user's request language when clear; otherwise preserve the source language.";
+  }
+  return "Preserve the source language in newly generated durable knowledge unless the user explicitly requests translation.";
 }

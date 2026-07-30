@@ -25,6 +25,7 @@ import type {
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   AppearanceSettingsSummary,
+  KnowledgeLanguageMutationResult,
   AppearanceThemeMutationResult,
   BackupRestoreStatus,
   CreateVaultRequest,
@@ -171,6 +172,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetKnowledgeLanguageRequest,
   SetStartupDestinationRequest,
   SetThemeRequest,
   SetSidebarOpenRequest,
@@ -268,6 +270,7 @@ import {
   CurrentNoteAppendProposalGetResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  KnowledgeLanguageMutationResultSchema,
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
@@ -484,6 +487,7 @@ import {
   SkillRestoreResultSchema,
   SkillUninstallRequestSchema,
   SetLocaleRequestSchema,
+  SetKnowledgeLanguageRequestSchema,
   SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
   StartupDestinationMutationResultSchema,
@@ -1778,6 +1782,15 @@ const api: PigeDesktopApi = {
     setTheme: async (request: SetThemeRequest): Promise<AppearanceThemeMutationResult> =>
       AppearanceThemeMutationResultSchema.parse(
         await ipcRenderer.invoke("settings.setTheme", SetThemeRequestSchema.parse(request))
+      ),
+    setKnowledgeLanguage: async (
+      request: SetKnowledgeLanguageRequest
+    ): Promise<KnowledgeLanguageMutationResult> =>
+      KnowledgeLanguageMutationResultSchema.parse(
+        await ipcRenderer.invoke(
+          "settings.setKnowledgeLanguage",
+          SetKnowledgeLanguageRequestSchema.parse(request)
+        )
       ),
     startupDestination: async (): Promise<StartupDestinationSummary> =>
       StartupDestinationSummarySchema.parse(await ipcRenderer.invoke("settings.startupDestination")),

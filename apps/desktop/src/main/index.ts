@@ -13,6 +13,7 @@ import type {
   AgentSubmitTurnRequest,
   AppHealth,
   AppearanceThemeMutationResult,
+  KnowledgeLanguageMutationResult,
   CreateVaultRequest,
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
@@ -37,6 +38,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetKnowledgeLanguageRequest,
   SetStartupDestinationRequest,
   SetThemeRequest,
   SetSidebarOpenRequest,
@@ -69,6 +71,7 @@ import {
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
+  KnowledgeLanguageMutationResultSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
@@ -102,6 +105,7 @@ import {
   UpdateStatusEventSchema,
   UpdateSummarySchema,
   SetLocaleRequestSchema,
+  SetKnowledgeLanguageRequestSchema,
   SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
   StartupDestinationMutationResultSchema,
@@ -1517,6 +1521,7 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
     : "not_initialized";
   const parser = getDocumentParserService();
   const imageOcrReady = getOcrService().canOcr("image_file");
+  const appearance = getAppearanceService().summary();
   return {
     localDatabaseStatus,
     parserToolchainReady: parser.canParse("pdf_file") && parser.canParse("docx_file") && parser.canParse("pptx_file"),
@@ -1525,6 +1530,8 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
       getDatasetService().canMaterialize("sqlite_file"),
     ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
     ocrLanguageHints: getOcrLanguagePreferenceService().policyLanguageHints(),
+    appLocale: appearance.locale,
+    generatedKnowledgeLanguage: appearance.generatedKnowledgeLanguage,
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
@@ -2967,6 +2974,14 @@ ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) =>
 ipcMain.handle("settings.setTheme", (_event, request: SetThemeRequest): AppearanceThemeMutationResult =>
   AppearanceThemeMutationResultSchema.parse(
     getAppearanceService().setTheme(SetThemeRequestSchema.parse(request))
+  )
+);
+ipcMain.handle("settings.setKnowledgeLanguage", (
+  _event,
+  request: SetKnowledgeLanguageRequest
+): KnowledgeLanguageMutationResult =>
+  KnowledgeLanguageMutationResultSchema.parse(
+    getAppearanceService().setKnowledgeLanguage(SetKnowledgeLanguageRequestSchema.parse(request))
   )
 );
 ipcMain.handle("settings.startupDestination", () =>

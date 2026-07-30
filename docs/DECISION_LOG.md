@@ -756,23 +756,22 @@ References:
 
 Status: Accepted
 Date: 2026-07-09
+Revised: 2026-07-30
 
 Decision:
 
-Settings that affect Agent work are compiled into typed Agent Runtime Policy Context and enforced by owning services. Prompt text may summarize the policy, but prompt text alone is never the enforcement layer.
+Typed policy context, not prompt text, governs Agent-affecting settings.
 
 Rationale:
 
-Settings such as source storage strategy, cloud-send policy, default model, language behavior, confirmation thresholds, memory enablement, and permission mode change what Pige should do. If implementation only appends natural-language hints to prompts, source prompt injection, model drift, or workflow-specific prompt omissions can make the Agent behave inconsistently.
+Owners must resist injection, model drift and workflow omissions.
 
 Consequences:
 
-- Agent Orchestrator builds a policy context for each model-dependent job.
-- Job and operation records store policy refs/hashes, not full settings files or secrets.
-- Source Storage Service enforces copy/reference behavior before Agent ingest.
-- Permission Broker, Model Provider Registry, Change Proposal Service, Agent Memory Service, Retrieval Service, and Local Tool Service enforce their own domains.
-- Agent-affecting settings must be added to the policy effect registry before implementation.
-- Source content, model output, Skills, packages, and web pages cannot modify policy context.
+- Orchestrator snapshots model Jobs; records keep refs/hashes, never settings or secrets.
+- Domain owners enforce registered fields; untrusted content cannot mutate them.
+- Knowledge language is local, unbacked and permission-free; revision-fenced locale/preference
+  bind Job hashes without translating source bodies.
 
 References:
 

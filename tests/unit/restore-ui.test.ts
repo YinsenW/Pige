@@ -1435,6 +1435,7 @@ function appearanceSummary(locale: Locale): AppearanceSettingsSummary {
     availableLocales: ["zh-Hans", "en", "ja", "ko", "fr", "de"],
     themePreference: "system",
     effectiveTheme: "light",
+    generatedKnowledgeLanguage: "preserve_source",
     revision: 0
   };
 }

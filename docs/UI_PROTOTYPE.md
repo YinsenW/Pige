@@ -1135,11 +1135,10 @@ Preserve source language
 
 Language settings:
 
-- App language changes UI strings.
-- Knowledge language controls generated wiki language only when the user chooses a preference.
-- The source-language preservation control starts enabled; translating captured material
-  remains an explicit user choice.
-- Voice input language and OCR language hints may be configured separately when supported.
+- App language changes UI strings; OCR/voice hints remain separate.
+- New Agent jobs preserve source (legacy default), follow the question, or use app language;
+  without translating source bodies or permission.
+- Changes serialize; stale/failure retains draft, focus and safe status.
 
 ## 14. First-Run Flow
 

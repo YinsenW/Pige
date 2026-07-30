@@ -186,7 +186,22 @@ describe("agent ingest service", () => {
       warnings: [],
       confidence: "high"
     });
-    const service = new AgentIngestService(makeModelPort(() => verifiedLocalRuntimeConfig), modelClient);
+    const service = new AgentIngestService(
+      makeModelPort(() => verifiedLocalRuntimeConfig),
+      modelClient,
+      { snapshot: () => ({
+        localDatabaseStatus: "ready",
+        parserToolchainReady: true,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        appLocale: "de",
+        generatedKnowledgeLanguage: "app_locale"
+      }) }
+    );
 
     const result = await service.ingestSource(vaultPath, sourceRecord, job);
 
@@ -218,6 +233,8 @@ describe("agent ingest service", () => {
     expect(operation).not.toContain("sk-test-source-secret");
     expect(operation).not.toContain("API_KEY");
     expect(result.operationIds).toHaveLength(1);
+    expect(modelClient.systemPrompt).toContain("newly generated durable knowledge in the configured app language de");
+    expect(modelClient.systemPrompt).toContain("do not translate preserved source bodies");
     expect(modelClient.lastUserPrompt).toContain("API_KEY=sk-test-source-secret-12345");
     expect(modelClient.lastUserPrompt).not.toContain("[redacted-secret]");
 

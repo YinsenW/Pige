@@ -17,6 +17,8 @@ import type {
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
+  GeneratedKnowledgeLanguage,
+  KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
   BackupReconnectDestinationRequest,
@@ -272,6 +274,7 @@ import type {
   SettingPermissionRequirement,
   SettingScope,
   SetLocaleRequest,
+  SetKnowledgeLanguageRequest,
   SetStartupDestinationRequest,
   SetThemeRequest,
   SourceKind,
@@ -308,6 +311,8 @@ export type {
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
+  GeneratedKnowledgeLanguage,
+  KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
   BackupReconnectDestinationRequest,
@@ -431,6 +436,7 @@ export type {
   ManagedCopyRootSummary,
   RendererSafeSubjectLabel,
   SetLocaleRequest,
+  SetKnowledgeLanguageRequest,
   SetStartupDestinationRequest,
   SetThemeRequest,
   StartupDestinationMutationResult,
@@ -2113,6 +2119,9 @@ export interface PigeDesktopApi {
     readonly appearance: () => Promise<AppearanceSettingsSummary>;
     readonly setLocale: (request: SetLocaleRequest) => Promise<AppearanceSettingsSummary>;
     readonly setTheme: (request: SetThemeRequest) => Promise<AppearanceThemeMutationResult>;
+    readonly setKnowledgeLanguage: (
+      request: SetKnowledgeLanguageRequest
+    ) => Promise<KnowledgeLanguageMutationResult>;
     readonly startupDestination: () => Promise<StartupDestinationSummary>;
     readonly setStartupDestination: (
       request: SetStartupDestinationRequest
