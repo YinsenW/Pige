@@ -475,7 +475,15 @@ describe("Home Pi Agent service", () => {
     let executions = 0;
     const reviewedTaskPlans = makeReviewedTaskPlanPort({
       onRegister: (turn) => { registeredTurn = turn; },
-      onExecute: () => { executions += 1; }
+      onExecute: () => {
+        executions += 1;
+        if (!registeredTurn) throw new Error("Missing reviewed task-plan turn binding.");
+        const current = jobs.readAgentTurnJob(registeredTurn.jobId);
+        if (!current) throw new Error("Missing reviewed task-plan Agent Job.");
+        jobs.patchAgentTurnJob(current, {
+          message: "The reviewed task-plan owner committed its durable result."
+        });
+      }
     });
     const runtime = {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
@@ -522,7 +530,10 @@ describe("Home Pi Agent service", () => {
       authoredTaskIntent: "explicit_user_task",
       confirmationOwner: { kind: "agent_turn", clientTurnId: "turn_20260727_reviewedplan" }
     });
-    expect(jobs.readAgentTurnJob(outcome.requestId)?.privacy?.usedShell).toBe(true);
+    expect(jobs.readAgentTurnJob(outcome.requestId)).toMatchObject({
+      state: "completed",
+      privacy: { usedShell: true }
+    });
   });
 
   it("binds explicit authored Home text to the External/Web Skill runtime port", async () => {

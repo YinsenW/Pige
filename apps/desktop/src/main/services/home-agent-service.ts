@@ -1543,10 +1543,10 @@ export class HomeAgentService {
         try {
           assertCurrentBindingAndVault();
           const result = await tool.execute(args, toolSignal, context);
+          session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
           externalToolEvidence.push(projectExternalToolEvidence(tool.name, result));
           const currentPrivacy = session.current.privacy ?? {
-            usedCloudModel: false,
-            usedNetwork: false,
+            usedCloudModel: false, usedNetwork: false,
             usedShell: false,
             accessedExternalFiles: false
           };
