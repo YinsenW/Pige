@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AgentMemorySettingsPanel,
   AppearanceSettingsPanel,
-  GeneralSettingsPanel,
   MaintenanceSettingsPanel,
   PiPackagesSettingsPanel,
   SettingsSurface,
@@ -17,6 +16,7 @@ import {
   type DevelopmentCapability,
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
+import { GeneralSettingsPanel } from "../../apps/desktop/src/renderer/src/components/GeneralSettingsPanel";
 import {
   PermissionsPrivacySettingsPanel,
   type PermissionPolicyApi
@@ -131,6 +131,10 @@ describe("full UI Settings surface", () => {
   it("keeps the always-on-top control inert until window truth is known", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);
+    const startupDestinationApi = {
+      load: vi.fn(async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 0 })),
+      set: vi.fn()
+    };
     const root = createRoot(dom.window.document.querySelector("#root")!);
 
     await act(async () => {
@@ -139,6 +143,7 @@ describe("full UI Settings surface", () => {
         alwaysOnTopBusy: false,
         onAlwaysOnTopChange,
         onOpenAppearance: vi.fn(),
+        startupDestinationApi,
         t
       }));
       await settle(dom);
@@ -158,6 +163,7 @@ describe("full UI Settings surface", () => {
         alwaysOnTopBusy: true,
         onAlwaysOnTopChange,
         onOpenAppearance: vi.fn(),
+        startupDestinationApi,
         t
       }));
       await settle(dom);
@@ -172,11 +178,14 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("reflects WindowLayout persistence without inventing a startup preference", async () => {
+  it("reflects WindowLayout persistence and the authoritative next-launch destination", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);
-    const onDevelopment = vi.fn();
     const onOpenAppearance = vi.fn();
+    const startupDestinationApi = {
+      load: vi.fn(async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 4 })),
+      set: vi.fn()
+    };
     let ipcRead = false;
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
@@ -193,7 +202,7 @@ describe("full UI Settings surface", () => {
         alwaysOnTopBusy: false,
         onAlwaysOnTopChange,
         onOpenAppearance,
-        onDevelopment,
+        startupDestinationApi,
         t
       }));
       await settle(dom);
@@ -209,7 +218,9 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).toContain("Last state");
     expect(page.textContent).toContain("Temporary pane expansion is never saved as the base size.");
     expect(page.textContent).toContain("A constrained display may present Note Agent as an overlay.");
-    expect(page.querySelector("select")).toBeNull();
+    const startupDestination = requireElement(page.querySelector<HTMLSelectElement>('select[aria-label="On launch"]'));
+    expect(startupDestination.value).toBe("home");
+    expect(startupDestination.disabled).toBe(false);
     const alwaysOnTop = requireElement(page.querySelector<HTMLButtonElement>(
       'button[role="switch"][aria-label="Keep Pige on top"]'
     ));
@@ -223,10 +234,87 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
 
-    expect(onDevelopment).toHaveBeenCalledOnce();
     expect(onOpenAppearance).toHaveBeenCalledOnce();
     expect(onAlwaysOnTopChange).toHaveBeenCalledOnce();
     expect(ipcRead).toBe(false);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("fences startup destination changes and preserves the attempted choice on stale", async () => {
+    const dom = createDom();
+    let resolveMutation: ((result: import("@pige/contracts").StartupDestinationMutationResult) => void) | undefined;
+    const startupDestinationApi = {
+      load: vi.fn(async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 7 })),
+      set: vi.fn(() => new Promise<import("@pige/contracts").StartupDestinationMutationResult>((resolve) => {
+        resolveMutation = resolve;
+      }))
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: false,
+        alwaysOnTopBusy: false,
+        onAlwaysOnTopChange: async () => undefined,
+        onOpenAppearance: () => undefined,
+        startupDestinationApi,
+        t
+      }));
+      await settle(dom);
+    });
+    const select = requireElement(dom.window.document.querySelector<HTMLSelectElement>('select[aria-label="On launch"]'));
+    await act(async () => {
+      selectValue(dom, select, "library");
+      selectValue(dom, select, "home");
+      await settle(dom);
+    });
+    expect(startupDestinationApi.set).toHaveBeenCalledOnce();
+    expect(startupDestinationApi.set).toHaveBeenCalledWith({ destination: "library", expectedRevision: 7 });
+    expect(select.disabled).toBe(true);
+
+    await act(async () => {
+      resolveMutation?.({
+        status: "stale",
+        summary: { apiVersion: 1, destination: "home", revision: 8 }
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(select.value).toBe("library");
+    expect(select.disabled).toBe(false);
+    expect(dom.window.document.body.textContent).toContain("The saved startup destination changed. Your choice is still selected; retry to save it.");
+    expect(dom.window.document.activeElement).toBe(select);
+
+    await act(async () => {
+      selectValue(dom, select, "library");
+      await settle(dom);
+    });
+    expect(startupDestinationApi.set).toHaveBeenCalledTimes(2);
+    expect(startupDestinationApi.set).toHaveBeenLastCalledWith({ destination: "library", expectedRevision: 8 });
+    await act(async () => {
+      resolveMutation?.({
+        status: "committed",
+        summary: { apiVersion: 1, destination: "library", revision: 9 }
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(select.value).toBe("library");
+    expect(dom.window.document.body.textContent).not.toContain("The saved startup destination changed.");
+
+    await act(async () => {
+      selectValue(dom, select, "home");
+      await settle(dom);
+    });
+    expect(startupDestinationApi.set).toHaveBeenLastCalledWith({ destination: "home", expectedRevision: 9 });
+    await act(async () => {
+      resolveMutation?.({ status: "failed" });
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(select.value).toBe("home");
+    expect(dom.window.document.body.textContent).toContain("The startup destination could not be saved. Your choice is still selected.");
 
     await act(async () => root.unmount());
     dom.window.close();

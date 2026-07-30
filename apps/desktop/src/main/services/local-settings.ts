@@ -10,6 +10,7 @@ import {
   type Locale,
   type MachineLocalSettings,
   type OcrLanguagePreferenceMachineSettings,
+  type StartupDestination,
   type UpdateMachineSettings,
   type WindowPreferences
 } from "@pige/schemas";
@@ -19,6 +20,7 @@ import { hasObjectErrorCode as isErrno } from "./object-error-code";
 import { acquireVaultWriterLease } from "./vault-writer-lease";
 
 type RecentVaultSettings = MachineLocalSettings["recentVaults"];
+type StartupDestinationMachineSettings = NonNullable<MachineLocalSettings["startupDestination"]>;
 
 export interface RecentVaultBinding {
   readonly vaultId: string;
@@ -38,6 +40,11 @@ export interface AppearanceSettingsMutation {
 export interface OcrLanguagePreferenceSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: OcrLanguagePreferenceMachineSettings;
+}
+
+export interface StartupDestinationSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: StartupDestinationMachineSettings;
 }
 
 export class LocalSettingsStore {
@@ -83,6 +90,37 @@ export class LocalSettingsStore {
     return this.read().ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
   }
 
+  getStartupDestinationSettings(): StartupDestinationMachineSettings {
+    return this.read().startupDestination ?? { revision: 0, destination: "home" };
+  }
+
+  mutateStartupDestinationSettings(
+    expectedRevision: number,
+    destination: StartupDestination
+  ): StartupDestinationSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const settings = current.startupDestination ?? { revision: 0, destination: "home" as const };
+      if (settings.revision !== expectedRevision) return { status: "stale", settings };
+      if (settings.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError("settings.revision_exhausted", "Startup destination revision is exhausted.");
+      }
+      const next = { revision: settings.revision + 1, destination };
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        appearance: current.appearance,
+        startupDestination: next,
+        window: current.window,
+        updates: current.updates,
+        ocrLanguagePreference: current.ocrLanguagePreference,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: next };
+    });
+  }
+
   mutateOcrLanguagePreferenceSettings(
     expectedRevision: number,
     mutation: (settings: OcrLanguagePreferenceMachineSettings) => OcrLanguagePreferenceMachineSettings
@@ -103,6 +141,7 @@ export class LocalSettingsStore {
         activeVaultPath: current.activeVaultPath,
         appLocale: current.appLocale,
         appearance: current.appearance,
+        startupDestination: current.startupDestination,
         window: current.window,
         updates: current.updates,
         ocrLanguagePreference: next,
@@ -135,6 +174,7 @@ export class LocalSettingsStore {
         activeVaultPath: current.activeVaultPath,
         appLocale: current.appLocale,
         appearance: nextAppearance,
+        startupDestination: current.startupDestination,
         window: current.window,
         updates: current.updates,
         ocrLanguagePreference: current.ocrLanguagePreference,
@@ -171,6 +211,7 @@ export class LocalSettingsStore {
         activeVaultPath: current.activeVaultPath,
         appLocale: current.appLocale,
         appearance: current.appearance,
+        startupDestination: current.startupDestination,
         window: current.window,
         updates: nextUpdates,
         ocrLanguagePreference: current.ocrLanguagePreference,
@@ -191,6 +232,7 @@ export class LocalSettingsStore {
         activeVaultPath: settings.activeVaultPath,
         appLocale: settings.appLocale,
         appearance: settings.appearance,
+        startupDestination: settings.startupDestination,
         window: settings.window,
         updates: settings.updates,
         ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -208,6 +250,7 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale,
       appearance: settings.appearance,
+      startupDestination: settings.startupDestination,
       window: settings.window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -221,6 +264,7 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       appearance: settings.appearance,
+      startupDestination: settings.startupDestination,
       window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -255,6 +299,7 @@ export class LocalSettingsStore {
     return this.#mutate((settings) => createMachineLocalSettings({
       appLocale: settings.appLocale,
       appearance: settings.appearance,
+      startupDestination: settings.startupDestination,
       window: settings.window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -268,6 +313,7 @@ export class LocalSettingsStore {
       activeVaultPath: settings.activeVaultPath,
       appLocale: settings.appLocale,
       appearance: settings.appearance,
+      startupDestination: settings.startupDestination,
       window: settings.window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -404,6 +450,7 @@ function activateVault(
     activeVaultPath: resolvedVaultPath,
     appLocale: settings.appLocale,
     appearance: settings.appearance,
+    startupDestination: settings.startupDestination,
     window: settings.window,
     updates: settings.updates,
     ocrLanguagePreference: settings.ocrLanguagePreference,
@@ -512,6 +559,7 @@ function createMachineLocalSettings(input: {
   readonly activeVaultPath?: string | undefined;
   readonly appLocale?: Locale | undefined;
   readonly appearance?: AppearanceMachineSettings | undefined;
+  readonly startupDestination?: StartupDestinationMachineSettings | undefined;
   readonly window?: WindowPreferences | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
   readonly ocrLanguagePreference?: OcrLanguagePreferenceMachineSettings | undefined;
@@ -533,6 +581,10 @@ function createMachineLocalSettings(input: {
 
   if (input.appearance) {
     settings.appearance = input.appearance;
+  }
+
+  if (input.startupDestination) {
+    settings.startupDestination = input.startupDestination;
   }
 
   if (input.window) {

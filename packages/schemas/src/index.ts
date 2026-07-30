@@ -40,6 +40,27 @@ export const AppearanceThemeMutationResultSchema = z.discriminatedUnion("status"
   z.object({ status: z.literal("failed"), settings: AppearanceSettingsSummarySchema }).strict()
 ]);
 
+export const StartupDestinationSchema = z.enum(["home", "library"]);
+export const StartupDestinationRevisionSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const StartupDestinationSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  destination: StartupDestinationSchema,
+  revision: StartupDestinationRevisionSchema
+}).strict();
+export const SetStartupDestinationRequestSchema = z.object({
+  destination: StartupDestinationSchema,
+  expectedRevision: StartupDestinationRevisionSchema
+}).strict();
+export const StartupDestinationMutationResultSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("committed"), summary: StartupDestinationSummarySchema }).strict(),
+  z.object({ status: z.literal("stale"), summary: StartupDestinationSummarySchema }).strict(),
+  z.object({ status: z.literal("failed"), summary: StartupDestinationSummarySchema.optional() }).strict()
+]);
+const StartupDestinationMachineSettingsSchema = z.object({
+  revision: StartupDestinationRevisionSchema,
+  destination: StartupDestinationSchema
+}).strict();
+
 export const VaultIdSchema = z.string().regex(PIGE_VAULT_ID_PATTERN);
 
 // Durable IDs are path-independent vocabulary. Keep these schemas centralized so
@@ -3485,6 +3506,7 @@ export const MachineLocalSettingsSchema = z.object({
   activeVaultPath: z.string().min(1).optional(),
   appLocale: LocaleSchema.optional(),
   appearance: AppearanceMachineSettingsSchema.optional(),
+  startupDestination: StartupDestinationMachineSettingsSchema.optional(),
   window: WindowPreferencesSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
   ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.optional(),
@@ -8246,6 +8268,11 @@ export type AppearanceSettingsSummary = z.infer<typeof AppearanceSettingsSummary
 export type SetLocaleRequest = z.infer<typeof SetLocaleRequestSchema>;
 export type SetThemeRequest = z.infer<typeof SetThemeRequestSchema>;
 export type AppearanceThemeMutationResult = z.infer<typeof AppearanceThemeMutationResultSchema>;
+export type StartupDestination = z.infer<typeof StartupDestinationSchema>;
+export type StartupDestinationRevision = z.infer<typeof StartupDestinationRevisionSchema>;
+export type StartupDestinationSummary = z.infer<typeof StartupDestinationSummarySchema>;
+export type SetStartupDestinationRequest = z.infer<typeof SetStartupDestinationRequestSchema>;
+export type StartupDestinationMutationResult = z.infer<typeof StartupDestinationMutationResultSchema>;
 export type UpdatePhase = z.infer<typeof UpdatePhaseSchema>;
 export type UpdateStatusEvent = z.infer<typeof UpdateStatusEventSchema>;
 export type UpdateSummary = z.infer<typeof UpdateSummarySchema>;

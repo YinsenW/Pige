@@ -1291,6 +1291,11 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
     },
     settings: {
       appearance: () => harness.appearance(),
+      startupDestination: async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 0 }),
+      setStartupDestination: async (request) => ({
+        status: "committed" as const,
+        summary: { apiVersion: 1 as const, destination: request.destination, revision: request.expectedRevision + 1 }
+      }),
       onAppearanceChanged: () => () => undefined,
       setLocale: async ({ locale }: { readonly locale: Locale }) => {
         harness.localeRequests.push(locale);

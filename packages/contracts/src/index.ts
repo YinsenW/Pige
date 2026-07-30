@@ -260,10 +260,13 @@ import type {
   SettingPermissionRequirement,
   SettingScope,
   SetLocaleRequest,
+  SetStartupDestinationRequest,
   SetThemeRequest,
   SourceKind,
   SourceAssetRootKind,
   SourceStorageStrategy,
+  StartupDestinationMutationResult,
+  StartupDestinationSummary,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
   VaultMigrationPreview,
@@ -409,7 +412,10 @@ export type {
   ManagedCopyRootSummary,
   RendererSafeSubjectLabel,
   SetLocaleRequest,
+  SetStartupDestinationRequest,
   SetThemeRequest,
+  StartupDestinationMutationResult,
+  StartupDestinationSummary,
   VaultRevealResult,
   VaultRevealTarget,
   NoteInlineReferenceTarget,
@@ -2074,6 +2080,10 @@ export interface PigeDesktopApi {
     readonly appearance: () => Promise<AppearanceSettingsSummary>;
     readonly setLocale: (request: SetLocaleRequest) => Promise<AppearanceSettingsSummary>;
     readonly setTheme: (request: SetThemeRequest) => Promise<AppearanceThemeMutationResult>;
+    readonly startupDestination: () => Promise<StartupDestinationSummary>;
+    readonly setStartupDestination: (
+      request: SetStartupDestinationRequest
+    ) => Promise<StartupDestinationMutationResult>;
     readonly onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => () => void;
     readonly registry: () => Promise<SettingsRegistrySummary>;
   };

@@ -36,6 +36,7 @@ import type {
   SetDefaultModelRequest,
   UpdateModelRequest,
   SetLocaleRequest,
+  SetStartupDestinationRequest,
   SetThemeRequest,
   SetSidebarOpenRequest,
   SetWindowModeRequest,
@@ -99,7 +100,10 @@ import {
   UpdateStatusEventSchema,
   UpdateSummarySchema,
   SetLocaleRequestSchema,
+  SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
+  StartupDestinationMutationResultSchema,
+  StartupDestinationSummarySchema,
   WindowLayoutRequestSchema,
   WindowLayoutStateSchema,
   VaultActionResultSchema,
@@ -154,6 +158,7 @@ import {
 } from "./services/paddle-ocr-runtime-composition";
 import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
+import { StartupDestinationService } from "./services/startup-destination-service";
 import { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import { BackupRestoreService } from "./services/backup-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
@@ -338,6 +343,7 @@ let homeAgentService: HomeAgentService | undefined;
 let homeAgentUrlService: HomeAgentUrlService | undefined;
 let currentNoteAppendService: CurrentNoteAppendService | undefined;
 let appearanceService: AppearanceService | undefined;
+let startupDestinationService: StartupDestinationService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let captureService: CaptureService | undefined;
@@ -834,6 +840,11 @@ const getAppearanceService = (): AppearanceService => {
     });
   }
   return appearanceService;
+};
+
+const getStartupDestinationService = (): StartupDestinationService => {
+  startupDestinationService ??= new StartupDestinationService(getLocalSettingsStore());
+  return startupDestinationService;
 };
 
 const getUpdateService = (): UpdateService => {
@@ -2920,6 +2931,14 @@ ipcMain.handle("settings.setLocale", (_event, request: SetLocaleRequest) =>
 ipcMain.handle("settings.setTheme", (_event, request: SetThemeRequest): AppearanceThemeMutationResult =>
   AppearanceThemeMutationResultSchema.parse(
     getAppearanceService().setTheme(SetThemeRequestSchema.parse(request))
+  )
+);
+ipcMain.handle("settings.startupDestination", () =>
+  StartupDestinationSummarySchema.parse(getStartupDestinationService().summary())
+);
+ipcMain.handle("settings.setStartupDestination", (_event, request: SetStartupDestinationRequest) =>
+  StartupDestinationMutationResultSchema.parse(
+    getStartupDestinationService().set(SetStartupDestinationRequestSchema.parse(request))
   )
 );
 ipcMain.handle("settings.registry", () => getSettingsRegistry());

@@ -122,6 +122,26 @@ afterEach(() => {
 });
 
 describe("Home durable Agent conversation UI", () => {
+  it("applies the one-shot startup destination only after restoring an active vault", async () => {
+    const libraryDom = createDom();
+    const libraryHarness = createHarness(undefined);
+    libraryHarness.startupDestination = "library";
+    const libraryMount = await mountHome(libraryDom, makePigeApi(libraryHarness));
+    await waitFor(libraryDom, () => libraryMount.container.querySelector(".library-page") !== null);
+    expect(libraryMount.container.querySelector(".home")).toBeNull();
+    await act(async () => libraryMount.root.unmount());
+    libraryDom.window.close();
+
+    const failedDom = createDom();
+    const failedHarness = createHarness(undefined);
+    failedHarness.startupDestination = "failed";
+    const failedMount = await mountHome(failedDom, makePigeApi(failedHarness));
+    await waitFor(failedDom, () => failedMount.container.querySelector(".home") !== null);
+    expect(failedMount.container.querySelector(".library-page")).toBeNull();
+    await act(async () => failedMount.root.unmount());
+    failedDom.window.close();
+  });
+
   it("keeps a waiting dependency repair single-flight and restores focus after failure or disappearance", async () => {
     const dom = createDom();
     const { createRoot } = await import("react-dom/client");
@@ -5020,6 +5040,7 @@ interface ConversationHarness {
   readonly windowLayoutRequests: WindowLayoutRequest[];
   readonly windowLayoutListeners: Set<(state: WindowLayoutState) => void>;
   appearanceSummary: AppearanceSettingsSummary;
+  startupDestination: "home" | "library" | "failed";
   appearanceThemeMutationStatus: "committed" | "stale" | "failed";
   readonly appearanceThemeRequests: SetThemeRequest[];
   readonly appearanceListeners: Set<(settings: AppearanceSettingsSummary) => void>;
@@ -5119,6 +5140,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     windowLayoutRequests: [],
     windowLayoutListeners: new Set(),
     appearanceSummary: testAppearanceSummary("en"),
+    startupDestination: "home",
     appearanceThemeMutationStatus: "committed",
     appearanceThemeRequests: [],
     appearanceListeners: new Set(),
@@ -5397,6 +5419,14 @@ function makePigeApi(harness: ConversationHarness): object {
     },
     settings: {
       appearance: () => harness.loadAppearance(),
+      startupDestination: async () => {
+        if (harness.startupDestination === "failed") throw new Error("startup destination unavailable");
+        return { apiVersion: 1 as const, destination: harness.startupDestination, revision: 3 };
+      },
+      setStartupDestination: async (request) => ({
+        status: "committed" as const,
+        summary: { apiVersion: 1 as const, destination: request.destination, revision: request.expectedRevision + 1 }
+      }),
       setTheme: async (request: SetThemeRequest) => {
         harness.appearanceThemeRequests.push(request);
         if (harness.appearanceThemeMutationStatus !== "committed") {

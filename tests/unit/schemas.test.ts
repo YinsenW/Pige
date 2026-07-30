@@ -156,7 +156,10 @@ import {
   ReaderSelectionCreateNoteResultSchema,
   ReaderSelectionProposalDecisionResultSchema,
   RetrievalSearchResultSchema,
+  SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
+  StartupDestinationMutationResultSchema,
+  StartupDestinationSummarySchema,
   SkillDiscardStagedRequestSchema,
   SkillDiscardStagedResultSchema,
   SkillEnableRequestSchema,
@@ -4334,6 +4337,48 @@ describe("schemas", () => {
       expectedRevision: 4,
       rawCss: "body{}"
     })).toThrow();
+  });
+
+  it("strictly validates pathless startup destination summaries and CAS results", () => {
+    const summary = StartupDestinationSummarySchema.parse({
+      apiVersion: 1,
+      destination: "library",
+      revision: 7
+    });
+    expect(SetStartupDestinationRequestSchema.parse({
+      destination: "home",
+      expectedRevision: 7
+    })).toEqual({ destination: "home", expectedRevision: 7 });
+    expect(StartupDestinationMutationResultSchema.parse({ status: "committed", summary }))
+      .toEqual({ status: "committed", summary });
+    expect(StartupDestinationMutationResultSchema.parse({ status: "stale", summary }))
+      .toEqual({ status: "stale", summary });
+    expect(StartupDestinationMutationResultSchema.parse({ status: "failed" }))
+      .toEqual({ status: "failed" });
+    expect(StartupDestinationMutationResultSchema.parse({ status: "failed", summary }))
+      .toEqual({ status: "failed", summary });
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      startupDestination: { revision: 7, destination: "library" },
+      recentVaults: []
+    }).startupDestination).toEqual({ revision: 7, destination: "library" });
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      recentVaults: []
+    }).startupDestination).toBeUndefined();
+    expect(() => SetStartupDestinationRequestSchema.parse({
+      destination: "reader",
+      expectedRevision: 7
+    })).toThrow();
+    for (const privateField of ["path", "vaultId", "activeVaultId", "openAtLogin"] as const) {
+      expect(() => StartupDestinationSummarySchema.parse({ ...summary, [privateField]: "private" }))
+        .toThrow();
+      expect(() => SetStartupDestinationRequestSchema.parse({
+        destination: "home",
+        expectedRevision: 7,
+        [privateField]: "private"
+      })).toThrow();
+    }
   });
 
   it("validates toolchain manifests", () => {
