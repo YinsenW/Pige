@@ -84,6 +84,19 @@ const duplicateTopicRepairRequest = {
   absorbedRevision: `noteeditrev_${"a".repeat(64)}`,
   absorbedRenderProof: `knowledge_health_render_${"b".repeat(64)}`
 } as const;
+const claimSearchRequest = {
+  apiVersion: 1, requestId: "knowledge_health_claim_source_search_abcdefghijklmnop",
+  activeVaultId: binding.vaultId, reportRequestId: request.requestId,
+  indexGeneration: "2026-07-31T12:00:00.000Z#claimsource", issueKind: "unsourced_claim",
+  pageId: "page_20260731_claimsource", repairContextId: `knowledge_health_repair_context_${"a".repeat(64)}`,
+  claimRevision: `noteeditrev_${"b".repeat(64)}`, claimRenderProof: `knowledge_health_render_${"c".repeat(64)}`,
+  query: "Evidence"
+} as const;
+const { query: _claimQuery, requestId: _claimSearchId, ...claimProof } = claimSearchRequest;
+const claimRepairRequest = {
+  ...claimProof, requestId: "knowledge_health_claim_source_repair_abcdefghijklmnop",
+  action: "bind_claim_source", sourceContextId: `knowledge_health_claim_source_context_${"d".repeat(64)}`
+} as const;
 
 function readyResult() {
   return {
@@ -114,6 +127,8 @@ function makeHarness(options: {
   readonly searchKnowledgeHealthOrphanParents?: (...args: unknown[]) => unknown;
   readonly repairKnowledgeHealthOrphan?: (...args: unknown[]) => unknown;
   readonly repairKnowledgeHealthDuplicateTopic?: (...args: unknown[]) => unknown;
+  readonly searchKnowledgeHealthClaimSources?: (...args: unknown[]) => unknown;
+  readonly repairKnowledgeHealthUnsourcedClaim?: (...args: unknown[]) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const runKnowledgeHealth = vi.fn(options.runKnowledgeHealth ?? (() => readyResult()));
@@ -146,6 +161,13 @@ function makeHarness(options: {
     status: "committed" as const,
     operationId: "op_20260731_duplicatetopic123"
   })));
+  const searchKnowledgeHealthClaimSources = vi.fn(options.searchKnowledgeHealthClaimSources ?? (() => ({
+    ...claimSearchRequest, status: "ready" as const, sources: [], truncated: false
+  })));
+  const repairKnowledgeHealthUnsourcedClaim = vi.fn(options.repairKnowledgeHealthUnsourcedClaim ?? (() => ({
+    ...claimRepairRequest, status: "committed" as const, revision: `noteeditrev_${"e".repeat(64)}`,
+    operationId: "op_20260731_claimsource123"
+  })));
   registerKnowledgeHealthIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -156,6 +178,8 @@ function makeHarness(options: {
     searchKnowledgeHealthOrphanParents,
     repairKnowledgeHealthOrphan,
     repairKnowledgeHealthDuplicateTopic,
+    searchKnowledgeHealthClaimSources,
+    repairKnowledgeHealthUnsourcedClaim,
     repairKnowledgeHealth
   });
   return {
@@ -165,7 +189,9 @@ function makeHarness(options: {
     searchKnowledgeHealthTargets,
     searchKnowledgeHealthOrphanParents,
     repairKnowledgeHealthOrphan,
-    repairKnowledgeHealthDuplicateTopic
+    repairKnowledgeHealthDuplicateTopic,
+    searchKnowledgeHealthClaimSources,
+    repairKnowledgeHealthUnsourcedClaim
   };
 }
 
@@ -173,7 +199,8 @@ describe("registerKnowledgeHealthIpc", () => {
   it("registers and strictly delegates the maintenance channel", async () => {
     const { handlers, runKnowledgeHealth, searchKnowledgeHealthTargets, repairKnowledgeHealth,
       searchKnowledgeHealthOrphanParents, repairKnowledgeHealthOrphan,
-      repairKnowledgeHealthDuplicateTopic } = makeHarness();
+      repairKnowledgeHealthDuplicateTopic, searchKnowledgeHealthClaimSources,
+      repairKnowledgeHealthUnsourcedClaim } = makeHarness();
 
     expect([...handlers.keys()]).toEqual([
       "maintenance.runKnowledgeHealth",
@@ -181,7 +208,9 @@ describe("registerKnowledgeHealthIpc", () => {
       "maintenance.repairKnowledgeHealth",
       "maintenance.repairKnowledgeHealthDuplicateTopic",
       "maintenance.searchKnowledgeHealthOrphanParents",
-      "maintenance.repairKnowledgeHealthOrphan"
+      "maintenance.repairKnowledgeHealthOrphan",
+      "maintenance.searchKnowledgeHealthClaimSources",
+      "maintenance.repairKnowledgeHealthUnsourcedClaim"
     ]);
     await expect(handlers.get("maintenance.runKnowledgeHealth")!(
       {} as IpcMainInvokeEvent,
@@ -213,6 +242,14 @@ describe("registerKnowledgeHealthIpc", () => {
       duplicateTopicRepairRequest
     )).resolves.toMatchObject({ status: "committed", operationId: "op_20260731_duplicatetopic123" });
     expect(repairKnowledgeHealthDuplicateTopic).toHaveBeenCalledWith(binding.vaultPath, duplicateTopicRepairRequest);
+    await expect(handlers.get("maintenance.searchKnowledgeHealthClaimSources")!(
+      {} as IpcMainInvokeEvent, claimSearchRequest
+    )).resolves.toMatchObject({ status: "ready", sources: [] });
+    expect(searchKnowledgeHealthClaimSources).toHaveBeenCalledWith(binding.vaultPath, claimSearchRequest);
+    await expect(handlers.get("maintenance.repairKnowledgeHealthUnsourcedClaim")!(
+      {} as IpcMainInvokeEvent, claimRepairRequest
+    )).resolves.toMatchObject({ status: "committed", operationId: "op_20260731_claimsource123" });
+    expect(repairKnowledgeHealthUnsourcedClaim).toHaveBeenCalledWith(binding.vaultPath, claimRepairRequest);
   });
 
   it("fails closed before service access for malformed or inactive-vault requests", async () => {

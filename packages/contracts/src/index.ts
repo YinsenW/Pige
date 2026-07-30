@@ -142,6 +142,11 @@ import type {
   KnowledgeHealthOrphanParentSearchResult,
   KnowledgeHealthOrphanRepairRequest,
   KnowledgeHealthOrphanRepairResult,
+  KnowledgeHealthClaimSourceCandidate,
+  KnowledgeHealthClaimSourceSearchRequest,
+  KnowledgeHealthClaimSourceSearchResult,
+  KnowledgeHealthClaimSourceRepairRequest,
+  KnowledgeHealthClaimSourceRepairResult,
   LibraryBrowseRequest,
   LibraryBrowseResult,
   Locale,
@@ -596,6 +601,11 @@ export type {
   KnowledgeHealthOrphanParentSearchResult,
   KnowledgeHealthOrphanRepairRequest,
   KnowledgeHealthOrphanRepairResult,
+  KnowledgeHealthClaimSourceCandidate,
+  KnowledgeHealthClaimSourceSearchRequest,
+  KnowledgeHealthClaimSourceSearchResult,
+  KnowledgeHealthClaimSourceRepairRequest,
+  KnowledgeHealthClaimSourceRepairResult,
   LibraryTagFacet,
   LibraryTaggedPageSummary,
   LibraryTagsCursor,
@@ -2429,6 +2439,12 @@ export interface PigeDesktopApi {
     readonly repairKnowledgeHealthDuplicateTopic: (
       request: KnowledgeHealthDuplicateTopicRepairRequest
     ) => Promise<KnowledgeHealthDuplicateTopicRepairResult>;
+    readonly searchKnowledgeHealthClaimSources: (
+      request: KnowledgeHealthClaimSourceSearchRequest
+    ) => Promise<KnowledgeHealthClaimSourceSearchResult>;
+    readonly repairKnowledgeHealthUnsourcedClaim: (
+      request: KnowledgeHealthClaimSourceRepairRequest
+    ) => Promise<KnowledgeHealthClaimSourceRepairResult>;
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;

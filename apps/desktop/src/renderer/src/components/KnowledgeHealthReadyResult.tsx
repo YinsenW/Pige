@@ -32,6 +32,14 @@ export type RepairableDuplicateTopic = Extract<KnowledgeHealthIssueSummary, { re
   ];
 };
 
+export type RepairableUnsourcedClaim = Extract<KnowledgeHealthIssueSummary, { readonly kind: "unsourced_claim" }> & {
+  readonly repairContextId: string;
+  readonly claimRevision: string;
+  readonly claimRenderProof: string;
+  readonly reportRequestId: string;
+  readonly indexGeneration: string;
+};
+
 export function KnowledgeHealthReadyResult(props: {
   readonly result: Extract<KnowledgeHealthRunResult, { readonly status: "ready" }>;
   readonly groupedIssues: readonly {
@@ -44,6 +52,7 @@ export function KnowledgeHealthReadyResult(props: {
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
+  readonly onChooseClaimSource: (issue: RepairableUnsourcedClaim, trigger: HTMLButtonElement) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -101,6 +110,11 @@ export function KnowledgeHealthReadyResult(props: {
                 onRetargetIssue={props.onRetargetIssue}
                 onChooseOrphanParent={props.onChooseOrphanParent}
                 onMergeDuplicateTopic={props.onMergeDuplicateTopic}
+                onChooseClaimSource={(issue, trigger) => props.onChooseClaimSource({
+                  ...issue,
+                  reportRequestId: props.result.requestId,
+                  indexGeneration: props.result.indexGeneration
+                }, trigger)}
                 repairState={props.repairState}
                 t={props.t}
               />
@@ -119,6 +133,11 @@ function KnowledgeHealthIssueRow(props: {
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
+  readonly onChooseClaimSource: (
+    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "unsourced_claim" }> & {
+      readonly repairContextId: string; readonly claimRevision: string; readonly claimRenderProof: string;
+    }, trigger: HTMLButtonElement
+  ) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -166,6 +185,11 @@ function KnowledgeHealthIssueRow(props: {
     props.issue.targetRevision && props.issue.targetRenderProof
     ? props.issue as RepairableOrphan
     : null;
+  const repairableClaim = props.issue.kind === "unsourced_claim" && props.issue.repairContextId &&
+    props.issue.claimRevision && props.issue.claimRenderProof ? props.issue as Extract<KnowledgeHealthIssueSummary,
+      { readonly kind: "unsourced_claim" }> & {
+        readonly repairContextId: string; readonly claimRevision: string; readonly claimRenderProof: string;
+      } : null;
   return (
     <span>
       <button className="settings-button" type="button" onClick={() => void props.onOpenPage(page.pageId)}>
@@ -194,6 +218,15 @@ function KnowledgeHealthIssueRow(props: {
           <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
             onClick={() => props.onChooseOrphanParent(repairableOrphan)}>
             {props.t("maintenance.knowledgeHealth.chooseOrphanParent")}
+          </button>
+        </>
+      ) : null}
+      {repairableClaim ? (
+        <>
+          {" · "}
+          <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
+            onClick={(event) => props.onChooseClaimSource(repairableClaim, event.currentTarget)}>
+            {props.t("maintenance.knowledgeHealth.chooseClaimSource")}
           </button>
         </>
       ) : null}

@@ -14,8 +14,10 @@ import {
   type KnowledgeHealthRepairState,
   type RepairableBrokenLink,
   type RepairableDuplicateTopic,
-  type RepairableOrphan
+  type RepairableOrphan,
+  type RepairableUnsourcedClaim
 } from "./KnowledgeHealthReadyResult";
+import { KnowledgeHealthClaimSourceRepair } from "./KnowledgeHealthClaimSourceRepair";
 
 type KnowledgeHealthState =
   | { readonly kind: "not_run" | "checking" | "unavailable" | "failed" }
@@ -67,10 +69,12 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const [knowledgeHealthRetargetState, setKnowledgeHealthRetargetState] = useState<KnowledgeHealthRetargetState>(null);
   const [orphanParentPickerState, setOrphanParentPickerState] = useState<OrphanParentPickerState>(null);
   const [duplicateTopicMergeState, setDuplicateTopicMergeState] = useState<DuplicateTopicMergeState>(null);
+  const [claimSourceIssue, setClaimSourceIssue] = useState<RepairableUnsourcedClaim | null>(null);
   const [knowledgeHealthOpenFailed, setKnowledgeHealthOpenFailed] = useState(false);
   const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
   const knowledgeHealthRunButtonRef = useRef<HTMLButtonElement>(null);
   const duplicateTopicTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const claimSourceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -106,6 +110,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     setKnowledgeHealthRetargetState(null);
     setOrphanParentPickerState(null);
     setDuplicateTopicMergeState(null);
+    setClaimSourceIssue(null);
     setKnowledgeHealthOpenFailed(false);
   }, [props.activeVaultId]);
 
@@ -183,6 +188,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       setKnowledgeHealthRepairState(null);
       setKnowledgeHealthRetargetState(null);
       setOrphanParentPickerState(null);
+      setClaimSourceIssue(null);
     }
     const activeVaultId = props.activeVaultId;
     const sequence = knowledgeHealthSequenceRef.current + 1;
@@ -688,6 +694,10 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
                 duplicateTopicTriggerRef.current = trigger;
                 setDuplicateTopicMergeState({ issue, survivorPageId: issue.pages[0]!.pageId });
               }}
+              onChooseClaimSource={(issue, trigger) => {
+                claimSourceTriggerRef.current = trigger;
+                setClaimSourceIssue(issue);
+              }}
               repairState={knowledgeHealthRepairState}
               t={props.t}
             />
@@ -725,6 +735,16 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
                 </button>
               </div>
             </div>
+          ) : null}
+          {claimSourceIssue ? (
+            <KnowledgeHealthClaimSourceRepair
+              activeVaultId={props.activeVaultId}
+              issue={claimSourceIssue}
+              returnFocus={claimSourceTriggerRef.current}
+              t={props.t}
+              onClose={() => setClaimSourceIssue(null)}
+              onCommitted={() => runKnowledgeHealth(true)}
+            />
           ) : null}
           {knowledgeHealthRetargetState ? (
             <div className="settings-row tall" role="group" aria-labelledby="knowledge-health-retarget-title">
