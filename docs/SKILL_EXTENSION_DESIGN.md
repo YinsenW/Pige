@@ -40,17 +40,16 @@ and one root `SKILL.md`. Executables, hooks, packages, raw-secret/unknown capabi
 or ambiguous boundaries, links, paths, tampering and stale review close before durable effect.
 Explicit authored chat selects one Host HTTPS candidate by index; other content cannot authorize.
 
-External review and installed summaries expose only kind, exact declared capabilities and derived
-boundaries, safe source, checksums, files and warnings. Explicit install persists verified bytes
-disabled; stage/install never runs Skill content. A verified machine-local `external_web` manifest
-with `pige_readonly_https_v1`, `external_network`, `network` and one exact HTTPS origin may expose
-explicit enablement. Its strict HTTPS source may stage a reviewed update; capability/origin drift
-is disclosed, commit disables it, and restart adopts once. Other runtime classes remain separate.
+Review/installed summaries expose only kind, capabilities, boundary, safe source, checksums, files
+and warnings. Install stores verified inert bytes disabled. A machine-local `external_web` Skill
+with `pige_readonly_https_v1`, `external_network`, `network` and one HTTPS origin may be enabled;
+other runtimes stay separate.
 
-Only verified `user_confirmed` machine-local pure Skills expose lifecycle actions. Enable restores;
-uninstall trashes; export is pathless. HTTPS update binds source/base/revision, preserves state,
-trashes prior bytes and CAS-adopts once. Verified private-trash restore returns disabled.
-Background and cross-source/file/ZIP update stay out.
+Verified `user_confirmed` pure Skills can enable, trash-uninstall and pathless-export. Reviewed
+update binds source/base/revision: HTTPS reuses its origin; Main picks matching local `.md`/`.zip`.
+Both trash old bytes, CAS-adopt once and preserve pure enablement; External/Web drift is disclosed
+and commits disabled. Restart uses the private receipt; trash restore returns disabled. No
+background or cross-source update.
 
 ## 5. Skill Format
 
