@@ -237,6 +237,8 @@ import type {
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
   NoteEditTaxonomyResult,
+  NoteRenameRequest,
+  NoteRenameResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -637,6 +639,8 @@ export type {
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
   NoteEditTaxonomyResult,
+  NoteRenameRequest,
+  NoteRenameResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -1339,6 +1343,7 @@ export interface KnowledgeActivitySummary {
   readonly kind:
     | "create_page"
     | "update_page"
+    | "rename_page"
     | "archive_page"
     | "restore_page"
     | "trash_page"
@@ -2282,6 +2287,7 @@ export interface PigeDesktopApi {
     ) => Promise<NoteRestoreArchivedResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
+    readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;
