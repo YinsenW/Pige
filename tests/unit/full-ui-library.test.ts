@@ -19,6 +19,8 @@ import type {
   LibraryTagsResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteAddTagRequest,
+  NoteAddTagResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
   NoteRenderResult,
@@ -1754,6 +1756,39 @@ describe("full UI Library", () => {
     expect(container.querySelector('[data-reader-action="more"]')).toBeNull();
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("adds one canonical tag to the exact active Reader note and retains the draft on stale", async () => {
+    const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteAddTagRequest[] = []; const adopted: NoteRenderResult[] = []; let mode: "stale" | "committed" = "stale";
+    let selected: NoteRenderResult = { ...readerNote(), tagging: { tags: ["research"], canAdd: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const onAddNoteTag = async (request: NoteAddTagRequest): Promise<NoteAddTagResult> => {
+      requests.push(request); return mode === "committed"
+        ? { ...request, status: "committed", operationId: "operation_note_add_tag_library", render: {
+            ...selected, tagging: { tags: ["research", request.tag], canAdd: true, revision: `noteeditrev_${"b".repeat(32)}` } } }
+        : { ...request, status: "stale" };
+    };
+    const renderPanel = (): void => root.render(createElement(LibraryPanel, {
+      libraryList: libraryList(), selectedNote: selected, selectedNoteRelated: null, noteLoadingPageId: null, error: null,
+      onGoHome: () => undefined, onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+      onOpenNote: async () => undefined, onCloseNote: () => undefined, noteAgentOpen: false, onToggleNoteAgent: () => undefined,
+      noteAgentToggleRef: { current: null }, developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+      activeVaultId: "vault_20260715_fullui01", onAddNoteTag, onCurrentNoteTagged: (render) => { adopted.push(render); selected = render; renderPanel(); },
+      onDevelopment: () => undefined, t
+    }));
+    await act(async () => { renderPanel(); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Add tag"));
+    const input = container.querySelector<HTMLInputElement>('input[placeholder="Enter a tag"]')!;
+    await inputText(dom, input, "  field   notes  "); await clickButton(dom, buttonNamed(container, "Add tag"));
+    expect(requests[0]).toMatchObject({ apiVersion: 1, activeVaultId: "vault_20260715_fullui01", currentPageId: selected.summary.pageId,
+      renderContextId: selected.renderContextId, expectedRevision: `noteeditrev_${"a".repeat(32)}`, tag: "field notes" });
+    expect(requests[0]?.requestId).toMatch(/^noteaddtagreq_[a-z0-9]{16,64}$/u);
+    expect(container.textContent).toContain("The tag was not added. Review it and try again.");
+    expect(input.value).toBe("  field   notes  "); expect(dom.window.document.activeElement).toBe(input); expect(adopted).toHaveLength(0);
+    mode = "committed"; await clickButton(dom, buttonNamed(container, "Add tag")); await waitFor(dom, () => adopted.length === 1);
+    expect(adopted[0]?.tagging?.tags).toContain("field notes"); expect(container.querySelector(".note-reader")).not.toBeNull();
+    await act(async () => root.unmount()); dom.window.close();
   });
 
   it("merges one selected ordinary note into the current Reader and adopts only the authoritative render", async () => {
