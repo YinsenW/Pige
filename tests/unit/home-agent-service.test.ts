@@ -3825,6 +3825,64 @@ describe("Home Pi Agent service", () => {
       .trim().split("\n")).toHaveLength(2);
   });
 
+  it("rehydrates a compacted long conversation after restart and keeps the recent tail exact", async () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    let conversationId: string | undefined, tailEventId: string | undefined;
+    for (let index = 0; index < 18; index += 1) {
+      const user = conversations.appendUserTurn(
+        fixture.vaultPath,
+        `Durable user turn ${index}.`,
+        { inputKind: index === 0 ? "typed_text" : "follow_up", locale: "en" },
+        {
+          clientTurnId: `turn_20260731_compaction${String(index).padStart(4, "0")}`,
+          ...(conversationId ? { conversationId, expectedTailEventId: tailEventId } : {})
+        }
+      );
+      const assistant = conversations.appendAssistantTurn(
+        fixture.vaultPath,
+        user,
+        `job_20260731_compaction${String(index).padStart(4, "0")}`,
+        `Durable assistant turn ${index}.`
+      );
+      conversationId = user.event.conversationId;
+      tailEventId = assistant.id;
+    }
+    const requests: PiAgentRunRequest[] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        requests.push(request);
+        await request.beforeModelTurn?.();
+        return makeRuntimeResult(request, undefined, {
+          answer: "Compacted continuation.", citationRefs: [], grounding: "general"
+        });
+      }
+    };
+    const restarted = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      runtime,
+      undefined,
+      conversations
+    );
+    const result = await restarted.submitTurn({
+      schemaVersion: 1,
+      clientTurnId: "turn_20260731_compactionfollowup",
+      conversationId: conversationId!,
+      expectedTailEventId: tailEventId!,
+      text: "Continue the compacted conversation.",
+      inputKind: "follow_up",
+      locale: "en"
+    });
+    expect(result).toMatchObject({ state: "completed", answer: { answer: "Compacted continuation." } });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.history).toHaveLength(16);
+    expect(requests[0]?.history[0]?.text).toContain("Earlier conversation context compacted by Pige");
+    expect(requests[0]?.history.at(-1)?.text).toBe("Durable assistant turn 17.");
+  });
+
   it("rejects a stale follow-up tail before creating a Job or invoking Pi", async () => {
     const fixture = makeFixture();
     let runtimeCalls = 0;

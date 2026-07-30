@@ -760,13 +760,19 @@ describe("Agent turn conversation store", () => {
     }
 
     const reader = new AgentTurnConversationStore();
+    const transcriptPath = conversationPath(vaultPath, current.locator);
+    const transcriptBefore = fs.readFileSync(transcriptPath, "utf8");
     const context = reader.readContextBeforeUserTurn(vaultPath, current);
+    const restartedContext = new AgentTurnConversationStore().readContextBeforeUserTurn(vaultPath, current);
     const exact = reader.readConversationTimeline(vaultPath, current.event.conversationId, 5);
     const latest = reader.readLatestConversationTimeline(vaultPath, 5);
 
     expect(context.length).toBeLessThanOrEqual(16);
     expect(context.reduce((bytes, message) => bytes + Buffer.byteLength(message.text), 0)).toBeLessThanOrEqual(64 * 1024);
     expect(context.every((message) => ["user", "assistant"].includes(message.role))).toBe(true);
+    expect(context[0]?.text).toContain("Earlier conversation context compacted by Pige");
+    expect(restartedContext).toEqual(context);
+    expect(fs.readFileSync(transcriptPath, "utf8")).toBe(transcriptBefore);
     expect(exact).toEqual(latest);
     expect(exact).toMatchObject({
       conversationId: current.event.conversationId,
