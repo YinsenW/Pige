@@ -3779,6 +3779,10 @@ export function LibraryPanel(props: {
             merge: props.t("library.tagMerge"), mergeTitle: props.t("library.tagMergeTitle"), mergeDescription: props.t("library.tagMergeDescription"),
             mergeSource: props.t("library.tagMergeSource"), mergeTarget: props.t("library.tagMergeTarget"), mergeCancel: props.t("library.tagMergeCancel"),
             mergeConfirm: props.t("library.tagMergeConfirm"), mergePending: props.t("library.tagMergePending"), mergeFailed: props.t("library.tagMergeFailed"),
+            remove: props.t("library.tagRemove"), removeTitle: props.t("library.tagRemoveTitle"),
+            removeDescription: props.t("library.tagRemoveDescription"), removeCurrent: props.t("library.tagRemoveCurrent"),
+            removePageCount: props.t("library.tagRemovePageCount"), removeCancel: props.t("library.tagRemoveCancel"),
+            removeConfirm: props.t("library.tagRemoveConfirm"), removePending: props.t("library.tagRemovePending"), removeFailed: props.t("library.tagRemoveFailed"),
             noteCount: (count) => `${count} ${props.t("library.tagsPages")}`,
           }}
           onOpenNote={props.onOpenNote}

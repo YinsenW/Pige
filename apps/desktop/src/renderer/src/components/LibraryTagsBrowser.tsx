@@ -3,6 +3,8 @@ import type {
   LibraryTagFacet,
   LibraryMergeTagRequest,
   LibraryMergeTagResult,
+  LibraryRemoveTagRequest,
+  LibraryRemoveTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   LibraryTaggedPageSummary,
@@ -14,6 +16,7 @@ export interface LibraryTagsApi {
   readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
   readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
   readonly mergeTag: (request: LibraryMergeTagRequest) => Promise<LibraryMergeTagResult>;
+  readonly removeTag: (request: LibraryRemoveTagRequest) => Promise<LibraryRemoveTagResult>;
 }
 
 export interface LibraryTagsBrowserLabels {
@@ -46,6 +49,15 @@ export interface LibraryTagsBrowserLabels {
   readonly mergeConfirm: string;
   readonly mergePending: string;
   readonly mergeFailed: string;
+  readonly remove: string;
+  readonly removeTitle: string;
+  readonly removeDescription: string;
+  readonly removeCurrent: string;
+  readonly removePageCount: string;
+  readonly removeCancel: string;
+  readonly removeConfirm: string;
+  readonly removePending: string;
+  readonly removeFailed: string;
   readonly noteCount: (count: number) => string;
 }
 
@@ -75,6 +87,12 @@ type MergeDialogState = {
   readonly targetTag: string;
   readonly state: "ready" | "pending" | "failed";
 };
+type RemoveDialogState = {
+  readonly tag: string;
+  readonly expectedPageCount: number;
+  readonly expectedSnapshotId: string;
+  readonly state: "ready" | "pending" | "failed";
+};
 
 function createRequestId(): string {
   return `library_tags_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
@@ -86,6 +104,10 @@ function createRenameRequestId(): `library_tag_rename_request_${string}` {
 
 function createMergeRequestId(): `library_tag_merge_request_${string}` {
   return `library_tag_merge_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
+function createRemoveRequestId(): `library_tag_remove_request_${string}` {
+  return `library_tag_remove_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
 function canonicalTag(value: string): string {
@@ -123,6 +145,7 @@ export function LibraryTagsBrowser(
   const [focusRevision, setFocusRevision] = useState(0);
   const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
   const [mergeDialog, setMergeDialog] = useState<MergeDialogState | null>(null);
+  const [removeDialog, setRemoveDialog] = useState<RemoveDialogState | null>(null);
   const loadingMoreOwnerRef = useRef<"tags" | "notes" | null>(null);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const selectedTagRef = useRef<string | null>(null);
@@ -136,6 +159,7 @@ export function LibraryTagsBrowser(
   const tagRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const mergeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const removeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameDialogRef = useRef<HTMLElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelRef = useRef<HTMLButtonElement>(null);
@@ -146,6 +170,10 @@ export function LibraryTagsBrowser(
   const mergeCancelRef = useRef<HTMLButtonElement>(null);
   const mergeRequestActiveRef = useRef(false);
   const mergeSequenceRef = useRef(0);
+  const removeDialogRef = useRef<HTMLElement>(null);
+  const removeCancelRef = useRef<HTMLButtonElement>(null);
+  const removeRequestActiveRef = useRef(false);
+  const removeSequenceRef = useRef(0);
   const pendingTagFocusRef = useRef<string | null>(null);
   const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
@@ -312,9 +340,12 @@ export function LibraryTagsBrowser(
     renameRequestActiveRef.current = false;
     mergeSequenceRef.current += 1;
     mergeRequestActiveRef.current = false;
+    removeSequenceRef.current += 1;
+    removeRequestActiveRef.current = false;
     pendingTagFocusRef.current = null;
     setRenameDialog(null);
     setMergeDialog(null);
+    setRemoveDialog(null);
     void loadTags(false);
   }, [props.activeVaultId]);
 
@@ -504,6 +535,79 @@ export function LibraryTagsBrowser(
     }
   };
 
+  const openRemove = (tag: LibraryTagFacet): void => {
+    const snapshotId = tagsContinuation?.snapshotId;
+    if (!snapshotId || tag.pageCount <= 0 || removeRequestActiveRef.current) return;
+    setRemoveDialog({
+      tag: tag.tag,
+      expectedPageCount: tag.pageCount,
+      expectedSnapshotId: snapshotId,
+      state: "ready",
+    });
+    window.requestAnimationFrame(() => removeCancelRef.current?.focus({ preventScroll: true }));
+  };
+
+  const cancelRemove = (): void => {
+    if (!removeDialog || removeRequestActiveRef.current) return;
+    const tag = removeDialog.tag;
+    setRemoveDialog(null);
+    window.requestAnimationFrame(() => removeTriggerRefs.current.get(tag)?.focus({ preventScroll: true }));
+  };
+
+  const submitRemove = async (): Promise<void> => {
+    if (!removeDialog || removeRequestActiveRef.current) return;
+    removeRequestActiveRef.current = true;
+    const sequence = ++removeSequenceRef.current;
+    const request: LibraryRemoveTagRequest = {
+      apiVersion: 1,
+      requestId: createRemoveRequestId(),
+      activeVaultId: props.activeVaultId,
+      tag: removeDialog.tag,
+      expectedSnapshotId: removeDialog.expectedSnapshotId,
+      expectedPageCount: removeDialog.expectedPageCount,
+    };
+    setRemoveDialog((current) => current ? { ...current, state: "pending" } : current);
+    try {
+      const result = await props.api.removeTag(request);
+      if (sequence !== removeSequenceRef.current || activeVaultIdRef.current !== request.activeVaultId) return;
+      if (!removeIdentityMatches(request, result)) {
+        setRemoveDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => removeCancelRef.current?.focus({ preventScroll: true }));
+        return;
+      }
+      if (result.status === "committed") {
+        const sourceIndex = tags.findIndex((tag) => tag.tag === request.tag);
+        const focusTag = tags[sourceIndex + 1]?.tag ?? tags[sourceIndex - 1]?.tag;
+        setRemoveDialog(null);
+        if (selectedTagRef.current === request.tag) {
+          setSelectedTag(null);
+          selectedTagRef.current = null;
+          setNotes([]);
+          setNotesContinuation(null);
+        }
+        await loadTags(false);
+        window.requestAnimationFrame(() => {
+          (focusTag ? tagRowRefs.current.get(focusTag) : null)?.focus({ preventScroll: true });
+          if (!focusTag || document.activeElement === document.body) {
+            tagsHeadingRef.current?.focus({ preventScroll: true });
+          }
+        });
+        return;
+      }
+      setRemoveDialog((current) => current ? { ...current, state: "failed" } : current);
+      window.requestAnimationFrame(() => removeCancelRef.current?.focus({ preventScroll: true }));
+    } catch {
+      if (sequence === removeSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        setRemoveDialog((current) => current ? { ...current, state: "failed" } : current);
+        window.requestAnimationFrame(() => removeCancelRef.current?.focus({ preventScroll: true }));
+      }
+    } finally {
+      if (sequence === removeSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        removeRequestActiveRef.current = false;
+      }
+    }
+  };
+
   return (
     <section className="search-group" aria-labelledby="library-tags-heading">
       <h2 ref={tagsHeadingRef} id="library-tags-heading" tabIndex={-1}>{props.labels.title}</h2>
@@ -563,6 +667,18 @@ export function LibraryTagsBrowser(
                   onClick={() => openMerge(tag)}
                 >
                   {props.labels.merge}
+                </button> : null}
+                {tag.pageCount > 0 && tagsContinuation?.snapshotId ? <button
+                  ref={(element) => {
+                    if (element) removeTriggerRefs.current.set(tag.tag, element);
+                    else removeTriggerRefs.current.delete(tag.tag);
+                  }}
+                  type="button"
+                  className="settings-button danger"
+                  aria-label={`${props.labels.remove}: ${tag.tag}`}
+                  onClick={() => openRemove(tag)}
+                >
+                  {props.labels.remove}
                 </button> : null}
               </div>
             ))}
@@ -756,6 +872,55 @@ export function LibraryTagsBrowser(
           </section>
         </div>
       ) : null}
+      {removeDialog ? (
+        <div className="confirmation-backdrop">
+          <section
+            ref={removeDialogRef}
+            className="confirmation-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="library-tag-remove-title"
+            aria-describedby="library-tag-remove-description"
+            aria-busy={removeDialog.state === "pending"}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && removeDialog.state !== "pending") {
+                event.preventDefault();
+                cancelRemove();
+                return;
+              }
+              if (event.key !== "Tab") return;
+              const controls = Array.from(removeDialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []);
+              if (controls.length === 0) return event.preventDefault();
+              const first = controls[0]!;
+              const last = controls.at(-1)!;
+              if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+              } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
+              }
+            }}
+          >
+            <div className="confirmation-icon" aria-hidden="true">!</div>
+            <div className="confirmation-copy">
+              <h2 id="library-tag-remove-title">{props.labels.removeTitle}</h2>
+              <p id="library-tag-remove-description">{props.labels.removeDescription}</p>
+              <p><strong>{props.labels.removeCurrent}</strong> {removeDialog.tag}</p>
+              <p><strong>{props.labels.removePageCount}</strong> {props.labels.noteCount(removeDialog.expectedPageCount)}</p>
+              {removeDialog.state === "failed" ? <p className="error" role="alert">{props.labels.removeFailed}</p> : null}
+            </div>
+            <div className="confirmation-actions">
+              <button ref={removeCancelRef} type="button" className="secondary" disabled={removeDialog.state === "pending"} onClick={cancelRemove}>
+                {props.labels.removeCancel}
+              </button>
+              <button type="button" className="primary danger" disabled={removeDialog.state === "pending"} onClick={() => void submitRemove()}>
+                {removeDialog.state === "pending" ? props.labels.removePending : props.labels.removeConfirm}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -773,4 +938,11 @@ function mergeIdentityMatches(request: LibraryMergeTagRequest, result: LibraryMe
     result.targetTag === request.targetTag && result.expectedSnapshotId === request.expectedSnapshotId &&
     result.expectedSourcePageCount === request.expectedSourcePageCount &&
     result.expectedTargetPageCount === request.expectedTargetPageCount;
+}
+
+function removeIdentityMatches(request: LibraryRemoveTagRequest, result: LibraryRemoveTagResult): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.tag === request.tag &&
+    result.expectedSnapshotId === request.expectedSnapshotId &&
+    result.expectedPageCount === request.expectedPageCount;
 }
