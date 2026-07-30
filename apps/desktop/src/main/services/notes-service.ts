@@ -22,6 +22,7 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  parsePigeFrontmatter,
   renderPigeMarkdownToHtml,
   type PigeMarkdownSelectionSegment
 } from "@pige/markdown";
@@ -118,6 +119,20 @@ export type NotesSourceRevealResolution =
       assertCurrent(): boolean;
     }
   | { readonly status: "stale" | "not_found" };
+
+export type NotesTrashResolution =
+  | {
+      readonly status: "ready";
+      readonly activeVaultId: string;
+      readonly vaultPath: string;
+      readonly pageId: string;
+      readonly pagePath: string;
+      readonly absolutePath: string;
+      readonly pageContentHash: string;
+      readonly title: string;
+      assertCurrent(): boolean;
+    }
+  | { readonly status: "stale" | "not_found" | "ineligible" };
 
 interface NoteEditorBinding {
   readonly privateRenderIdentity: string;
@@ -448,6 +463,46 @@ export class NotesService {
           this.#matchesCurrentPage(context) &&
           sameFileIdentity(source.identity, latest.identity)
         );
+      }
+    };
+  }
+
+  resolveTrashTarget(ownerId: string, input: {
+    readonly activeVaultId: string;
+    readonly pageId: string;
+    readonly renderContextId: string;
+    readonly expectedRevision: string;
+  }): NotesTrashResolution {
+    const vault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vault || !vaultPath || vault.vaultId !== input.activeVaultId) return { status: "stale" };
+    const context = this.#readRenderContext(ownerId, input.renderContextId);
+    if (
+      !context ||
+      context.vaultId !== input.activeVaultId ||
+      context.vaultPath !== vaultPath ||
+      context.pageId !== input.pageId ||
+      this.#ownerEpochs.get(ownerId) !== context.ownerEpoch ||
+      publicEditorRevision(context.pageContentHash) !== input.expectedRevision ||
+      !this.#matchesCurrentPage(context)
+    ) return { status: "stale" };
+    if (context.pageType !== "note") return { status: "ineligible" };
+    const title = parsePigeFrontmatter(context.markdown)?.frontmatter.title?.replace(/\s+/gu, " ").trim();
+    if (!title) return { status: "ineligible" };
+    return {
+      status: "ready",
+      activeVaultId: context.vaultId,
+      vaultPath: context.vaultPath,
+      pageId: context.pageId,
+      pagePath: context.pagePath,
+      absolutePath: context.absolutePath,
+      pageContentHash: context.pageContentHash,
+      title: title.slice(0, 120),
+      assertCurrent: () => {
+        const current = this.#readRenderContext(ownerId, input.renderContextId);
+        return current === context &&
+          this.#ownerEpochs.get(ownerId) === context.ownerEpoch &&
+          this.#matchesCurrentPage(context);
       }
     };
   }
