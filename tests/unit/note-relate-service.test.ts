@@ -3,6 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
+import {
+  NoteMarkdownEditorActivityAdapter,
+  NoteMarkdownEditorService,
+} from "../../apps/desktop/src/main/services/note-markdown-editor-service";
+import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 
 const temporaryPaths: string[] = [];
 const request = {
@@ -80,6 +85,45 @@ describe("NoteRelateService", () => {
     } as never, { open: vi.fn(() => openedCurrent()), save } as never, () => vaultPath);
     await expect(staleCurrent.relate("reader_owner", request)).resolves.toEqual({ ...request, status: "stale" });
   });
+
+  it("commits one real update_page Activity and restores exact bytes through Undo", async () => {
+    const vaultPath = createVault();
+    const sourcePath = path.join(vaultPath, "wiki", "source.md");
+    const before = noteMarkdown(request.currentPageId, "Source note", "2026-07-30T09:00:00.000Z");
+    fs.writeFileSync(sourcePath, before, "utf8");
+    const vaults = {
+      current: () => ({
+        vaultId: request.activeVaultId, name: "Relate vault", activeVaultPathDisplay: "Relate vault",
+        knowledgeRootDisplay: "Relate vault", sourceAssetRootDisplay: "Sources",
+        sourceAssetRootKind: "vault_internal", defaultSourceStorageStrategy: "managed_copy", schemaVersion: 1,
+      }),
+      activeVaultPath: () => vaultPath,
+    } as never;
+    const activity = new NoteMarkdownEditorActivityAdapter(vaults);
+    const editor = new NoteMarkdownEditorService(vaults, activity, {
+      now: () => new Date("2026-07-30T11:00:00.000Z"), randomId: () => "relate-activity-fixture",
+    });
+    const notes = new NotesService(vaults, undefined, undefined, editor);
+    const ownerId = "reader_relate_integration";
+    const rendered = await notes.render({ pageId: request.currentPageId }, ownerId);
+    const expectedRevision = rendered.trashEligibility?.revision;
+    if (!rendered.renderContextId || !expectedRevision) throw new Error("Expected an editable Reader render.");
+    const service = new NoteRelateService(notes, editor, () => vaultPath,
+      () => new Date("2026-07-30T11:00:00.000Z"));
+
+    const result = await service.relate(ownerId, {
+      ...request,
+      renderContextId: rendered.renderContextId,
+      expectedRevision,
+    });
+    expect(result.status).toBe("committed");
+    if (result.status !== "committed") throw new Error("Expected relation commit.");
+    expect(fs.readFileSync(sourcePath, "utf8")).toContain(`related_page_ids: ["${request.targetPageId}"]`);
+    const operation = readOperation(vaultPath, result.operationId);
+    expect(activity.activitySummary(operation)).toMatchObject({ kind: "update_page", canUndo: true });
+    expect(activity.undo(operation, operation.after?.id)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(sourcePath, "utf8")).toBe(before);
+  });
 });
 
 function createVault(): string {
@@ -134,4 +178,12 @@ function relatedRender() {
     renderContextId: "notectx_fedcba9876543210fedcba9876543210",
     trashEligibility: { canTrash: true, revision: `sha256:${"b".repeat(64)}` },
   };
+}
+
+function readOperation(vaultPath: string, operationId: string) {
+  const dateKey = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("Invalid Operation fixture identity.");
+  return JSON.parse(fs.readFileSync(path.join(
+    vaultPath, ".pige", "operations", dateKey.slice(0, 4), dateKey.slice(4, 6), `${operationId}.json`,
+  ), "utf8"));
 }
