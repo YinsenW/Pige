@@ -213,6 +213,8 @@ import type {
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
+  PiPackageRestoreRequest,
+  PiPackageRestoreResult,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
@@ -434,6 +436,11 @@ export type {
   PiPackageName,
   PiPackageRegistryQueryResult,
   PiPackageRegistrySummary,
+  PiPackageRestorableSummary,
+  PiPackageRestoreContextId,
+  PiPackageRestoreRequest,
+  PiPackageRestoreRequestId,
+  PiPackageRestoreResult,
   PiPackageRollbackId,
   PiPackageRollbackRequest,
   PiPackageRollbackRequestId,
@@ -1949,6 +1956,9 @@ export interface PigeDesktopApi {
     readonly uninstall: (
       request: PiPackageUninstallRequest
     ) => Promise<PiPackageUninstallResult>;
+    readonly restore: (
+      request: PiPackageRestoreRequest
+    ) => Promise<PiPackageRestoreResult>;
     readonly update: (
       request: PiPackageUpdateRequest
     ) => Promise<PiPackageUpdateResult>;

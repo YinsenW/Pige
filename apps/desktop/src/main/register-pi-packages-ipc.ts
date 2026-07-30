@@ -5,6 +5,8 @@ import {
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageRestoreRequestSchema,
+  PiPackageRestoreResultSchema,
   PiPackageRollbackRequestSchema,
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
@@ -19,6 +21,8 @@ import {
   type PiPackageCatalogQueryResult,
   type PiPackageRegistrySummary,
   type PiPackageRegistryQueryResult,
+  type PiPackageRestoreRequest,
+  type PiPackageRestoreResult,
   type PiPackageRollbackRequest,
   type PiPackageRollbackResult,
   type PiPackageSetPinnedRequest,
@@ -40,6 +44,7 @@ export interface RegisterPiPackagesIpcOptions {
   readonly install: (request: PiPackageInstallRequest) => Awaitable<PiPackageInstallResult>;
   readonly confirmUninstall: (sender: WebContents, request: PiPackageUninstallRequest) => Awaitable<boolean>;
   readonly uninstall: (request: PiPackageUninstallRequest) => Awaitable<PiPackageUninstallResult>;
+  readonly restore: (request: PiPackageRestoreRequest) => Awaitable<PiPackageRestoreResult>;
   readonly confirmUpdate: (sender: WebContents, binding: PiPackageUpdateConfirmationBinding) => Awaitable<boolean>;
   readonly update: (request: PiPackageUpdateRequest) => Awaitable<PiPackageUpdateResult>;
   readonly confirmRollback: (sender: WebContents, binding: PiPackageRollbackConfirmationBinding) => Awaitable<boolean>;
@@ -113,6 +118,19 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
       return trustedActiveVault(options, event.sender) === vaultId ? result : failedUninstall(parsed);
     } catch {
       return failedUninstall(parsed);
+    }
+  });
+
+  options.ipcMain.handle("piPackages.restore", async (event, request: unknown) => {
+    const parsed = PiPackageRestoreRequestSchema.parse(request);
+    const vaultId = trustedActiveVault(options, event.sender);
+    if (!vaultId) return failedRestore(parsed);
+    try {
+      const result = PiPackageRestoreResultSchema.parse(await options.restore(parsed));
+      assertRestoreIdentity(parsed, result);
+      return trustedActiveVault(options, event.sender) === vaultId ? result : failedRestore(parsed);
+    } catch {
+      return failedRestore(parsed);
     }
   });
 
@@ -276,6 +294,19 @@ function uninstallResult(
 function assertUninstallIdentity(request: PiPackageUninstallRequest, result: PiPackageUninstallResult): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId || result.packageId !== request.packageId) {
     throw new Error("Pi package uninstall response identity did not match the request.");
+  }
+}
+
+function failedRestore(request: PiPackageRestoreRequest): PiPackageRestoreResult {
+  const { expectedRegistryRevision: _expectedRegistryRevision, ...identity } = request;
+  return PiPackageRestoreResultSchema.parse({ ...identity, status: "failed" });
+}
+
+function assertRestoreIdentity(request: PiPackageRestoreRequest, result: PiPackageRestoreResult): void {
+  if (result.requestId !== request.requestId || result.restoreContextId !== request.restoreContextId ||
+    result.packageId !== request.packageId || result.version !== request.version || result.integrity !== request.integrity ||
+    result.pinned !== request.pinned || JSON.stringify(result.rollbackTarget) !== JSON.stringify(request.rollbackTarget)) {
+    throw new Error("Pi package restore result identity changed.");
   }
 }
 

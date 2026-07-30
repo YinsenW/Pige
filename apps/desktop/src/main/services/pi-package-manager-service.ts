@@ -137,6 +137,10 @@ export class PiPackageManagerService {
     const next = replacePackageRecord(current, replacement, incrementRevision(current.revision));
     this.#writeRegistry(next); return next;
   }
+  restoreLifecycleRecord(expectedRevision: number, record: PiPackageRecord): PiPackageRegistryFile { const current = this.#readRegistry(), nextRevision = incrementRevision(current.revision);
+    if (current.revision !== expectedRevision || current.packages.some((candidate) => candidate.packageId === record.packageId)) throw packageError("package.registry_stale", "Package Registry changed before restore commit.");
+    const next = addPackageRecord(current, record, nextRevision); this.#writeRegistry(next); return next;
+  }
   projectLifecycleRegistry(registry: PiPackageRegistryFile): PiPackageRegistrySummary {
     return projectRegistry(registry, (record) => this.#lifecycleStore.rollbackTarget(record));
   }
@@ -922,6 +926,10 @@ function replaceRecord(registry: PiPackageRegistryFile, record: PiPackageRecord,
 function replacePackageRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
   if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");
   return { schemaVersion: 1, revision, packages: registry.packages.map((candidate) => candidate.packageId === record.packageId ? record : candidate).sort(compareRecords) };
+}
+function addPackageRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
+  if (revision !== incrementRevision(registry.revision) || registry.packages.some((candidate) => candidate.packageId === record.packageId)) throw packageError("package.registry_invalid", "Package Registry restore revision is invalid.");
+  return { schemaVersion: 1, revision, packages: [...registry.packages, record].sort(compareRecords) };
 }
 function removeRecord(registry: PiPackageRegistryFile, record: PiPackageRecord, revision: number): PiPackageRegistryFile {
   if (revision !== incrementRevision(registry.revision)) throw packageError("package.registry_invalid", "Package Registry revision is invalid.");

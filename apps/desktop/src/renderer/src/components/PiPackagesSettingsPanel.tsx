@@ -7,6 +7,9 @@ import type {
   PiPackageInstallResult,
   PiPackageRegistryQueryResult,
   PiPackageRegistrySummary,
+  PiPackageRestorableSummary,
+  PiPackageRestoreRequest,
+  PiPackageRestoreResult,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
@@ -23,6 +26,7 @@ export interface PiPackagesApi {
   catalogQuery: (request: PiPackageCatalogQueryRequest) => Promise<PiPackageCatalogQueryResult>;
   install: (request: PiPackageInstallRequest) => Promise<PiPackageInstallResult>;
   uninstall: (request: PiPackageUninstallRequest) => Promise<PiPackageUninstallResult>;
+  restore: (request: PiPackageRestoreRequest) => Promise<PiPackageRestoreResult>;
   update: (request: PiPackageUpdateRequest) => Promise<PiPackageUpdateResult>;
   rollback: (request: PiPackageRollbackRequest) => Promise<PiPackageRollbackResult>;
   setPinned: (request: PiPackageSetPinnedRequest) => Promise<PiPackageSetPinnedResult>;
@@ -48,6 +52,7 @@ export function PiPackagesSettingsPanel(props: {
   const [catalogState, setCatalogState] = useState<ReadState>("loading");
   const [installing, setInstalling] = useState(false);
   const [uninstallingPackageId, setUninstallingPackageId] = useState<string | null>(null);
+  const [restoringContextId, setRestoringContextId] = useState<string | null>(null);
   const [updatingPackageId, setUpdatingPackageId] = useState<string | null>(null);
   const [rollingBackPackageId, setRollingBackPackageId] = useState<string | null>(null);
   const [pinningPackageId, setPinningPackageId] = useState<string | null>(null);
@@ -62,6 +67,8 @@ export function PiPackagesSettingsPanel(props: {
   const installActiveRef = useRef(false);
   const uninstallSequenceRef = useRef(0);
   const uninstallActiveRef = useRef(false);
+  const restoreSequenceRef = useRef(0);
+  const restoreActiveRef = useRef(false);
   const updateSequenceRef = useRef(0);
   const updateActiveRef = useRef(false);
   const rollbackSequenceRef = useRef(0);
@@ -81,6 +88,7 @@ export function PiPackagesSettingsPanel(props: {
       catalogSequenceRef.current += 1;
       installSequenceRef.current += 1;
       uninstallSequenceRef.current += 1;
+      restoreSequenceRef.current += 1;
       updateSequenceRef.current += 1;
       rollbackSequenceRef.current += 1;
       pinSequenceRef.current += 1;
@@ -139,7 +147,7 @@ export function PiPackagesSettingsPanel(props: {
     const installedPackageId = pendingInstalledPackageFocusRef.current;
     const packageId = pendingPackageFocusRef.current;
     const mutationFocus = pendingMutationFocusRef.current;
-    if (installing || uninstallingPackageId || updatingPackageId || rollingBackPackageId || pinningPackageId) return;
+    if (installing || uninstallingPackageId || restoringContextId || updatingPackageId || rollingBackPackageId || pinningPackageId) return;
     if (mutationFocus) {
       pendingMutationFocusRef.current = null;
       const selector = mutationFocus.action === "update"
@@ -179,10 +187,10 @@ export function PiPackagesSettingsPanel(props: {
       pendingRegistryFocusRef.current = false;
       pageRef.current?.querySelector<HTMLElement>("#packages-registry-title")?.focus();
     }
-  }, [installing, pinningPackageId, registry, rollingBackPackageId, uninstallingPackageId, updatingPackageId]);
+  }, [installing, pinningPackageId, registry, restoringContextId, rollingBackPackageId, uninstallingPackageId, updatingPackageId]);
 
   const installPackage = async (): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || packageName.length === 0 || version.length === 0) return;
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || packageName.length === 0 || version.length === 0) return;
     const sequence = ++installSequenceRef.current;
     const request: PiPackageInstallRequest = {
       apiVersion: 1,
@@ -232,7 +240,7 @@ export function PiPackagesSettingsPanel(props: {
   };
 
   const uninstallPackage = async (packageId: string): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
     const installedPackage = registry.packages.find((item) => item.packageId === packageId);
     if (!installedPackage) return;
     const sequence = ++uninstallSequenceRef.current;
@@ -277,8 +285,52 @@ export function PiPackagesSettingsPanel(props: {
     }
   };
 
+  const restorePackage = async (candidate: PiPackageRestorableSummary): Promise<void> => {
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
+    const sequence = ++restoreSequenceRef.current;
+    const request: PiPackageRestoreRequest = {
+      apiVersion: 1,
+      requestId: createPiPackageRestoreRequestId(),
+      expectedRegistryRevision: registry.revision,
+      restoreContextId: candidate.restoreContextId,
+      packageId: candidate.packageId,
+      version: candidate.version,
+      integrity: candidate.integrity,
+      pinned: candidate.pinned,
+      rollbackTarget: candidate.rollbackTarget
+    };
+    restoreActiveRef.current = true;
+    setRestoringContextId(candidate.restoreContextId);
+    setMaintenanceStatusKey(null);
+    try {
+      const result = await props.api.restore(request);
+      if (!mountedRef.current || sequence !== restoreSequenceRef.current) return;
+      if (result.requestId !== request.requestId || result.restoreContextId !== request.restoreContextId ||
+        result.packageId !== request.packageId || result.version !== request.version || result.integrity !== request.integrity ||
+        result.pinned !== request.pinned || JSON.stringify(result.rollbackTarget) !== JSON.stringify(request.rollbackTarget)) {
+        setMaintenanceStatusKey("packages.restoreStatus.failed");
+        return;
+      }
+      if (result.status === "failed") {
+        setMaintenanceStatusKey("packages.restoreStatus.failed");
+        return;
+      }
+      setRegistry(result.registry);
+      setMaintenanceStatusKey(`packages.restoreStatus.${result.status}`);
+      if (result.status === "committed") pendingInstalledPackageFocusRef.current = result.packageId;
+      else pendingRegistryFocusRef.current = true;
+    } catch {
+      if (mountedRef.current && sequence === restoreSequenceRef.current) setMaintenanceStatusKey("packages.restoreStatus.failed");
+    } finally {
+      if (mountedRef.current && sequence === restoreSequenceRef.current) {
+        restoreActiveRef.current = false;
+        setRestoringContextId(null);
+      }
+    }
+  };
+
   const updatePackage = async (packageId: string): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
     const installedPackage = registry.packages.find((item) => item.packageId === packageId);
     const draft = updateDrafts[packageId];
     if (!installedPackage?.canUpdate || !draft || draft.targetVersion.length === 0 || draft.targetIntegrity.length === 0) return;
@@ -335,7 +387,7 @@ export function PiPackagesSettingsPanel(props: {
   };
 
   const rollbackPackage = async (packageId: string): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
     const installedPackage = registry.packages.find((item) => item.packageId === packageId);
     const rollbackTarget = installedPackage?.canRollback ? installedPackage.rollbackTarget : null;
     if (!installedPackage || !rollbackTarget) return;
@@ -385,7 +437,7 @@ export function PiPackagesSettingsPanel(props: {
   };
 
   const setPackagePinned = async (packageId: string): Promise<void> => {
-    if (installActiveRef.current || uninstallActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
+    if (installActiveRef.current || uninstallActiveRef.current || restoreActiveRef.current || updateActiveRef.current || rollbackActiveRef.current || pinActiveRef.current || !registry || readState !== "ready") return;
     const installedPackage = registry.packages.find((item) => item.packageId === packageId);
     if (!installedPackage) return;
     const sequence = ++pinSequenceRef.current;
@@ -431,7 +483,7 @@ export function PiPackagesSettingsPanel(props: {
     }
   };
 
-  const mutationBusy = installing || uninstallingPackageId !== null || updatingPackageId !== null || rollingBackPackageId !== null || pinningPackageId !== null;
+  const mutationBusy = installing || uninstallingPackageId !== null || restoringContextId !== null || updatingPackageId !== null || rollingBackPackageId !== null || pinningPackageId !== null;
 
   return (
     <section ref={pageRef} className="settings-page settings-packages" aria-labelledby="settings-packages-title">
@@ -691,6 +743,39 @@ export function PiPackagesSettingsPanel(props: {
           </div>
         )}
         {maintenanceStatusKey ? <p className="settings-note" role="status" aria-live="polite">{props.t(maintenanceStatusKey)}</p> : null}
+        {(registry?.restorablePackages?.length ?? 0) > 0 ? (
+          <>
+            <h3 className="settings-section-title">{props.t("packages.restoreTitle")}</h3>
+            <div className="settings-card" data-package-restore-count={registry!.restorablePackages!.length}>
+              {registry!.restorablePackages!.map((candidate) => (
+                <div className="settings-row tall" data-package-restore-context={candidate.restoreContextId} key={candidate.restoreContextId}>
+                  <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="package" size={17} /></span>
+                  <div className="settings-row-copy">
+                    <strong>{candidate.packageName}</strong>
+                    <span>{`v${candidate.version}`}</span>
+                    <span>{props.t("packages.restoreDescription")}</span>
+                    <div className="skill-registry-meta" aria-label={props.t("packages.details") }>
+                      <span>{props.t("packages.state.installed_disabled")}</span>
+                      {candidate.pinned ? <span>{props.t("packages.pinned")}</span> : null}
+                      {candidate.rollbackTarget ? <span>{`${props.t("packages.rollback")} v${candidate.rollbackTarget.targetVersion}`}</span> : null}
+                    </div>
+                  </div>
+                  <div className="settings-row-control">
+                    <button
+                      className="settings-button"
+                      type="button"
+                      data-package-restore-id={candidate.restoreContextId}
+                      disabled={mutationBusy || readState !== "ready"}
+                      onClick={() => void restorePackage(candidate)}
+                    >
+                      {props.t(restoringContextId === candidate.restoreContextId ? "packages.restoring" : "packages.restore")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="settings-section" role="group" aria-labelledby="packages-install-title">
@@ -809,4 +894,10 @@ function createPiPackageSetPinnedRequestId(): `pi_package_pin_request_${string}`
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
   return `pi_package_pin_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function createPiPackageRestoreRequestId(): `pi_package_restore_request_${string}` {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  return `pi_package_restore_request_${Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("")}`;
 }

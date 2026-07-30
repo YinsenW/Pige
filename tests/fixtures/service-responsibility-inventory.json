@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 213,
-  "baselineLines": 106732,
+  "baselineFileCount": 214,
+  "baselineLines": 107066,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -72,6 +72,7 @@
       ["permissioned-external-capability-service.ts", 369, "jpr"],
       ["pi-package-install-task-service.ts", 387, "prd"],
       ["pi-package-manager-service.ts", 1116, "prd"],
+      ["pi-package-restore-service.ts", 334, "prd"],
       ["pi-package-update-service.ts", 223, "prd"],
       ["reader-selection-job-binding.ts", 141, "jrd"],
       ["reader-selection-create-note-service.ts", 973, "jrd"],
@@ -246,7 +247,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 213,
+    "serviceOwnerCount": 214,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

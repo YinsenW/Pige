@@ -182,6 +182,8 @@ import {
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageRestoreRequestSchema,
+  PiPackageRestoreResultSchema,
   PiPackageRollbackRequestSchema,
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
@@ -3123,6 +3125,73 @@ describe("schemas", () => {
       ...request,
       requestId: "pi_package_request_abcdefghijklmnop"
     })).toThrow();
+  });
+
+  it("binds Pi package restore to one exact pathless trash projection", () => {
+    const packageId = "pkg_0123456789abcdef01234567";
+    const integrity = `sha512-${"A".repeat(86)}==`;
+    const rollbackTarget = {
+      rollbackId: "pi_package_rollback_abcdefghijklmnop",
+      targetVersion: "1.0.0"
+    } as const;
+    const restorable = {
+      restoreContextId: `pi_package_restore_context_v1_${"a".repeat(48)}`,
+      packageId,
+      packageName: "restorable-package",
+      version: "1.2.3",
+      integrity,
+      packageTypes: ["extension"],
+      dependencyCount: 0,
+      pinned: true,
+      rollbackTarget,
+      uninstalledAt: "2026-07-30T00:00:00.000Z",
+      canRestore: true
+    } as const;
+    const registry = { apiVersion: 1, revision: 7, packages: [], restorablePackages: [restorable] } as const;
+    expect(PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry })).toEqual({ status: "ready", registry });
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_restore_request_abcdefghijklmnop",
+      expectedRegistryRevision: 7,
+      restoreContextId: restorable.restoreContextId,
+      packageId,
+      version: restorable.version,
+      integrity,
+      pinned: true,
+      rollbackTarget
+    } as const;
+    expect(PiPackageRestoreRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["committed", "stale", "not_found", "ineligible"] as const) {
+      expect(PiPackageRestoreResultSchema.parse({
+        apiVersion: 1,
+        requestId: request.requestId,
+        restoreContextId: request.restoreContextId,
+        packageId,
+        version: request.version,
+        integrity,
+        pinned: true,
+        rollbackTarget,
+        status,
+        registry
+      })).toMatchObject({ status, registry });
+    }
+    const { expectedRegistryRevision: _expectedRegistryRevision, ...identity } = request;
+    const failed = { ...identity, status: "failed" as const };
+    expect(PiPackageRestoreResultSchema.parse(failed)).toEqual(failed);
+    expect(() => PiPackageRestoreResultSchema.parse({ ...failed, registry })).toThrow();
+    expect(() => PiPackageRegistryQueryResultSchema.parse({
+      status: "ready",
+      registry: { ...registry, packages: [{
+        packageId, packageName: restorable.packageName, version: restorable.version,
+        state: "installed_disabled", packageTypes: ["extension"], dependencyCount: 0,
+        enabled: false, trust: "community", pinned: false, canUpdate: true,
+        canRollback: false, rollbackTarget: null
+      }] }
+    })).toThrow();
+    for (const unsafe of [{ path: "/private/trash" }, { body: "package code" }, { receipt: { private: true } }]) {
+      expect(() => PiPackageRestoreRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+      expect(() => PiPackageRestoreResultSchema.parse({ ...failed, ...unsafe })).toThrow();
+    }
   });
 
   it("freezes exact-version Pi package update and one-step rollback without runtime authority", () => {

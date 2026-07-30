@@ -1081,7 +1081,8 @@ Reviewed search distinguishes loading/empty/failed and discloses identity, integ
 and boundaries; selection only fills install. Disabled rows offer Update, one prior Roll back and
 metadata-only Pin/Unpin; pinned rows disable maintenance. Mutations serialize and adopt registry
 truth while failure retains drafts/inventory. Effects confirm; pin/unpin does not. No path/code or
-runtime authority.
+runtime authority. Verified private-trash candidates offer Restore; success returns disabled and
+closed outcomes adopt authoritative registry truth.
 
 ### Backup And Restore
 

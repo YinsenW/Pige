@@ -691,6 +691,7 @@ Commands:
 - `memory.export`
 - `memory.reset`
 - `piPackages.install`
+- `piPackages.restore`
 - `piPackages.uninstall`
 - `skills.stageFromUrl`
 - `skills.stageFromMarkdown`
@@ -727,10 +728,10 @@ ZIP adds `invalid` and one non-executing Markdown/JSON bundle. Eligibility gates
 binds source/base/revision; install preserves enablement, trashes prior bytes and CAS-adopts.
 
 Pi Package IPC is path/body-free and `summary` authoritative. `catalogQuery` returns reviewed
-identity/disclosure. Install/uninstall/update/rollback confirm; pin/unpin does not. Update binds
-package/revision/version/SRI; rollback binds one opaque prior target. Pin rejects both before
-confirmation/network. Readable outcomes include registry; `failed` is identity-only. Main adopts
-verified trees once and never runs package code.
+identity/disclosure. Install/uninstall/update/rollback confirm; pin/unpin and receipt-owned restore
+do not. Restore binds registry/package/version/SRI/pin/rollback/context, revalidates private trash
+and commits disabled without network or code. Readable outcomes include registry; `failed` is
+identity-only. Main adopts verified trees once.
 
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |

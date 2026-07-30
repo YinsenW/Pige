@@ -288,6 +288,7 @@ import { createFirstPartyCommandCapabilityAdapter } from "./services/command-cap
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageCatalogService } from "./services/pi-package-catalog-service";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
+import { PiPackageRestoreService } from "./services/pi-package-restore-service";
 import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
@@ -367,6 +368,7 @@ let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
 let piPackageCatalogService: PiPackageCatalogService | undefined;
 let piPackageManagerService: PiPackageManagerService | undefined;
+let piPackageRestoreService: PiPackageRestoreService | undefined;
 let piPackageUpdateService: PiPackageUpdateService | undefined;
 let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
@@ -1224,6 +1226,11 @@ const getPiPackageManagerService = (): PiPackageManagerService => {
 const getPiPackageUpdateService = (): PiPackageUpdateService => {
   piPackageUpdateService ??= new PiPackageUpdateService({ manager: getPiPackageManagerService() });
   return piPackageUpdateService;
+};
+
+const getPiPackageRestoreService = (): PiPackageRestoreService => {
+  piPackageRestoreService ??= new PiPackageRestoreService({ manager: getPiPackageManagerService() });
+  return piPackageRestoreService;
 };
 
 const getPiPackageCatalogService = (): PiPackageCatalogService => {
@@ -2650,6 +2657,7 @@ registerSkillsIpc({
   }
 });
 const piPackageUpdates = getPiPackageUpdateService();
+const piPackageRestores = getPiPackageRestoreService();
 registerPiPackagesIpc({
   ipcMain,
   isTrustedSender: (sender) => {
@@ -2657,7 +2665,7 @@ registerPiPackagesIpc({
     return !!window && mainWindows.has(window);
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
-  summary: async () => ({ status: "ready", registry: await piPackageUpdates.summary() }),
+  summary: async () => ({ status: "ready", registry: await piPackageRestores.summary() }),
   catalogQuery: (request) => getPiPackageCatalogService().query(request),
   install: (request) => getPiPackageInstallTaskService().install(request),
   confirmUninstall: async (sender, request) => {
@@ -2673,7 +2681,8 @@ registerPiPackagesIpc({
       throw caught;
     }
   },
-  uninstall: (request) => getPiPackageManagerService().uninstall(request),
+  uninstall: (request) => piPackageRestores.uninstall(request),
+  restore: (request) => piPackageRestores.restore(request),
   confirmUpdate: async (sender, binding) => {
     try {
       await confirmSettingAction(sender, [], {

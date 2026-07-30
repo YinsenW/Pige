@@ -651,7 +651,7 @@ Build:
   One Pige-owned External/Web adapter confirms each public-origin read; identity or redirect
   drift closes before network.
 - [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
-- [B8.10 -> E8.04] Pi package install, enable/disable, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure.
+- [B8.10 -> E8.04] Pi package install, disabled trash/restore, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure; runtime enable stays isolated.
 
 Deferred from this phase:
 

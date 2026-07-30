@@ -173,7 +173,8 @@ Settings searches one offline reviewed `@narumitw/pi-btw@0.34.0` entry with MIT,
 filesystem/cloud disclosure. Selection grants no authority. Confirmed install publishes disabled
 after link/dependency/hook/bin/native rejection; trash-uninstall adopts once. Exact update retains
 one offline rollback tree. Restart-safe pin blocks maintenance before effects; unpin restores
-receipt-derived eligibility. IPC exposes no code/path/body. Enable/runtime/public restore stay open.
+receipt-derived eligibility. Exact private-trash restore revalidates and returns disabled without
+network or execution. IPC exposes no code/path/body. Enable/runtime stay open.
 
 The Feishu recipe binds CLI/package/native, 27-Skill/444-file identities, hashes, destinations,
 overwrite/link policy and environment before confirmation; opaque `npx` or later discovery fail.

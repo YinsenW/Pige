@@ -6,6 +6,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPiPackageInstallCapabilityAdapter } from "../../apps/desktop/src/main/services/pi-package-capability-adapter";
 import { PiPackageManagerService } from "../../apps/desktop/src/main/services/pi-package-manager-service";
+import { PiPackageRestoreService } from "../../apps/desktop/src/main/services/pi-package-restore-service";
 import { PiPackageLifecycleStore, type PiPackageLifecycleRecord } from "../../apps/desktop/src/main/services/pi-package-lifecycle-store";
 import { HighRiskConfirmationService } from "../../apps/desktop/src/main/services/high-risk-confirmation-service";
 import { PermissionBrokerService } from "../../apps/desktop/src/main/services/permission-broker-service";
@@ -325,6 +326,139 @@ describe("PiPackageManagerService", () => {
       .toMatchObject({ state: "committed", packageId: installed.packageId, committedRegistryRevision: 2 });
   });
 
+  it("restores one exact receipt-owned package disabled without network or code execution", async () => {
+    const fixture = await createFixture();
+    const restores = new PiPackageRestoreService({ manager: fixture.packages });
+    await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
+    const installed = fixture.packages.summary().packages[0]!;
+    const removed = await restores.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_restorecandidate01",
+      expectedRegistryRevision: 1,
+      packageId: installed.packageId
+    });
+    if (removed.status !== "removed") throw new Error("Expected package removal.");
+    const candidate = removed.registry.restorablePackages?.[0];
+    expect(candidate).toMatchObject({
+      packageId: installed.packageId,
+      version: PACKAGE_VERSION,
+      pinned: false,
+      rollbackTarget: null,
+      canRestore: true
+    });
+    if (!candidate) throw new Error("Expected restorable package candidate.");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "pi_package_restore_request_abcdefghijklmnop",
+      expectedRegistryRevision: removed.registry.revision,
+      restoreContextId: candidate.restoreContextId,
+      packageId: candidate.packageId,
+      version: candidate.version,
+      integrity: candidate.integrity,
+      pinned: candidate.pinned,
+      rollbackTarget: candidate.rollbackTarget
+    };
+    const fetches = fixture.fetchImpl.mock.calls.length;
+    const restored = await restores.restore(request);
+    expect(restored).toMatchObject({
+      status: "committed",
+      registry: {
+        revision: 3,
+        packages: [{ packageId: installed.packageId, state: "installed_disabled", enabled: false }]
+      }
+    });
+    if (restored.status !== "committed") throw new Error("Expected committed package restore.");
+    expect(restored.registry.restorablePackages).toBeUndefined();
+    expect(await restores.restore(request)).toEqual(restored);
+    expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetches);
+    expect(JSON.stringify(restored)).not.toMatch(/relativePath|treeHash|archiveHash|manifestHash|installedAt|SYNTHETIC_PACKAGE_CODE/u);
+  });
+
+  it("fails closed for stale or tampered private trash and adopts one prepared restore after restart", async () => {
+    const fixture = await createFixture();
+    const restores = new PiPackageRestoreService({ manager: fixture.packages });
+    await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
+    const installed = fixture.packages.summary().packages[0]!;
+    const uninstallRequestId = "pi_package_uninstall_request_restorerestart01";
+    const removed = await restores.uninstall({
+      apiVersion: 1, requestId: uninstallRequestId, expectedRegistryRevision: 1, packageId: installed.packageId
+    });
+    if (removed.status !== "removed") throw new Error("Expected package removal.");
+    const candidate = removed.registry.restorablePackages?.[0];
+    if (!candidate) throw new Error("Expected restorable package candidate.");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "pi_package_restore_request_restartrequest01",
+      expectedRegistryRevision: 2,
+      restoreContextId: candidate.restoreContextId,
+      packageId: candidate.packageId,
+      version: candidate.version,
+      integrity: candidate.integrity,
+      pinned: candidate.pinned,
+      rollbackTarget: candidate.rollbackTarget
+    };
+    expect(await restores.restore({ ...request, expectedRegistryRevision: 1 })).toMatchObject({
+      status: "stale", registry: { revision: 2 }
+    });
+
+    const packageRoot = path.join(fs.realpathSync.native(fixture.machineRoot), "pi-packages");
+    const store = fixture.packages.lifecycleStore;
+    const uninstall = store.readUninstallReceipt(uninstallRequestId);
+    if (!uninstall) throw new Error("Expected uninstall receipt.");
+    const restoreReceipt = store.prepareRestore({
+      requestId: request.requestId,
+      restoreContextId: request.restoreContextId,
+      expectedRegistryRevision: 2,
+      uninstallReceipt: uninstall,
+      createdAt: "2026-07-30T00:00:00.000Z"
+    });
+    store.ensureRestored(restoreReceipt);
+    const fetches = fixture.fetchImpl.mock.calls.length;
+    const restarted = new PiPackageManagerService({
+      appDataRoot: fixture.machineRoot,
+      fetchImpl: fixture.fetchImpl,
+      lookup: async () => ["93.184.216.34"]
+    });
+    const restartedRestores = new PiPackageRestoreService({ manager: restarted });
+    expect(await restartedRestores.summary()).toMatchObject({
+      revision: 3,
+      packages: [{ packageId: installed.packageId, state: "installed_disabled", enabled: false }]
+    });
+    expect(await restartedRestores.restore(request)).toMatchObject({ status: "committed", registry: { revision: 3 } });
+    expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetches);
+
+    const second = await createFixture();
+    const secondRestores = new PiPackageRestoreService({ manager: second.packages });
+    await callTool(requireTool(second.registry.toolsForTurn(second.turn)));
+    const secondInstalled = second.packages.summary().packages[0]!;
+    const secondRemoved = await secondRestores.uninstall({
+      apiVersion: 1,
+      requestId: "pi_package_uninstall_request_restoretampered01",
+      expectedRegistryRevision: 1,
+      packageId: secondInstalled.packageId
+    });
+    if (secondRemoved.status !== "removed") throw new Error("Expected second package removal.");
+    const secondCandidate = secondRemoved.registry.restorablePackages?.[0];
+    if (!secondCandidate) throw new Error("Expected second restorable package candidate.");
+    const trashed = path.join(second.machineRoot, "pi-packages", "trash", "pi_package_uninstall_request_restoretampered01", "package");
+    fs.writeFileSync(path.join(trashed, "README.md"), "tampered\n", "utf8");
+    expect((await secondRestores.summary()).restorablePackages).toBeUndefined();
+    const secondFetches = second.fetchImpl.mock.calls.length;
+    expect(await secondRestores.restore({
+      apiVersion: 1,
+      requestId: "pi_package_restore_request_tamperedrequest1",
+      expectedRegistryRevision: 2,
+      restoreContextId: secondCandidate.restoreContextId,
+      packageId: secondCandidate.packageId,
+      version: secondCandidate.version,
+      integrity: secondCandidate.integrity,
+      pinned: secondCandidate.pinned,
+      rollbackTarget: secondCandidate.rollbackTarget
+    })).toMatchObject({ status: "not_found", registry: { revision: 2, packages: [] } });
+    expect(second.fetchImpl).toHaveBeenCalledTimes(secondFetches);
+    expect(fs.existsSync(path.join(packageRoot, "trash", uninstallRequestId))).toBe(true);
+  });
+
   it("returns authoritative stale/not-found states and keeps failed output registry-free", async () => {
     const fixture = await createFixture();
     await callTool(requireTool(fixture.registry.toolsForTurn(fixture.turn)));
@@ -390,7 +524,7 @@ describe("PiPackageManagerService", () => {
       fetchImpl: fixture.fetchImpl,
       lookup: async () => ["93.184.216.34"]
     });
-    expect(restarted.summary()).toEqual({ apiVersion: 1, revision: 2, packages: [] });
+    expect(restarted.summary()).toMatchObject({ apiVersion: 1, revision: 2, packages: [] });
     expect(fixture.fetchImpl).toHaveBeenCalledTimes(fetchCount);
     expect(store.readUninstallReceipt(receipt.requestId)).toMatchObject({
       state: "committed", committedRegistryRevision: 2
