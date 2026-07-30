@@ -1019,13 +1019,6 @@ export function App(): React.JSX.Element {
           (toolId, index) => toolId !== expectedMissingRequiredToolIds[index]
         )
       ) return "stale";
-      if (result.status === "opened" || result.status === "stale" || result.status === "not_needed") {
-        try {
-          setToolchainHealth(await window.pige.system.toolchainHealth());
-        } catch {
-          // The action outcome remains valid; the existing Check again owner can re-probe.
-        }
-      }
       return result.status;
     } catch {
       return "failed";

@@ -4376,6 +4376,23 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("keeps toolchain repair identity-fenced and leaves health re-probing explicit", () => {
+    const appSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/App.tsx"),
+      "utf8"
+    );
+    const repairOwner = appSource.slice(
+      appSource.indexOf("const openToolchainReinstall"),
+      appSource.indexOf("const setHomeDefaultModel")
+    );
+
+    expect(repairOwner).toContain("window.pige.system.repairToolchain({");
+    expect(repairOwner).toContain("expectedHealthId: repair.healthId");
+    expect(repairOwner).toContain("toolchainHealthRef.current?.repair");
+    expect(repairOwner).not.toContain("window.pige.system.toolchainHealth()");
+    expect(appSource).toContain("onOpenToolchainReinstall={openToolchainReinstall}");
+  });
+
   it("installs one missing speech language asset and rechecks authoritative availability", async () => {
     const dom = createDom();
     let assetListener: ((event: SpeechAssetInstallEvent) => void) | undefined;
