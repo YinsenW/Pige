@@ -20,6 +20,8 @@ import type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteAddTagRequest,
+  NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -58,6 +60,9 @@ import {
   NOTE_RESTORE_ARCHIVED_CHANNEL,
   NoteRestoreArchivedRequestSchema,
   NoteRestoreArchivedResultSchema,
+  NOTE_ADD_TAG_CHANNEL,
+  NoteAddTagRequestSchema,
+  NoteAddTagResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -86,6 +91,7 @@ import type { ReaderSourceRevealService } from "./services/reader-source-reveal-
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
+import type { NoteTagService } from "./services/note-tag-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
@@ -105,6 +111,7 @@ interface RegisterReaderIpcOptions {
   }>;
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
+  readonly getNoteTagService: () => NoteTagService;
   readonly getNoteMergeService: () => NoteMergeService;
   readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
@@ -273,6 +280,24 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteRestoreArchivedResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_ADD_TAG_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteAddTagRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteAddTagResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteAddTagResult;
+    try {
+      rawResult = await options.getNoteTagService().add(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteAddTagResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : NoteAddTagResultSchema.parse({ ...parsed, status: "failed" });
   });
   options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
     const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;

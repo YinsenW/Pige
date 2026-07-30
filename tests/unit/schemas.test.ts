@@ -137,6 +137,9 @@ import {
   NoteArchiveCurrentResultSchema,
   NoteRestoreArchivedRequestSchema,
   NoteRestoreArchivedResultSchema,
+  NOTE_ADD_TAG_CHANNEL,
+  NoteAddTagRequestSchema,
+  NoteAddTagResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
@@ -3890,6 +3893,27 @@ describe("schemas", () => {
     for (const privateField of ["pagePath", "markdown", "contentHash", "sourceId", "rawError"] as const) {
       expect(() => NoteRestoreArchivedRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
       expect(() => NoteRestoreArchivedResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps note tag addition revision-bound and path/body-free", () => {
+    expect(NOTE_ADD_TAG_CHANNEL).toBe("notes.addTag");
+    const identity = {
+      apiVersion: 1,
+      requestId: "noteaddtagreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      tag: "Research note"
+    } as const;
+    expect(NoteAddTagRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteAddTagResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    expect(() => NoteAddTagRequestSchema.parse({ ...identity, tag: " Research note " })).toThrow();
+    for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteAddTagResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 

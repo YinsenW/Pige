@@ -18,6 +18,7 @@ import {
   type ReaderNoteRelateLabels,
   type ReaderNoteRelateOutcome,
 } from "./ReaderNoteRelateDialog";
+import { ReaderNoteTagDialog, type ReaderNoteTagLabels, type ReaderNoteTagOutcome } from "./ReaderNoteTagDialog";
 
 export type ReaderDocumentTrashOutcome = "committed" | "retained";
 export type ReaderDocumentArchiveOutcome =
@@ -165,6 +166,7 @@ export interface ReaderDocumentActionsProps {
   readonly canRelate?: boolean;
   readonly canArchive?: boolean;
   readonly canRestore?: boolean;
+  readonly canAddTag?: boolean; readonly existingTags?: readonly string[]; readonly tagLabels?: ReaderNoteTagLabels;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
@@ -178,21 +180,25 @@ export interface ReaderDocumentActionsProps {
   readonly onRelate?: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteRelateOutcome>;
   readonly onArchive?: () => Promise<ReaderDocumentArchiveOutcome>;
   readonly onRestore?: () => Promise<ReaderDocumentRestoreOutcome>;
+  readonly onAddTag?: (tag: string) => Promise<ReaderNoteTagOutcome>;
   readonly onCommitted: () => void;
   readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onRelateCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onArchiveCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onRestoreCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
+  readonly onTagCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
 }
 
 export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.JSX.Element | null {
   const canArchive = props.canArchive === true && Boolean(props.archiveLabels && props.onArchive);
   const canRestore = props.canRestore === true && Boolean(props.restoreLabels && props.onRestore);
   const canRelate = props.canRelate === true && Boolean(props.relateLabels && props.onLoadRelateTargets && props.onRelate);
+  const canAddTag = props.canAddTag === true && Boolean(props.tagLabels && props.onAddTag);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"trash" | "archive" | "restore" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const requestSequenceRef = useRef(0);
@@ -204,6 +210,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   const restoreActionRef = useRef<HTMLButtonElement>(null);
   const mergeActionRef = useRef<HTMLButtonElement>(null);
   const relateActionRef = useRef<HTMLButtonElement>(null);
+  const tagActionRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   ownerIdentityRef.current = props.ownerIdentity;
@@ -215,9 +222,10 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setConfirmAction(null);
     setMergeOpen(false);
     setRelateOpen(false);
+    setTagOpen(false);
     setPending(false);
     setFailed(false);
-  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRestore, canRelate]);
+  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRestore, canRelate, canAddTag]);
 
   useEffect(() => {
     if (menuOpen) {
@@ -225,7 +233,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         ? mergeActionRef.current
         : canRelate
           ? relateActionRef.current
-        : canArchive
+        : canAddTag ? tagActionRef.current : canArchive
           ? archiveActionRef.current
           : canRestore
             ? restoreActionRef.current
@@ -237,7 +245,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     if (confirmAction) cancelRef.current?.focus({ preventScroll: true });
   }, [confirmAction]);
 
-  if (!props.canMoveToTrash && !props.canMerge && !canArchive && !canRestore && !canRelate) return null;
+  if (!props.canMoveToTrash && !props.canMerge && !canArchive && !canRestore && !canRelate && !canAddTag) return null;
 
   const restoreTriggerFocus = (): void => {
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -345,6 +353,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
             {props.relateLabels.title}
           </button>
         ) : null}
+        {canAddTag && props.tagLabels ? <button ref={tagActionRef} type="button" role="menuitem" onClick={() => { setMenuOpen(false); setTagOpen(true); }}>{props.tagLabels.title}</button> : null}
         {canArchive && props.archiveLabels ? (
           <button
             ref={archiveActionRef}
@@ -418,6 +427,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         }}
       />
     ) : null}
+    {tagOpen && props.tagLabels && props.onAddTag ? <ReaderNoteTagDialog ownerIdentity={props.ownerIdentity} existingTags={props.existingTags ?? []} labels={props.tagLabels} returnFocusRef={triggerRef} onAdd={props.onAddTag} onCancel={() => setTagOpen(false)} onCommitted={(render) => { setTagOpen(false); props.onTagCommitted?.(render); }} /> : null}
     {confirmAction ? (
       <div className="confirmation-backdrop">
         <section

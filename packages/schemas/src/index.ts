@@ -1412,6 +1412,12 @@ export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{
 export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
+export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
+export const NoteCanonicalTagSchema = z.string().min(1).max(48).refine(
+  (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
+    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Note tags must use the canonical Markdown tag representation."
+);
 export const NoteTrashEligibilitySchema = z.object({
   canTrash: z.boolean(),
   revision: NoteEditorRevisionSchema
@@ -1422,6 +1428,11 @@ export const NoteArchiveEligibilitySchema = z.object({
 }).strict();
 export const NoteRestoreEligibilitySchema = z.object({
   canRestore: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
+export const NoteTaggingSummarySchema = z.object({
+  tags: z.array(NoteCanonicalTagSchema).max(12).readonly(),
+  canAdd: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
 export const NoteEditorPortableMarkdownSchema = z.string()
@@ -1456,6 +1467,7 @@ export const NoteRenderResultSchema = z.object({
   trashEligibility: NoteTrashEligibilitySchema.optional(),
   archiveEligibility: NoteArchiveEligibilitySchema.optional(),
   restoreEligibility: NoteRestoreEligibilitySchema.optional(),
+  tagging: NoteTaggingSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional()
 }).strict();
 const NoteReconnectOriginalSourceResultIdentitySchema = NoteReconnectOriginalSourceRequestSchema;
@@ -1523,6 +1535,7 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
+export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_IMPORT_MARKDOWN_CHANNEL = "notes.importMarkdown" as const;
 export const NoteImportMarkdownRequestIdSchema = z.string()
   .regex(/^noteimport_[a-z0-9]{16,64}$/u);
@@ -1578,6 +1591,26 @@ export const NoteRestoreArchivedResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteRestoreArchivedResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteAddTagRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteAddTagRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  tag: NoteCanonicalTagSchema
+}).strict();
+const NoteAddTagResultIdentitySchema = NoteAddTagRequestSchema;
+export const NoteAddTagResultSchema = z.discriminatedUnion("status", [
+  NoteAddTagResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteAddTagResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const NoteTrashCurrentRequestSchema = z.object({
@@ -4736,11 +4769,7 @@ export const LibraryTagsSnapshotIdSchema = z.string().regex(
 export const LibraryTagsCursorSchema = z.string().regex(
   /^library_tags_cursor_[a-f0-9]{64}$/
 );
-export const LibraryCanonicalTagSchema = z.string().min(1).max(48).refine(
-  (value) => !/[\u0000-\u001f\u007f]/u.test(value) &&
-    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
-  "Library tags must use the canonical Markdown tag representation."
-);
+export const LibraryCanonicalTagSchema = NoteCanonicalTagSchema;
 export const LibraryRenameTagRequestIdSchema = z.string().regex(
   /^library_tag_rename_request_[a-z0-9]{16,64}$/
 );
@@ -8958,6 +8987,11 @@ export type NoteRestoreArchivedRequestId = z.infer<typeof NoteRestoreArchivedReq
 export type NoteRestoreArchivedRequest = z.infer<typeof NoteRestoreArchivedRequestSchema>;
 export type NoteRestoreArchivedResult = z.infer<typeof NoteRestoreArchivedResultSchema>;
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
+export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
+export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;
+export type NoteTaggingSummary = z.infer<typeof NoteTaggingSummarySchema>;
+export type NoteAddTagRequest = z.infer<typeof NoteAddTagRequestSchema>;
+export type NoteAddTagResult = z.infer<typeof NoteAddTagResultSchema>;
 export type NoteTrashEligibility = z.infer<typeof NoteTrashEligibilitySchema>;
 export type NoteTrashCurrentRequest = z.infer<typeof NoteTrashCurrentRequestSchema>;
 export type NoteTrashCurrentResult = z.infer<typeof NoteTrashCurrentResultSchema>;

@@ -125,6 +125,8 @@ import type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteAddTagRequest,
+  NoteAddTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteDocument,
@@ -447,6 +449,9 @@ import {
   NOTE_RESTORE_ARCHIVED_CHANNEL,
   NoteRestoreArchivedRequestSchema,
   NoteRestoreArchivedResultSchema,
+  NOTE_ADD_TAG_CHANNEL,
+  NoteAddTagRequestSchema,
+  NoteAddTagResultSchema,
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -1591,6 +1596,10 @@ const api: PigeDesktopApi = {
     restoreArchived: async (request: NoteRestoreArchivedRequest): Promise<NoteRestoreArchivedResult> =>
       NoteRestoreArchivedResultSchema.parse(
         await ipcRenderer.invoke(NOTE_RESTORE_ARCHIVED_CHANNEL, NoteRestoreArchivedRequestSchema.parse(request))
+      ),
+    addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
+      NoteAddTagResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_ADD_TAG_CHANNEL, NoteAddTagRequestSchema.parse(request))
       ),
     trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
       NoteTrashCurrentResultSchema.parse(

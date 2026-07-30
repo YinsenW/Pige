@@ -8,6 +8,7 @@ import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/s
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
+import type { NoteTagService } from "../../apps/desktop/src/main/services/note-tag-service";
 import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/services/note-markdown-import-service";
 import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
 
@@ -34,7 +35,8 @@ function makeHarness(
   onNoteArchiveCommitted = vi.fn(),
   noteMarkdownImportService?: Partial<NoteMarkdownImportService>,
   onNoteImported = vi.fn(),
-  noteRelateService?: Partial<NoteRelateService>
+  noteRelateService?: Partial<NoteRelateService>,
+  noteTagService?: Partial<NoteTagService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -71,6 +73,10 @@ function makeHarness(
       if (noteArchiveService) return noteArchiveService as NoteArchiveService;
       throw new Error("Note archive service was not expected.");
     },
+    getNoteTagService: () => {
+      if (noteTagService) return noteTagService as NoteTagService;
+      throw new Error("Note tag service was not expected.");
+    },
     getNoteMergeService: () => {
       if (noteMergeService) return noteMergeService as NoteMergeService;
       throw new Error("Note merge service was not expected.");
@@ -102,6 +108,7 @@ describe("registerReaderIpc", () => {
       "notes.trashCurrent",
       "notes.archiveCurrent",
       "notes.restoreArchived",
+      "notes.addTag",
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
@@ -117,6 +124,37 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("binds note tag addition to the tracked Reader owner and refreshes Activity only after commit", async () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "noteaddtagreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_tagnote1",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      tag: "Research note"
+    };
+    const render = {
+      summary: { pageId: request.currentPageId, title: "Tagged", pageType: "note", status: "active",
+        pagePath: "wiki/tagged.md", createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T11:00:00.000Z", sourceIds: [] },
+      html: "<h1>Tagged</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      tagging: { tags: [request.tag], canAdd: true, revision: `noteeditrev_${"b".repeat(32)}` }
+    } as const;
+    const add = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260730_noteaddtag123", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, { add });
+    const sender = makeSender(45);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.addTag")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260730_noteaddtag123" });
+    expect(add).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
   });
 
   it("binds note relation mutation to the tracked Reader owner and refreshes Activity after commit", async () => {

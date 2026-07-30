@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 211,
-  "baselineLines": 106265,
+  "baselineFileCount": 212,
+  "baselineLines": 106370,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -128,6 +128,7 @@
       ["managed-copy-root-service.ts", 317, "rd"],
       ["markdown-page-index.ts", 429, "f"],
       ["model-provider-registry.ts", 1083, "prd"],
+      ["note-tag-service.ts", 105, "rd"],
       ["object-error-code.ts", 11, "d"],
       ["ocr-artifact-service.ts", 419, "rd"],
       ["parser-artifact-service.ts", 498, "rd"],
@@ -244,7 +245,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 211,
+    "serviceOwnerCount": 212,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

@@ -190,7 +190,7 @@ export class NotesService {
       throw new PigeDomainError("note_changed", "The Markdown page changed while it was rendered.");
     }
 
-    const hrefs = extractRenderedInternalHrefs(rendered.html);
+    const hrefs = extractRenderedInternalHrefs(rendered.html), frontmatter = parsePigeFrontmatter(stable.markdown)?.frontmatter;
     const referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
     const renderContextId = ownerId === undefined
       ? undefined
@@ -227,7 +227,8 @@ export class NotesService {
           ? {
               trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) },
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
-              restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) }
+              restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
+              tagging: { tags: [...(frontmatter?.tags ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, revision: publicEditorRevision(stable.pageContentHash) }
             }
           : {})
       } : {})
