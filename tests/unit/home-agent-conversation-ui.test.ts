@@ -33,6 +33,8 @@ import type {
   ModelProviderSettingsSummary,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteEditorOpenRequest,
@@ -1663,6 +1665,7 @@ describe("Home durable Agent conversation UI", () => {
     const harness = createHarness(undefined);
     const sourceId = "src_20260715_source001";
     let sourceStatus: "not_found" | "resolved" = "not_found";
+    let reconnectStatus: "stale" | "reconnected" = "stale";
     harness.submitTurn = async (request) => {
       harness.submitRequests.push(request);
       return retrievalCompletedResult();
@@ -1670,9 +1673,29 @@ describe("Home durable Agent conversation UI", () => {
     harness.renderNote = async (pageId) => {
       const note = testRenderedNote(pageId);
       return pageId.endsWith("1")
-        ? { ...note, summary: { ...note.summary, sourceIds: [sourceId] } }
+        ? {
+            ...note,
+            summary: { ...note.summary, sourceIds: [sourceId] },
+            reconnectOriginalSourceIds: [sourceId]
+          }
         : note;
     };
+    harness.reconnectReaderOriginalSource = async (request) => reconnectStatus === "stale"
+      ? { ...request, status: "stale" }
+      : {
+          ...request,
+          status: "reconnected",
+          render: {
+            ...testRenderedNote(request.currentPageId),
+            summary: {
+              ...testRenderedNote(request.currentPageId).summary,
+              sourceIds: [sourceId]
+            },
+            html: "<p>Reconnected source body.</p>",
+            renderContextId: `notectx_${"b".repeat(32)}`,
+            reconnectOriginalSourceIds: []
+          }
+        };
     harness.openSourceReference = async (request) => sourceStatus === "resolved"
       ? {
           apiVersion: 1,
@@ -1709,6 +1732,30 @@ describe("Home durable Agent conversation UI", () => {
     ]);
     expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
 
+    const reconnect = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-reconnect="${sourceId}"]`
+    ));
+    reconnect.focus();
+    await clickElement(dom, reconnect);
+    await waitFor(dom, () => harness.readerSourceReconnectRequests.length === 1);
+    expect(harness.readerSourceReconnectRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      sourceId
+    });
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    expect(container.textContent).toContain("This source changed. Review it and try again.");
+    expect(dom.window.document.activeElement).toBe(reconnect);
+
+    reconnectStatus = "reconnected";
+    await clickElement(dom, reconnect);
+    await waitFor(dom, () => container.textContent?.includes("Reconnected source body.") === true);
+    expect(harness.readerSourceReconnectRequests).toHaveLength(2);
+    expect(container.querySelector(`[data-reader-source-reconnect="${sourceId}"]`)).toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement?.getAttribute("data-reader-source-open") === sourceId);
+
     const source = requireElement(container.querySelector<HTMLButtonElement>(".reader-source"));
     await clickElement(dom, source);
     await waitFor(dom, () => container.textContent?.includes("The linked local item could not be found.") === true);
@@ -1723,7 +1770,7 @@ describe("Home durable Agent conversation UI", () => {
       apiVersion: 1,
       activeVaultId: "vault_home_conversation",
       currentPageId: "page_20260715_note0001",
-      renderContextId: `notectx_${"a".repeat(32)}`,
+      renderContextId: `notectx_${"b".repeat(32)}`,
       sourceId
     });
     expect(harness.noteRenderRequests).toEqual([
@@ -5550,6 +5597,7 @@ interface ConversationHarness {
   readonly noteRenderRequests: string[];
   readonly sourceReferenceRequests: NoteOpenSourceReferenceRequest[];
   readonly sourceRevealRequests: NoteRevealSourceRequest[];
+  readonly readerSourceReconnectRequests: NoteReconnectOriginalSourceRequest[];
   readonly inlineReferenceRequests: NoteResolveInlineReferenceRequest[];
   readonly editorOpenRequests: NoteEditorOpenRequest[];
   readonly editorSaveRequests: NoteEditorSaveRequest[];
@@ -5562,6 +5610,9 @@ interface ConversationHarness {
   mergeCurrent: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
   revealSource: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  reconnectReaderOriginalSource: (
+    request: NoteReconnectOriginalSourceRequest
+  ) => Promise<NoteReconnectOriginalSourceResult>;
   resolveInlineReference: (request: NoteResolveInlineReferenceRequest) => Promise<NoteResolveInlineReferenceResult>;
   loadAppearance: () => Promise<AppearanceSettingsSummary>;
   loadOnboarding: () => Promise<OnboardingStatus>;
@@ -5665,6 +5716,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     noteRenderRequests: [],
     sourceReferenceRequests: [],
     sourceRevealRequests: [],
+    readerSourceReconnectRequests: [],
     inlineReferenceRequests: [],
     editorOpenRequests: [],
     editorSaveRequests: [],
@@ -5697,6 +5749,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       status: "not_found"
     }),
     revealSource: async (request) => ({ ...request, status: "revealed" }),
+    reconnectReaderOriginalSource: async (request) => ({ ...request, status: "cancelled" }),
     resolveInlineReference: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -6316,6 +6369,10 @@ function makePigeApi(harness: ConversationHarness): object {
       revealSource: async (request: NoteRevealSourceRequest) => {
         harness.sourceRevealRequests.push(request);
         return harness.revealSource(request);
+      },
+      reconnectOriginalSource: async (request: NoteReconnectOriginalSourceRequest) => {
+        harness.readerSourceReconnectRequests.push(request);
+        return harness.reconnectReaderOriginalSource(request);
       },
       openEditor: async (request: NoteEditorOpenRequest) => {
         harness.editorOpenRequests.push(request);

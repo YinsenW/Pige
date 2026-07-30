@@ -4,6 +4,8 @@ import type {
   LibraryRelatedResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -23,7 +25,11 @@ import {
   ReaderInlineReferenceSurface,
   type ReaderInlineReferenceActivation
 } from "./ReaderInlineReferenceSurface";
-import { ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
+import {
+  ReaderSourceActionSurface,
+  ReaderSourceRevealAction,
+  readerSourceActionLabels
+} from "./ReaderSourceActions";
 import {
   ReaderSelectionAskDialog,
   createReaderSelectionActionRequestId,
@@ -91,6 +97,10 @@ export function NoteReader(props: {
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onOpenSourcePage?: (pageId: string) => Promise<void>;
   readonly onRevealSource?: Parameters<typeof ReaderSourceRevealAction>[0]["onRevealSource"];
+  readonly onReconnectOriginalSource?: (
+    request: NoteReconnectOriginalSourceRequest
+  ) => Promise<NoteReconnectOriginalSourceResult>;
+  readonly onSourceReconnected?: (render: NoteRenderResult) => void;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: "selection_actions" | "reader_link") => void;
   readonly t: (key: string) => string;
@@ -864,6 +874,7 @@ export function NoteReader(props: {
                     className="reader-source"
                     type="button"
                     data-reader-source-action="open"
+                    data-reader-source-open={sourceId}
                     disabled={sourceReferenceState?.status === "resolving"}
                     aria-busy={sourceReferenceState?.sourceId === sourceId && sourceReferenceState.status === "resolving"}
                     onClick={() => void openSourceReference(sourceId)}
@@ -883,18 +894,44 @@ export function NoteReader(props: {
                     </span>
                     <small>{props.t("note.open")}</small>
                   </button>
-                  <ReaderSourceRevealAction
-                    currentPageId={summary.pageId}
-                    sourceId={sourceId}
-                    sourceLabel={sourceLabel}
-                    labels={readerSourceActionLabels(props.t)}
-                    {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
-                    {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
-                    {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
-                  />
                 </div>
               );
             })}
+            <ReaderSourceActionSurface
+              currentPageId={summary.pageId}
+              sources={Array.from(new Set([
+                ...summary.sourceIds.slice(0, 5),
+                ...(props.note.reconnectOriginalSourceIds ?? []).filter((sourceId) =>
+                  summary.sourceIds.includes(sourceId)
+                )
+              ])).map((sourceId) => ({
+                sourceId,
+                sourceLabel: props.t("note.savedSource").replace(
+                  "{number}",
+                  String(summary.sourceIds.indexOf(sourceId) + 1)
+                ),
+                canRevealOriginal: summary.sourceIds.slice(0, 5).includes(sourceId),
+                canReconnectOriginal: props.note.reconnectOriginalSourceIds?.includes(sourceId) === true
+              }))}
+              labels={readerSourceActionLabels(props.t)}
+              {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+              {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
+              {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+              {...(props.onReconnectOriginalSource ? {
+                onReconnectOriginalSource: props.onReconnectOriginalSource
+              } : {})}
+              {...(props.onSourceReconnected ? {
+                onReconnected: (reconnectedSourceId: string, render: NoteRenderResult) => {
+                  props.onSourceReconnected?.(render);
+                  window.requestAnimationFrame(() => {
+                    const sourceTrigger = readerRef.current?.querySelector<HTMLElement>(
+                      `[data-reader-source-open="${reconnectedSourceId}"]`
+                    );
+                    (sourceTrigger ?? readerRef.current)?.focus({ preventScroll: true });
+                  });
+                }
+              } : {})}
+            />
           </div>
           {summary.sourceIds.length > 5 ? (
             <p className="reader-source-overflow">
