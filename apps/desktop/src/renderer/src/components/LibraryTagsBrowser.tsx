@@ -5,18 +5,25 @@ import type {
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
   LibraryRemoveTagResult,
+  LibraryRemovePageTagRequest,
+  LibraryRemovePageTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   LibraryTaggedPageSummary,
   LibraryTagsRequest,
   LibraryTagsResult,
 } from "@pige/contracts";
+import {
+  LibraryPageTagRemoveDialog,
+  type LibraryPageTagRemoveDialogHandle,
+} from "./LibraryPageTagRemoveDialog";
 
 export interface LibraryTagsApi {
   readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
   readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
   readonly mergeTag: (request: LibraryMergeTagRequest) => Promise<LibraryMergeTagResult>;
   readonly removeTag: (request: LibraryRemoveTagRequest) => Promise<LibraryRemoveTagResult>;
+  readonly removePageTag: (request: LibraryRemovePageTagRequest) => Promise<LibraryRemovePageTagResult>;
 }
 
 export interface LibraryTagsBrowserLabels {
@@ -58,6 +65,14 @@ export interface LibraryTagsBrowserLabels {
   readonly removeConfirm: string;
   readonly removePending: string;
   readonly removeFailed: string;
+  readonly removePage: string;
+  readonly removePageTitle: string;
+  readonly removePageDescription: string;
+  readonly removePageCurrentTag: string;
+  readonly removePageCurrentPage: string;
+  readonly removePageConfirm: string;
+  readonly removePagePending: string;
+  readonly removePageFailed: string;
   readonly noteCount: (count: number) => string;
 }
 
@@ -130,6 +145,20 @@ function mergePages(
   return [...current, ...incoming.filter(({ pageId }) => !seen.has(pageId))];
 }
 
+function trapDialogFocus(
+  event: React.KeyboardEvent<HTMLElement>, dialog: HTMLElement | null, pending: boolean, cancel: () => void,
+): void {
+  if (event.key === "Escape" && !pending) { event.preventDefault(); cancel(); return; }
+  if (event.key !== "Tab") return;
+  const controls = Array.from(dialog?.querySelectorAll<HTMLElement>(
+    "input:not(:disabled), select:not(:disabled), button:not(:disabled)",
+  ) ?? []);
+  if (controls.length === 0) return event.preventDefault();
+  const first = controls[0]!; const last = controls.at(-1)!;
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+}
+
 export function LibraryTagsBrowser(
   props: LibraryTagsBrowserProps,
 ): React.JSX.Element {
@@ -160,6 +189,7 @@ export function LibraryTagsBrowser(
   const renameTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const mergeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const removeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pageRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameDialogRef = useRef<HTMLElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renameCancelRef = useRef<HTMLButtonElement>(null);
@@ -174,6 +204,7 @@ export function LibraryTagsBrowser(
   const removeCancelRef = useRef<HTMLButtonElement>(null);
   const removeRequestActiveRef = useRef(false);
   const removeSequenceRef = useRef(0);
+  const removePageDialogRef = useRef<LibraryPageTagRemoveDialogHandle>(null);
   const pendingTagFocusRef = useRef<string | null>(null);
   const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
@@ -608,6 +639,19 @@ export function LibraryTagsBrowser(
     }
   };
 
+  const handleRemovePageCommitted = async (pageId: string): Promise<void> => {
+    const tag = selectedTagRef.current;
+    if (!tag) return;
+    const pageIndex = notes.findIndex((page) => page.pageId === pageId);
+    const focusPageId = notes[pageIndex + 1]?.pageId ?? notes[pageIndex - 1]?.pageId;
+    await loadNotes(tag, false);
+    window.requestAnimationFrame(() => {
+      const row = focusPageId ? pageRowRefs.current.get(focusPageId) : null;
+      if (row) row.focus({ preventScroll: true });
+      else tagsHeadingRef.current?.focus({ preventScroll: true });
+    });
+  };
+
   return (
     <section className="search-group" aria-labelledby="library-tags-heading">
       <h2 ref={tagsHeadingRef} id="library-tags-heading" tabIndex={-1}>{props.labels.title}</h2>
@@ -717,18 +761,20 @@ export function LibraryTagsBrowser(
           ) : (
             <>
               {notes.map((note) => (
-                <button
-                  key={note.pageId}
-                  type="button"
-                  className="search-result"
-                  onClick={() => void props.onOpenNote(note.pageId)}
-                >
-                  <span className="search-result-copy">
-                    <strong>{note.title}</strong>
-                    <span>{note.pageType}</span>
-                  </span>
-                  <small>{props.labels.open}</small>
-                </button>
+                <div key={note.pageId}>
+                  <button ref={(element) => {
+                    if (element) pageRowRefs.current.set(note.pageId, element);
+                    else pageRowRefs.current.delete(note.pageId);
+                  }} type="button" className="search-result" onClick={() => void props.onOpenNote(note.pageId)}>
+                    <span className="search-result-copy"><strong>{note.title}</strong><span>{note.pageType}</span></span>
+                    <small>{props.labels.open}</small>
+                  </button>
+                  {notesContinuation?.snapshotId ? <button type="button" className="settings-button danger"
+                  aria-label={`${props.labels.removePage}: ${note.title}`}
+                  onClick={(event) => removePageDialogRef.current?.open(note, event.currentTarget)}>
+                    {props.labels.removePage}
+                  </button> : null}
+                </div>
               ))}
               {continuationFailedOwner === "notes" ? <p role="alert">{props.labels.notesFailed}</p> : null}
               {notesContinuation?.nextCursor ? (
@@ -757,25 +803,7 @@ export function LibraryTagsBrowser(
             aria-labelledby="library-tag-rename-title"
             aria-describedby="library-tag-rename-description"
             aria-busy={renameDialog.state === "pending"}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && renameDialog.state !== "pending") {
-                event.preventDefault();
-                cancelRename();
-                return;
-              }
-              if (event.key !== "Tab") return;
-              const controls = Array.from(renameDialogRef.current?.querySelectorAll<HTMLElement>("input:not(:disabled), button:not(:disabled)") ?? []);
-              if (controls.length === 0) return event.preventDefault();
-              const first = controls[0]!;
-              const last = controls.at(-1)!;
-              if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-              } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-              }
-            }}
+            onKeyDown={(event) => trapDialogFocus(event, renameDialogRef.current, renameDialog.state === "pending", cancelRename)}
           >
             <div className="confirmation-icon" aria-hidden="true">!</div>
             <div className="confirmation-copy">
@@ -818,25 +846,7 @@ export function LibraryTagsBrowser(
             aria-labelledby="library-tag-merge-title"
             aria-describedby="library-tag-merge-description"
             aria-busy={mergeDialog.state === "pending"}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && mergeDialog.state !== "pending") {
-                event.preventDefault();
-                cancelMerge();
-                return;
-              }
-              if (event.key !== "Tab") return;
-              const controls = Array.from(mergeDialogRef.current?.querySelectorAll<HTMLElement>("select:not(:disabled), button:not(:disabled)") ?? []);
-              if (controls.length === 0) return event.preventDefault();
-              const first = controls[0]!;
-              const last = controls.at(-1)!;
-              if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-              } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-              }
-            }}
+            onKeyDown={(event) => trapDialogFocus(event, mergeDialogRef.current, mergeDialog.state === "pending", cancelMerge)}
           >
             <div className="confirmation-icon" aria-hidden="true">!</div>
             <div className="confirmation-copy">
@@ -882,25 +892,7 @@ export function LibraryTagsBrowser(
             aria-labelledby="library-tag-remove-title"
             aria-describedby="library-tag-remove-description"
             aria-busy={removeDialog.state === "pending"}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && removeDialog.state !== "pending") {
-                event.preventDefault();
-                cancelRemove();
-                return;
-              }
-              if (event.key !== "Tab") return;
-              const controls = Array.from(removeDialogRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? []);
-              if (controls.length === 0) return event.preventDefault();
-              const first = controls[0]!;
-              const last = controls.at(-1)!;
-              if (event.shiftKey && document.activeElement === first) {
-                event.preventDefault();
-                last.focus();
-              } else if (!event.shiftKey && document.activeElement === last) {
-                event.preventDefault();
-                first.focus();
-              }
-            }}
+            onKeyDown={(event) => trapDialogFocus(event, removeDialogRef.current, removeDialog.state === "pending", cancelRemove)}
           >
             <div className="confirmation-icon" aria-hidden="true">!</div>
             <div className="confirmation-copy">
@@ -921,6 +913,15 @@ export function LibraryTagsBrowser(
           </section>
         </div>
       ) : null}
+      {selectedTag && notesContinuation?.snapshotId ? <LibraryPageTagRemoveDialog
+        ref={removePageDialogRef} activeVaultId={props.activeVaultId} tag={selectedTag}
+        snapshotId={notesContinuation.snapshotId} removePageTag={props.api.removePageTag}
+        labels={{ title: props.labels.removePageTitle, description: props.labels.removePageDescription,
+          currentTag: props.labels.removePageCurrentTag, currentPage: props.labels.removePageCurrentPage,
+          cancel: props.labels.removeCancel, confirm: props.labels.removePageConfirm,
+          pending: props.labels.removePagePending, failed: props.labels.removePageFailed }}
+        onCommitted={handleRemovePageCommitted}
+      /> : null}
     </section>
   );
 }
