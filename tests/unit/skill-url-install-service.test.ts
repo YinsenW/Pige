@@ -148,6 +148,147 @@ describe("SkillUrlInstallService", () => {
       .toMatchObject({ status: "failed" });
   });
 
+  it("updates an installed local Markdown Skill through a pathless reviewed stage and preserves enablement", async () => {
+    const root = createRoot();
+    const initialPath = path.join(root, "initial.md");
+    const updatePath = path.join(root, "updated.md");
+    const initial = skillMarkdown({ version: "1", updatedAt: "2026-07-28T10:00:00.000Z" });
+    const updated = skillMarkdown({ version: "2", updatedAt: "2026-07-29T10:00:00.000Z" });
+    fs.writeFileSync(initialPath, initial, { encoding: "utf8", mode: 0o600 });
+    fs.writeFileSync(updatePath, updated, { encoding: "utf8", mode: 0o600 });
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry });
+    const first = await service.stageFromMarkdown({
+      apiVersion: 1,
+      requestId: "skillreq_localupdateinitial01",
+      activeVaultId: "vault_20260731_localupdate"
+    }, initialPath);
+    if (first.status !== "ready") throw new Error("Expected local Markdown stage.");
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_localupdateinitial01",
+      stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256,
+      bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0,
+      enabled: true
+    })).toMatchObject({ status: "committed", registry: { skills: [{ canUpdate: true, enabled: true }] } });
+    const initialReceiptPath = path.join(root, "skills", "installed", "paper-reading", ".pige-install.json");
+    const { source: _source, warnings: _warnings, ...legacyReceipt } = JSON.parse(
+      fs.readFileSync(initialReceiptPath, "utf8")
+    );
+    fs.writeFileSync(initialReceiptPath, `${JSON.stringify(legacyReceipt)}\n`, "utf8");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "skill_lifecycle_request_localmarkdownupdate01",
+      activeVaultId: "vault_20260731_localupdate",
+      skillId: "paper-reading",
+      expectedRegistryRevision: 1
+    };
+    expect(service.resolveUpdateSource(request)).toBe("local_file");
+    const staged = await service.stageUpdate(request, updatePath);
+    expect(staged).toMatchObject({ status: "ready", staged: {
+      version: "2",
+      pureUpdateReview: {
+        previousVersion: "1",
+        addedFiles: [],
+        removedFiles: [],
+        changedFiles: ["SKILL.md"],
+        finalEnabled: true
+      }
+    } });
+    expect(JSON.stringify(staged)).not.toContain(updatePath);
+    expect(JSON.stringify(staged)).not.toContain("## Procedure");
+    if (staged.status !== "ready") throw new Error("Expected local Markdown update stage.");
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_localmarkdownupdate01",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: 1,
+      enabled: true
+    })).toMatchObject({ status: "committed", registry: { revision: 2, skills: [{ version: "2", enabled: true }] } });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "paper-reading", "SKILL.md"), "utf8")).toBe(updated);
+    expect(fs.readFileSync(path.join(
+      root, "skills", "trash", "updates", "skillreq_localmarkdownupdate01", "skill", "SKILL.md"
+    ), "utf8")).toBe(initial);
+    expect(JSON.parse(fs.readFileSync(path.join(
+      root, "skills", "installed", "paper-reading", ".pige-install.json"
+    ), "utf8"))).toMatchObject({ source: "local_markdown", enabled: true });
+  });
+
+  it("CAS-adopts a prepared local ZIP update after restart with the old tree retained privately", async () => {
+    const root = createRoot();
+    const initialPath = path.join(root, "initial.zip");
+    const updatePath = path.join(root, "updated.zip");
+    fs.writeFileSync(initialPath, await createZip([
+      ["skill/SKILL.md", skillMarkdown({ id: "local-zip-update", version: "1", updatedAt: "2026-07-28T10:00:00.000Z" })],
+      ["skill/references/guide.md", "# Old guide\n"]
+    ]));
+    fs.writeFileSync(updatePath, await createZip([
+      ["skill/SKILL.md", skillMarkdown({ id: "local-zip-update", version: "2", updatedAt: "2026-07-29T10:00:00.000Z" })],
+      ["skill/references/guide.md", "# New guide\n"],
+      ["skill/references/config.json", "{\"reviewed\":true}\n"]
+    ]));
+    const registry = new SkillRegistryService(root);
+    const service = new SkillUrlInstallService({ appDataRoot: root, registry });
+    const first = await service.stageFromZip({
+      apiVersion: 1,
+      requestId: "skillreq_localzipinitial0001",
+      activeVaultId: "vault_20260731_localzip"
+    }, initialPath);
+    if (first.status !== "ready") throw new Error("Expected local ZIP stage.");
+    service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_localzipinitial0001",
+      stagingId: first.staged.stagingId,
+      manifestSha256: first.staged.manifestSha256,
+      bundleSha256: first.staged.bundleSha256,
+      expectedRegistryRevision: 0,
+      enabled: false
+    });
+    const staged = await service.stageUpdate({
+      apiVersion: 1,
+      requestId: "skill_lifecycle_request_localzipupdate00001",
+      activeVaultId: "vault_20260731_localzip",
+      skillId: "local-zip-update",
+      expectedRegistryRevision: 1
+    }, updatePath);
+    expect(staged).toMatchObject({ status: "ready", staged: { pureUpdateReview: {
+      addedFiles: ["references/config.json"],
+      removedFiles: [],
+      changedFiles: ["SKILL.md", "references/guide.md"],
+      finalEnabled: false
+    } } });
+    if (staged.status !== "ready") throw new Error("Expected local ZIP update stage.");
+    const rename = fs.renameSync.bind(fs);
+    const spy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(from).includes(".registry.") && String(to).endsWith("registry.json")) throw new Error("crash");
+      return rename(from, to);
+    });
+    expect(service.installStaged({
+      apiVersion: 1,
+      requestId: "skillreq_localzipupdate00001",
+      stagingId: staged.staged.stagingId,
+      manifestSha256: staged.staged.manifestSha256,
+      bundleSha256: staged.staged.bundleSha256,
+      expectedRegistryRevision: 1,
+      enabled: false
+    })).toMatchObject({ status: "failed" });
+    spy.mockRestore();
+    const restarted = new SkillRegistryService(root, { recoverOrphanedMutationLock: true });
+    expect(restarted.summary()).toMatchObject({ status: "ready", registry: {
+      revision: 2,
+      skills: [{ id: "local-zip-update", version: "2", enabled: false, canUpdate: true }]
+    } });
+    expect(fs.readFileSync(path.join(root, "skills", "installed", "local-zip-update", "references", "guide.md"), "utf8"))
+      .toBe("# New guide\n");
+    expect(fs.readFileSync(path.join(
+      root, "skills", "trash", "updates", "skillreq_localzipupdate00001", "skill", "references", "guide.md"
+    ), "utf8")).toBe("# Old guide\n");
+  });
+
   it("stages a bounded pure Markdown Skill without execution and installs it once through registry CAS", async () => {
     const root = createRoot();
     const sentinel = path.join(root, "sibling-sentinel.txt");

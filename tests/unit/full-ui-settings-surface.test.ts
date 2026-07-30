@@ -1567,6 +1567,16 @@ describe("full UI Settings surface", () => {
       author: "Pige Labs",
       license: "MIT",
       files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 2304, sha256: `sha256:${"d".repeat(64)}` as const }],
+      pureUpdateReview: {
+        kind: "pure" as const,
+        previousVersion: "1.2.0",
+        previousManifestSha256: `sha256:${"a".repeat(64)}` as const,
+        previousBundleSha256: `sha256:${"b".repeat(64)}` as const,
+        addedFiles: [],
+        removedFiles: [],
+        changedFiles: ["SKILL.md" as const],
+        finalEnabled: false
+      },
       warnings: ["untrusted_remote_source" as const]
     };
     const stageUpdate = vi.fn(async (request: {
@@ -1627,6 +1637,8 @@ describe("full UI Settings surface", () => {
     });
     expect(page.textContent).toContain("v1.3.0");
     expect(page.textContent).toContain("This Skill comes from a remote source you must review.");
+    expect(page.textContent).toContain("~ SKILL.md");
+    expect(page.textContent).toContain("This Skill will remain disabled after the update.");
     expect(page.textContent).not.toContain(staged.stagingId);
     expect(page.textContent).not.toContain(staged.manifestSha256);
     const confirmUpdate = buttonNamed(page, "Update Skill");

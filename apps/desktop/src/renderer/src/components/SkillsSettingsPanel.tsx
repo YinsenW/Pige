@@ -405,6 +405,7 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
         queueInstalledFocus(skill.id, "update");
         return;
       }
+      if (result.status === "cancelled") { queueInstalledFocus(skill.id, "update"); return; }
       adoptRegistry(result.registry);
       setStatusKey(result.status === "current"
         ? "skills.updateCurrent"

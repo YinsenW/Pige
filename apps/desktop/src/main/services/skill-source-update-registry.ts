@@ -1,9 +1,12 @@
 import {
   deriveSkillDataBoundaries,
+  SkillCapabilityListSchema,
+  SkillDataBoundaryListSchema,
   SkillInstallStagedResultSchema,
   SkillInstallUrlSchema,
   SkillStageUpdateRequestSchema,
   SkillStageUpdateResultSchema,
+  SkillStagedFileSummarySchema,
   type SkillInstallStagedRequest,
   type SkillInstallStagedResult,
   type SkillInstallSourceKind,
@@ -37,11 +40,18 @@ export interface SkillStagedUpdateBinding {
   readonly installedInstallReceiptSha256?: string;
   readonly installedCapabilities?: SkillManifest["capabilities"];
   readonly installedDataBoundaries?: ReturnType<typeof deriveSkillDataBoundaries>;
+  readonly sourceKind?: "local_markdown" | "local_zip" | "local_file";
+  readonly installedFiles?: readonly {
+    readonly relativePath: string;
+    readonly utf8ByteSize: number;
+    readonly sha256: `sha256:${string}`;
+  }[];
 }
 
-export interface SkillUpdateTarget extends SkillStagedUpdateBinding {
-  readonly sourceUrl: string;
-}
+export type SkillUpdateTarget = SkillStagedUpdateBinding & (
+  | { readonly sourceUrl: string; readonly sourceKind?: never }
+  | { readonly sourceKind: "local_markdown" | "local_zip" | "local_file"; readonly sourceUrl?: never }
+);
 
 export type SkillUpdateResolution =
   | { readonly status: "ready"; readonly target: SkillUpdateTarget }
@@ -69,6 +79,49 @@ export interface SkillStagedInstallCandidate {
 export interface SkillStagingStorePort {
   readForInstall(stagingId: string, manifestSha256: string, bundleSha256: string): SkillStagedInstallCandidate | "stale" | undefined;
   discardExact(stagingId: string, manifestSha256: string, bundleSha256: string): "discarded" | "stale" | "not_found";
+}
+
+export function isSkillUpdateStageRecord(record: Record<string, unknown>): boolean {
+  if (!record.update || typeof record.update !== "object" || Array.isArray(record.update)) return false;
+  const update = record.update as Record<string, unknown>;
+  const keys = Object.keys(update).sort().join(",");
+  const pureKeys = "activeVaultId,enabled,expectedRegistryRevision,installedBundleSha256,installedFiles,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceUrl";
+  const localKeys = "activeVaultId,enabled,expectedRegistryRevision,installedBundleSha256,installedFiles,installedInstallReceiptSha256,installedManifestSha256,installedUpdatedAt,installedVersion,skillId,sourceKind";
+  const externalKeys = "activeVaultId,enabled,expectedRegistryRevision,installedBundleSha256,installedCapabilities,installedDataBoundaries,installedInstallReceiptSha256,installedManifestSha256,installedUpdatedAt,installedVersion,kind,skillId,sourceUrl";
+  const external = keys === externalKeys && update.kind === "external_web";
+  const local = keys === localKeys && ["local_markdown", "local_zip", "local_file"].includes(String(update.sourceKind));
+  const remote = keys === pureKeys || external;
+  return (remote || local) && SkillStageUpdateRequestSchema.safeParse({
+    apiVersion: 1, requestId: record.requestId, activeVaultId: update.activeVaultId,
+    skillId: update.skillId, expectedRegistryRevision: update.expectedRegistryRevision
+  }).success && (!remote || (update.sourceUrl === record.requestSourceUrl && update.sourceUrl === record.finalSourceUrl &&
+    SkillInstallUrlSchema.safeParse(update.sourceUrl).success)) && typeof update.enabled === "boolean" &&
+    typeof update.installedManifestSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedManifestSha256) &&
+    typeof update.installedVersion === "string" && typeof update.installedUpdatedAt === "string" &&
+    ((!external && !local) || (typeof update.installedBundleSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedBundleSha256) &&
+      typeof update.installedInstallReceiptSha256 === "string" && /^sha256:[a-f0-9]{64}$/u.test(update.installedInstallReceiptSha256) &&
+      (local || (SkillCapabilityListSchema.safeParse(update.installedCapabilities).success &&
+        SkillDataBoundaryListSchema.safeParse(update.installedDataBoundaries).success)))) &&
+    (!update.installedFiles || (Array.isArray(update.installedFiles) && update.installedFiles.length >= 1 &&
+      update.installedFiles.every((file) => SkillStagedFileSummarySchema.safeParse(file).success))) &&
+    Number.isFinite(Date.parse(update.installedUpdatedAt));
+}
+
+export function projectPureSkillUpdateReview(
+  update: SkillStagedUpdateBinding,
+  nextFiles: readonly { readonly relativePath: string; readonly sha256: `sha256:${string}` }[]
+) {
+  if (!update.installedBundleSha256 || !update.installedFiles) throw new Error("skill.update_review_invalid");
+  const previous = new Map(update.installedFiles.map((file) => [file.relativePath, file.sha256]));
+  const next = new Map(nextFiles.map((file) => [file.relativePath, file.sha256]));
+  return {
+    kind: "pure" as const, previousVersion: update.installedVersion,
+    previousManifestSha256: update.installedManifestSha256, previousBundleSha256: update.installedBundleSha256,
+    addedFiles: [...next.keys()].filter((file) => !previous.has(file)).sort(),
+    removedFiles: [...previous.keys()].filter((file) => !next.has(file)).sort(),
+    changedFiles: [...next.keys()].filter((file) => previous.has(file) && previous.get(file) !== next.get(file)).sort(),
+    finalEnabled: update.enabled
+  };
 }
 
 interface RegistryPorts {
@@ -113,7 +166,10 @@ export class SkillSourceUpdateRegistry {
         loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
         sourceUrl.success && loaded.manifest.kind === "external_web" && disclosure?.source === "https" &&
         disclosure.sourceUrl === sourceUrl.data;
-      if ((!pure && !external) || !sourceUrl.success || !loaded.manifest.updatedAt) {
+      const localSource = pure && !sourceUrl.success
+        ? resolveLocalSource(loaded.receipt, loaded.files)
+        : undefined;
+      if ((!pure && !external) || (!sourceUrl.success && !localSource) || !loaded.manifest.updatedAt) {
         return { status: "result", result: this.result(request, "not_found", current) };
       }
       return {
@@ -126,7 +182,24 @@ export class SkillSourceUpdateRegistry {
           installedVersion: record.version,
           installedUpdatedAt: loaded.manifest.updatedAt,
           enabled: record.enabled,
-          sourceUrl: sourceUrl.data,
+          ...(sourceUrl.success ? { sourceUrl: sourceUrl.data } : {
+            sourceKind: localSource!,
+            installedBundleSha256: loaded.bundleSha256,
+            installedInstallReceiptSha256: digestStableJson(loaded.receipt!),
+            installedFiles: loaded.files.map((file) => ({
+              relativePath: file.relativePath,
+              utf8ByteSize: file.bytes.length,
+              sha256: file.sha256
+            }))
+          }),
+          ...(pure && sourceUrl.success ? {
+            installedBundleSha256: loaded.bundleSha256,
+            installedFiles: loaded.files.map((file) => ({
+              relativePath: file.relativePath,
+              utf8ByteSize: file.bytes.length,
+              sha256: file.sha256
+            }))
+          } : {}),
           ...(external ? {
             kind: "external_web" as const,
             installedBundleSha256: loaded.bundleSha256,
@@ -186,6 +259,7 @@ export class SkillSourceUpdateRegistry {
     const existingIndex = current.skills.findIndex((skill) => skill.id === parsed.id);
     const existing = existingIndex >= 0 ? current.skills[existingIndex]! : undefined;
     const externalUpdate = update.kind === "external_web";
+    const localUpdate = update.sourceKind === "local_markdown" || update.sourceKind === "local_zip" || update.sourceKind === "local_file";
     const loaded = existing ? this.#ports.readManifest(existing.id) : undefined;
     if (!existing || !loaded || request.expectedRegistryRevision !== update.expectedRegistryRevision ||
       update.activeVaultId.length === 0 || update.skillId !== parsed.id ||
@@ -198,18 +272,23 @@ export class SkillSourceUpdateRegistry {
     if (externalUpdate && (candidate.source !== "https" || candidate.sourceUrl === undefined ||
       update.installedBundleSha256 !== loaded.bundleSha256 || !loaded.receipt ||
       update.installedInstallReceiptSha256 !== digestStableJson(loaded.receipt))) return installFailed(request.requestId);
+    if (localUpdate && ((update.sourceKind !== "local_file" && candidate.source !== update.sourceKind) ||
+      !["local_markdown", "local_zip"].includes(candidate.source) || candidate.sourceUrl !== undefined ||
+      update.installedBundleSha256 !== loaded.bundleSha256 || !loaded.receipt ||
+      update.installedInstallReceiptSha256 !== digestStableJson(loaded.receipt))) return installFailed(request.requestId);
     const now = new Date().toISOString();
     const finalEnabled = externalUpdate ? false : existing.enabled;
-    const externalInstallReceipt: SkillInstallReceipt | undefined = externalUpdate ? {
+    const fullTreeUpdate = externalUpdate || localUpdate;
+    const replacementInstallReceipt: SkillInstallReceipt | undefined = fullTreeUpdate ? {
       schemaVersion: 1,
       requestId: request.requestId,
       stagingId: request.stagingId,
       manifestSha256: request.manifestSha256,
       bundleSha256: request.bundleSha256,
-      enabled: false,
-      source: "https",
-      sourceUrl: candidate.sourceUrl!,
-      warnings: candidate.warnings ?? ["untrusted_remote_source"]
+      enabled: finalEnabled,
+      source: candidate.source,
+      ...(candidate.sourceUrl ? { sourceUrl: candidate.sourceUrl } : {}),
+      warnings: candidate.warnings ?? (candidate.source === "https" ? ["untrusted_remote_source"] : [])
     } : undefined;
     const receipt = this.#ports.lifecycleStore.prepareUpdate({
       requestId: request.requestId,
@@ -221,7 +300,7 @@ export class SkillSourceUpdateRegistry {
       newVersion: parsed.version,
       enabled: finalEnabled,
       bytes: candidate.bytes,
-      ...(externalUpdate ? { files: candidate.files, installReceipt: externalInstallReceipt! } : {}),
+      ...(fullTreeUpdate ? { files: candidate.files, installReceipt: replacementInstallReceipt! } : {}),
       createdAt: now
     });
     const nextSkills = [...current.skills];
@@ -283,9 +362,19 @@ export function canUpdateSkill(
   disclosure?: { readonly source: SkillInstallSourceKind; readonly sourceUrl?: string }
 ): boolean {
   const source = SkillInstallUrlSchema.safeParse(manifest.sourceUrl);
-  if (!manifest.updatedAt || !source.success) return false;
-  if (manifest.kind === "pure") return true;
+  if (!manifest.updatedAt) return false;
+  if (manifest.kind === "pure") return source.success || manifest.sourceUrl === undefined;
   return manifest.kind === "external_web" && disclosure?.source === "https" && disclosure.sourceUrl === source.data;
+}
+
+function resolveLocalSource(
+  receipt: SkillInstallReceipt | undefined,
+  files: readonly SkillBundleFile[]
+): "local_markdown" | "local_zip" | "local_file" | undefined {
+  if (!receipt) return undefined;
+  if (receipt.source === "local_markdown" || receipt.source === "local_zip") return receipt.source;
+  if (receipt.source !== undefined || receipt.sourceUrl !== undefined) return undefined;
+  return files.length === 1 && files[0]?.relativePath === "SKILL.md" ? "local_file" : "local_zip";
 }
 
 function installFailed(requestId: string): SkillInstallStagedResult {

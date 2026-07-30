@@ -235,7 +235,7 @@ export class SkillRegistryService {
       ];
       const receipt: SkillInstallReceipt = { schemaVersion: 1, requestId: request.requestId, stagingId: request.stagingId,
         manifestSha256: request.manifestSha256, bundleSha256: request.bundleSha256, enabled: request.enabled,
-        ...(parsed.kind === "external_web" ? {
+        ...(parsed.kind === "external_web" || candidate.source !== "https" ? {
           source: candidate.source,
           ...(candidate.sourceUrl ? { sourceUrl: candidate.sourceUrl } : {}),
           warnings

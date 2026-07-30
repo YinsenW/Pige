@@ -2557,6 +2557,21 @@ export const SkillExternalUpdateReviewSchema = z.object({
     context.addIssue({ code: "custom", path: ["addedDataBoundaries"], message: "Data-boundary changes must not overlap." });
   }
 });
+export const SkillPureUpdateReviewSchema = z.object({
+  kind: z.literal("pure"),
+  previousVersion: z.string().min(1).max(80),
+  previousManifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  previousBundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  addedFiles: z.array(SkillStagedRelativePathSchema).max(SKILL_ZIP_STAGE_MAX_FILES),
+  removedFiles: z.array(SkillStagedRelativePathSchema).max(SKILL_ZIP_STAGE_MAX_FILES),
+  changedFiles: z.array(SkillStagedRelativePathSchema).max(SKILL_ZIP_STAGE_MAX_FILES),
+  finalEnabled: z.boolean()
+}).strict().superRefine((review, context) => {
+  const values = [...review.addedFiles, ...review.removedFiles, ...review.changedFiles];
+  if (new Set(values).size !== values.length) {
+    context.addIssue({ code: "custom", path: ["changedFiles"], message: "Pure Skill file changes must not overlap." });
+  }
+});
 export const SkillStagedSummarySchema = z.object({
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
@@ -2578,6 +2593,7 @@ export const SkillStagedSummarySchema = z.object({
   license: z.string().min(1).max(120).optional(),
   files: z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES),
   externalUpdateReview: SkillExternalUpdateReviewSchema.optional(),
+  pureUpdateReview: SkillPureUpdateReviewSchema.optional(),
   warnings: z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill stage warnings must be unique.")
 }).strict().superRefine((staged, context) => {
@@ -2613,6 +2629,9 @@ export const SkillStagedSummarySchema = z.object({
   if (staged.externalUpdateReview !== undefined &&
     (staged.kind !== "external_web" || staged.source !== "https" || staged.sourceUrl === undefined)) {
     context.addIssue({ code: "custom", path: ["externalUpdateReview"], message: "External update review identity is invalid." });
+  }
+  if (staged.pureUpdateReview !== undefined && staged.kind !== "pure") {
+    context.addIssue({ code: "custom", path: ["pureUpdateReview"], message: "Pure update review identity is invalid." });
   }
   const canonicalPaths = new Set<string>();
   let totalBytes = 0;
@@ -2810,6 +2829,7 @@ export const SkillStageUpdateResultSchema = z.discriminatedUnion("status", [
     status: z.literal("not_found"),
     registry: SkillRegistrySummarySchema
   }).strict(),
+  SkillInstalledLifecycleResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
   SkillInstalledLifecycleResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]).superRefine((result, context) => {
   if (result.status === "ready" && result.staged.id !== result.skillId) {
@@ -2820,6 +2840,9 @@ export const SkillStageUpdateResultSchema = z.discriminatedUnion("status", [
   }
   if (result.status === "ready" && result.staged.kind === "pure" && result.staged.externalUpdateReview !== undefined) {
     context.addIssue({ code: "custom", path: ["staged", "externalUpdateReview"], message: "Pure updates cannot expose an External/Web diff." });
+  }
+  if (result.status === "ready" && result.staged.kind === "external_web" && result.staged.pureUpdateReview !== undefined) {
+    context.addIssue({ code: "custom", path: ["staged", "pureUpdateReview"], message: "External updates cannot expose a pure diff." });
   }
 });
 
