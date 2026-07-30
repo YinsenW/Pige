@@ -36,6 +36,7 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const replaceSchemas = schemasSource.slice(
       schemasSource.indexOf("export const CurrentNoteReplaceProposalIdSchema"),
       schemasSource.indexOf("export const ReaderSelectionActionRequestIdSchema")
@@ -113,12 +114,14 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const libraryApi = contractsSource.slice(
       contractsSource.indexOf("readonly library: {"),
       contractsSource.indexOf("readonly notes: {")
     );
 
     expect(schemasSource).toContain('LIBRARY_TAGS_CHANNEL = "library.tags"');
+    expect(schemasSource).toContain('LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag"');
     expect(schemasSource).toContain("LibraryTagsRequestSchema");
     expect(schemasSource).toContain('mode: z.literal("list_tags")');
     expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
@@ -127,11 +130,24 @@ describe("desktop shell build contract", () => {
     expect(libraryApi).toContain(
       "readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;"
     );
+    expect(libraryApi).toContain(
+      "readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;"
+    );
     expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
     expect(preloadSource).toContain(
       "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
     );
     expect(preloadSource).toContain("LibraryTagsResultSchema.parse(");
+    expect(preloadSource).toContain("LibraryRenameTagRequestSchema.parse(request)");
+    expect(preloadSource).toContain("LibraryRenameTagResultSchema.parse(");
+    const renameHandler = mainSource.slice(
+      mainSource.indexOf("ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL"),
+      mainSource.indexOf("registerReaderIpc({")
+    );
+    expect(renameHandler).toContain("LibraryRenameTagRequestSchema.parse(request)");
+    expect(renameHandler).toContain("LibraryRenameTagResultSchema.parse(getLibraryTagRenameService().rename(parsed))");
+    expect(renameHandler.indexOf("LibraryRenameTagRequestSchema.parse(request)"))
+      .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().rename(parsed)"));
     expect(preloadSource).toContain("Invalid Library tags response identity.");
     for (const privateField of [
       "pagePath",

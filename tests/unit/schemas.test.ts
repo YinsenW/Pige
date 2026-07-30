@@ -86,9 +86,12 @@ import {
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
   LIBRARY_TAGS_CHANNEL,
+  LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_TAGS_PAGE_SIZE_MAX,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
+  LibraryRenameTagRequestSchema,
+  LibraryRenameTagResultSchema,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
@@ -914,6 +917,29 @@ describe("schemas", () => {
       status: "failed",
       tags: []
     })).toThrow();
+  });
+
+  it("keeps Library tag rename identity-bound with closed body-free outcomes", () => {
+    expect(LIBRARY_RENAME_TAG_CHANNEL).toBe("library.renameTag");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "library_tag_rename_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260710_rename01",
+      tag: "Research",
+      replacementTag: "Reading",
+      expectedSnapshotId: `library_tags_snapshot_${"a".repeat(64)}`,
+      expectedPageCount: 3
+    };
+    expect(LibraryRenameTagRequestSchema.parse(request)).toEqual(request);
+    expect(() => LibraryRenameTagRequestSchema.parse({ ...request, replacementTag: "research" })).toThrow();
+    expect(LibraryRenameTagResultSchema.parse({
+      ...request,
+      status: "committed",
+      operationId: "op_20260710_tagrename01",
+      renamedPageCount: 3
+    })).toMatchObject({ status: "committed", renamedPageCount: 3 });
+    expect(() => LibraryRenameTagResultSchema.parse({ ...request, status: "committed", renamedPageCount: 3 })).toThrow();
+    expect(LibraryRenameTagResultSchema.parse({ ...request, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("opens one durable Dataset citation as an exact read-only preview with typed highlights", () => {

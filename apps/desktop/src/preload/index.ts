@@ -72,6 +72,8 @@ import type {
   LibraryRelatedResult,
   LibraryTagsRequest,
   LibraryTagsResult,
+  LibraryRenameTagRequest,
+  LibraryRenameTagResult,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -336,8 +338,11 @@ import {
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
   LIBRARY_TAGS_CHANNEL,
+  LIBRARY_RENAME_TAG_CHANNEL,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
+  LibraryRenameTagRequestSchema,
+  LibraryRenameTagResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -675,6 +680,20 @@ async function invokeLibraryTags(request: LibraryTagsRequest): Promise<LibraryTa
       (result.mode !== "list_pages_for_tag" || result.tag !== parsedRequest.tag))
   ) {
     throw new Error("Invalid Library tags response identity.");
+  }
+  return result;
+}
+
+async function invokeLibraryRenameTag(request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> {
+  const parsedRequest = LibraryRenameTagRequestSchema.parse(request);
+  const result = LibraryRenameTagResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_RENAME_TAG_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.tag !== parsedRequest.tag || result.replacementTag !== parsedRequest.replacementTag ||
+    result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
+    result.expectedPageCount !== parsedRequest.expectedPageCount) {
+    throw new Error("Invalid Library tag rename response identity.");
   }
   return result;
 }
@@ -1463,7 +1482,8 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("library.tree") as Promise<KnowledgeTreeResult>,
     related: async (request: LibraryRelatedRequest): Promise<LibraryRelatedResult> =>
       ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>,
-    tags: invokeLibraryTags
+    tags: invokeLibraryTags,
+    renameTag: invokeLibraryRenameTag
   },
   notes: {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>

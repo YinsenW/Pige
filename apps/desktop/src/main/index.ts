@@ -27,6 +27,7 @@ import type {
   KnowledgeActivityListRequest,
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
+  LibraryRenameTagRequest,
   LibraryTagsRequest,
   LibraryRelatedRequest,
   OpenRecentVaultRequest,
@@ -121,6 +122,9 @@ import {
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
+  LIBRARY_RENAME_TAG_CHANNEL,
+  LibraryRenameTagRequestSchema,
+  LibraryRenameTagResultSchema,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   PERMISSIONS_CHANGED_CHANNEL,
@@ -210,6 +214,7 @@ import {
   type JobClassExecutorRegistry
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
+import { LibraryTagRenameService } from "./services/library-tag-rename-service";
 import { LibraryTagsService } from "./services/library-tags-service";
 import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
@@ -380,6 +385,7 @@ let managedCollectionCitationService: ManagedCollectionCitationService | undefin
 const collectionCitationConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
+let libraryTagRenameService: LibraryTagRenameService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
@@ -1585,6 +1591,11 @@ const getLibraryTagsService = (): LibraryTagsService => {
   return libraryTagsService;
 };
 
+const getLibraryTagRenameService = (): LibraryTagRenameService => {
+  libraryTagRenameService ??= new LibraryTagRenameService(getVaultService());
+  return libraryTagRenameService;
+};
+
 const getNotesService = (): NotesService => {
   if (!notesService) {
     notesService = new NotesService(
@@ -1624,14 +1635,19 @@ const getNoteMarkdownImportService = (): NoteMarkdownImportService => {
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
   const trash = getNoteTrashService();
   const merge = getNoteMergeService();
+  const tagRename = getLibraryTagRenameService();
   return {
-    activitySummary: (operation, undo) => merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
-    findUndoOperation: (operation, operations) => merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
-    undo: (operation) => merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    activitySummary: (operation, undo) => tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
+    findUndoOperation: (operation, operations) => tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
+      const tagRenameResult = tagRename.recoverIncompleteOperations();
       const mergeResult = merge.recoverIncompleteOperations();
       const trashResult = trash.recoverIncompleteOperations();
-      return { recovered: mergeResult.recovered + trashResult.recovered, failed: mergeResult.failed + trashResult.failed };
+      return {
+        recovered: tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
+        failed: tagRenameResult.failed + mergeResult.failed + trashResult.failed
+      };
     }
   };
 };
@@ -2724,6 +2740,12 @@ ipcMain.handle("library.tags", (_event, request: LibraryTagsRequest) => {
   const parsed = LibraryTagsRequestSchema.parse(request);
   return LibraryTagsResultSchema.parse(getLibraryTagsService().browse(parsed));
 });
+ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL, (_event, request: LibraryRenameTagRequest) => {
+  const parsed = LibraryRenameTagRequestSchema.parse(request);
+  const result = LibraryRenameTagResultSchema.parse(getLibraryTagRenameService().rename(parsed));
+  if (result.status === "committed") scheduleActivityIndexRebuild();
+  return result;
+});
 registerReaderIpc({
   ipcMain,
   getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
@@ -3238,6 +3260,7 @@ app.whenReady().then(async () => {
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
+  libraryTagRenameService = new LibraryTagRenameService(getVaultService());
   noteRelateService = new NoteRelateService(
     getNotesService(),
     noteMarkdownEditorService,
