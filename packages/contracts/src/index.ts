@@ -165,6 +165,9 @@ import type {
   LibraryMergeTagRequest,
   LibraryMergeTagRequestId,
   LibraryMergeTagResult,
+  LibraryRemoveTagRequest,
+  LibraryRemoveTagRequestId,
+  LibraryRemoveTagResult,
   MarkdownPageStatus,
   MarkdownPageType,
   ModelListStrategy,
@@ -463,6 +466,9 @@ export type {
   LibraryMergeTagRequest,
   LibraryMergeTagRequestId,
   LibraryMergeTagResult,
+  LibraryRemoveTagRequest,
+  LibraryRemoveTagRequestId,
+  LibraryRemoveTagResult,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -2050,6 +2056,7 @@ export interface PigeDesktopApi {
     readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
     readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
     readonly mergeTag: (request: LibraryMergeTagRequest) => Promise<LibraryMergeTagResult>;
+    readonly removeTag: (request: LibraryRemoveTagRequest) => Promise<LibraryRemoveTagResult>;
   };
   readonly notes: {
     readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
