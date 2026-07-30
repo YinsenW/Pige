@@ -739,58 +739,7 @@ Model Providers
 
 ## 11. Knowledge Tree
 
-Knowledge Tree is the semantic exploration surface. It should answer "how is my knowledge growing?" and "how are my ideas connected?" rather than "where is this file stored?"
-
-The data contract for topics, concepts, entities, relationship types, review gates, and graph rebuild behavior lives in `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
-
-It should show:
-
-- Trunk, branch, and leaf structure.
-- Main trunk for broad knowledge domains.
-- Branches for topics, concepts, projects, or recurring questions.
-- Leaves for fragmented knowledge units such as notes, chunks, source fragments, claims, examples, or accepted insights.
-- Related notes and source evidence.
-- Backlinks and suggested links.
-- Relationship confidence or status when useful.
-- Autonomous relationship Activity and exceptional unresolved conflicts.
-
-Visual encoding:
-
-- Trunk thickness represents the total weight of a knowledge domain.
-- Branch thickness represents the weight of a topic or concept.
-- Leaf count represents the number of fragmented knowledge units under that branch.
-- Leaf size represents the size or importance of a leaf cluster.
-- Leaf color depth represents density: deeper color means more accumulated fragments or stronger evidence.
-- New or low-confidence growth can use lighter leaves until evidence reinforces it.
-
-Current bounded slice:
-
-- Knowledge Tree is a separate sidebar destination, not a folder browser or graph editor.
-- A compact heading, Refresh action, totals, and Tree/Network/List views expose the same
-  body-free aggregate; views, search, focus, and camera are renderer-local and create no
-  data owner.
-- Native meters and adjacent text state exact weight, fragment, source, and leaf counts;
-  color or thickness is never the only explanation.
-- Node detail and screen-reader description state exact weight, fragment, source, leaf, and evidence-density values. Density is fragments plus sources with fixed `0`, `1–2`, `3–5`, and `6+` color bands; review-needed growth keeps a distinct outline. Domain/topic size follows weight, deeper node size follows relative density, and leaf count never uses depth.
-- Navigable nodes open the confined Reader. Selection loads bounded outgoing/backlink groups and
-  opens only returned page IDs; drift/failure preserves tree/focus. Synthetic topics stay unavailable.
-  Back restores invoking tree focus; opaque source IDs show only `Source evidence`.
-- Loading, ready, empty, degraded, and error states are localized. Force graphs, manual
-  taxonomy, editing, health workflows, and advanced graph analytics remain open.
-
-Illustrative hierarchy:
-
-```txt
-Knowledge Tree
-
-Main trunk: Local-first
-  Branch: Local RAG
-    Leaves: Embedding, lexical search, reranker, chunks, citations
-  Branch: Agent Memory
-    Leaves: preferences, corrections, scenarios
-  Branch: OCR Pipeline
-    Leaves: screenshots, scanned PDFs, slides
-```
+Knowledge Tree shows growth/connections, not paths; `docs/KNOWLEDGE_MODEL_AND_LINKING.md` owns graph data/review/rebuild. Its sidebar heading, Refresh, totals, and Tree/Network/List views share a body-free aggregate while view/search/focus/camera stay renderer-local. Domain/topic thickness and size show weight; deeper size uses relative density; exact leaf count never depth; fragment-plus-source density uses fixed `0`, `1–2`, `3–5`, `6+` color bands; `needs_review` stays outlined. Meters, detail, and screen-reader text state exact weight/fragment/source/leaf/density so visuals are never sole explanation. Bounded outgoing/backlink IDs open confined Reader; drift/failure preserves tree/focus, Back restores focus, synthetic topics stay disabled, opaque IDs read `Source evidence`. Localized loading/ready/empty/degraded/error work; graph editing, manual taxonomy, health workflows, force/advanced analytics remain open.
 
 ## 12. Knowledge Health
 

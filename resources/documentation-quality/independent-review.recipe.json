@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound referenced-original reconnect, exact active-note title rename, source refresh/reimport, complete Activity history browsing, vault-portable Agent memory backup inclusion, restart-safe exact note-edit Redo and explainable Knowledge Tree density.",
+    "scope": "Existing reviewed Vault v2/Alpha convergence scope through exact active-note title rename/Redo, plus explainable Knowledge Tree density.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "021a3a050afb608f5aabe00523984654d806d38e66ee6ecb09b3bf0350502a57"
+    "reviewedSha256": "4fec7138e2b5baafc27e166693b2ef50329770dd13df362ee8b9a7a537b24ed6"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, referenced-original reconnect, exact active-note title rename, source refresh/reimport, Activity history browsing, Agent memory backup inclusion, exact note-edit Redo and explainable Knowledge Tree density",
+    "task": "Bind exact active-note title rename/Redo and explainable Knowledge Tree density into the reviewed Alpha baseline",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,14 +67,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, proof-bound referenced-original reconnect, exact active-note title rename, source-refresh, Activity-history, memory-backup, exact note-edit Redo and Knowledge Tree density claims; Development supplied executable evidence and UI Design independently returned P0/P1 CLEAR on exact fix/source HEAD 75c6144b0825b227d6303ff58cc7fa653b2a9741 with Knowledge Tree UI+i18n 7/7 passing."
+    "independence": "Planning retained the reviewed Alpha baseline including exact active-note title rename/Redo and bound density claims; Development supplied executable evidence; UI Design returned P0/P1 CLEAR at exact fix/source HEAD 75c6144b0825b227d6303ff58cc7fa653b2a9741 with UI+i18n 7/7."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Knowledge Tree adds no mode or graph controls; selection keeps exact counts, related-page navigation, keyboard tree semantics and localized detail."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Knowledge-model, UI and Playbook owners agree on fragments-plus-sources density bands, weight-sized domains/topics, density-sized deeper nodes and durable leaf counts."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; density evidence narrows B6.14/E6.09 without promoting dense-scale, assistive-technology or packaged visual acceptance."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Fixed bands, review-needed outline, exact accessible descriptions and six-locale labels are explicit and executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Knowledge Tree owner sections and trace evidence absorb the bounded density delta without a new document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"No new mode; exact counts, navigation, keyboard tree and localized detail remain."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Owners agree on density bands, weight/density sizing and durable leaf count."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Density evidence narrows B6.14/E6.09 without promoting open scale/a11y/package proof."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Bands, review outline, exact a11y detail and six locales are executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners and trace absorb the delta."}
   ],
   "verification": [
     {"command":"node scripts/verify/independent-documentation-review.mjs && npm run verify:documentation-leanness && npm run verify:prd-contract && npm run verify:doc-map","status":"passed","evidence":"Knowledge Tree density semantics, trace evidence, owner routing and the bounded documentation ratchet remain synchronized."},
