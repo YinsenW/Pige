@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { NoteArchiveCurrentRequest, NoteArchiveCurrentResult, NoteRenderResult } from "@pige/contracts";
+import type {
+  NoteArchiveCurrentRequest,
+  NoteArchiveCurrentResult,
+  NoteRenderResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
+} from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 import {
   ReaderNoteMergeDialog,
@@ -18,6 +24,10 @@ export type ReaderDocumentArchiveOutcome =
   | { readonly status: "committed"; readonly render: NoteRenderResult }
   | { readonly status: "retained" };
 export type ReaderNoteArchiveSubmit = (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
+export type ReaderDocumentRestoreOutcome =
+  | { readonly status: "committed"; readonly render: NoteRenderResult }
+  | { readonly status: "retained" };
+export type ReaderNoteRestoreSubmit = (request: NoteRestoreArchivedRequest) => Promise<NoteRestoreArchivedResult>;
 
 export interface ReaderDocumentActionLabels {
   readonly more: string;
@@ -40,6 +50,8 @@ export interface ReaderDocumentArchiveLabels {
   readonly pending: string;
   readonly failed: string;
 }
+
+export type ReaderDocumentRestoreLabels = ReaderDocumentArchiveLabels;
 
 export async function submitReaderNoteArchive(input: {
   readonly note: NoteRenderResult | null | undefined;
@@ -75,9 +87,45 @@ export async function submitReaderNoteArchive(input: {
   }
 }
 
+export async function submitReaderNoteRestore(input: {
+  readonly note: NoteRenderResult | null | undefined;
+  readonly activeVaultId: string | null | undefined;
+  readonly submit: ReaderNoteRestoreSubmit | null | undefined;
+  readonly currentNote?: () => NoteRenderResult | null | undefined;
+}): Promise<ReaderDocumentRestoreOutcome> {
+  const eligibility = input.note?.restoreEligibility;
+  const renderContextId = input.note?.renderContextId;
+  if (!input.note || !eligibility?.canRestore || !input.activeVaultId || !renderContextId || !input.submit) {
+    return { status: "retained" };
+  }
+  const request: NoteRestoreArchivedRequest = {
+    apiVersion: 1,
+    requestId: `noterestorereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+    activeVaultId: input.activeVaultId,
+    currentPageId: input.note.summary.pageId,
+    renderContextId,
+    expectedRevision: eligibility.revision,
+  };
+  try {
+    const result = await input.submit(request);
+    if (!restoreIdentityMatches(request, result) ||
+      (input.currentNote && !restoreRequestMatchesNote(request, input.currentNote())) ||
+      result.status !== "committed" || result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.status !== "active") return { status: "retained" };
+    return { status: "committed", render: result.render };
+  } catch {
+    return { status: "retained" };
+  }
+}
+
 function archiveRequestMatchesNote(request: NoteArchiveCurrentRequest, note: NoteRenderResult | null | undefined): boolean {
   return note?.summary.pageId === request.currentPageId && note.renderContextId === request.renderContextId &&
     note.archiveEligibility?.revision === request.expectedRevision;
+}
+
+function restoreRequestMatchesNote(request: NoteRestoreArchivedRequest, note: NoteRenderResult | null | undefined): boolean {
+  return note?.summary.pageId === request.currentPageId && note.renderContextId === request.renderContextId &&
+    note.restoreEligibility?.revision === request.expectedRevision;
 }
 
 export function readerDocumentArchiveLabels(t: (key: string) => string): ReaderDocumentArchiveLabels {
@@ -89,7 +137,22 @@ export function readerDocumentArchiveLabels(t: (key: string) => string): ReaderD
   };
 }
 
+export function readerDocumentRestoreLabels(t: (key: string) => string): ReaderDocumentRestoreLabels {
+  return {
+    action: t("note.document.restore"), title: t("note.document.restoreTitle"),
+    description: t("note.document.restoreDescription"), cancel: t("note.document.restoreCancel"),
+    confirm: t("note.document.restoreConfirm"), pending: t("note.document.restoring"),
+    failed: t("note.document.restoreFailed"),
+  };
+}
+
 function archiveIdentityMatches(request: NoteArchiveCurrentRequest, result: NoteArchiveCurrentResult): boolean {
+  return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId && result.renderContextId === request.renderContextId &&
+    result.expectedRevision === request.expectedRevision;
+}
+
+function restoreIdentityMatches(request: NoteRestoreArchivedRequest, result: NoteRestoreArchivedResult): boolean {
   return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
     result.currentPageId === request.currentPageId && result.renderContextId === request.renderContextId &&
     result.expectedRevision === request.expectedRevision;
@@ -101,28 +164,33 @@ export interface ReaderDocumentActionsProps {
   readonly canMerge: boolean;
   readonly canRelate?: boolean;
   readonly canArchive?: boolean;
+  readonly canRestore?: boolean;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
   readonly relateLabels?: ReaderNoteRelateLabels;
   readonly archiveLabels?: ReaderDocumentArchiveLabels;
+  readonly restoreLabels?: ReaderDocumentRestoreLabels;
   readonly onMoveToTrash: () => Promise<ReaderDocumentTrashOutcome>;
   readonly onLoadMergeTargets: () => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMerge: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteMergeOutcome>;
   readonly onLoadRelateTargets?: () => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onRelate?: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteRelateOutcome>;
   readonly onArchive?: () => Promise<ReaderDocumentArchiveOutcome>;
+  readonly onRestore?: () => Promise<ReaderDocumentRestoreOutcome>;
   readonly onCommitted: () => void;
   readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onRelateCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onArchiveCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
+  readonly onRestoreCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
 }
 
 export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.JSX.Element | null {
   const canArchive = props.canArchive === true && Boolean(props.archiveLabels && props.onArchive);
+  const canRestore = props.canRestore === true && Boolean(props.restoreLabels && props.onRestore);
   const canRelate = props.canRelate === true && Boolean(props.relateLabels && props.onLoadRelateTargets && props.onRelate);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<"trash" | "archive" | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"trash" | "archive" | "restore" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [relateOpen, setRelateOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -133,6 +201,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
   const archiveActionRef = useRef<HTMLButtonElement>(null);
+  const restoreActionRef = useRef<HTMLButtonElement>(null);
   const mergeActionRef = useRef<HTMLButtonElement>(null);
   const relateActionRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -148,7 +217,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setRelateOpen(false);
     setPending(false);
     setFailed(false);
-  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRelate]);
+  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRestore, canRelate]);
 
   useEffect(() => {
     if (menuOpen) {
@@ -158,6 +227,8 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
           ? relateActionRef.current
         : canArchive
           ? archiveActionRef.current
+          : canRestore
+            ? restoreActionRef.current
           : actionRef.current)?.focus({ preventScroll: true });
     }
   }, [menuOpen]);
@@ -166,7 +237,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     if (confirmAction) cancelRef.current?.focus({ preventScroll: true });
   }, [confirmAction]);
 
-  if (!props.canMoveToTrash && !props.canMerge && !canArchive && !canRelate) return null;
+  if (!props.canMoveToTrash && !props.canMerge && !canArchive && !canRestore && !canRelate) return null;
 
   const restoreTriggerFocus = (): void => {
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -187,13 +258,17 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setPending(true);
     setFailed(false);
     try {
-      const outcome = confirmAction === "archive" && props.onArchive
-        ? await props.onArchive()
-        : await props.onMoveToTrash();
+      const outcome = confirmAction === "archive" && props.onArchive ? await props.onArchive()
+        : confirmAction === "restore" && props.onRestore ? await props.onRestore() : await props.onMoveToTrash();
       if (sequence !== requestSequenceRef.current || ownerIdentity !== ownerIdentityRef.current) return;
       if (confirmAction === "archive" && typeof outcome === "object" && outcome.status === "committed") {
         setConfirmAction(null);
         props.onArchiveCommitted?.(outcome.render);
+        return;
+      }
+      if (confirmAction === "restore" && typeof outcome === "object" && outcome.status === "committed") {
+        setConfirmAction(null);
+        props.onRestoreCommitted?.(outcome.render);
         return;
       }
       if (outcome === "committed") {
@@ -284,6 +359,20 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
             {props.archiveLabels.action}
           </button>
         ) : null}
+        {canRestore && props.restoreLabels ? (
+          <button
+            ref={restoreActionRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmAction("restore");
+              setFailed(false);
+            }}
+          >
+            {props.restoreLabels.action}
+          </button>
+        ) : null}
         {props.canMoveToTrash ? (
           <button
             ref={actionRef}
@@ -362,23 +451,29 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
           <div className="confirmation-icon" aria-hidden="true">!</div>
           <div className="confirmation-copy">
             <h2 id={`reader-document-${confirmAction}-title`}>
-              {confirmAction === "archive" ? props.archiveLabels?.title : props.labels.title}
+              {confirmAction === "archive" ? props.archiveLabels?.title
+                : confirmAction === "restore" ? props.restoreLabels?.title : props.labels.title}
             </h2>
             <p id={`reader-document-${confirmAction}-description`}>
-              {confirmAction === "archive" ? props.archiveLabels?.description : props.labels.description}
+              {confirmAction === "archive" ? props.archiveLabels?.description
+                : confirmAction === "restore" ? props.restoreLabels?.description : props.labels.description}
             </p>
           </div>
           {failed ? <p className="error" role="alert">
-            {confirmAction === "archive" ? props.archiveLabels?.failed : props.labels.failed}
+            {confirmAction === "archive" ? props.archiveLabels?.failed
+              : confirmAction === "restore" ? props.restoreLabels?.failed : props.labels.failed}
           </p> : null}
           <div className="confirmation-actions">
             <button ref={cancelRef} type="button" className="secondary" disabled={pending} onClick={cancel}>
-              {confirmAction === "archive" ? props.archiveLabels?.cancel : props.labels.cancel}
+              {confirmAction === "archive" ? props.archiveLabels?.cancel
+                : confirmAction === "restore" ? props.restoreLabels?.cancel : props.labels.cancel}
             </button>
             <button type="button" className="primary" disabled={pending} onClick={() => void submit()}>
               {pending
-                ? confirmAction === "archive" ? props.archiveLabels?.pending : props.labels.pending
-                : confirmAction === "archive" ? props.archiveLabels?.confirm : props.labels.confirm}
+                ? confirmAction === "archive" ? props.archiveLabels?.pending
+                  : confirmAction === "restore" ? props.restoreLabels?.pending : props.labels.pending
+                : confirmAction === "archive" ? props.archiveLabels?.confirm
+                  : confirmAction === "restore" ? props.restoreLabels?.confirm : props.labels.confirm}
             </button>
           </div>
         </section>
