@@ -4114,22 +4114,37 @@ describe("full UI Settings surface", () => {
       if (locale === "de") throw new Error("raw locale persistence failure /Users/private");
     });
     const onThemeChange = vi.fn(async () => true);
-    const onDevelopment = vi.fn();
+    let finishKnowledgeLanguageChange!: (status: "committed" | "stale" | "failed") => void;
+    const onKnowledgeLanguageChange = vi.fn<
+      (language: "preserve_source" | "follow_query" | "app_locale") =>
+        Promise<"committed" | "stale" | "failed">
+    >()
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        finishKnowledgeLanguageChange = resolve;
+      }))
+      .mockResolvedValueOnce("failed")
+      .mockResolvedValueOnce("committed");
     const root = createRoot(dom.window.document.querySelector("#root")!);
-    await act(async () => {
-      root.render(createElement(AppearanceSettingsPanel, {
+    const renderAppearance = async (
+      generatedKnowledgeLanguage: "preserve_source" | "follow_query" | "app_locale"
+    ): Promise<void> => {
+      await act(async () => {
+        root.render(createElement(AppearanceSettingsPanel, {
         locale: "en",
         availableLocales: ["en", "fr", "de"],
         themePreference: "system",
+        generatedKnowledgeLanguage,
         themeBusy: false,
         themeError: null,
         onLocaleChange,
         onThemeChange,
-        onDevelopment,
+        onKnowledgeLanguageChange,
         t
-      }));
-      await settle(dom);
-    });
+        }));
+        await settle(dom);
+      });
+    };
+    await renderAppearance("preserve_source");
 
     const container = dom.window.document.querySelector("#root")!;
     expect(container.querySelector("h1")?.textContent).toBe("Appearance & Language");
@@ -4150,9 +4165,14 @@ describe("full UI Settings surface", () => {
     expect(themes.map((theme) => theme.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
 
     const appLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="App language"]'));
-    const knowledgeLanguage = requireElement(container.querySelector<HTMLButtonElement>('[data-appearance-control="knowledge-language"]'));
-    expect(knowledgeLanguage.textContent).toBe("In development");
-    expect(container.querySelector('select[aria-label="Knowledge language"]')).toBeNull();
+    const knowledgeLanguage = requireElement(container.querySelector<HTMLSelectElement>('select[aria-label="Knowledge language"]'));
+    expect(knowledgeLanguage.value).toBe("preserve_source");
+    expect(Array.from(knowledgeLanguage.options).map((option) => option.value)).toEqual([
+      "preserve_source",
+      "follow_query",
+      "app_locale"
+    ]);
+    expect(container.textContent).toContain("Source content remains unchanged.");
     expect(container.querySelector('select[aria-label="OCR language hint"]')).toBeNull();
     await act(async () => {
       selectValue(dom, appLanguage, "fr");
@@ -4169,14 +4189,45 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(appLanguage.disabled).toBe(false);
+    expect(onLocaleChange).toHaveBeenCalledWith("fr");
+    expect(ipcRead).toBe(false);
+
     await act(async () => {
-      knowledgeLanguage.click();
+      knowledgeLanguage.focus();
+      selectValue(dom, knowledgeLanguage, "follow_query");
+      selectValue(dom, knowledgeLanguage, "app_locale");
       await settle(dom);
     });
-    expect(onLocaleChange).toHaveBeenCalledWith("fr");
-    expect(onDevelopment).toHaveBeenCalledTimes(1);
-    expect(knowledgeLanguage.textContent).toBe("In development");
-    expect(ipcRead).toBe(false);
+    expect(onKnowledgeLanguageChange).toHaveBeenCalledOnce();
+    expect(onKnowledgeLanguageChange).toHaveBeenCalledWith("follow_query");
+    expect(knowledgeLanguage.disabled).toBe(true);
+    await act(async () => {
+      finishKnowledgeLanguageChange("stale");
+      await settle(dom);
+    });
+    await renderAppearance("app_locale");
+    expect(knowledgeLanguage.value).toBe("follow_query");
+    expect(container.textContent).toContain("Knowledge language changed elsewhere.");
+    expect(dom.window.document.activeElement).toBe(knowledgeLanguage);
+
+    await act(async () => {
+      selectValue(dom, knowledgeLanguage, "preserve_source");
+      await settle(dom);
+    });
+    await renderAppearance("app_locale");
+    expect(onKnowledgeLanguageChange).toHaveBeenCalledTimes(2);
+    expect(knowledgeLanguage.value).toBe("preserve_source");
+    expect(container.textContent).toContain("Knowledge language could not be changed.");
+    expect(dom.window.document.activeElement).toBe(knowledgeLanguage);
+
+    await act(async () => {
+      selectValue(dom, knowledgeLanguage, "app_locale");
+      await settle(dom);
+    });
+    expect(onKnowledgeLanguageChange).toHaveBeenCalledTimes(3);
+    expect(knowledgeLanguage.value).toBe("app_locale");
+    expect(container.querySelector("#appearance-knowledge-language-notice")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(knowledgeLanguage);
 
     await act(async () => {
       selectValue(dom, appLanguage, "de");
