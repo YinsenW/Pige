@@ -679,6 +679,7 @@ Commands:
 - `settings.getPage`
 - `settings.setLocale`
 - `settings.setTheme`
+- `settings.setStartupDestination`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
 - `models.addPresetProvider`
@@ -715,6 +716,7 @@ Queries:
 
 - `settings.registry`
 - `settings.appearance`
+- `settings.startupDestination`
 - `models.summary`
 - `memory.list`
 - `piPackages.summary`
@@ -786,6 +788,7 @@ Rules:
   written to the vault. `settings.appearanceChanged` emits the same strict summary after
   an applied theme-preference or effective system-theme change; preload validates the
   event and drops malformed payloads.
+- Startup IPC is path/vault-free CAS (`committed | stale | failed`) and applies after next-launch vault restoration.
 - Secret writes use dedicated secret handling and return secret references only.
 - Provider create is write-only, authorized by the disclosed Settings Connect/Save
   gesture, probed before commit, secret-store-only, and returns redacted summaries.

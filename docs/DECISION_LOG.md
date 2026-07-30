@@ -4008,6 +4008,27 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260730-Machine-Local-Startup-Destination
+
+Status: Accepted
+Date: 2026-07-30
+
+Decision:
+
+General owns local CAS startup Home (default) or Library, applied next launch after vault restore.
+
+Rationale:
+
+Preserve choice without vault authority.
+
+Consequences:
+
+- Stale returns current truth while UI retains draft; broader Settings acceptance stays partial.
+
+References:
+
+- `docs/SETTINGS_AND_PREFERENCES.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

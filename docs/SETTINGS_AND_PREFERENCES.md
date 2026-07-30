@@ -152,7 +152,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Window sizes and layout mode | General | `machine_local` | Window Service | OS app data | No | `none` | Next/open window or immediate resize |
 | Always-on-top preference | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
 | Sidebar visibility | General/Home | `machine_local` | Window Service | OS app data | No | `none` | Immediate |
-| Startup behavior | General | `machine_local` | Window Service, Vault Runtime Service | OS app data | No | `none` | Next launch |
+| Startup destination (`home` or `library`) | General | `machine_local` | Settings Service, Vault Runtime Service, Renderer | OS app data | No | `none` | Next launch, after active-vault restoration |
 | Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `permission_and_confirmation` | Safe user switch or restore-owned exact binding CAS after destination commit |
 | Recent vault list | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `none` | Immediate |
 | First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
