@@ -15,6 +15,8 @@ import {
   type RestoreCoreApplyInput,
   type RestoreCorePreviewResult
 } from "../../apps/desktop/src/main/services/backup-service";
+import { createMemoryEventId, createMemoryId } from "../../apps/desktop/src/main/services/agent-memory-lifecycle";
+import { AgentMemoryService } from "../../apps/desktop/src/main/services/agent-memory-service";
 import {
   PIGE_DURABLE_ROOTS,
   PIGE_REBUILDABLE_ROOTS,
@@ -80,12 +82,113 @@ const DURABLE_FIXTURES: Readonly<Record<DurableRoot, FixtureFile>> = {
     canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-operation-body-canary" })}\n`
   },
   ".pige/memory": {
-    path: ".pige/memory/memory.json",
-    canary: `${JSON.stringify({ schemaVersion: 1, canary: "durable-memory-body-canary" })}\n`
+    path: ".pige/memory/registry.json",
+    canary: serializeMemoryRegistryFixture()
   },
   ".pige/skills": { path: ".pige/skills/skill.md", canary: "durable-skill-body-canary" },
   ".pige/trash": { path: ".pige/trash/deleted.md", canary: "durable-trash-body-canary" }
 };
+
+function serializeMemoryRegistryFixture(): string {
+  const occurredAt = "2026-07-14T00:00:00.000Z";
+  const userEventId = "evt_20260714_backupmemory01";
+  const eventId = createMemoryEventId(userEventId);
+  const shared = {
+    title: "Durable memory canary",
+    body: "Keep the durable memory backup canary.",
+    conversationId: "conv_20260714_backupmemory01",
+    userEventId,
+    parentJobId: "job_20260714_backupmemory01",
+    language: { domain: "memory", language: "unknown", basis: "legacy_missing" }
+  } as const;
+  return `${JSON.stringify({
+    schemaVersion: 1,
+    revision: 1,
+    events: [{ id: eventId, kind: "explicit_remember", ...shared, occurredAt }],
+    records: [{
+      id: createMemoryId(userEventId),
+      kind: "preference",
+      title: shared.title,
+      body: shared.body,
+      status: "active",
+      provenance: { kind: "explicit_user_request", occurredAt },
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+      eventId,
+      conversationId: shared.conversationId,
+      userEventId,
+      parentJobId: shared.parentJobId,
+      language: shared.language
+    }]
+  })}\n`;
+}
+
+function advancingMemoryClock(): () => Date {
+  let tick = 0;
+  return () => new Date(Date.parse("2026-07-14T08:00:00.000Z") + tick++ * 1_000);
+}
+
+function rememberBackupMemory(
+  service: AgentMemoryService,
+  vaultPath: string,
+  activeVaultId: string,
+  suffix: string
+) {
+  return service.rememberPreference({
+    vaultPath,
+    activeVaultId,
+    title: `Backup preference ${suffix}`,
+    body: `Keep the bounded backup preference ${suffix}.`,
+    sourceConversationId: `conv_20260714_backup${suffix}01`,
+    sourceEventId: `evt_20260714_backup${suffix}0001`,
+    parentJobId: `job_20260714_backup${suffix}0001`
+  });
+}
+
+function writeMemoryRegistry(vaultPath: string, count: number): void {
+  const events = [];
+  const records = [];
+  for (let index = 0; index < count; index += 1) {
+    const suffix = String(index).padStart(8, "0");
+    const occurredAt = new Date(Date.parse("2026-07-14T00:00:00.000Z") + index).toISOString();
+    const userEventId = `evt_20260714_capacity${suffix}`;
+    const eventId = createMemoryEventId(userEventId);
+    const title = `Capacity preference ${index}`;
+    const body = `Remember bounded value ${index}.`;
+    const conversationId = `conv_20260714_capacity${suffix}`;
+    const parentJobId = `job_20260714_capacity${suffix}`;
+    const language = { domain: "memory", language: "unknown", basis: "legacy_missing" } as const;
+    events.push({
+      id: eventId,
+      kind: "explicit_remember",
+      title,
+      body,
+      conversationId,
+      userEventId,
+      parentJobId,
+      language,
+      occurredAt
+    });
+    records.push({
+      id: createMemoryId(userEventId),
+      kind: "preference",
+      title,
+      body,
+      status: "active",
+      provenance: { kind: "explicit_user_request", occurredAt },
+      createdAt: occurredAt,
+      updatedAt: occurredAt,
+      eventId,
+      conversationId,
+      userEventId,
+      parentJobId,
+      language
+    });
+  }
+  const registryPath = path.join(vaultPath, ".pige/memory/registry.json");
+  fs.mkdirSync(path.dirname(registryPath), { recursive: true });
+  fs.writeFileSync(registryPath, `${JSON.stringify({ schemaVersion: 1, revision: count, events, records })}\n`);
+}
 
 function makeVault(): { root: string; vaultPath: string } {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pige-backup-test-")));
@@ -179,6 +282,154 @@ describe("backup restore service", () => {
       restored_from_backup_id: preview.backupId
     });
   });
+
+  it("round-trips exact vault memory lifecycle state and recalls only restored active records", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "memory-lifecycle.pige-backup.zip");
+    const restoreParent = path.join(root, "memory-restore-targets");
+    const vaultId = String(readVaultManifestFixture(vaultPath).vault_id);
+    const memory = new AgentMemoryService({ now: advancingMemoryClock() });
+    const first = rememberBackupMemory(memory, vaultPath, vaultId, "first");
+    const second = rememberBackupMemory(memory, vaultPath, vaultId, "second");
+    const third = rememberBackupMemory(memory, vaultPath, vaultId, "third");
+    expect(memory.edit(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_backupedit000001",
+      activeVaultId: vaultId,
+      memoryId: first.id,
+      expectedRevision: 3,
+      title: "Edited first preference",
+      body: "Keep the exact edited preference after restore."
+    }).status).toBe("committed");
+    expect(memory.disable(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_backupdisable001",
+      activeVaultId: vaultId,
+      memoryId: second.id,
+      expectedRevision: 4
+    }).status).toBe("committed");
+    expect(memory.delete(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_backupdelete0001",
+      activeVaultId: vaultId,
+      memoryId: third.id,
+      expectedRevision: 5
+    }).status).toBe("committed");
+    const before = memory.list(vaultPath, vaultId);
+    fs.mkdirSync(path.join(vaultPath, ".pige/indexes/memory"), { recursive: true });
+    fs.writeFileSync(path.join(vaultPath, ".pige/indexes/memory/cache.bin"), "rebuildable-memory-cache");
+    fs.mkdirSync(path.join(root, "app-data"), { recursive: true });
+    fs.writeFileSync(path.join(root, "app-data", "global-memory-secret.json"), "machine-local-secret");
+
+    const created = await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+    expect(created.manifest).toMatchObject({ memoryCount: 2, includes: { vaultMemory: true } });
+    expect(JSON.stringify(created.manifest)).not.toContain("Edited first preference");
+    expect(JSON.stringify(archive.manifest)).not.toContain("Edited first preference");
+    expect(archive.manifest.memoryCount).toBe(2);
+    expect(archive.manifest.memoryIntegrity).toMatchObject({
+      sourceVaultId: vaultId,
+      registryRevision: 6,
+      eventCount: 2,
+      recordCount: 2,
+      lifecycleReceiptCount: 2,
+      restoreIntentCount: 0,
+      operationCount: 2
+    });
+    expect([...archive.entries.keys()]).toEqual(expect.arrayContaining([
+      "vault/.pige/memory/registry.json",
+      "vault/.pige/memory/edits/memory_request_backupedit000001.json",
+      "vault/.pige/trash/memory/memory_request_backupdelete0001.json"
+    ]));
+    expect([...archive.entries.keys()].some((entry) => entry.includes("indexes/memory"))).toBe(false);
+    expect(Buffer.concat([...archive.entries.values()]).toString("utf8")).not.toContain("machine-local-secret");
+
+    const preview = await new BackupRestoreService().inspectRestoreArchive(backupPath);
+    const restored = await applyTestRestore(new BackupRestoreService(), backupPath, restoreParent, preview);
+    expect(fs.readFileSync(path.join(restored.restoredVaultPath, ".pige/memory/registry.json"), "utf8"))
+      .toBe(fs.readFileSync(path.join(vaultPath, ".pige/memory/registry.json"), "utf8"));
+    const restarted = new AgentMemoryService({ activeVaultPath: () => restored.restoredVaultPath });
+    const after = restarted.list(restored.restoredVaultPath, restored.resultVaultId);
+    expect(after.revision).toBe(before.revision);
+    expect(after.records).toEqual(before.records);
+    expect(after.records.map((record) => record.id)).toEqual([second.id, first.id]);
+    expect(after.records.find((record) => record.id === second.id)?.status).toBe("disabled");
+    expect(restarted.recall(restored.restoredVaultPath, 8).map((record) => record.id)).toEqual([first.id]);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    await expect(new BackupRestoreService().createBackup(
+      restored.restoredVaultPath,
+      path.join(root, "memory-clone-second-backup.zip"),
+      "0.1.0-test"
+    )).resolves.toMatchObject({ status: "created", manifest: { memoryCount: 2 } });
+  });
+
+  it("fails closed on missing memory provenance and semantically tampered restore state", async () => {
+    const missing = makeVault();
+    const missingVaultId = String(readVaultManifestFixture(missing.vaultPath).vault_id);
+    const memory = new AgentMemoryService({ now: advancingMemoryClock() });
+    const record = rememberBackupMemory(memory, missing.vaultPath, missingVaultId, "missing");
+    memory.edit(missing.vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_missingreceipt01",
+      activeVaultId: missingVaultId,
+      memoryId: record.id,
+      expectedRevision: 1,
+      title: "Edited missing receipt",
+      body: "This edit must retain its receipt."
+    });
+    fs.unlinkSync(path.join(missing.vaultPath, ".pige/memory/edits/memory_request_missingreceipt01.json"));
+    await expect(new BackupRestoreService().createBackup(
+      missing.vaultPath,
+      path.join(missing.root, "missing-memory.pige-backup.zip"),
+      "0.1.0-test"
+    )).rejects.toMatchObject({ code: "backup.memory_integrity_invalid" });
+
+    const tampered = makeVault();
+    const backupPath = path.join(tampered.root, "tampered-memory.pige-backup.zip");
+    const restoreParent = path.join(tampered.root, "tampered-targets");
+    writeVaultFixture(tampered.vaultPath);
+    await new BackupRestoreService().createBackup(tampered.vaultPath, backupPath, "0.1.0-test");
+    await rewriteBackupArchive(backupPath, (manifest, entries) => {
+      const entryName = "vault/.pige/memory/registry.json";
+      const registry = JSON.parse(entries.get(entryName)!.toString("utf8")) as { records: Array<{ status: string }> };
+      registry.records[0]!.status = "disabled";
+      const changed = Buffer.from(`${JSON.stringify(registry)}\n`, "utf8");
+      entries.set(entryName, changed);
+      return {
+        ...manifest,
+        totalBytes: manifest.totalBytes - requireManifestFile(manifest, ".pige/memory/registry.json").size + changed.length,
+        files: manifest.files.map((file) => file.path === ".pige/memory/registry.json"
+          ? { ...file, size: changed.length, checksum: checksumBuffer(changed) }
+          : file)
+      };
+    });
+    const preview = await new BackupRestoreService().inspectRestoreArchive(backupPath);
+    expect(preview.invalidFileCount).toBe(0);
+    await expect(applyTestRestore(new BackupRestoreService(), backupPath, restoreParent, preview))
+      .rejects.toMatchObject({ code: "restore.result_invalid" });
+    expect(fs.existsSync(path.join(restoreParent, "Backup Vault Restored"))).toBe(false);
+  });
+
+  it("backs up and restores the bounded 1,000-record memory registry", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "memory-capacity.pige-backup.zip");
+    const restoreParent = path.join(root, "memory-capacity-targets");
+    writeMemoryRegistry(vaultPath, 1_000);
+    await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+    expect(archive.manifest.memoryIntegrity).toMatchObject({ eventCount: 1_000, recordCount: 1_000 });
+    expect(archive.manifest.memoryCount).toBe(1_000);
+    const restored = await applyTestRestore(
+      new BackupRestoreService(),
+      backupPath,
+      restoreParent,
+      await new BackupRestoreService().inspectRestoreArchive(backupPath)
+    );
+    const restoredMemory = new AgentMemoryService();
+    expect(restoredMemory.list(restored.restoredVaultPath, restored.resultVaultId).records).toHaveLength(1_000);
+    expect(restoredMemory.recall(restored.restoredVaultPath, 8)).toHaveLength(8);
+  }, 15_000);
 
   it("applies replace_existing without changing the source vault identity", async () => {
     const { root, vaultPath } = makeVault();
@@ -1480,7 +1731,8 @@ describe("backup restore service", () => {
     expect(archive.manifest.noteCount).toBe(countManifestFiles(archive.manifest, "wiki/", ".md"));
     expect(archive.manifest.sourceCount).toBe(countManifestFiles(archive.manifest, "sources/", ".md"));
     expect(archive.manifest.conversationCount).toBe(countManifestFiles(archive.manifest, ".pige/conversations/"));
-    expect(archive.manifest.memoryCount).toBe(countManifestFiles(archive.manifest, ".pige/memory/"));
+    expect(archive.manifest.memoryCount).toBe(archive.manifest.memoryIntegrity?.recordCount);
+    expect(countManifestFiles(archive.manifest, ".pige/memory/")).toBeGreaterThanOrEqual(archive.manifest.memoryCount);
     expect(archive.manifest.includesSecrets).toBe(false);
     expect(archive.manifest.includes).toEqual({
       markdownKnowledge: true,

@@ -695,6 +695,9 @@ Visible backup options:
 Settings export/import behavior is governed by `docs/SETTINGS_AND_PREFERENCES.md`.
 
 The default should include Agent memory because it is part of the user's Pige experience.
+The backup manifest binds its registry revision/checksum and exact event, record, lifecycle
+receipt, restore-intent and Operation counts. Backup and restore reject missing provenance,
+semantic tampering or count drift; restored active/disabled/trashed state remains exact.
 
 Playbook/acceptance own current evidence and open work. Readable format-v1 remains legacy
 input but cannot invent domain compatibility. If `backupId` is absent, preview derives

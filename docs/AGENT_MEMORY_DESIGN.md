@@ -60,6 +60,9 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
 - Enable/delete/reset use revision CAS. Delete/reset retain exact L0/L1 privately, record
   `trash_memory`, and Undo writes `restore_memory` without losing later facts; removed atoms leave recall.
 - Export rechecks revision after Main's dialog and writes safe summaries; results are pathless.
+- Backup binds the exact registry revision/checksum, lifecycle receipts, restore intents and
+  linked Operations; restore revalidates those bindings before publication. Active records
+  remain recallable, disabled/trashed records stay excluded, and the bound is 1,000 records.
   Autonomous/global and semantic memory remain open.
 
 ## 5. v0.1 Scope
