@@ -3409,11 +3409,23 @@ describe("full UI Settings surface", () => {
   it("binds real redacted diagnostics and support preview on its own page", async () => {
     const dom = createDom();
     const refreshDiagnostics = vi.fn(async () => undefined);
-    const previewSupportBundle = vi.fn(async () => ({
-      previewId: "support_preview",
+    const workflow = {
+      apiVersion: 1 as const,
+      revision: 7,
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      activeVaultId: "vault_20260730_diagnostics",
+      localOnly: true as const,
+      ownedArtifactCount: 0
+    };
+    const previewSupportBundle = vi.fn(async (request: { apiVersion: 1; requestId: string }) => ({
+      ...request,
+      previewId: `supportpreview_${"b".repeat(48)}`,
       generatedAt: "2026-07-16T00:00:00.000Z",
       localOnly: true as const,
       estimatedBytes: 2048,
+      scopeContextId: workflow.scopeContextId,
+      expectedRevision: workflow.revision,
+      activeVaultId: workflow.activeVaultId,
       includedCategories: [{ id: "app_runtime", label: "/private/raw-label", included: true, reason: "private body" }],
       excludedCategories: [{ id: "content", label: "RAW CONTENT", included: false, reason: "excluded" }],
       privacyWarnings: [
@@ -3426,9 +3438,11 @@ describe("full UI Settings surface", () => {
       configurable: true,
       value: {
         diagnostics: {
+          workflowSummary: vi.fn(async () => workflow),
           previewSupportBundle,
           exportSupportBundle: vi.fn(),
-          cancelSupportBundleExport: vi.fn()
+          cancelSupportBundleExport: vi.fn(),
+          retrySupportBundleExport: vi.fn()
         }
       }
     });
@@ -3493,11 +3507,15 @@ describe("full UI Settings surface", () => {
       .mockResolvedValueOnce({
         apiVersion: 1,
         requestId: "diagclearreq_aaaaaaaaaaaaaaaa",
+        scopeContextId: `diagctx_${"a".repeat(48)}`,
+        expectedRevision: 2,
         status: "failed"
       })
       .mockResolvedValueOnce({
         apiVersion: 1,
         requestId: "diagclearreq_bbbbbbbbbbbbbbbb",
+        scopeContextId: `diagctx_${"a".repeat(48)}`,
+        expectedRevision: 2,
         status: "cleared",
         health: {
           status: "degraded",
@@ -3505,15 +3523,29 @@ describe("full UI Settings surface", () => {
           localOnly: true,
           recentErrorCount: 0,
           checks: []
-        }
+        },
+        workflow: {
+          apiVersion: 1,
+          revision: 3,
+          scopeContextId: `diagctx_${"a".repeat(48)}`,
+          activeVaultId: "vault_20260730_diagnostics",
+          localOnly: true,
+          ownedArtifactCount: 1
+        },
+        clearedArtifactCount: 2
       });
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
         diagnostics: {
+          workflowSummary: vi.fn(async () => ({
+            apiVersion: 1, revision: 2, scopeContextId: `diagctx_${"a".repeat(48)}`,
+            activeVaultId: "vault_20260730_diagnostics", localOnly: true, ownedArtifactCount: 3
+          })),
           previewSupportBundle: vi.fn(),
           exportSupportBundle: vi.fn(),
-          cancelSupportBundleExport: vi.fn()
+          cancelSupportBundleExport: vi.fn(),
+          retrySupportBundleExport: vi.fn()
         }
       }
     });

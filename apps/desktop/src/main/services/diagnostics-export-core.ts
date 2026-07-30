@@ -544,7 +544,8 @@ function isSupportBundlePreview(value: unknown): boolean {
   if (!isRecord(value) || !hasExactKeys(value, [
     "previewId", "generatedAt", "includedCategories", "excludedCategories", "privacyWarnings"
   ])) return false;
-  return typeof value.previewId === "string" && /^support_[0-9]{14}$/u.test(value.previewId) &&
+  return typeof value.previewId === "string" &&
+    /^(?:support_[0-9]{14}|supportpreview_[a-f0-9]{48})$/u.test(value.previewId) &&
     isIsoDate(value.generatedAt) &&
     matchesExactRecords(value.includedCategories, INCLUDED_CATEGORIES) &&
     matchesExactRecords(value.excludedCategories, EXCLUDED_CATEGORIES) &&

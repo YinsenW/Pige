@@ -264,7 +264,9 @@ describe("schemas", () => {
   it("keeps machine-local diagnostics clear pathless, bounded, and all-or-current", () => {
     const request = {
       apiVersion: 1,
-      requestId: "diagclearreq_abcdefghijklmnop"
+      requestId: "diagclearreq_abcdefghijklmnop",
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      expectedRevision: 4
     } as const;
     const health = {
       status: "ok",
@@ -279,13 +281,23 @@ describe("schemas", () => {
     } as const;
 
     expect(DiagnosticsClearLocalRequestSchema.parse(request)).toEqual(request);
-    for (const privateField of ["activeVaultId", "path", "body", "expectedRevision"] as const) {
+    for (const privateField of ["activeVaultId", "path", "body", "outputPath"] as const) {
       expect(() => DiagnosticsClearLocalRequestSchema.parse({ ...request, [privateField]: "private" }))
         .toThrow();
     }
-    for (const status of ["cleared", "busy"] as const) {
-      expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status, health }))
-        .toEqual({ ...request, status, health });
+    const workflow = {
+      apiVersion: 1 as const,
+      revision: 5,
+      scopeContextId: request.scopeContextId,
+      activeVaultId: "vault_20260729_diagnostics",
+      localOnly: true as const,
+      ownedArtifactCount: 0
+    };
+    expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status: "cleared", health, workflow, clearedArtifactCount: 3 }))
+      .toEqual({ ...request, status: "cleared", health, workflow, clearedArtifactCount: 3 });
+    for (const status of ["busy", "stale"] as const) {
+      expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status, health, workflow }))
+        .toEqual({ ...request, status, health, workflow });
     }
     expect(DiagnosticsClearLocalResultSchema.parse({ ...request, status: "failed" }))
       .toEqual({ ...request, status: "failed" });

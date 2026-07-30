@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { DiagnosticsHealth, SupportBundleExportResult, SupportBundlePreview } from "@pige/contracts";
+import type { DiagnosticsHealth, SupportBundlePreview } from "@pige/contracts";
 import {
   redactDiagnosticText,
   redactPaths
@@ -207,9 +207,18 @@ export class DiagnosticsService {
     };
   }
 
-  previewSupportBundle(): SupportBundlePreview {
+  previewSupportBundle(context?: Pick<SupportBundlePreview,
+    "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
+  >): SupportBundlePreview {
     const recentEvents = this.#readRecentEvents();
-    const preview = buildSupportBundlePreview(estimateBundleBytes(recentEvents), this.#nowIso());
+    const generatedAt = this.#nowIso();
+    const preview = buildSupportBundlePreview(estimateBundleBytes(recentEvents), generatedAt, context ?? {
+      apiVersion: 1,
+      requestId: `diagpreviewreq_${randomUUID().replaceAll("-", "")}`,
+      scopeContextId: `diagctx_${createHash("sha256").update("legacy-diagnostics-preview").digest("hex").slice(0, 48)}`,
+      expectedRevision: 0,
+      activeVaultId: null
+    });
     this.recordEvent({
       level: "info",
       code: "diagnostics.previewSupportBundle",
@@ -222,8 +231,21 @@ export class DiagnosticsService {
     outputPath: string,
     preview: SupportBundlePreview,
     options: DiagnosticsExportWriteOptions = {}
-  ): Promise<SupportBundleExportResult> {
+  ): Promise<{ readonly status: "exported"; readonly exportedAt: string; readonly outputPath: string; readonly bytesWritten: number }> {
     const safeOutputPath = path.resolve(outputPath);
+    const redacted = this.createSupportBundlePayload(preview);
+    const { bytesWritten } = await this.writePreparedSupportBundle(safeOutputPath, redacted, options);
+    const exportedAt = JSON.parse(redacted) as { exportedAt: string };
+    this.recordEvent({
+      level: "info",
+      code: "diagnostics.exportSupportBundle",
+      message: "Support bundle exported.",
+      redactedDetails: { bytesWritten }
+    });
+    return { status: "exported", exportedAt: exportedAt.exportedAt, outputPath: safeOutputPath, bytesWritten };
+  }
+
+  createSupportBundlePayload(preview: SupportBundlePreview): string {
     const bundle = {
       schemaVersion: 1,
       exportedAt: this.#nowIso(),
@@ -244,23 +266,15 @@ export class DiagnosticsService {
       diagnosticsHealth: this.health(),
       recentEvents: this.#readRecentEvents()
     };
-    const redacted = `${JSON.stringify(redactDiagnosticValue(bundle), null, 2)}\n`;
-    const { bytesWritten } = await this.#exporter.write({
-      outputPath: safeOutputPath,
-      content: redacted
-    }, options);
-    this.recordEvent({
-      level: "info",
-      code: "diagnostics.exportSupportBundle",
-      message: "Support bundle exported.",
-      redactedDetails: { bytesWritten }
-    });
-    return {
-      status: "exported",
-      exportedAt: bundle.exportedAt,
-      outputPath: safeOutputPath,
-      bytesWritten
-    };
+    return `${JSON.stringify(redactDiagnosticValue(bundle), null, 2)}\n`;
+  }
+
+  async writePreparedSupportBundle(
+    outputPath: string,
+    content: string,
+    options: DiagnosticsExportWriteOptions = {}
+  ): Promise<{ readonly bytesWritten: number }> {
+    return this.#exporter.write({ outputPath: path.resolve(outputPath), content }, options);
   }
 
   recordEvent(event: DiagnosticEvent): void {
@@ -279,6 +293,28 @@ export class DiagnosticsService {
     this.#nextExpiryAtMs = undefined;
     this.#storeBytes = 0;
     return this.health();
+  }
+
+  ownedEventArtifactCount(): number {
+    return this.#listEventFilesNewestFirst().length;
+  }
+
+  trashOwnedEvents(clearRoot: string): number {
+    const target = path.join(clearRoot, "events");
+    fs.mkdirSync(target, { recursive: true, mode: 0o700 });
+    let moved = 0;
+    for (const filePath of this.#listEventFilesNewestFirst()) {
+      const destination = path.join(target, path.basename(filePath));
+      try { fs.renameSync(filePath, destination); moved += 1; }
+      catch (caught) {
+        if ((caught as NodeJS.ErrnoException).code === "ENOENT" && fs.existsSync(destination)) continue;
+        throw caught;
+      }
+    }
+    this.#currentSegmentBytes = 0;
+    this.#nextExpiryAtMs = undefined;
+    this.#storeBytes = 0;
+    return moved;
   }
 
   #readRecentEvents(): unknown[] {
@@ -469,9 +505,16 @@ export class DiagnosticsService {
   }
 }
 
-function buildSupportBundlePreview(estimatedBytes: number, generatedAt: string): SupportBundlePreview {
+function buildSupportBundlePreview(
+  estimatedBytes: number,
+  generatedAt: string,
+  context: Pick<SupportBundlePreview,
+    "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
+  >
+): SupportBundlePreview {
   return {
-    previewId: `support_${generatedAt.replace(/[^0-9]/g, "").slice(0, 14)}`,
+    ...context,
+    previewId: `supportpreview_${createHash("sha256").update(`${context.requestId}\0${generatedAt}\0${randomUUID()}`).digest("hex").slice(0, 48)}`,
     generatedAt,
     localOnly: true,
     estimatedBytes,
@@ -524,7 +567,7 @@ function buildSupportBundlePreview(estimatedBytes: number, generatedAt: string):
 }
 
 function estimateBundleBytes(recentEvents: unknown[]): number {
-  return Buffer.byteLength(JSON.stringify({ recentEvents }, null, 2)) + 4096;
+  return Math.min(2 * 1024 * 1024, Buffer.byteLength(JSON.stringify({ recentEvents }, null, 2)) + 4096);
 }
 
 function buildPersistedEvent(

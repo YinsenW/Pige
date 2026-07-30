@@ -241,6 +241,10 @@ describe("desktop shell build contract", () => {
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const diagnosticsIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-diagnostics-ipc.ts"),
+      "utf8"
+    );
     const diagnosticsApi = contractsSource.slice(
       contractsSource.indexOf("readonly diagnostics: {"),
       contractsSource.indexOf("readonly models: {")
@@ -258,18 +262,13 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("DiagnosticsClearLocalRequestSchema.parse(request)");
     expect(preloadSource).toContain("DiagnosticsClearLocalResultSchema.parse(");
     expect(preloadSource).toContain("DIAGNOSTICS_CLEAR_LOCAL_CHANNEL");
-    const handler = mainSource.slice(
-      mainSource.indexOf("ipcMain.handle(\n  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL"),
-      mainSource.indexOf("function isDiagnosticsExportRequestId")
-    );
-    expect(handler).toContain("DiagnosticsClearLocalRequestSchema.parse(request)");
-    expect(handler).toContain("diagnosticsClearInFlight || activeSupportBundleExports.size > 0");
-    expect(handler).toContain("getDiagnosticsService().clearOwnedEvents({");
-    expect(handler).toContain("latestSupportBundlePreview = undefined");
-    expect(handler.indexOf("DiagnosticsClearLocalRequestSchema.parse(request)"))
-      .toBeLessThan(handler.indexOf("clearOwnedEvents"));
-    expect(handler).not.toMatch(/activeVaultId|sourceId|rootId|outputPath|filePath/);
-    for (const privateField of ["activeVaultId", "path", "body", "expectedRevision"]) {
+    expect(mainSource).toContain("registerDiagnosticsIpc({");
+    expect(mainSource).toContain("clear: (request) => getDiagnosticsLifecycleService().clear(request)");
+    expect(diagnosticsIpcSource).toContain("DiagnosticsClearLocalRequestSchema.parse(input)");
+    expect(diagnosticsIpcSource).toContain("options.isTrustedSender(event.sender)");
+    expect(diagnosticsIpcSource).toContain("await options.clear(request)");
+    expect(diagnosticsIpcSource).not.toMatch(/sourceId|rootId|filePath/);
+    for (const privateField of ["path", "body", "outputPath"]) {
       expect(diagnosticsApi).not.toContain(privateField);
     }
   });
@@ -1000,23 +999,25 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
-    const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
-    const handler = mainSource.slice(
-      mainSource.indexOf('ipcMain.handle("diagnostics.exportSupportBundle"'),
-      mainSource.indexOf('ipcMain.handle("models.summary"')
+    const rendererSource = [
+      "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/components/DiagnosticsWorkflowCards.tsx"
+    ].map((file) => fs.readFileSync(path.resolve(file), "utf8")).join("\n");
+    const diagnosticsIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-diagnostics-ipc.ts"),
+      "utf8"
     );
 
-    expect(contractsSource).toContain("readonly exportRequestId: string;");
+    expect(contractsSource).toContain("request: DiagnosticsSupportBundleMutationRequest");
     expect(contractsSource).toContain("cancelSupportBundleExport");
-    expect(preloadSource).toContain('ipcRenderer.invoke("diagnostics.cancelSupportBundleExport", request)');
-    expect(handler).toContain("active.senderId !== event.sender.id");
-    expect(handler).toContain("active.senderId === event.sender.id");
-    expect(handler).toContain("active.controller.abort()");
-    expect(handler).toContain('event.sender.once("destroyed", abortOnSenderDestroyed)');
-    expect(handler).toContain("{ signal: controller.signal }");
+    expect(preloadSource).toContain("DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL");
+    expect(diagnosticsIpcSource).toContain('mutation(options, event.sender, input, "cancel")');
+    expect(diagnosticsIpcSource).toContain("DiagnosticsSupportBundleMutationRequestSchema.parse(input)");
+    expect(diagnosticsIpcSource).toContain("assertMutationIdentity(request, result)");
+    expect(mainSource).toContain("cancel: (request) => getDiagnosticsLifecycleService().cancel(request)");
     expect(rendererSource).toContain('props.t("maintenance.cancelSupportExport")');
-    expect(rendererSource).toContain("supportBundleCancelRequestRef");
-    expect(rendererSource).toContain("void window.pige.diagnostics.cancelSupportBundleExport");
+    expect(rendererSource).toContain("workflow.job.jobId");
+    expect(rendererSource).toContain("window.pige.diagnostics.cancelSupportBundleExport({");
   });
 
   it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
