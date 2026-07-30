@@ -8,6 +8,7 @@ const noteReaderSource = fs.readFileSync(path.join(rendererRoot, "components/Not
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
 const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
+const readerFullscreenToggleSource = fs.readFileSync(path.join(rendererRoot, "components/ReaderFullscreenToggle.tsx"), "utf8");
 const windowControlsSource = fs.readFileSync(path.join(rendererRoot, "components/useWindowControls.ts"), "utf8");
 const enMessages = JSON.parse(
   fs.readFileSync(path.join(rendererRoot, "locales/en/messages.json"), "utf8")
@@ -100,8 +101,14 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('surface: "home"');
     expect(appSource).toContain('surface: "reader"');
     expect(appSource).toContain("<WindowModeToggle");
+    expect(appSource).toContain("<ReaderFullscreenToggle");
+    expect(appSource).toContain('visible={Boolean(selectedNote) || Boolean(windowState?.isFullScreen)}');
     expect(windowControlsSource).toContain("window.pige.window.setMode({");
+    expect(windowControlsSource).toContain('state?.isFullScreen ? "expanded" : "fullscreen"');
     expect(windowModeToggleSource).not.toContain("window.pige.window.setMode(");
+    expect(readerFullscreenToggleSource).not.toContain("window.pige.window.setMode(");
+    expect(readerFullscreenToggleSource).toContain("aria-pressed={fullScreen}");
+    expect(enMessages["topbar.exitFullscreen"]).toBe("Exit full screen");
     expect(windowControlsSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     expect(windowModeToggleSource).not.toMatch(/\b(width|height|workArea|presentation)\s*:/);
     expect(appSource).not.toContain("window.pige.window.setSidebarOpen(");

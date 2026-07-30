@@ -2010,6 +2010,44 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("enters Reader full screen and follows native exit without losing note context", async () => {
+    const dom = createDom(960);
+    const harness = createHarness(undefined);
+    harness.windowMode = "expanded";
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 960;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    expect(buttonsByAriaLabel(container, "Full screen")).toHaveLength(0);
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+    const enterButton = buttonsByAriaLabel(container, "Full screen")[0]!;
+    expect(enterButton.getAttribute("aria-pressed")).toBe("false");
+
+    await clickElement(dom, enterButton);
+    await waitFor(dom, () => container.querySelector(".shell.mode-fullscreen") !== null);
+    expect(harness.windowModeRequests).toEqual(["fullscreen"]);
+    const exitButton = buttonsByAriaLabel(container, "Exit full screen")[0]!;
+    expect(exitButton.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    harness.windowMode = "expanded";
+    harness.windowFullScreen = false;
+    harness.windowLayoutRevision += 1;
+    const nativeExit = windowLayoutState(harness);
+    await act(async () => {
+      for (const listener of harness.windowLayoutListeners) listener(nativeExit);
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.querySelector(".shell.mode-expanded") !== null);
+    expect(buttonsByAriaLabel(container, "Full screen")[0]?.getAttribute("aria-pressed")).toBe("false");
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("uses the wide layout on first paint while window truth is still loading", async () => {
     const dom = createDom(960);
     const harness = createHarness(undefined);
@@ -6103,8 +6141,9 @@ interface ConversationHarness {
     request: CurrentNoteReplaceProposalDecisionRequest
   ) => Promise<CurrentNoteReplaceProposalDecisionResult>;
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
-  windowMode: "compact" | "expanded";
-  readonly windowModeRequests: ("compact" | "expanded")[];
+  windowMode: "compact" | "expanded" | "fullscreen";
+  windowFullScreen: boolean;
+  readonly windowModeRequests: ("compact" | "expanded" | "fullscreen")[];
   sidebarOpen: boolean;
   noteAgentOpen: boolean;
   windowLayoutRevision: number;
@@ -6237,6 +6276,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     decideCurrentNoteReplaceProposal: async () => ({ apiVersion: 1, status: "not_found" }),
     locale: "en",
     windowMode: "compact",
+    windowFullScreen: false,
     windowModeRequests: [],
     sidebarOpen: false,
     noteAgentOpen: false,
@@ -6546,9 +6586,10 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.windowLayoutListeners.add(listener);
         return () => harness.windowLayoutListeners.delete(listener);
       },
-      setMode: async ({ mode }: { readonly mode: "compact" | "expanded" }) => {
+      setMode: async ({ mode }: { readonly mode: "compact" | "expanded" | "fullscreen" }) => {
         harness.windowModeRequests.push(mode);
         harness.windowMode = mode;
+        harness.windowFullScreen = mode === "fullscreen";
         return windowState(harness);
       },
       setSidebarOpen: async ({ sidebarOpen }: { readonly sidebarOpen: boolean }) => {
@@ -7006,7 +7047,7 @@ function windowState(harness: ConversationHarness) {
     mode: harness.windowMode,
     sidebarOpen: harness.sidebarOpen,
     alwaysOnTop: false,
-    isFullScreen: false,
+    isFullScreen: harness.windowFullScreen,
     size: { width: harness.windowMode === "compact" ? 420 : 1200, height: 800 }
   };
 }
@@ -7072,7 +7113,7 @@ function windowLayoutState(harness: ConversationHarness): WindowLayoutState {
     noteAgentPresentation,
     autoExpanded: harness.windowLayoutBaseWidth !== null && width > harness.windowLayoutBaseWidth,
     isMaximized: false,
-    isFullScreen: false
+    isFullScreen: harness.windowFullScreen
   };
 }
 

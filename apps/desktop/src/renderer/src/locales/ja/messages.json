@@ -1935,6 +1935,7 @@
   "topbar.expanded": "ワイド表示に切り替え",
   "topbar.expandSidebar": "サイドバーを開く",
   "topbar.fullscreen": "フルスクリーン",
+  "topbar.exitFullscreen": "フルスクリーンを終了",
   "topbar.pin": "常に手前",
   "topbar.pinShort": "固定",
   "vaultSettings.createNew": "新しい Vault を作成",

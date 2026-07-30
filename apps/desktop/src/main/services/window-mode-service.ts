@@ -100,11 +100,14 @@ export class WindowModeService {
     source: "native" | "display" = "native"
   ): WindowLayoutState | undefined {
     const session = this.#getSession(nativeWindow);
+    const wasFullScreen = session.state.isFullScreen;
+    const isFullScreen = nativeWindow.isFullScreen();
+    this.#rememberNativeFullScreenPreference(wasFullScreen, isFullScreen);
     const bounds = nativeWindow.getBounds();
     if (session.lastAppliedBounds) {
       const programmaticBoundsSettled = sameRectangle(bounds, session.lastAppliedBounds);
       delete session.lastAppliedBounds;
-      if (programmaticBoundsSettled) return undefined;
+      if (programmaticBoundsSettled && wasFullScreen === isFullScreen) return undefined;
     }
 
     const returnedToNormalFrame =
@@ -372,6 +375,18 @@ export class WindowModeService {
     if (preferences.mode === "compact") return { ...preferences, compactSize: size };
     if (preferences.mode === "expanded") return { ...preferences, expandedSize: size };
     return preferences;
+  }
+
+  #rememberNativeFullScreenPreference(wasFullScreen: boolean, isFullScreen: boolean): void {
+    if (wasFullScreen === isFullScreen) return;
+    const preferences = this.#getPreferences();
+    const mode = isFullScreen
+      ? "fullscreen"
+      : preferences.mode === "fullscreen"
+        ? "expanded"
+        : preferences.mode;
+    if (preferences.mode === mode) return;
+    this.#settings.setWindowPreferences({ ...preferences, mode });
   }
 
   #getCurrentSize(nativeWindow: NativeWindowController): WindowSize {

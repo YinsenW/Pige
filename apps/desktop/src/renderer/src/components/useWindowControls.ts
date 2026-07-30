@@ -4,6 +4,7 @@ import type { WindowState } from "@pige/contracts";
 interface WindowControls {
   readonly busy: boolean;
   readonly toggleAlwaysOnTop: () => Promise<void>;
+  readonly toggleFullScreen: () => Promise<void>;
   readonly toggleWindowMode: () => Promise<void>;
 }
 
@@ -30,6 +31,9 @@ export function useWindowControls(
   return {
     busy,
     toggleAlwaysOnTop: () => run(() => window.pige.window.setAlwaysOnTop({ alwaysOnTop: !state?.alwaysOnTop })),
+    toggleFullScreen: () => run(() => window.pige.window.setMode({
+      mode: state?.isFullScreen ? "expanded" : "fullscreen"
+    })),
     toggleWindowMode: () => run(() => window.pige.window.setMode({
       mode: state?.mode === "compact" ? "expanded" : "compact"
     }))
