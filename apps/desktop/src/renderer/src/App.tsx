@@ -296,6 +296,12 @@ type HomeReaderSelectionContext = {
   readonly pageId: string;
   readonly title: string;
 };
+type HomeReaderDurableRefresh = {
+  readonly vaultId: string;
+  readonly pageId: string;
+  readonly jobId: string;
+  readonly sequence: number;
+};
 function readerSelectionProposalOwnerMatches(
   vaultId: string,
   pageId: string,
@@ -374,6 +380,7 @@ export function App(): React.JSX.Element {
   const [readerSelectionProposal, setReaderSelectionProposal] = useState<ActiveReaderSelectionProposal | null>(null);
   const [homeReaderSelectionContext, setHomeReaderSelectionContext] = useState<HomeReaderSelectionContext | null>(null);
   const [homeReaderSelectionAgentActive, setHomeReaderSelectionAgentActive] = useState(false);
+  const [homeReaderDurableRefresh, setHomeReaderDurableRefresh] = useState<HomeReaderDurableRefresh | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingRecentVaultId, setOpeningRecentVaultId] = useState<string | null>(null);
@@ -534,7 +541,9 @@ export function App(): React.JSX.Element {
   }, [readerSelectionProposal?.preview.proposalId, readerSelectionProposal?.preview.state]);
   const sidebarOpen = windowLayoutState?.sidebarOpen ?? windowState?.sidebarOpen ?? false;
   const homeSurface = view === "home" && !selectedNote && !selectedCollection;
-  const windowLayoutSurface = homeSurface ? "home" : "reader";
+  const homeReaderAgentOwnerActive = homeReaderSelectionAgentActive &&
+    homeReaderSelectionContext?.vaultId === onboarding?.activeVault?.vaultId;
+  const windowLayoutSurface = homeSurface && !homeReaderAgentOwnerActive ? "home" : "reader";
   const layoutSurfaceCurrent = windowLayoutState?.surface === windowLayoutSurface;
   const sidebarOverlayLayout = layoutSurfaceCurrent && windowLayoutState?.sidebarOpen
     ? windowLayoutState.sidebarPresentation === "overlay"
@@ -1226,14 +1235,20 @@ export function App(): React.JSX.Element {
     readonly jobId: string;
   }): Promise<void> => {
     const selected = selectedNoteRef.current;
-    if (
-      activeVaultIdRef.current !== identity.vaultId ||
-      selectedNoteVaultIdRef.current !== identity.vaultId ||
-      selected?.summary.pageId !== identity.pageId ||
-      !identity.jobId
-    ) return;
+    if (activeVaultIdRef.current !== identity.vaultId || !identity.jobId) return;
+    const selectedOwner = selectedNoteVaultIdRef.current === identity.vaultId &&
+      selected?.summary.pageId === identity.pageId;
+    const homeOwner = homeReaderSelectionContextRef.current?.vaultId === identity.vaultId &&
+      homeReaderSelectionContextRef.current.pageId === identity.pageId;
+    if (!selectedOwner && !homeOwner) return;
+    if (homeOwner) {
+      setHomeReaderDurableRefresh((current) => ({
+        ...identity,
+        sequence: (current?.sequence ?? 0) + 1
+      }));
+    }
     await Promise.allSettled([
-      openNoteTarget(identity.pageId, false),
+      ...(selectedOwner ? [openNoteTarget(identity.pageId, false)] : []),
       refreshVaultState()
     ]);
   };
@@ -1970,7 +1985,8 @@ export function App(): React.JSX.Element {
 
   useEffect(() => {
     if (!windowLayoutState) return;
-    const desiredNoteAgentOpen = windowLayoutSurface === "reader" && Boolean(selectedNote) && noteAgentOpen;
+    const desiredNoteAgentOpen = windowLayoutSurface === "reader" &&
+      Boolean(selectedNote || homeReaderAgentOwnerActive) && noteAgentOpen;
     if (
       windowLayoutState.surface === windowLayoutSurface &&
       windowLayoutState.sidebarOpen === sidebarOpen &&
@@ -1982,7 +1998,14 @@ export function App(): React.JSX.Element {
       sidebarOpen,
       noteAgentOpen: desiredNoteAgentOpen
     });
-  }, [windowLayoutState?.revision, windowLayoutSurface, sidebarOpen, selectedNote?.summary.pageId, noteAgentOpen]);
+  }, [
+    windowLayoutState?.revision,
+    windowLayoutSurface,
+    sidebarOpen,
+    selectedNote?.summary.pageId,
+    homeReaderAgentOwnerActive,
+    noteAgentOpen
+  ]);
 
   useEffect(() => {
     if (!sidebarModal) return;
@@ -2623,8 +2646,12 @@ export function App(): React.JSX.Element {
             onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
             onReaderSelectionContextChange={(context) => {
               setHomeReaderSelectionContext(context);
-              if (!context) setHomeReaderSelectionAgentActive(false);
+              if (!context) {
+                setHomeReaderSelectionAgentActive(false);
+                setHomeReaderDurableRefresh(null);
+              }
             }}
+            readerDurableRefresh={homeReaderDurableRefresh}
             onOpenNoteEditor={(request) => window.pige.notes.openEditor(request)}
             onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
             onReloadNoteEditor={reloadNoteEditor}
@@ -4248,6 +4275,7 @@ function HomeComposer(props: {
   readonly onReaderSelectionTransform: (result: ReaderSelectionTransformResult) => void;
   readonly onReaderSelectionCreateNote: (result: ReaderSelectionCreateNoteResult) => void;
   readonly onReaderSelectionContextChange: (context: HomeReaderSelectionContext | null) => void;
+  readonly readerDurableRefresh: HomeReaderDurableRefresh | null;
   readonly onOpenNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
@@ -5785,6 +5813,17 @@ function HomeComposer(props: {
   const openResult = async (pageId: string): Promise<void> => {
     await openResultTarget(pageId);
   };
+
+  useEffect(() => {
+    const refresh = props.readerDurableRefresh;
+    const note = selectedNoteRef.current;
+    if (
+      !refresh ||
+      activeVaultIdRef.current !== refresh.vaultId ||
+      note?.summary.pageId !== refresh.pageId
+    ) return;
+    void openResultTarget(refresh.pageId, false);
+  }, [props.readerDurableRefresh?.sequence]);
 
   const submitHomeReaderSelectionTransform = async (
     request: ReaderSelectionTransformRequest

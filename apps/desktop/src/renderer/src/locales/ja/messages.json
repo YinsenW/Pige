@@ -860,6 +860,7 @@
   "note.proposal.apply": "変更を適用",
   "note.proposal.action.expand": "選択した箇所を展開",
   "note.proposal.action.append_current_note": "現在のノートに追記",
+  "note.proposal.action.replace_current_note": "現在のノートを置き換える",
   "note.proposal.action.create_note": "選択範囲からノートを作成",
   "note.proposal.action.polish": "選択した箇所を推敲",
   "note.proposal.action.translate": "選択した箇所を翻訳",

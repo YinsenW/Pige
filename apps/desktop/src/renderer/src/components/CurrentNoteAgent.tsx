@@ -6,6 +6,8 @@ import type {
   AgentTurnDraftEvent,
   CurrentNoteAppendProposalDecisionResult,
   CurrentNoteAppendProposalPreview,
+  CurrentNoteReplaceProposalDecisionResult,
+  CurrentNoteReplaceProposalPreview,
   PigeErrorSummary,
   ReaderSelectionProposalPreview
 } from "@pige/contracts";
@@ -26,6 +28,10 @@ type ActiveDraftBinding = {
   conversationEventId?: string;
   sequence: number;
 };
+
+type CurrentNoteMutationProposalPreview = CurrentNoteAppendProposalPreview | CurrentNoteReplaceProposalPreview;
+type CurrentNoteMutationProposalDecisionResult =
+  CurrentNoteAppendProposalDecisionResult | CurrentNoteReplaceProposalDecisionResult;
 
 export function CurrentNoteAgent(props: {
   readonly modal: boolean;
@@ -57,7 +63,7 @@ export function CurrentNoteAgent(props: {
   const [error, setError] = useState<PigeErrorSummary | null>(null);
   const [switchingModel, setSwitchingModel] = useState(false);
   const [appendProposal, setAppendProposal] = useState<{
-    readonly preview: CurrentNoteAppendProposalPreview;
+    readonly preview: CurrentNoteMutationProposalPreview;
     readonly errorMessageKey?: string;
   } | null>(null);
   const [appendProposalLoadErrorMessageKey, setAppendProposalLoadErrorMessageKey] = useState<string | null>(null);
@@ -65,7 +71,7 @@ export function CurrentNoteAgent(props: {
   const loadSequenceRef = useRef(0);
   const appendProposalSequenceRef = useRef(0);
   const appendProposalDecisionInFlightRef = useRef(false);
-  const resolvedAppendJobIdRef = useRef<string | null>(null);
+  const resolvedMutationRef = useRef<{ readonly jobId: string; readonly kind: CurrentNoteMutationProposalPreview["kind"] } | null>(null);
   const reportedTerminalJobsRef = useRef(new Set<string>());
   const activePageIdRef = useRef<string | null>(props.pageId);
   const activeVaultIdRef = useRef<string | null>(props.vaultId);
@@ -148,7 +154,7 @@ export function CurrentNoteAgent(props: {
     setDismissedAppendProposalId(null);
     appendProposalSequenceRef.current += 1;
     appendProposalDecisionInFlightRef.current = false;
-    resolvedAppendJobIdRef.current = null;
+    resolvedMutationRef.current = null;
     reportedTerminalJobsRef.current.clear();
     modelSwitchInFlightRef.current = false;
     void refreshTimeline();
@@ -174,20 +180,45 @@ export function CurrentNoteAgent(props: {
     appendProposalSequenceRef.current = sequence;
     const read = async (): Promise<void> => {
       try {
-        const result = await window.pige.agent.currentNoteAppendProposal({
-          apiVersion: 1,
-          activeVaultId: vaultId,
-          pageId,
-          jobId: binding.jobId,
-          proposalId: binding.proposalId
-        });
+        const appendRead = await window.pige.agent.currentNoteAppendProposal({
+            apiVersion: 1,
+            activeVaultId: vaultId,
+            pageId,
+            jobId: binding.jobId,
+            proposalId: binding.proposalId
+          }).catch(() => null);
+        const appendReadFailed = appendRead === null;
         if (!appendProposalReadIsCurrent(sequence, vaultId, pageId, binding, activeVaultIdRef, activePageIdRef, appendProposalSequenceRef)) return;
-        if (result.status === "available" && currentNoteAppendProposalMatches(result.proposal, vaultId, pageId, binding)) {
-          setAppendProposal({ preview: result.proposal });
+        if (appendRead?.status === "available") {
+          if (currentNoteMutationProposalMatches(appendRead.proposal, vaultId, pageId, binding)) {
+            setAppendProposal({ preview: appendRead.proposal });
+            setAppendProposalLoadErrorMessageKey(null);
+          } else {
+            setAppendProposal(null);
+            setAppendProposalLoadErrorMessageKey("note.proposal.unavailable");
+          }
+          return;
+        }
+        const replaceRead = await window.pige.agent.currentNoteReplaceProposal({
+            apiVersion: 1,
+            activeVaultId: vaultId,
+            jobId: binding.jobId,
+            proposalId: binding.proposalId
+          }).catch(() => null);
+        if (!appendProposalReadIsCurrent(sequence, vaultId, pageId, binding, activeVaultIdRef, activePageIdRef, appendProposalSequenceRef)) return;
+        if (
+          replaceRead?.status === "available" &&
+          currentNoteMutationProposalMatches(replaceRead.proposal, vaultId, pageId, binding)
+        ) {
+          setAppendProposal({ preview: replaceRead.proposal });
           setAppendProposalLoadErrorMessageKey(null);
         } else {
           setAppendProposal(null);
-          setAppendProposalLoadErrorMessageKey("note.proposal.unavailable");
+          setAppendProposalLoadErrorMessageKey(
+            appendReadFailed || replaceRead === null || replaceRead.status === "failed"
+              ? "note.proposal.decisionFailed"
+              : "note.proposal.unavailable"
+          );
         }
       } catch {
         if (!appendProposalReadIsCurrent(sequence, vaultId, pageId, binding, activeVaultIdRef, activePageIdRef, appendProposalSequenceRef)) return;
@@ -201,7 +232,7 @@ export function CurrentNoteAgent(props: {
     };
   }, [appendProposalBinding?.jobId, appendProposalBinding?.proposalId, dismissedAppendProposalId, props.pageId, props.vaultId]);
 
-  const terminalJobId = terminalSuccessfulJobId(latestTurn, currentOutcome, resolvedAppendJobIdRef.current);
+  const terminalJobId = terminalSuccessfulJobId(latestTurn, currentOutcome, resolvedMutationRef.current);
   useEffect(() => {
     if (!terminalJobId || reportedTerminalJobsRef.current.has(terminalJobId)) return;
     reportedTerminalJobsRef.current.add(terminalJobId);
@@ -355,23 +386,33 @@ export function CurrentNoteAgent(props: {
       activeVaultIdRef.current !== vaultId ||
       activePageIdRef.current !== pageId ||
       current.preview.activeVaultId !== vaultId ||
-      current.preview.pageId !== pageId
+      (current.preview.kind === "append_current_note" && current.preview.pageId !== pageId)
     ) return;
     appendProposalDecisionInFlightRef.current = true;
     const sequence = appendProposalSequenceRef.current + 1;
     appendProposalSequenceRef.current = sequence;
     setAppendProposal({ preview: { ...current.preview, state: "resolving" } });
-    let result: CurrentNoteAppendProposalDecisionResult;
+    let result: CurrentNoteMutationProposalDecisionResult;
     try {
-      result = await window.pige.agent.decideCurrentNoteAppendProposal({
-        apiVersion: 1,
-        activeVaultId: vaultId,
-        pageId,
-        jobId: current.preview.jobId,
-        proposalId,
-        expectedRevision: current.preview.revision,
-        decision: action === "apply" ? "approve" : "reject"
-      });
+      const decision = action === "apply" ? "approve" as const : "reject" as const;
+      result = current.preview.kind === "append_current_note"
+        ? await window.pige.agent.decideCurrentNoteAppendProposal({
+            apiVersion: 1,
+            activeVaultId: vaultId,
+            pageId,
+            jobId: current.preview.jobId,
+            proposalId,
+            expectedRevision: current.preview.revision,
+            decision
+          })
+        : await window.pige.agent.decideCurrentNoteReplaceProposal({
+            apiVersion: 1,
+            activeVaultId: vaultId,
+            jobId: current.preview.jobId,
+            proposalId,
+            expectedRevision: current.preview.revision,
+            decision
+          });
     } catch {
       if (sequence === appendProposalSequenceRef.current) {
         setAppendProposal({ ...current, errorMessageKey: "note.proposal.decisionFailed" });
@@ -385,8 +426,10 @@ export function CurrentNoteAgent(props: {
       activeVaultIdRef.current !== vaultId ||
       activePageIdRef.current !== pageId
     ) return;
-    applyAppendProposalDecisionResult(result, current, vaultId, pageId, setAppendProposal);
-    if (result.status === "applied") resolvedAppendJobIdRef.current = current.preview.jobId;
+    applyMutationProposalDecisionResult(result, current, vaultId, pageId, setAppendProposal);
+    if (result.status === "applied") {
+      resolvedMutationRef.current = { jobId: current.preview.jobId, kind: current.preview.kind };
+    }
     if (result.status === "applied" || result.status === "rejected") await refreshTimeline();
   };
 
@@ -567,27 +610,26 @@ function currentNoteAppendProposalBinding(
 function terminalSuccessfulJobId(
   latestTurn: AgentConversationInitialTimeline["latestTurn"],
   currentOutcome: AgentSubmitTurnResult | null,
-  resolvedAppendJobId: string | null
+  resolvedMutation: { readonly jobId: string; readonly kind: CurrentNoteMutationProposalPreview["kind"] } | null
 ): string | null {
   if (
     (latestTurn?.state === "completed" || latestTurn?.state === "completed_with_warnings") &&
-    latestTurn.currentNoteAppendApplied === true &&
-    (latestTurn.jobId === currentOutcome?.jobId || latestTurn.jobId === resolvedAppendJobId)
+    latestTurn.jobId === resolvedMutation?.jobId &&
+    (resolvedMutation.kind === "replace_current_note" || latestTurn.currentNoteAppendApplied === true)
   ) return latestTurn.jobId;
   return currentOutcome?.state === "completed" && currentOutcome.currentNoteAppendApplied === true
     ? currentOutcome.jobId
     : null;
 }
 
-function currentNoteAppendProposalMatches(
-  proposal: CurrentNoteAppendProposalPreview,
+function currentNoteMutationProposalMatches(
+  proposal: CurrentNoteMutationProposalPreview,
   vaultId: string,
   pageId: string,
   binding: AppendProposalBinding
 ): boolean {
-  return proposal.kind === "append_current_note" &&
-    proposal.activeVaultId === vaultId &&
-    proposal.pageId === pageId &&
+  return proposal.activeVaultId === vaultId &&
+    (proposal.kind === "replace_current_note" || proposal.pageId === pageId) &&
     proposal.jobId === binding.jobId &&
     proposal.proposalId === binding.proposalId;
 }
@@ -608,13 +650,13 @@ function appendProposalReadIsCurrent(
     binding.proposalId.length > 0;
 }
 
-function applyAppendProposalDecisionResult(
-  result: CurrentNoteAppendProposalDecisionResult,
-  current: { readonly preview: CurrentNoteAppendProposalPreview; readonly errorMessageKey?: string },
+function applyMutationProposalDecisionResult(
+  result: CurrentNoteMutationProposalDecisionResult,
+  current: { readonly preview: CurrentNoteMutationProposalPreview; readonly errorMessageKey?: string },
   vaultId: string,
   pageId: string,
   setProposal: React.Dispatch<React.SetStateAction<{
-    readonly preview: CurrentNoteAppendProposalPreview;
+    readonly preview: CurrentNoteMutationProposalPreview;
     readonly errorMessageKey?: string;
   } | null>>
 ): void {
@@ -622,9 +664,13 @@ function applyAppendProposalDecisionResult(
     setProposal({ ...current, errorMessageKey: "note.proposal.decisionFailed" });
     return;
   }
+  if (result.status === "not_found") {
+    setProposal({ ...current, errorMessageKey: "note.proposal.unavailable" });
+    return;
+  }
   if (result.status === "stale") {
     const preview = result.proposal;
-    setProposal(preview && currentNoteAppendProposalMatches(preview, vaultId, pageId, {
+    setProposal(preview && preview.kind === current.preview.kind && currentNoteMutationProposalMatches(preview, vaultId, pageId, {
       jobId: current.preview.jobId,
       proposalId: current.preview.proposalId
     })
@@ -632,7 +678,7 @@ function applyAppendProposalDecisionResult(
       : { preview: { ...current.preview, state: "conflicted" }, errorMessageKey: "note.proposal.stale" });
     return;
   }
-  if (!currentNoteAppendProposalMatches(result.proposal, vaultId, pageId, {
+  if (result.proposal.kind !== current.preview.kind || !currentNoteMutationProposalMatches(result.proposal, vaultId, pageId, {
     jobId: current.preview.jobId,
     proposalId: current.preview.proposalId
   })) {

@@ -860,6 +860,7 @@
   "note.proposal.apply": "Apply change",
   "note.proposal.action.expand": "Expand selected passage",
   "note.proposal.action.append_current_note": "Append to current note",
+  "note.proposal.action.replace_current_note": "Replace current note",
   "note.proposal.action.create_note": "Create note from selection",
   "note.proposal.action.polish": "Polish selected passage",
   "note.proposal.action.translate": "Translate selected passage",
