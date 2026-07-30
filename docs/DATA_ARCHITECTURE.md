@@ -444,17 +444,7 @@ Compaction rules:
 
 Pige should keep complete conversation history without duplicating large source content.
 
-Storage:
-
-```txt
-.pige/conversations/
-  conversations-manifest.json
-  2026/
-    07/
-      conv_20260709_001.jsonl
-```
-
-Conversation event records use JSON Lines to support append-only writes and partial recovery.
+Storage is `.pige/conversations/conversations-manifest.json` plus dated append-only JSONL.
 
 Event types:
 
@@ -471,19 +461,15 @@ Event types:
 Rules:
 
 - Normal short user and assistant messages are stored directly.
-- Large pasted content is stored exactly once as a managed text source; conversation and
-  Job records keep references only, never a duplicate body. One Agent-turn snapshot may
-  bind multiple ordered file/paste refs. Preservation and aggregate bounds are owned by
-  `resources/large-paste-boundary.manifest.json`; an exact idempotent retry adopts the same
-  source IDs rather than rewriting bytes.
-- Conversation file refs carry source ID/name/kind; bodies, paths and checksums stay in
-  source records.
-- Assistant answers that become wiki pages are stored once as the page content and referenced from the conversation.
-- Conversation events may store unsaved assistant text and safe page/ref citations;
-  private evidence identity stays elsewhere and restart neither refetches nor calls Provider.
-- Prompts/raw responses are not stored by default. Selection events add only strict action
-  presentation; body/path/span/hash/Provider data stay out, while Jobs/proposals/Operations
-  own selection/review/apply.
+- Trash moves exact JSONL to confined private storage and records revision/hash receipts.
+  Restore requires an unoccupied original identity/path; retry/restart adopts one Operation
+  without Provider replay. Renderer inventories expose previews/opaque IDs only.
+- Large pastes are one managed source; conversation/Job keep bounded ordered refs under
+  `resources/large-paste-boundary.manifest.json`, and retry reuses source IDs.
+- File refs carry ID/name/kind; bodies/paths/checksums remain in Source Records. Saved answers
+  live once as pages; unsaved text and safe citations may remain as events.
+- Prompts/raw responses stay out. Selection stores strict presentation only; Jobs/proposals/
+  Operations own review/apply, and restart neither refetches nor calls Provider.
 - Conversation records are not the knowledge source of truth; they are the activity history.
 
 Compaction:

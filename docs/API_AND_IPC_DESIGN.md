@@ -506,11 +506,14 @@ Dataset boundary:
 Commands:
 
 - `agent.submitTurn`
+- `agent.trashConversation`
+- `agent.restoreConversation`
 - `agent.ask`
 - `retrieval.ask`
 - `retrieval.saveAnswer`
 
-Queries: `agent.conversation`, `retrieval.search`, `retrieval.localSemanticStatus`.
+Queries: `agent.conversation`, `agent.conversationHistory`, `agent.conversationTrash`,
+`retrieval.search`, `retrieval.localSemanticStatus`.
 Asset commands: `retrieval.installLocalSemanticAsset`,
 `retrieval.enableLocalSemanticAsset`, `retrieval.disableLocalSemanticAsset`,
 `retrieval.removeLocalSemanticAsset`.
@@ -539,12 +542,11 @@ kinds reject it. Home snapshots `canFollowUp`; stale/mixed identity fails before
 never falls back. `agent.conversation` returns <=100 bounded messages, exact tail,
 `canFollowUp` and safe latest Job without paths, Provider data or raw errors.
 
-`agent.conversationHistory` returns <=50 vault summaries ordered by `updatedAt` descending
-then ID. Summary is bounded preview/safe scope/tail/state and grants selection only;
-opening reuses `agent.conversation`, which alone supplies follow-up authority. The opaque
-cursor binds vault, immutable snapshot and boundary; tamper/drift fails identity-only.
-`Current` rereads the latest durable conversation; failure preserves the timeline and
-restart triggers no Provider/Job replay.
+`agent.conversationHistory` returns <=50 ordered safe summaries; opening reuses
+`agent.conversation`, the sole follow-up authority. Its cursor binds vault/snapshot/boundary.
+Trash binds vault/conversation/revision and moves exact JSONL to private storage with one
+Operation; its pathless inventory restores by opaque entry/identity/revision. Drift fails
+closed, `Current` rereads durable truth, and restart never replays Provider/Job work.
 
 Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
 submits exact text, ordered staged identities, active vault and one client-turn identity;
