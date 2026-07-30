@@ -18,8 +18,8 @@ Do not open a public issue with exploit steps, secrets, private files, or user d
 
 Preferred reporting path:
 
-1. Use GitHub private vulnerability reporting for this repository once maintainers enable it.
-2. If private vulnerability reporting is not available yet, open a minimal public issue that says only "security contact request" and includes no technical details.
+1. Use GitHub private vulnerability reporting through the repository's enabled [private advisory route](https://github.com/YinsenW/Pige/security/advisories/new).
+2. If that GitHub path is temporarily unavailable, open a minimal public issue that says only "security contact request" and includes no technical details.
 3. Wait for a maintainer-provided private channel before sharing reproduction details.
 
 When reporting, include:

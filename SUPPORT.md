@@ -11,7 +11,7 @@ Use the right channel:
 - General product questions: use public discussions or issues once they are enabled.
 - Bugs and regressions: open a public issue with a minimal, redacted reproduction.
 - Feature requests: open a public issue and connect it to the relevant design document when possible.
-- Security vulnerabilities: do not open a public issue. Follow [Security Policy](SECURITY.md).
+- Security vulnerabilities: use the repository's enabled private reporting route; do not post details publicly. Follow [Security Policy](SECURITY.md).
 - Privacy or data-use concerns: reference [Privacy And Data Use Policy](PRIVACY.md) and avoid sharing private data publicly.
 
 During public alpha, response times are best effort. Pige is an open-source project and does not provide guaranteed professional support, data recovery, or legal/compliance advice.
