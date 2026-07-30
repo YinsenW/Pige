@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReaderSelectionIdentity } from "@pige/contracts";
 import type { JobRecord } from "@pige/schemas";
 import {
+  ReaderSelectionCreateNoteActionService,
   ReaderSelectionCreateNoteProposalService,
   ReaderSelectionCreateNoteService
 } from "../../apps/desktop/src/main/services/reader-selection-create-note-service";
@@ -41,6 +42,25 @@ describe("Reader selection create-note service", () => {
     expect(markdown).toContain("# A bounded Reader note");
     expect(markdown).toContain("Selected evidence summarized safely.");
     expect(result.operation.after?.id).toBe(`sha256:${createHash("sha256").update(markdown).digest("hex")}`);
+  });
+
+  it("creates exact reviewed Claim and Question pages without action drift", () => {
+    for (const [action, expectedType, expectedField] of [
+      ["create_claim", 'type: "claim"', "claim:\n  confidence: \"medium\""],
+      ["create_question", 'type: "question"', "question:\n  state: \"open\""]
+    ] as const) {
+      const fixture = makeFixture(action);
+      const service = new ReaderSelectionCreateNoteService();
+      const result = service.apply(fixture.input);
+      const markdown = fs.readFileSync(path.join(fixture.vaultPath, result.pagePath), "utf8");
+      expect(markdown).toContain(expectedType);
+      expect(markdown).toContain(expectedField);
+      expect(result.operation.summary).toContain(action === "create_claim" ? "Created claim" : "Created question");
+      expect(() => service.apply({
+        ...fixture.input,
+        intent: { ...fixture.intent, action: action === "create_claim" ? "create_question" : "create_claim" }
+      })).toThrowError(expect.objectContaining({ code: "agent_ingest.page_conflict" }));
+    }
   });
 
   it("adopts a committed page after an interrupted Operation commit without duplicating identities", () => {
@@ -127,9 +147,59 @@ describe("Reader selection create-note service", () => {
       proposal: { state: "applied" }
     });
   });
+
+  it("binds a Question request to the exact current selection and durable turn action", async () => {
+    const fixture = makeFixture("create_question");
+    const preview = {
+      proposalId: "proposal_20260729_readerquestion1",
+      action: "create_question" as const,
+      state: "ready" as const,
+      revision: 1,
+      lines: [{ kind: "added" as const, text: "What remains unknown?" }]
+    };
+    const submitTurn = vi.fn(async (_request, context) => {
+      context.assertCurrent();
+      expect(context.currentNoteCreateNoteAction).toBe("create_question");
+      return {
+        state: "waiting" as const,
+        jobId: fixture.job.id,
+        conversationEventId: "evt_20260729_readerquestion1",
+        conversationId: "conv_20260729_readerquestion1",
+        tailEventId: "evt_20260729_readerquestion2",
+        error: {
+          code: "agent_runtime.review_required",
+          domain: "agent_runtime" as const,
+          messageKey: "error.generic",
+          retryable: false,
+          severity: "info" as const,
+          userAction: "none" as const
+        }
+      };
+    });
+    const service = new ReaderSelectionCreateNoteActionService(
+      { current: () => fixture.vault, activeVaultPath: () => fixture.vaultPath },
+      { submitTurn },
+      { readPublication: () => preview } as never
+    );
+    const result = await service.submit({
+      apiVersion: 1,
+      requestId: "readerselaction_question123456",
+      action: "create_question",
+      activeVaultId: fixture.vault.vaultId,
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      selection: fixture.selection,
+      locale: "en",
+      clientTurnId: "turn_20260729_readerquestion1"
+    }, { renderContextCurrent: () => true });
+
+    expect(result).toMatchObject({ status: "review_required", proposal: { action: "create_question" } });
+    expect(submitTurn).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Create a standalone question from the current selection and submit it for my review."
+    }), expect.objectContaining({ currentNoteCreateNoteAction: "create_question" }));
+  });
 });
 
-function makeFixture() {
+function makeFixture(action: "create_note" | "create_claim" | "create_question" = "create_note") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-reader-create-note-"));
   roots.push(root);
   createVaultOnDisk({
@@ -189,7 +259,7 @@ Selected evidence for a bounded Reader note.
       },
       {
         kind: "tool",
-        id: "reader_selection_create_note",
+        id: `reader_selection_${action}`,
         checksum: selection.pageContentHash,
         role: "agent_turn_reader_create_note"
       }
@@ -197,6 +267,7 @@ Selected evidence for a bounded Reader note.
   } as JobRecord;
   const intent = {
     proposalId: "proposal_20260729_readercreate12",
+    action,
     selection,
     title: "A bounded Reader note",
     body: "Selected evidence summarized safely.",

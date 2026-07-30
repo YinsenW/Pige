@@ -12,12 +12,12 @@ import type {
   PigeErrorSummary,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
+  ReaderSelectionCreatePageAction,
   ReaderSelectionCreateNoteRequest,
   ReaderSelectionCreateNoteResult,
   VaultSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { parsePigeFrontmatter } from "@pige/markdown";
 import {
   JobRecordSchema,
   OperationRecordSchema,
@@ -47,6 +47,12 @@ import {
   readCurrentNoteSelectionEvidenceBinding
 } from "./retrieval-evidence-boundary";
 import { readerSelectionContentRestricted } from "./reader-selection-proposal-service";
+import {
+  createReaderSelectionPageMarkdown as createMarkdown,
+  createReaderSelectionPageOperation as createOperation,
+  hashReaderSelectionPage as hashText,
+  readerSelectionPageType as pageTypeForAction
+} from "./reader-selection-create-page-artifact";
 
 const MAX_TITLE_CHARACTERS = 120;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -58,10 +64,13 @@ export const HOME_CREATE_READER_SELECTION_NOTE_TOOL_NAME = "pige_create_note_fro
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
 
-export function createReaderSelectionCreateNoteJobRef(selection: ReaderSelectionIdentity): JobRef {
+export function createReaderSelectionCreateNoteJobRef(
+  selection: ReaderSelectionIdentity,
+  action: ReaderSelectionCreatePageAction = "create_note"
+): JobRef {
   return {
     kind: "tool",
-    id: "reader_selection_create_note",
+    id: `reader_selection_${action}`,
     role: CREATE_NOTE_ROLE,
     checksum: selection.pageContentHash
   };
@@ -69,7 +78,7 @@ export function createReaderSelectionCreateNoteJobRef(selection: ReaderSelection
 
 export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   readonly selection: ReaderSelectionIdentity;
-  readonly action: "create_note";
+  readonly action: ReaderSelectionCreatePageAction;
 } | undefined {
   const refs = job.inputRefs ?? [];
   const actionRefs = refs.filter((ref) => ref.role === CREATE_NOTE_ROLE);
@@ -77,6 +86,7 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   const scope = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
   const selections = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
   const action = actionRefs[0];
+  const actionMatch = /^reader_selection_(create_note|create_claim|create_question)$/u.exec(action?.id ?? "");
   const selected = selections[0];
   const locator = /^utf8_bytes:(\d+):(\d+)$/u.exec(selected?.locator ?? "");
   const selection = {
@@ -91,7 +101,7 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   };
   if (
     actionRefs.length !== 1 || scope.length !== 1 || selections.length !== 1 ||
-    action?.kind !== "tool" || action.id !== "reader_selection_create_note" ||
+    action?.kind !== "tool" || !actionMatch ||
     selected?.kind !== "page" || selected.id !== scope[0]?.id || !locator ||
     !/^page_\d{8}_[a-z0-9]{8,}$/u.test(selection.pageId ?? "") ||
     !/^sha256:[a-f0-9]{64}$/u.test(selection.pageContentHash ?? "") ||
@@ -99,33 +109,36 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   ) {
     throw conflict("The durable Reader create-note binding is invalid.");
   }
-  return { selection: selection as ReaderSelectionIdentity, action: "create_note" };
+  return { selection: selection as ReaderSelectionIdentity, action: actionMatch[1] as ReaderSelectionCreatePageAction };
 }
 
 export function assertReaderSelectionCreateNoteJobBinding(
   refs: readonly JobRef[],
   selection: ReaderSelectionIdentity | undefined,
-  enabled: boolean
+  action: ReaderSelectionCreatePageAction | undefined
 ): void {
   const actual = refs.filter((ref) => ref.role === CREATE_NOTE_ROLE);
-  const expected = enabled && selection ? createReaderSelectionCreateNoteJobRef(selection) : undefined;
+  const expected = action && selection ? createReaderSelectionCreateNoteJobRef(selection, action) : undefined;
   if (actual.length > 1 || !isDeepStrictEqual(actual[0], expected)) {
     throw conflict("The existing Agent Job does not match its Reader create-note authority.");
   }
 }
 
 export function createReaderSelectionCreateNoteTool(options: {
+  readonly action?: ReaderSelectionCreatePageAction;
   readonly authorize: () => void;
   readonly stage: (input: { readonly title: string; readonly body: string }) => ReaderSelectionProposalPreview;
 }): PigeAgentToolDefinition {
+  const action = options.action ?? "create_note";
+  const pageKind = action === "create_claim" ? "claim" : action === "create_question" ? "question" : "note";
   const InputSchema = z.object({
     title: z.string().min(1).max(MAX_TITLE_CHARACTERS),
     body: z.string().min(1).max(MAX_BODY_BYTES)
   }).strict();
   return {
     name: HOME_CREATE_READER_SELECTION_NOTE_TOOL_NAME,
-    label: "Create note from Reader selection",
-    description: "Stage one standalone note from the exact Host-bound Reader selection for explicit user review.",
+    label: `Create ${pageKind} from Reader selection`,
+    description: `Stage one standalone ${pageKind} from the exact Host-bound Reader selection for explicit user review.`,
     version: "1",
     capability: "write_vault_knowledge",
     parameters: {
@@ -173,6 +186,7 @@ export function createReaderSelectionCreateNoteTool(options: {
 
 export interface ReaderSelectionCreateNoteIntent {
   readonly proposalId: string;
+  readonly action: ReaderSelectionCreatePageAction;
   readonly selection: ReaderSelectionIdentity;
   readonly title: string;
   readonly body: string;
@@ -202,6 +216,7 @@ export class ReaderSelectionCreateNoteService {
     const operationId = createOperationId(input.intent.proposalId);
     const createdAt = job.createdAt;
     const markdown = createMarkdown({
+      action: input.intent.action,
       pageId,
       title,
       body,
@@ -211,6 +226,7 @@ export class ReaderSelectionCreateNoteService {
     });
     const contentHash = hashText(markdown);
     const operation = createOperation({
+      action: input.intent.action,
       operationId,
       job,
       proposalId: input.intent.proposalId,
@@ -249,6 +265,7 @@ export class ReaderSelectionCreateNoteService {
     const pageId = createPageId(job.id, input.intent.proposalId);
     const pagePath = createPagePath(pageId);
     const markdown = createMarkdown({
+      action: input.intent.action,
       pageId,
       title,
       body,
@@ -257,6 +274,7 @@ export class ReaderSelectionCreateNoteService {
       modelProfileId: input.intent.modelProfileId
     });
     const operation = createOperation({
+      action: input.intent.action,
       operationId: createOperationId(input.intent.proposalId),
       job,
       proposalId: input.intent.proposalId,
@@ -282,6 +300,7 @@ const CreateNoteProposalRecordSchema = z.object({
   state: ReaderSelectionProposalStateSchema,
   activeVaultId: VaultIdSchema,
   jobId: z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/),
+  action: z.enum(["create_note", "create_claim", "create_question"]).default("create_note"),
   selection: ReaderSelectionIdentitySchema,
   title: z.string().min(1).max(MAX_TITLE_CHARACTERS),
   body: z.string().min(1).max(MAX_BODY_BYTES),
@@ -318,7 +337,7 @@ export interface ReaderSelectionCreateNoteJobPort {
 export interface ReaderSelectionCreateNoteAgentPort {
   submitTurn(request: AgentSubmitTurnRequest, context: {
     readonly currentNoteSelection: ReaderSelectionIdentity;
-    readonly currentNoteCreateNoteAction: "create_note";
+    readonly currentNoteCreateNoteAction: ReaderSelectionCreatePageAction;
     readonly assertCurrent: () => void;
     readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void;
   }): Promise<AgentSubmitTurnResult>;
@@ -359,16 +378,14 @@ export class ReaderSelectionCreateNoteActionService {
       assertCurrent();
       const turn = await this.agent.submitTurn({
         schemaVersion: 1,
-        text: request.locale.startsWith("zh")
-          ? "根据当前选中的内容创建一篇独立笔记，并提交给我确认。"
-          : "Create a standalone note from the current selection and submit it for my review.",
+        text: createPageInstruction(request.action, request.locale),
         inputKind: "typed_text",
         scope: { kind: "current_note", pageId: request.selection.pageId },
         locale: request.locale,
         clientTurnId: request.clientTurnId
       }, {
         currentNoteSelection: request.selection,
-        currentNoteCreateNoteAction: "create_note",
+        currentNoteCreateNoteAction: request.action,
         assertCurrent,
         ...(context.onDraft ? { onDraft: context.onDraft } : {})
       });
@@ -471,6 +488,7 @@ export class ReaderSelectionCreateNoteProposalService {
     const proposalId = createProposalId(job.id);
     const intentHash = hashText(JSON.stringify({
       jobId: job.id,
+      action: binding.action,
       selection: input.selection,
       title,
       body,
@@ -478,9 +496,19 @@ export class ReaderSelectionCreateNoteProposalService {
       policyContextId: job.policyContextId,
       policyHash: job.policyHash
     }));
+    const legacyIntentHash = binding.action === "create_note" ? hashText(JSON.stringify({
+      jobId: job.id,
+      selection: input.selection,
+      title,
+      body,
+      modelProfileId: input.modelProfileId,
+      policyContextId: job.policyContextId,
+      policyHash: job.policyHash
+    })) : undefined;
     const existing = readProposal(vaultPath, proposalId);
     if (existing) {
-      if (existing.activeVaultId !== vault.vaultId || existing.intentHash !== intentHash) {
+      if (existing.activeVaultId !== vault.vaultId ||
+        (existing.intentHash !== intentHash && existing.intentHash !== legacyIntentHash)) {
         throw conflict("The deterministic create-note proposal identity is occupied by another intent.");
       }
       return projectProposal(this.#reconcile(vaultPath, existing));
@@ -493,6 +521,7 @@ export class ReaderSelectionCreateNoteProposalService {
       state: "ready",
       activeVaultId: vault.vaultId,
       jobId: job.id,
+      action: binding.action,
       selection: input.selection,
       title,
       body,
@@ -615,8 +644,20 @@ export class ReaderSelectionCreateNoteProposalService {
         facts: {
           stage: "planning",
           outputRefs: record.operationId && record.createdPageId ? [
-            { kind: "operation", id: record.operationId, role: "reader_selection_create_note_operation" },
-            { kind: "page", id: record.createdPageId, role: "reader_selection_created_note" }
+            {
+              kind: "operation",
+              id: record.operationId,
+              role: record.action === "create_note"
+                ? "reader_selection_create_note_operation"
+                : "reader_selection_create_page_operation"
+            },
+            {
+              kind: "page",
+              id: record.createdPageId,
+              role: record.action === "create_note"
+                ? "reader_selection_created_note"
+                : `reader_selection_created_${pageTypeForAction(record.action)}`
+            }
           ] : [],
           ...(record.operationId ? { operationIds: [record.operationId] } : {})
         },
@@ -652,6 +693,7 @@ function requireBoundJob(
     !/^model_[a-z0-9_]+$/u.test(intent.modelProfileId) ||
     !/^proposal_\d{8}_[a-z0-9]{8,}$/u.test(intent.proposalId) ||
     !hasExactSelectionBinding(job, intent.selection, selectionBindingHash) ||
+    readReaderSelectionCreateNoteBinding(job)?.action !== intent.action ||
     !isDeepStrictEqual(readReaderSelectionCreateNoteBinding(job)?.selection, intent.selection)
   ) {
     throw conflict("The Reader create-note intent is not bound to its exact Job authority.");
@@ -665,6 +707,14 @@ function requireCurrentSelectionBindingHash(vaultPath: string, selection: Reader
   } catch {
     throw conflict("The Reader create-note selection is no longer current.");
   }
+}
+
+function createPageInstruction(action: ReaderSelectionCreatePageAction, locale: string): string {
+  const pageType = pageTypeForAction(action);
+  if (locale.startsWith("zh")) {
+    return `根据当前选中的内容创建一篇独立${pageType === "claim" ? "主张" : pageType === "question" ? "问题" : "笔记"}，并提交给我确认。`;
+  }
+  return `Create a standalone ${pageType} from the current selection and submit it for my review.`;
 }
 
 function hasExactSelectionBinding(
@@ -697,60 +747,6 @@ function normalizeBody(value: string): string {
     throw readerSelectionContentRestricted("The generated note body is invalid.");
   }
   return body;
-}
-
-function createMarkdown(input: {
-  readonly pageId: string;
-  readonly title: string;
-  readonly body: string;
-  readonly createdAt: string;
-  readonly jobId: string;
-  readonly modelProfileId: string;
-}): string {
-  const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: "note"\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: "active"\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  model_profile_id: ${JSON.stringify(input.modelProfileId)}\n  confidence: "high"\nnote:\n  note_kind: "summary"\n  review_state: "clean"\n---\n\n# ${escapeHeading(input.title)}\n\n${input.body}\n`;
-  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {
-    throw readerSelectionContentRestricted("The generated note is invalid.");
-  }
-  return markdown;
-}
-
-function createOperation(input: {
-  readonly operationId: string;
-  readonly job: JobRecord;
-  readonly proposalId: string;
-  readonly pageId: string;
-  readonly pagePath: string;
-  readonly title: string;
-  readonly contentHash: string;
-  readonly modelProfileId: string;
-  readonly policyContextId: string;
-  readonly policyHash: string;
-}): OperationRecord {
-  return OperationRecordSchema.parse({
-    id: input.operationId,
-    schemaVersion: 1,
-    jobId: input.job.id,
-    proposalId: input.proposalId,
-    createdAt: input.job.createdAt,
-    actor: { kind: "pige_agent", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
-    modelProfileId: input.modelProfileId,
-    policyAudit: {
-      policyContextId: input.policyContextId,
-      policyHash: input.policyHash,
-      enforcementOwners: ["Reader Selection Create Note Service", "Proposal Service", "Vault Service"]
-    },
-    kind: "create_page",
-    targetRefs: [{ kind: "page", id: input.pageId, path: input.pagePath }],
-    sourceRefs: [
-      { kind: "proposal", id: input.proposalId },
-      { kind: "job", id: input.job.id }
-    ],
-    after: { kind: "page", id: input.contentHash, path: input.pagePath },
-    summary: `Created note ${JSON.stringify(input.title)} from an approved Reader selection.`,
-    reversible: "best_effort",
-    rollbackHint: "Move the generated note to trash after verifying that it has not changed.",
-    warnings: []
-  });
 }
 
 function readExactOperation(vaultPath: string, expected: OperationRecord): OperationRecord | undefined {
@@ -823,14 +819,6 @@ function resolveVaultPath(vaultPath: string, relativePath: string): string {
   return resolved;
 }
 
-function escapeHeading(value: string): string {
-  return value.replace(/([\\`*_{}\[\]()#+.!|>~-])/gu, "\\$1");
-}
-
-function hashText(value: string): string {
-  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
 function createProposalId(jobId: string): string {
   const date = /^job_(\d{8})_/u.exec(jobId)?.[1] ?? "19700101";
   const suffix = createHash("sha256").update(`pige.reader-selection-proposal.v1\0${jobId}`, "utf8").digest("hex").slice(0, 20);
@@ -840,6 +828,7 @@ function createProposalId(jobId: string): string {
 function proposalIntent(record: CreateNoteProposalRecord): ReaderSelectionCreateNoteIntent {
   return {
     proposalId: record.proposalId,
+    action: record.action,
     selection: record.selection,
     title: record.title,
     body: record.body,
@@ -852,7 +841,7 @@ function proposalIntent(record: CreateNoteProposalRecord): ReaderSelectionCreate
 function projectProposal(record: CreateNoteProposalRecord): ReaderSelectionProposalPreview {
   return {
     proposalId: record.proposalId,
-    action: "create_note",
+    action: record.action,
     state: record.state,
     revision: record.revision,
     lines: record.previewLines

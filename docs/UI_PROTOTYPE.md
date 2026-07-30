@@ -634,8 +634,8 @@ Copy  Quote  Ask  Translate  Polish  Expand  Summarize  More
 
 Action behavior:
 
-- Copy/quote stay local. Any Reader submits exact identity to the shared owner; applied reopens,
-  while review/wait uses Note Agent.
+- Copy/quote stay local. Other actions submit exact identity to the shared owner; Note, Claim and
+  Question stage one review, and applied opens only the matching authoritative page type.
 - Closed/drift keeps Reader/selection/focus; renderer owns no body/path/hash/span/apply.
 
 ### 8.4 Structured Knowledge Surface

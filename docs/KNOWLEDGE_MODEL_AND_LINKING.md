@@ -483,7 +483,7 @@ Reader:
 
 - Show backlinks, related pages, sources, and citations.
 - Let the Note Agent explain or improve links.
-- Selection actions may create notes, ask questions, or apply reversible links with Undo.
+- Selection actions may review-create notes, claims or questions, ask, or apply reversible links with Undo.
 
 Settings:
 

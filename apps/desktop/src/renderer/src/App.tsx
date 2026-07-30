@@ -2154,7 +2154,7 @@ export function App(): React.JSX.Element {
         ? homeContext
         : null;
     if (!owner) return;
-    if (result.status === "review_required" && result.proposal.action === "create_note") {
+    if (result.status === "review_required" && ["create_note", "create_claim", "create_question"].includes(result.proposal.action)) {
       setReaderSelectionProposal({ vaultId, pageId: owner.pageId, preview: result.proposal });
     } else if (result.status !== "waiting" && !(result.status === "failed" && result.conversationId)) {
       return;
@@ -2263,12 +2263,12 @@ export function App(): React.JSX.Element {
     }
     setReaderSelectionProposal({ vaultId: current.vaultId, pageId: current.pageId, preview: result.proposal });
     if (result.status === "applied") {
-      const opened = result.proposal.action === "create_note" && result.createdPageId
-        ? await openNoteTarget(result.createdPageId, false, "note")
-        : result.proposal.action !== "create_note"
+      const createdPageType = result.proposal.action === "create_note" ? "note" : result.proposal.action === "create_claim" ? "claim" : result.proposal.action === "create_question" ? "question" : null; const opened = createdPageType && result.createdPageId
+        ? await openNoteTarget(result.createdPageId, false, createdPageType)
+        : !createdPageType
           ? await openNoteTarget(current.pageId)
           : false;
-      if (!opened && result.proposal.action === "create_note") {
+      if (!opened && createdPageType) {
         setReaderSelectionProposal({
           vaultId: current.vaultId,
           pageId: current.pageId,
