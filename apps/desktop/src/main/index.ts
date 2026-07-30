@@ -28,6 +28,7 @@ import type {
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
   LibraryMergeTagRequest,
+  LibraryRemoveTagRequest,
   LibraryRenameTagRequest,
   LibraryTagsRequest,
   LibraryRelatedRequest,
@@ -126,6 +127,9 @@ import {
   LIBRARY_MERGE_TAG_CHANNEL,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
+  LIBRARY_REMOVE_TAG_CHANNEL,
+  LibraryRemoveTagRequestSchema,
+  LibraryRemoveTagResultSchema,
   LIBRARY_RENAME_TAG_CHANNEL,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
@@ -2753,6 +2757,13 @@ ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL, (_event, request: LibraryRenameTagReq
 ipcMain.handle(LIBRARY_MERGE_TAG_CHANNEL, (_event, request: LibraryMergeTagRequest) => {
   const parsed = LibraryMergeTagRequestSchema.parse(request);
   const result = LibraryMergeTagResultSchema.parse(getLibraryTagRenameService().merge(parsed));
+  if (result.status === "committed") scheduleActivityIndexRebuild();
+  return result;
+});
+
+ipcMain.handle(LIBRARY_REMOVE_TAG_CHANNEL, (_event, request: LibraryRemoveTagRequest) => {
+  const parsed = LibraryRemoveTagRequestSchema.parse(request);
+  const result = LibraryRemoveTagResultSchema.parse(getLibraryTagRenameService().remove(parsed));
   if (result.status === "committed") scheduleActivityIndexRebuild();
   return result;
 });
