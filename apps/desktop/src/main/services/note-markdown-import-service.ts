@@ -74,9 +74,13 @@ export class NoteMarkdownImportService {
           const source = readSelectedMarkdown(selectedPath);
           if (!source) return { ...identity, status: "invalid" };
           const prepared = prepareImportedMarkdown(request, source);
-          writeStage(scope.vaultPath, request.requestId, prepared.markdown);
+          writeStage(scope.vaultPath, request.requestId, prepared.markdown, () => {
+            if (!this.#scopeMatches(request.activeVaultId, scope.vaultPath)) throw new Error("stale import scope");
+          });
         }
-        receipt = completeImport(scope.vaultPath, request);
+        receipt = completeImport(scope.vaultPath, request, () => {
+          if (!this.#scopeMatches(request.activeVaultId, scope.vaultPath)) throw new Error("stale import scope");
+        });
       } else {
         assertReceiptIdentity(receipt, request);
         assertCommittedImport(scope.vaultPath, receipt);
@@ -96,6 +100,7 @@ export class NoteMarkdownImportService {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vault || !vaultPath) return { recovered: 0, failed: 0 };
+    this.#vaults.assertWriterLease(vaultPath);
     const directory = stageDirectory(vaultPath);
     if (!fs.existsSync(directory)) return { recovered: 0, failed: 0 };
     let recovered = 0;
@@ -109,7 +114,12 @@ export class NoteMarkdownImportService {
           requestId: match[1],
           activeVaultId: vault.vaultId
         });
-        completeImport(vaultPath, request);
+        completeImport(vaultPath, request, () => {
+          if (this.#vaults.current()?.vaultId !== vault.vaultId || this.#vaults.activeVaultPath() !== vaultPath) {
+            throw new Error("stale import recovery scope");
+          }
+          this.#vaults.assertWriterLease(vaultPath);
+        });
         recovered += 1;
       } catch {
         failed += 1;
@@ -188,7 +198,12 @@ function prepareImportedMarkdown(
   return { markdown };
 }
 
-function completeImport(vaultPath: string, request: NoteImportMarkdownRequest): Receipt {
+function completeImport(
+  vaultPath: string,
+  request: NoteImportMarkdownRequest,
+  assertCurrent: () => void
+): Receipt {
+  assertCurrent();
   const staged = readStage(vaultPath, request.requestId);
   if (!staged) throw new Error("missing import stage");
   const parsed = parsePigeFrontmatter(staged);
@@ -210,8 +225,11 @@ function completeImport(vaultPath: string, request: NoteImportMarkdownRequest): 
     createdAt,
     contentHash
   });
-  const pageStatus = createGeneratedNoteExclusive(vaultPath, resolveVaultPath(vaultPath, pagePath), staged);
+  const pageStatus = createGeneratedNoteExclusive(vaultPath, resolveVaultPath(vaultPath, pagePath), staged, {
+    assertSourceCurrent: assertCurrent
+  });
   if (pageStatus === "exists") assertExactText(vaultPath, pagePath, staged, MAX_MARKDOWN_BYTES);
+  assertCurrent();
   const operation = createOperation(receipt);
   const operationStatus = createGeneratedNoteExclusive(
     vaultPath,
@@ -219,9 +237,11 @@ function completeImport(vaultPath: string, request: NoteImportMarkdownRequest): 
     `${JSON.stringify(operation, null, 2)}\n`
   );
   if (operationStatus === "exists") assertExactOperation(vaultPath, operation);
+  assertCurrent();
   const receiptText = `${JSON.stringify(receipt, null, 2)}\n`;
   const receiptStatus = createGeneratedNoteExclusive(vaultPath, receiptPath(vaultPath, request.requestId), receiptText);
   if (receiptStatus === "exists") assertExactText(vaultPath, receiptRelativePath(request.requestId), receiptText, MAX_RECEIPT_BYTES);
+  assertCurrent();
   removeStageIfExact(vaultPath, request.requestId, contentHash);
   return receipt;
 }
@@ -272,8 +292,15 @@ function assertExactOperation(vaultPath: string, expected: OperationRecord): voi
   }
 }
 
-function writeStage(vaultPath: string, requestId: string, markdown: string): void {
-  const status = createGeneratedNoteExclusive(vaultPath, stagePath(vaultPath, requestId), markdown);
+function writeStage(
+  vaultPath: string,
+  requestId: string,
+  markdown: string,
+  assertCurrent: () => void
+): void {
+  const status = createGeneratedNoteExclusive(vaultPath, stagePath(vaultPath, requestId), markdown, {
+    assertSourceCurrent: assertCurrent
+  });
   if (status === "exists") assertExactText(vaultPath, stageRelativePath(requestId), markdown, MAX_MARKDOWN_BYTES);
 }
 

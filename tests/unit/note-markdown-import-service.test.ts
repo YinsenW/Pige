@@ -98,6 +98,16 @@ describe("NoteMarkdownImportService", () => {
     await expect(service.importMarkdown("reader_owner", request, { pick: async () => undefined }))
       .resolves.toEqual({ ...request, status: "cancelled" });
 
+    fs.writeFileSync(fixture.sourcePath, "# Drifted picker\n", "utf8");
+    await expect(service.importMarkdown("reader_owner", { ...request, requestId: "noteimport_driftabcdefghijkl" }, {
+      pick: async () => {
+        fixture.setVaultId("vault_20260730_otherxx");
+        return fixture.sourcePath;
+      }
+    })).resolves.toEqual({ ...request, requestId: "noteimport_driftabcdefghijkl", status: "stale" });
+    expect(findFiles(fixture.vaultPath, (file) => file.includes("note-import"))).toEqual([]);
+    fixture.setVaultId(request.activeVaultId);
+
     fs.writeFileSync(fixture.sourcePath, "# Outside identity\n", "utf8");
     const symlink = path.join(fixture.root, "linked.md");
     fs.symlinkSync(fixture.sourcePath, symlink);
@@ -145,12 +155,13 @@ function createFixture() {
   const vaultPath = path.join(root, "vault");
   fs.mkdirSync(vaultPath, { recursive: true });
   const sourcePath = path.join(root, "selected.md");
+  let currentVaultId = request.activeVaultId;
   const vaults = {
-    current: () => ({ vaultId: request.activeVaultId }),
+    current: () => ({ vaultId: currentVaultId }),
     activeVaultPath: () => vaultPath,
     assertWriterLease: vi.fn()
   };
-  return { root, vaultPath, sourcePath, vaults };
+  return { root, vaultPath, sourcePath, vaults, setVaultId: (vaultId: string) => { currentVaultId = vaultId; } };
 }
 
 function renderResult(pageId: string) {
