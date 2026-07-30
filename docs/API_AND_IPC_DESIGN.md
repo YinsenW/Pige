@@ -507,6 +507,7 @@ Commands:
 - `agent.submitTurn`
 - `agent.trashConversation`
 - `agent.restoreConversation`
+- `agent.exportConversation`
 - `agent.ask`
 - `retrieval.ask`
 - `retrieval.saveAnswer`
@@ -544,8 +545,9 @@ never falls back. `agent.conversation` returns <=100 bounded messages, exact tai
 `agent.conversationHistory` returns <=50 ordered safe summaries; opening reuses
 `agent.conversation`, the sole follow-up authority. Its cursor binds vault/snapshot/boundary.
 Trash binds vault/conversation/revision and moves exact JSONL to private storage with one
-Operation; its pathless inventory restores by opaque entry/identity/revision. Drift fails
-closed, `Current` rereads durable truth, and restart never replays Provider/Job work.
+Operation; pathless restore binds opaque identity/revision. `Current` rereads durable truth and
+restart never replays work. Export binds vault/conversation/tail, rereads JSONL and writes one
+Main-selected JSON file; pathless stale/cancel/failure changes no history.
 
 Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
 submits exact text, ordered staged identities, active vault and one client-turn identity;

@@ -483,11 +483,11 @@ shrink or revise; it is not a saved message. Do not announce every replacement t
 live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
 failure once.
 
-The durable Pi final replaces the draft; failure/cancellation clears or marks it. Restart shows
-durable messages only, never Pi/provider internals. History lists previews newest-first;
-selection opens the exact timeline and gates compose on follow-up authority. Exact-history Trash
-confirms once; its pathless recovery list restores by opaque identity. Drift/failure retains
-timeline/focus, `Current` rereads durable truth, and vault change resets browsing.
+The durable Pi final replaces the draft; failure/cancel clears or marks it. Restart shows only
+durable messages. History lists previews newest-first; selection opens the exact timeline and gates
+follow-up. Trash confirms once and restores by opaque identity. Drift retains timeline/focus,
+`Current` rereads truth, and vault change resets browsing. Export uses Main save and only pathless
+success; cancel/failure preserves history.
 
 Prototype:
 
