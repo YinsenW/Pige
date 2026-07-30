@@ -24,6 +24,7 @@ type VisualNode = {
   readonly weight: number;
   readonly fragmentCount: number;
   readonly sourceCount: number;
+  readonly leafCount: number;
   readonly status: KnowledgeTreeNode["status"] | KnowledgeTreePageRef["status"] | "active";
   readonly pageId?: string;
   readonly focusKey?: string;
@@ -33,6 +34,7 @@ type VisualTree = {
   readonly nodes: readonly VisualNode[];
   readonly byId: ReadonlyMap<string, VisualNode>;
   readonly maxWeight: number;
+  readonly maxDensity: number;
 };
 
 type ViewportAnnouncement =
@@ -359,7 +361,9 @@ export function KnowledgeTreeMap(props: {
               {visual.nodes.map((node) => {
                 const interactive = nodeInteractive(node);
                 const dimmed = nodeDimmed(node);
-                const radius = nodeRadius(node, visual.maxWeight);
+                const density = evidenceDensity(node);
+                const densityBand = evidenceDensityBand(density);
+                const radius = nodeRadius(node, visual.maxWeight, visual.maxDensity);
                 const showLabel = node.kind !== "page" && (node.level <= 1 || node.id === activeId);
                 return (
                   <g
@@ -368,12 +372,15 @@ export function KnowledgeTreeMap(props: {
                       if (element) nodeRefs.current.set(node.id, element);
                       else nodeRefs.current.delete(node.id);
                     }}
-                    className={`knowledge-map-node level-${Math.min(node.level, 4)}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
+                    className={`knowledge-map-node level-${Math.min(node.level, 4)} density-${densityBand}${node.status === "needs_review" ? " needs-review" : ""}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
                     role="treeitem"
                     aria-level={node.level + 1}
                     aria-label={node.title}
+                    aria-description={formatNodeSummary(props.t, node)}
                     aria-hidden={!interactive}
                     aria-selected={node.id === activeId}
+                    data-knowledge-density={density}
+                    data-knowledge-leaf-count={node.leafCount}
                     tabIndex={interactive && node.id === activeId ? 0 : -1}
                     transform={`translate(${node.x} ${node.y})`}
                     onClick={() => {
@@ -417,7 +424,8 @@ export function KnowledgeTreeMap(props: {
           <p>{props.t(`knowledgeTree.kind.${active.kind === "page" || active.kind === "root" ? "concept" : active.kind}`)}</p>
           <div className="knowledge-inspector-tags">
             <span>{props.t("knowledgeTree.fragments")} {active.fragmentCount}</span>
-            <span>{props.t("knowledgeTree.leaves")} {active.level}</span>
+            <span>{props.t("knowledgeTree.leaves")} {active.leafCount}</span>
+            <span>{props.t("knowledgeTree.density")} {evidenceDensity(active)}</span>
           </div>
           {active.pageId && active.focusKey ? (
             <button
@@ -655,6 +663,7 @@ function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) =
     weight: roots.reduce((sum, node) => sum + node.metrics.weight, 0),
     fragmentCount: roots.reduce((sum, node) => sum + node.metrics.fragmentPageCount, 0),
     sourceCount: roots.reduce((sum, node) => sum + node.metrics.sourceCount, 0),
+    leafCount: roots.reduce((sum, node) => sum + node.metrics.leafCount, 0),
     status: "active"
   }];
   const rootSpan = Math.PI * .82;
@@ -668,7 +677,8 @@ function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) =
   return {
     nodes,
     byId: new Map(nodes.map((node) => [node.id, node])),
-    maxWeight: Math.max(1, ...nodes.map((node) => node.weight))
+    maxWeight: Math.max(1, ...nodes.map((node) => node.weight)),
+    maxDensity: Math.max(1, ...nodes.map(evidenceDensity))
   };
 }
 
@@ -701,6 +711,7 @@ function appendKnowledgeNode(
     weight: node.metrics.weight,
     fragmentCount: node.metrics.fragmentPageCount,
     sourceCount: node.metrics.sourceCount,
+    leafCount: node.metrics.leafCount,
     status: node.status,
     ...(node.navigation ? { pageId: node.navigation.pageId, focusKey: `${pathKey}-node` } : {})
   });
@@ -741,6 +752,7 @@ function appendPageNode(
     weight: Math.max(1, page.sourceIds.length),
     fragmentCount: 1,
     sourceCount: page.sourceIds.length,
+    leafCount: 1,
     status: page.status,
     pageId: page.pageId,
     focusKey
@@ -757,10 +769,33 @@ function branchWidth(node: VisualNode, maxWeight: number): number {
   return node.level <= 1 ? .9 + Math.pow(ratio, .58) * 7 : .45 + Math.pow(ratio, .6) * 2.2;
 }
 
-function nodeRadius(node: VisualNode, maxWeight: number): number {
+function nodeRadius(node: VisualNode, maxWeight: number, maxDensity: number): number {
   if (node.kind === "root") return 6.8;
-  const ratio = Math.max(.08, node.weight / maxWeight);
+  const ratio = Math.max(.08, node.kind === "domain" || node.kind === "topic"
+    ? node.weight / maxWeight
+    : evidenceDensity(node) / maxDensity);
   return Math.min(6.2, 1.65 + Math.pow(ratio, .52) * (node.level <= 1 ? 5 : 3.2));
+}
+
+function evidenceDensity(node: VisualNode): number {
+  return node.fragmentCount + node.sourceCount;
+}
+
+function evidenceDensityBand(density: number): 0 | 1 | 2 | 3 {
+  if (density <= 0) return 0;
+  if (density <= 2) return 1;
+  if (density <= 5) return 2;
+  return 3;
+}
+
+function formatNodeSummary(t: (key: string) => string, node: VisualNode): string {
+  return t("knowledgeTree.nodeSummary")
+    .replace("{title}", node.title)
+    .replace("{weight}", String(node.weight))
+    .replace("{fragments}", String(node.fragmentCount))
+    .replace("{sources}", String(node.sourceCount))
+    .replace("{leaves}", String(node.leafCount))
+    .replace("{density}", String(evidenceDensity(node)));
 }
 
 function clamp(value: number, min: number, max: number): number {
