@@ -3629,6 +3629,40 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("keeps a mixed drop result with explicit queued and rejected counts", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      const completed = completedResult();
+      if (completed.state !== "completed") throw new Error("Expected a completed fixture.");
+      return {
+        ...completed,
+        sourceIds: ["src_20260731_dropaccepted"],
+        rejectedFiles: [{ displayName: "blocked.zip", reason: "unsupported_type" as const }]
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await dropFiles(dom, container, [
+      ["accepted.md", "# Accepted\n"],
+      ["blocked.zip", "not-an-archive"]
+    ]);
+    await waitFor(dom, () => container.querySelector(".capture-batch-result") !== null);
+
+    const result = container.querySelector<HTMLElement>(".capture-batch-result")!;
+    expect(result.textContent).toContain("Queued: 1 · Rejected: 1");
+    expect(result.textContent).toContain("blocked.zip");
+    expect(result.textContent).toContain("This file type is not supported.");
+    expect(result.textContent).not.toContain("/Users/");
+    expect(harness.submitRequests).toHaveLength(1);
+    await setTextareaValue(dom, container, "Keep the settled batch result visible.");
+    expect(container.querySelector(".capture-batch-result")?.textContent).toContain("Queued: 1 · Rejected: 1");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("preserves a failed multi-file drop for one explicit duplicate-free retry", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -6007,6 +6041,10 @@ describe("Home durable Agent conversation UI", () => {
       path.resolve("apps/desktop/src/renderer/src/App.tsx"),
       "utf8"
     );
+    const captureDropZoneSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/HomeCaptureDropZone.tsx"),
+      "utf8"
+    );
     const styles = fs.readFileSync(
       path.resolve("apps/desktop/src/renderer/src/styles/app.css"),
       "utf8"
@@ -6051,7 +6089,7 @@ describe("Home durable Agent conversation UI", () => {
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
     expect(appSource).toContain("setStagedComposerItems((current) => [");
     expect(appSource).toContain('kind: "file" as const');
-    expect(appSource).toContain("multiple");
+    expect(captureDropZoneSource).toContain("multiple");
     expect(retryLatestTurn).toContain("props.onRetryJob(retryableLatestTurn.jobId)");
     expect(retryLatestTurn).not.toContain("submitTurn");
     expect(submitHomeInput.indexOf("window.pige.agent.submitTurn"))

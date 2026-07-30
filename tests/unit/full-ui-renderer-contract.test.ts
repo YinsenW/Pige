@@ -4,8 +4,24 @@ import { describe, expect, it } from "vitest";
 
 const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
+const homeCaptureDropZoneSource = fs.readFileSync(
+  path.join(rendererRoot, "components/HomeCaptureDropZone.tsx"),
+  "utf8"
+);
+const homeCaptureDropZoneCssSource = fs.readFileSync(
+  path.join(rendererRoot, "styles/home-capture-drop-zone.css"),
+  "utf8"
+);
+const libraryPanelModelSource = fs.readFileSync(
+  path.join(rendererRoot, "components/library-panel-model.ts"),
+  "utf8"
+);
 const noteReaderSource = fs.readFileSync(path.join(rendererRoot, "components/NoteReader.tsx"), "utf8");
 const noteReaderSourcesSource = fs.readFileSync(path.join(rendererRoot, "components/NoteReaderSources.tsx"), "utf8");
+const readerDocumentActionsSource = fs.readFileSync(
+  path.join(rendererRoot, "components/ReaderDocumentActions.tsx"),
+  "utf8"
+);
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
 const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
@@ -147,19 +163,20 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('onSearch={(request) => window.pige.retrieval.search(request)}');
     expect(appSource).toContain('role="tablist"');
     expect(appSource).toContain('aria-selected={family === value}');
-    expect(appSource).toContain('if (family === "sources") return ["source"]');
+    expect(libraryPanelModelSource).toContain('if (family === "sources") return ["source"]');
     expect(appSource).toContain('family === "tags"');
     expect(appSource).toContain('onInput={(event) => setQuery(event.currentTarget.value)}');
     expect(cssSource).toContain("width: min(100%, 680px);");
     expect(cssSource).toContain("min-height: 42px;");
     expect(cssSource).toContain("min-height: 48px;");
-    expect(appSource).toContain('onClick={() => fileInputRef.current?.click()}');
-    expect(appSource).toContain('name="attach"');
-    expect(appSource).toContain('props.t("home.attachToMessage")');
+    expect(homeCaptureDropZoneSource).toContain('inputRef.current?.click()');
+    expect(homeCaptureDropZoneSource).toContain('aria-label={props.t("home.attachToMessage")}');
     expect(appSource).toContain('className={`attachment-chip${isPastedText ? " pasted-text-chip" : ""}');
-    expect(appSource).toContain("multiple");
-    expect(appSource).toContain('className="attachment-submission-notice"');
-    expect(appSource).toContain("attachmentRejectionMessageKey(rejection.reason)");
+    expect(homeCaptureDropZoneSource).toContain("multiple");
+    expect(homeCaptureDropZoneSource).toContain("attachment-submission-notice capture-batch-result");
+    expect(homeCaptureDropZoneSource).toContain("attachmentRejectionMessageKey(rejection.reason)");
+    expect(homeCaptureDropZoneSource).toContain("event.stopPropagation()");
+    expect(homeCaptureDropZoneSource).toContain('role={props.status.status === "failed" ? "alert" : "status"}');
     expect(appSource).not.toContain('props.t("home.oneFilePerTurn")');
     expect(appSource).toContain('submitHomeFiles(request.files, "file_drop"');
     expect(appSource).toContain('"file_picker"');
@@ -168,6 +185,7 @@ describe("full production UI renderer contract", () => {
     expect(enMessages["home.attachToMessage"]).toBe("Attach to this message");
     expect(cssSource).toContain(".attachment-strip.visible");
     expect(cssSource).toContain(".conversation-attachment-list");
+    expect(homeCaptureDropZoneCssSource).toContain(".home-capture-drop-trigger:focus-visible");
     expect(appSource).toContain('? "loading" : "send"');
     expect(appSource).toContain("onKeyDown={handleComposerKeyDown}");
   });
@@ -178,7 +196,7 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain("navigator.clipboard.writeText(note.markdownBody)");
     expect(appSource).toContain('data-reader-action="edit"');
     expect(appSource).toContain('data-reader-action="copy"');
-    expect(appSource).toContain('data-reader-action="more"');
+    expect(readerDocumentActionsSource).toContain('data-reader-action="more"');
     expect(noteReaderSource).toContain('props.onDevelopment("selection_actions")');
     expect(noteReaderSource).toContain("props.onOpenSourceReference");
     expect(noteReaderSourcesSource).toContain('data-reader-source-action="open"');
