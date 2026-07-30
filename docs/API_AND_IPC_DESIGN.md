@@ -469,6 +469,7 @@ Commands:
 
 - `notes.saveEditor`
 - `notes.revealSource`
+- `notes.trashCurrent`
 
 Library queries return bounded stable-ID summaries without renderer file access. Notes resolve IDs
 to safe Markdown/HTML. `renderContextId` authorizes rendering only; Main retains paths,

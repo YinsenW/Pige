@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 198,
-  "baselineLines": 101984,
+  "baselineFileCount": 201,
+  "baselineLines": 103078,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -27,6 +27,7 @@
       ["agent-runtime-service.ts", 118, "ap"],
       ["background-job-drainer.ts", 93, "r"],
       ["backup-coordinator-service.ts", 989, "jr"],
+      ["backup-destination-reconnect-service.ts", 338, "jrd"],
       ["backup-reconnect-coordinator.ts", 201, "jr"],
       ["backup-service.ts", 3207, "rd"],
       ["current-note-append-service.ts", 842, "ard"],
@@ -54,6 +55,7 @@
       ["model-egress-content.ts", 77, "pf"],
       ["model-runtime-binding.ts", 113, "ap"],
       ["note-markdown-editor-service.ts", 973, "rd"],
+      ["note-trash-service.ts", 710, "rd"],
       ["notes-service.ts", 957, "prf"],
       ["ocr-language-preference-service.ts", 282, "aprd"],
       ["permission-broker-service.ts", 947, "prd"],
@@ -80,6 +82,7 @@
       ["source-file-access.ts", 217, "pr"],
       ["source-original-reconnect-service.ts", 194, "jrd"],
       ["speech-service.ts", 541, "pr"],
+      ["startup-destination-service.ts", 46, "r"],
       ["task-execution-plan-runner.ts", 500, "japr"],
       ["task-execution-plan-service.ts", 863, "jpr"],
       ["task-process-session-service.ts", 611, "jpr"],
@@ -231,7 +234,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 198,
+    "serviceOwnerCount": 201,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
