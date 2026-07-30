@@ -266,6 +266,11 @@ type StagedComposerItem =
   | { readonly kind: "file"; readonly localId: string; readonly file: File }
   | ({ readonly kind: "pasted_text" } & StagedPastedTextItem)
   | ({ readonly kind: "rejected_pasted_text"; readonly reason: AgentStagedItemRejectionReason } & StagedPastedTextItem);
+type FailedFileDropRecovery = {
+  readonly activeVaultId: string;
+  readonly clientTurnId: string;
+  readonly files: readonly File[];
+};
 type ActiveReaderSelectionProposal = {
   readonly vaultId: string;
   readonly pageId: string;
@@ -4081,6 +4086,7 @@ function HomeComposer(props: {
   const [voiceCanOpenSystemSettings, setVoiceCanOpenSystemSettings] = useState(false);
   const [voiceAssetInstallProgress, setVoiceAssetInstallProgress] = useState<number | undefined>(undefined);
   const [stagedComposerItems, setStagedComposerItems] = useState<readonly StagedComposerItem[]>([]);
+  const [failedFileDropRecovery, setFailedFileDropRecovery] = useState<FailedFileDropRecovery | null>(null);
   const [attachmentSubmissionNotice, setAttachmentSubmissionNotice] = useState<{
     readonly acceptedCount: number;
     readonly rejectedFiles: readonly CaptureFileRejection[];
@@ -4163,11 +4169,13 @@ function HomeComposer(props: {
     readonly tailEventId: string;
   } | null>(null);
   const handledFileDropClientTurnIdRef = useRef<string | null>(null);
+  const failedFileDropRecoveryRef = useRef<FailedFileDropRecovery | null>(null);
   const activeVaultIdRef = useRef<string | undefined>(props.activeVault?.vaultId);
   const selectedHistoryConversationIdRef = useRef<string | null>(selectedHistoryConversationId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
   recentJobsRef.current = props.recentJobs;
+  failedFileDropRecoveryRef.current = failedFileDropRecovery;
   selectedHistoryConversationIdRef.current = selectedHistoryConversationId;
   selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
@@ -4996,6 +5004,7 @@ function HomeComposer(props: {
     stagedAttachmentRevisionRef.current += 1;
     stagedComposerAttemptRef.current = null;
     setStagedComposerItems([]);
+    setFailedFileDropRecovery(null);
     setLiveAnswerEventId(null);
     setAgentAnswer(null);
     clearAgentDraft();
@@ -5399,6 +5408,7 @@ function HomeComposer(props: {
     submittedText: string | undefined,
     clientTurnId: string
   ): Promise<void> => {
+    const submittedVaultId = activeVaultIdRef.current;
     const sourceDisplayName = files[0]?.name ?? null;
     setCaptureError(null);
     setAttachmentSubmissionNotice(null);
@@ -5415,6 +5425,9 @@ function HomeComposer(props: {
       if (!result) {
         setActiveSourceTurn(null);
         setAgentRunState("failed");
+        if (inputKind === "file_drop" && submittedVaultId && activeVaultIdRef.current === submittedVaultId) {
+          setFailedFileDropRecovery({ activeVaultId: submittedVaultId, clientTurnId, files });
+        }
         return;
       }
       if (result.rejectedFiles?.length) {
@@ -5438,13 +5451,38 @@ function HomeComposer(props: {
       } else {
         setAgentAnswer(null);
         setAgentError(result.error);
+        if (result.state === "failed" && inputKind === "file_drop" && submittedVaultId && activeVaultIdRef.current === submittedVaultId) {
+          setFailedFileDropRecovery({ activeVaultId: submittedVaultId, clientTurnId, files });
+        }
       }
+      if (
+        result.state !== "failed" &&
+        failedFileDropRecoveryRef.current?.clientTurnId === clientTurnId
+      ) setFailedFileDropRecovery(null);
       await refreshConversation();
     } catch {
       clearAgentDraft();
       setActiveSourceTurn(null);
       setAgentRunState("failed");
+      if (inputKind === "file_drop" && submittedVaultId && activeVaultIdRef.current === submittedVaultId) {
+        setFailedFileDropRecovery({ activeVaultId: submittedVaultId, clientTurnId, files });
+      }
     }
+  };
+
+  const retryFailedFileDrop = async (): Promise<void> => {
+    const recovery = failedFileDropRecoveryRef.current;
+    if (
+      !recovery ||
+      recovery.activeVaultId !== activeVaultIdRef.current ||
+      recovery.files.length === 0 ||
+      !beginComposerSubmission(recovery.clientTurnId)
+    ) return;
+    void submitHomeFiles(recovery.files, "file_drop", undefined, recovery.clientTurnId)
+      .finally(() => {
+        finishComposerSubmission(recovery.clientTurnId);
+        restoreComposerFocus();
+      });
   };
 
   useEffect(() => {
@@ -5462,6 +5500,7 @@ function HomeComposer(props: {
     void submitHomeFiles(request.files, "file_drop", request.text, request.clientTurnId)
       .finally(() => {
         finishComposerSubmission(request.clientTurnId);
+        restoreComposerFocus();
       });
   }, [props.fileDropRequest?.clientTurnId, composerSubmitActive]);
 
@@ -6060,6 +6099,51 @@ function HomeComposer(props: {
           />
         ) : (
           <>
+        {failedFileDropRecovery ? (
+          <section
+            className="attachment-strip visible"
+            aria-label={props.t("home.messageItems")}
+            aria-busy={composerSubmitActive || undefined}
+          >
+            <div className="attachment-list">
+              {failedFileDropRecovery.files.map((file, index) => (
+                <div className="attachment-chip" key={`${failedFileDropRecovery.clientTurnId}-${index}`}>
+                  <span className="attachment-chip-copy">
+                    <strong>{file.name}</strong>
+                    <small role="status">{props.t("error.generic")}</small>
+                  </span>
+                  <button
+                    className="chip-remove"
+                    type="button"
+                    disabled={composerSubmitActive}
+                    aria-label={`${props.t("home.removeAttachment")} ${file.name}`}
+                    onClick={() => {
+                      const files = failedFileDropRecovery.files.filter((_, fileIndex) => fileIndex !== index);
+                      setFailedFileDropRecovery(files.length > 0
+                        ? {
+                            ...failedFileDropRecovery,
+                            clientTurnId: createAgentClientTurnId(),
+                            files
+                          }
+                        : null);
+                      window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
+                    }}
+                  >
+                    <PigeIcon name="close" size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="secondary"
+              disabled={composerSubmitActive}
+              onClick={() => void retryFailedFileDrop()}
+            >
+              {props.t("confirmation.retry")}
+            </button>
+          </section>
+        ) : null}
         {stagedComposerItems.length > 0 ? (
           <div className="attachment-strip visible" aria-label={props.t("home.messageItems")}>
             <div className="attachment-list">

@@ -3185,6 +3185,103 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("preserves a failed multi-file drop for one explicit duplicate-free retry", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const pendingResults: Array<(result: AgentSubmitTurnResult) => void> = [];
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => pendingResults.push(resolve));
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await setTextareaValue(dom, container, "Keep this separate draft.");
+    homeComposer(container).focus();
+    await dropFiles(dom, container, [
+      ["drop-first.md", "# First\n"],
+      ["drop-second.csv", "value\n2\n"]
+    ]);
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    const firstClientTurnId = harness.submitRequests[0]?.clientTurnId;
+    await act(async () => {
+      pendingResults[0]?.({
+        requestId: "request_20260730_dropfailed",
+        state: "failed",
+        modelUsage: "none",
+        sourceIds: [],
+        error: turnConflictError()
+      });
+      await settle(dom);
+      await settle(dom);
+    });
+
+    expect(textareaValue(container)).toBe("Keep this separate draft.");
+    expect(Array.from(container.querySelectorAll(".attachment-chip strong")).map((chip) => chip.textContent)).toEqual([
+      "drop-first.md",
+      "drop-second.csv"
+    ]);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    const retry = requireElement(container.querySelector<HTMLButtonElement>(".attachment-strip .secondary"));
+    await act(async () => {
+      retry.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      retry.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+
+    expect(harness.submitRequests[1]).toMatchObject({
+      inputKind: "file_drop",
+      clientTurnId: firstClientTurnId
+    });
+    expect(harness.submitRequests[1]?.text).toBeUndefined();
+    expect(harness.submittedFileNames).toEqual([
+      ["drop-first.md", "drop-second.csv"],
+      ["drop-first.md", "drop-second.csv"]
+    ]);
+
+    await act(async () => {
+      pendingResults[1]?.(completedResult());
+      await settle(dom);
+      await settle(dom);
+    });
+
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(textareaValue(container)).toBe("Keep this separate draft.");
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("preserves an exact dropped file after an IPC rejection without retrying automatically", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      throw new Error("synthetic rejected drop");
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await dropFile(dom, container, "retry-later.md", "# Retry later\n");
+    await waitFor(dom, () => container.querySelector(".attachment-chip") !== null);
+
+    expect(harness.submitRequests).toHaveLength(1);
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("retry-later.md");
+    expect(buttons(container, "Retry")).toHaveLength(1);
+    await act(async () => settle(dom));
+    expect(harness.submitRequests).toHaveLength(1);
+    await clickButtonByAriaLabel(dom, container, "Remove attachment retry-later.md");
+    expect(container.querySelector(".attachment-chip")).toBeNull();
+    expect(buttons(container, "Retry")).toHaveLength(0);
+    expect(dom.window.document.activeElement).toBe(homeComposer(container));
+    expect(harness.submitRequests).toHaveLength(1);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("queues an immediate global drop behind the shared composer submission gate", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
