@@ -11,6 +11,8 @@ import type {
   LibraryMergeTagResult,
   LibraryRemoveTagRequest,
   LibraryRemoveTagResult,
+  LibraryRemovePageTagRequest,
+  LibraryRemovePageTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   LibraryTagsRequest,
@@ -564,6 +566,14 @@ describe("full UI Library", () => {
       removeConfirm: "Remove from all pages",
       removePending: "Removing",
       removeFailed: "Remove failed",
+      removePage: "Remove tag",
+      removePageTitle: "Remove tag from this page?",
+      removePageDescription: "Remove from one page",
+      removePageCurrentTag: "Tag:",
+      removePageCurrentPage: "Page:",
+      removePageConfirm: "Remove tag",
+      removePagePending: "Removing",
+      removePageFailed: "Page remove failed",
       noteCount: (count) => `${count} notes`,
     };
     const opened: string[] = [];
@@ -640,6 +650,10 @@ describe("full UI Library", () => {
         status: "failed",
       })),
       removeTag: vi.fn(async (request: LibraryRemoveTagRequest): Promise<LibraryRemoveTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
+      removePageTag: vi.fn(async (request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> => ({
         ...request,
         status: "failed",
       })),
@@ -739,6 +753,9 @@ describe("full UI Library", () => {
       remove: "Remove from all pages", removeTitle: "Remove tag from all pages?", removeDescription: "Remove description",
       removeCurrent: "Tag:", removePageCount: "Current pages:", removeCancel: "Cancel",
       removeConfirm: "Remove from all pages", removePending: "Removing", removeFailed: "Remove failed",
+      removePage: "Remove tag", removePageTitle: "Remove tag from this page?", removePageDescription: "Remove from one page",
+      removePageCurrentTag: "Tag:", removePageCurrentPage: "Page:", removePageConfirm: "Remove tag",
+      removePagePending: "Removing", removePageFailed: "Page remove failed",
     };
     const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
     const renameRequests: LibraryRenameTagRequest[] = [];
@@ -773,6 +790,10 @@ describe("full UI Library", () => {
         status: "failed",
       })),
       removeTag: vi.fn(async (request: LibraryRemoveTagRequest): Promise<LibraryRemoveTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
+      removePageTag: vi.fn(async (request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> => ({
         ...request,
         status: "failed",
       })),
@@ -847,6 +868,9 @@ describe("full UI Library", () => {
       remove: "Remove from all pages", removeTitle: "Remove tag from all pages?", removeDescription: "Remove description",
       removeCurrent: "Tag:", removePageCount: "Current pages:", removeCancel: "Cancel",
       removeConfirm: "Remove from all pages", removePending: "Removing", removeFailed: "Remove failed",
+      removePage: "Remove tag", removePageTitle: "Remove tag from this page?", removePageDescription: "Remove from one page",
+      removePageCurrentTag: "Tag:", removePageCurrentPage: "Page:", removePageConfirm: "Remove tag",
+      removePagePending: "Removing", removePageFailed: "Page remove failed",
       noteCount: (count) => `${count} notes`,
     };
     const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
@@ -884,6 +908,10 @@ describe("full UI Library", () => {
         });
       }),
       removeTag: vi.fn(async (request: LibraryRemoveTagRequest): Promise<LibraryRemoveTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
+      removePageTag: vi.fn(async (request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> => ({
         ...request,
         status: "failed",
       })),
@@ -962,6 +990,9 @@ describe("full UI Library", () => {
       remove: "Remove from all pages", removeTitle: "Remove tag from all pages?", removeDescription: "Undo in Activity.",
       removeCurrent: "Tag:", removePageCount: "Current pages:", removeCancel: "Cancel",
       removeConfirm: "Remove from all pages", removePending: "Removing", removeFailed: "Remove failed",
+      removePage: "Remove tag", removePageTitle: "Remove tag from this page?", removePageDescription: "Remove from one page",
+      removePageCurrentTag: "Tag:", removePageCurrentPage: "Page:", removePageConfirm: "Remove tag",
+      removePagePending: "Removing", removePageFailed: "Page remove failed",
       noteCount: (count) => `${count} notes`,
     };
     const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
@@ -1002,6 +1033,10 @@ describe("full UI Library", () => {
           removedPageCount: 2,
         });
       }),
+      removePageTag: vi.fn(async (request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -1046,6 +1081,91 @@ describe("full UI Library", () => {
       dom.window.document.activeElement?.matches("button.search-result") === true &&
       dom.window.document.activeElement.textContent?.includes("notes") === true,
     );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("removes one exact tag from one listed page and reloads the authoritative tag pages", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(0), 0),
+    });
+    const labels: LibraryTagsBrowserLabels = {
+      title: "Tags", loading: "Loading tags", empty: "No tags", failed: "Tags unavailable", retry: "Try again",
+      notesLoading: "Loading tagged notes", notesEmpty: "No tagged notes", notesFailed: "Tagged notes unavailable",
+      loadMore: "Load more", loadingMore: "Loading more", open: "Open", rename: "Rename",
+      renameTitle: "Rename tag", renameDescription: "Rename description", renameCurrent: "Current tag:",
+      renameReplacement: "New tag", renameCancel: "Cancel", renameConfirm: "Rename tag",
+      renamePending: "Renaming", renameFailed: "Rename failed",
+      merge: "Merge", mergeTitle: "Merge tag", mergeDescription: "Merge description",
+      mergeSource: "Source tag:", mergeTarget: "Merge into", mergeCancel: "Cancel",
+      mergeConfirm: "Merge tag", mergePending: "Merging", mergeFailed: "Merge failed",
+      remove: "Remove from all pages", removeTitle: "Remove tag from all pages?", removeDescription: "Undo in Activity.",
+      removeCurrent: "Tag:", removePageCount: "Current pages:", removeCancel: "Cancel",
+      removeConfirm: "Remove from all pages", removePending: "Removing", removeFailed: "Remove failed",
+      removePage: "Remove tag", removePageTitle: "Remove tag from this page?", removePageDescription: "Remove from one page",
+      removePageCurrentTag: "Tag:", removePageCurrentPage: "Page:", removePageConfirm: "Remove tag",
+      removePagePending: "Removing", removePageFailed: "Page remove failed",
+      noteCount: (count) => `${count} notes`,
+    };
+    const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
+    const firstPage = { pageId: "page_20260730_research01", title: "Research brief", pageType: "note" as const,
+      status: "active" as const, updatedAt: "2026-07-30T08:00:00.000Z" };
+    const secondPage = { pageId: "page_20260730_research02", title: "Second note", pageType: "note" as const,
+      status: "active" as const, updatedAt: "2026-07-30T08:01:00.000Z" };
+    const removeRequests: LibraryRemovePageTagRequest[] = [];
+    let committed = false;
+    let resolveStale!: (result: LibraryRemovePageTagResult) => void;
+    const api = {
+      tags: vi.fn(async (request: LibraryTagsRequest): Promise<LibraryTagsResult> => request.mode === "list_tags" ? ({
+        apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, mode: "list_tags",
+        status: "ready", snapshotId, tags: [{ tag: "research", pageCount: committed ? 1 : 2 }], total: 1,
+      }) : ({
+        apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+        mode: "list_pages_for_tag", tag: request.tag, status: "ready", snapshotId,
+        pages: committed ? [secondPage] : [firstPage, secondPage], total: committed ? 1 : 2,
+      })),
+      renameTag: vi.fn(async (request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> => ({ ...request, status: "failed" })),
+      mergeTag: vi.fn(async (request: LibraryMergeTagRequest): Promise<LibraryMergeTagResult> => ({ ...request, status: "failed" })),
+      removeTag: vi.fn(async (request: LibraryRemoveTagRequest): Promise<LibraryRemoveTagResult> => ({ ...request, status: "failed" })),
+      removePageTag: vi.fn((request: LibraryRemovePageTagRequest): Promise<LibraryRemovePageTagResult> => {
+        removeRequests.push(request);
+        if (removeRequests.length === 1) return new Promise((resolve) => { resolveStale = resolve; });
+        committed = true;
+        return Promise.resolve({ ...request, status: "committed", operationId: "operation_library_page_tag_remove" });
+      }),
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LibraryTagsBrowser, { activeVaultId: "vault_20260730_librarytags", api, labels,
+        onOpenNote: async () => undefined }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonNamed(container, "research2 notes"));
+    await waitFor(dom, () => container.textContent?.includes("Research brief") === true);
+    await clickButton(dom, buttonWithLabel(container, "Remove tag: Research brief"));
+    expect(container.textContent).toContain("research");
+    expect(container.textContent).toContain("Research brief");
+    const confirm = requireElement(container.querySelector<HTMLButtonElement>(".confirmation-dialog .primary.danger"));
+    await act(async () => { confirm.click(); confirm.click(); await settle(dom); });
+    expect(removeRequests).toHaveLength(1);
+    expect(removeRequests[0]).toMatchObject({ activeVaultId: "vault_20260730_librarytags", tag: "research",
+      pageId: firstPage.pageId, expectedSnapshotId: snapshotId, expectedPageUpdatedAt: firstPage.updatedAt });
+    expect(removeRequests[0]?.requestId).toMatch(/^library_page_tag_remove_request_[a-z0-9]{16,64}$/u);
+    expect(JSON.stringify(removeRequests[0])).not.toMatch(/path|body/u);
+    resolveStale({ ...removeRequests[0]!, status: "stale" });
+    await waitFor(dom, () => container.textContent?.includes("Page remove failed") === true);
+    expect(container.textContent).toContain("Research brief");
+    await waitFor(dom, () => dom.window.document.activeElement?.textContent?.trim() === "Cancel");
+
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>(".confirmation-dialog .primary.danger")));
+    await waitFor(dom, () => container.textContent?.includes("Research brief") === false && container.textContent?.includes("Second note") === true);
+    expect(removeRequests).toHaveLength(2);
+    expect(api.tags).toHaveBeenCalledTimes(3);
+    await waitFor(dom, () => dom.window.document.activeElement?.textContent?.includes("Second note") === true);
 
     await act(async () => root.unmount());
     dom.window.close();
