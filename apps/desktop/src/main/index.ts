@@ -31,7 +31,6 @@ import type {
   LibraryRemoveTagRequest,
   LibraryRemovePageTagRequest,
   LibraryRenameTagRequest,
-  LibraryRenameTopicRequest,
   LibraryTagsRequest,
   LibraryRelatedRequest,
   OpenRecentVaultRequest,
@@ -143,9 +142,6 @@ import {
   LIBRARY_RENAME_TAG_CHANNEL,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
-  LIBRARY_RENAME_TOPIC_CHANNEL,
-  LibraryRenameTopicRequestSchema,
-  LibraryRenameTopicResultSchema,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   PERMISSIONS_CHANGED_CHANNEL,
@@ -2993,14 +2989,6 @@ ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL, (_event, request: LibraryRenameTagReq
   if (result.status === "committed") scheduleActivityIndexRebuild();
   return result;
 });
-ipcMain.handle(LIBRARY_RENAME_TOPIC_CHANNEL, async (event, request: LibraryRenameTopicRequest) => {
-  const parsed = LibraryRenameTopicRequestSchema.parse(request);
-  const result = LibraryRenameTopicResultSchema.parse(
-    await getLibraryTopicRenameService().rename(String(event.sender.id), parsed)
-  );
-  if (result.status === "committed") scheduleActivityIndexRebuild();
-  return result;
-});
 ipcMain.handle(LIBRARY_MERGE_TAG_CHANNEL, (_event, request: LibraryMergeTagRequest) => {
   const parsed = LibraryMergeTagRequestSchema.parse(request);
   const result = LibraryMergeTagResultSchema.parse(getLibraryTagRenameService().merge(parsed));
@@ -3041,6 +3029,7 @@ registerReaderIpc({
   getNoteRelateService,
   getNoteMarkdownImportService,
   getNoteRevisionHistoryService,
+  getLibraryTopicRenameService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
   onNoteArchiveCommitted: scheduleActivityIndexRebuild,
   onNoteRelated: scheduleActivityIndexRebuild,

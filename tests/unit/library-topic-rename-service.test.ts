@@ -4,6 +4,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { OperationRecordSchema } from "@pige/schemas";
+import { parsePigeFrontmatter } from "@pige/markdown";
 import { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 
@@ -23,12 +24,17 @@ describe("LibraryTopicRenameService", () => {
     const committed = await fixture.service.rename("reader_owner", request);
     expect(committed).toMatchObject({ status: "committed", render: { summary: { title: "New Topic" } } });
     if (committed.status !== "committed") throw new Error("Topic rename did not commit");
-    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('aliases: ["Old Topic"]');
+    const renamedMarkdown = fs.readFileSync(fixture.pagePath, "utf8");
+    expect(parsePigeFrontmatter(renamedMarkdown)?.frontmatter).toMatchObject({
+      id: PAGE_ID, type: "topic", title: "New Topic", aliases: ["Old Topic"]
+    });
+    expect(fs.existsSync(fixture.pagePath)).toBe(true);
 
     expect(await fixture.service.rename("reader_owner", request)).toMatchObject({
       status: "committed", operationId: committed.operationId, render: { summary: { title: "New Topic" } }
     });
     const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(operation.kind).toBe("rename_page");
     expect(fixture.service.activitySummary(operation)).toMatchObject({
       kind: "update_page", status: "applied", canUndo: true, target: { kind: "page", pageId: PAGE_ID }
     });

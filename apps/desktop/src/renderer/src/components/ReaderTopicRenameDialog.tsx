@@ -17,7 +17,7 @@ export function ReaderTopicRenameDialog(props: ReaderTopicRenameDialogProps): Re
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const requestRef = useRef<string | null>(null);
-  const ownerIdentity = `${props.activeVaultId ?? ""}:${props.note.summary.pageId}:${props.note.summary.updatedAt}`;
+  const ownerIdentity = `${props.activeVaultId ?? ""}:${props.note.summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.topicRenameEligibility?.revision ?? ""}`;
 
   useEffect(() => {
     requestRef.current = null;
@@ -60,8 +60,13 @@ export function ReaderTopicRenameDialog(props: ReaderTopicRenameDialogProps): Re
     setStatus("saving");
     try {
       const result = await props.onRename!(request);
-      if (requestRef.current !== requestId || !sameIdentity(request, result)) return;
+      if (requestRef.current !== requestId) return;
       requestRef.current = null;
+      if (!sameIdentity(request, result)) {
+        setStatus("failed");
+        window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+        return;
+      }
       if (
         result.status === "committed" && result.render.summary.pageId === request.pageId &&
         result.render.summary.pageType === "topic" && result.render.summary.title === request.title
@@ -139,5 +144,6 @@ export function ReaderTopicRenameDialog(props: ReaderTopicRenameDialogProps): Re
 function sameIdentity(request: LibraryRenameTopicRequest, result: LibraryRenameTopicResult): boolean {
   return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
     result.pageId === request.pageId && result.expectedUpdatedAt === request.expectedUpdatedAt &&
-    result.expectedTitle === request.expectedTitle && result.title === request.title;
+    result.expectedRevision === request.expectedRevision && result.expectedTitle === request.expectedTitle &&
+    result.title === request.title;
 }

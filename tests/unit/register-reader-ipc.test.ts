@@ -14,6 +14,7 @@ import type { NoteRenameService } from "../../apps/desktop/src/main/services/not
 import type { NoteAliasService } from "../../apps/desktop/src/main/services/note-alias-service";
 import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/services/note-markdown-import-service";
 import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
+import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -43,7 +44,8 @@ function makeHarness(
   sourceRefreshService?: Partial<SourceRefreshService>,
   onSourceRefreshed = vi.fn(),
   noteRenameService?: Partial<NoteRenameService>,
-  noteAliasService?: Partial<NoteAliasService>
+  noteAliasService?: Partial<NoteAliasService>,
+  libraryTopicRenameService?: Partial<LibraryTopicRenameService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -109,6 +111,10 @@ function makeHarness(
       throw new Error("Note Markdown import service was not expected.");
     },
     getNoteRevisionHistoryService: () => notes as unknown as import("../../apps/desktop/src/main/services/note-revision-history-service").NoteRevisionHistoryService,
+    getLibraryTopicRenameService: () => {
+      if (libraryTopicRenameService) return libraryTopicRenameService as LibraryTopicRenameService;
+      throw new Error("Library Topic rename service was not expected.");
+    },
     onNoteTrashCommitted,
     onNoteArchiveCommitted,
     onNoteRelated: onNoteArchiveCommitted,
@@ -139,6 +145,7 @@ describe("registerReaderIpc", () => {
       "notes.rename",
       "notes.changeAlias",
       "notes.removeTag",
+      "library.renameTopic",
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
@@ -234,6 +241,41 @@ describe("registerReaderIpc", () => {
     expect(remove).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     expect(refreshed).toHaveBeenCalledTimes(1);
     await expect(handlers.get("notes.removeTag")!({ sender: makeSender(48) } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "failed" });
+  });
+
+  it("binds Topic rename and its authoritative render to the tracked Reader owner", async () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "library_topic_rename_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_topicrename",
+      pageId: "page_20260731_topicrename",
+      expectedUpdatedAt: "2026-07-31T08:00:00.000Z",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`,
+      expectedTitle: "Old Topic",
+      title: "New Topic"
+    };
+    const render = {
+      summary: { pageId: request.pageId, title: request.title, pageType: "topic", status: "active",
+        pagePath: "wiki/topics/old-topic.md", createdAt: "2026-07-31T07:00:00.000Z",
+        updatedAt: "2026-07-31T09:00:00.000Z", sourceIds: [] },
+      html: "<h1>New Topic</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      topicRenameEligibility: { canRename: true, revision: `noteeditrev_${"b".repeat(64)}` }
+    } as const;
+    const rename = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260731_topicrename1234", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined,
+      undefined, vi.fn(), undefined, undefined, { rename });
+    const sender = makeSender(49);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.pageId });
+    await expect(handlers.get("library.renameTopic")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260731_topicrename1234" });
+    expect(rename).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    await expect(handlers.get("library.renameTopic")!({ sender: makeSender(50) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "failed" });
   });
 

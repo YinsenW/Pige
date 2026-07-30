@@ -193,7 +193,11 @@ export class LibraryTopicRenameService {
   ): Promise<LibraryRenameTopicResult> {
     try {
       const render = await this.#renderer.render({ pageId: request.pageId }, ownerId);
-      return render.renderContextId && render.summary.pageType === "topic" && render.summary.title === request.title
+      return render.renderContextId && render.summary.pageId === request.pageId &&
+        render.summary.pageType === "topic" && render.summary.status === "active" &&
+        render.summary.title === request.title &&
+        render.topicRenameEligibility?.canRename === true &&
+        render.topicRenameEligibility.revision !== request.expectedRevision
         ? { ...request, status: "committed", operationId, render: { ...render, renderContextId: render.renderContextId } }
         : closed(request, "failed");
     } catch {
@@ -238,7 +242,10 @@ function renameTopicMarkdown(
   if (start < 0) return undefined;
   const result = `${markdown.slice(0, start)}${raw}${markdown.slice(start + parsed.raw.length)}`;
   const verified = parsePigeFrontmatter(result)?.frontmatter;
-  return verified?.id === request.pageId && verified.type === "topic" && verified.title === request.title
+  return verified?.id === request.pageId && verified.type === "topic" && verified.status === "active" &&
+    verified.title === request.title && verified.aliases?.some((alias) =>
+      alias.normalize("NFKC").toLocaleLowerCase("en-US") === request.expectedTitle.toLocaleLowerCase("en-US")
+    )
     ? result
     : undefined;
 }

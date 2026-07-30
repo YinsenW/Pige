@@ -57,7 +57,8 @@ describe("ReaderTopicRenameDialog", () => {
   it("keeps the draft and dialog on stale, and hides the action for non-Topic pages", async () => {
     const onRename = vi.fn(async (request) => ({ ...request, status: "stale" as const }));
     const harness = await mount(topicRender(), onRename, vi.fn());
-    await click(harness.container.querySelector<HTMLButtonElement>('[data-reader-action="rename-topic"]')!, harness.dom);
+    const trigger = harness.container.querySelector<HTMLButtonElement>('[data-reader-action="rename-topic"]')!;
+    await click(trigger, harness.dom);
     const input = harness.container.querySelector<HTMLInputElement>("input")!;
     await act(async () => {
       setInputValue(input, "Retained Topic", harness.dom);
@@ -66,11 +67,55 @@ describe("ReaderTopicRenameDialog", () => {
     expect(harness.container.querySelector<HTMLInputElement>("input")?.value).toBe("Retained Topic");
     expect(harness.container.querySelector('[role="alert"]')?.textContent).toContain("changed");
     expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
+    await act(async () => {
+      input.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await new Promise((resolve) => harness.dom.window.setTimeout(resolve, 20));
+    });
+    expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await click(trigger, harness.dom);
+    await click(button(harness.container, "Cancel"), harness.dom);
+    await act(async () => {
+      await new Promise((resolve) => harness.dom.window.setTimeout(resolve, 20));
+    });
+    expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
     await harness.unmount();
 
     const hidden = await mount({ ...topicRender(), summary: { ...topicRender().summary, pageType: "note" } }, vi.fn(), vi.fn());
     expect(hidden.container.querySelector("button")).toBeNull();
     await hidden.unmount();
+  });
+
+  it("serializes submission and fails closed on a mismatched revision response", async () => {
+    let resolveRename!: (result: any) => void;
+    const onRename = vi.fn((request) => new Promise((resolve) => {
+      resolveRename = resolve;
+    }));
+    const harness = await mount(topicRender(), onRename, vi.fn());
+    await click(harness.container.querySelector<HTMLButtonElement>('[data-reader-action="rename-topic"]')!, harness.dom);
+    const input = harness.container.querySelector<HTMLInputElement>("input")!;
+    await act(async () => setInputValue(input, "New Topic", harness.dom));
+    const confirm = button(harness.container, "Rename");
+    await click(confirm, harness.dom);
+    await click(confirm, harness.dom);
+    expect(onRename).toHaveBeenCalledTimes(1);
+    const request = onRename.mock.calls[0]?.[0];
+    await act(async () => {
+      resolveRename({
+        ...request,
+        expectedRevision: `noteeditrev_${"c".repeat(64)}`,
+        status: "committed",
+        operationId: "op_20260731_topicrename",
+        render: topicRender("New Topic", "2026-07-31T09:00:00.000Z")
+      });
+      await Promise.resolve();
+      await new Promise((resolve) => harness.dom.window.setTimeout(resolve, 20));
+    });
+    expect(harness.container.querySelector<HTMLInputElement>("input")?.value).toBe("New Topic");
+    expect(harness.container.querySelector('[role="alert"]')?.textContent).toContain("failed");
+    expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
+    await harness.unmount();
   });
 });
 
