@@ -5792,7 +5792,7 @@ describe("full UI Settings surface", () => {
       '[role="switch"][aria-label="Include Agent memory in backups"]'
     ));
     expect(control.getAttribute("aria-checked")).toBe("true");
-    await act(async () => { control.click(); await settle(dom); });
+    await act(async () => { control.click(); control.click(); await settle(dom); });
     expect(setMemoryPreference).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: 1,
       activeVaultId: summary.activeVaultId,
@@ -5800,7 +5800,10 @@ describe("full UI Settings surface", () => {
       includeVaultMemory: false
     }));
     expect(setMemoryPreference.mock.calls[0]?.[0].requestId).toMatch(/^backupmemoryreq_[a-z0-9]{16,64}$/u);
+    expect(setMemoryPreference).toHaveBeenCalledTimes(1);
     expect(control.getAttribute("aria-checked")).toBe("false");
+    await act(async () => { await settle(dom); });
+    expect(dom.window.document.activeElement).toBe(control);
     expect(dom.window.document.body.textContent).toContain("The Agent memory backup preference was saved.");
 
     await act(async () => root.unmount());

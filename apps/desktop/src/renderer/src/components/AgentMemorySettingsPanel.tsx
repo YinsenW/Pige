@@ -64,6 +64,9 @@ export function AgentMemorySettingsPanel(
   const [backupPreferenceState, setBackupPreferenceState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
   const [backupPreferenceSaving, setBackupPreferenceSaving] = useState(false);
   const [backupPreferenceStatusKey, setBackupPreferenceStatusKey] = useState<string | null>(null);
+  const backupPreferenceRequestActiveRef = useRef(false);
+  const backupPreferenceSequenceRef = useRef(0);
+  const backupPreferenceButtonRef = useRef<HTMLButtonElement>(null);
   const [editDraft, setEditDraft] = useState<MemoryEditDraft | null>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -84,6 +87,8 @@ export function AgentMemorySettingsPanel(
   useEffect(() => {
     const requestedVaultId = props.activeVaultId;
     let current = true;
+    backupPreferenceSequenceRef.current += 1;
+    backupPreferenceRequestActiveRef.current = false;
     setBackupPreference(null);
     setBackupPreferenceStatusKey(null);
     setBackupPreferenceSaving(false);
@@ -493,9 +498,11 @@ export function AgentMemorySettingsPanel(
 
   const toggleBackupPreference = async (): Promise<void> => {
     const current = backupPreference;
-    if (!current || backupPreferenceSaving || !current.canUpdate) return;
+    if (!current || backupPreferenceRequestActiveRef.current || !current.canUpdate) return;
     const requestId = createBackupMemoryRequestId();
     const requestedVaultId = current.activeVaultId;
+    const requestSequence = ++backupPreferenceSequenceRef.current;
+    backupPreferenceRequestActiveRef.current = true;
     setBackupPreferenceSaving(true);
     setBackupPreferenceStatusKey(null);
     try {
@@ -507,10 +514,15 @@ export function AgentMemorySettingsPanel(
         includeVaultMemory: !current.includeVaultMemory,
       });
       if (
+        requestSequence !== backupPreferenceSequenceRef.current ||
         activeVaultIdRef.current !== requestedVaultId ||
         result.requestId !== requestId ||
         result.activeVaultId !== requestedVaultId
       ) return;
+      if (result.summary.activeVaultId !== requestedVaultId) {
+        setBackupPreferenceStatusKey("memory.backupPreferenceFailed");
+        return;
+      }
       setBackupPreference(result.summary);
       setBackupPreferenceStatusKey(
         result.status === "updated"
@@ -523,7 +535,14 @@ export function AgentMemorySettingsPanel(
       if (activeVaultIdRef.current === requestedVaultId)
         setBackupPreferenceStatusKey("memory.backupPreferenceFailed");
     } finally {
-      if (activeVaultIdRef.current === requestedVaultId) setBackupPreferenceSaving(false);
+      if (
+        requestSequence === backupPreferenceSequenceRef.current &&
+        activeVaultIdRef.current === requestedVaultId
+      ) {
+        backupPreferenceRequestActiveRef.current = false;
+        setBackupPreferenceSaving(false);
+        window.setTimeout(() => backupPreferenceButtonRef.current?.focus(), 0);
+      }
     }
   };
 
@@ -564,6 +583,7 @@ export function AgentMemorySettingsPanel(
               ) : null}
             </div>
             <button
+              ref={backupPreferenceButtonRef}
               type="button"
               className="settings-switch"
               role="switch"
