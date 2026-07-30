@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "Building the Knowledge Tree...",
   "knowledgeTree.loadingDescription": "Notes and sources remain available while the local index gets ready.",
   "knowledgeTree.nodeSummary": "{title}. Weight {weight}. {fragments} fragments, {sources} sources, {leaves} leaves. Evidence density {density}.",
+  "knowledgeTree.needsReview": "Needs review",
   "knowledgeTree.refresh": "Refresh",
   "knowledgeTree.relatedBranches": "Related branches",
   "knowledgeTree.related": "Related pages",

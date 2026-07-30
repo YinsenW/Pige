@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "ナレッジツリーを構築中…",
   "knowledgeTree.loadingDescription": "ローカル索引の準備中もノートとソースは利用できます。",
   "knowledgeTree.nodeSummary": "{title}。重み {weight}。断片 {fragments}、ソース {sources}、リーフ {leaves}。証拠密度 {density}。",
+  "knowledgeTree.needsReview": "確認が必要",
   "knowledgeTree.refresh": "更新",
   "knowledgeTree.relatedBranches": "関連ブランチ",
   "knowledgeTree.related": "関連ページ",

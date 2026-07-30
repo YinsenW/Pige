@@ -6741,6 +6741,8 @@ dd {
 }
 .knowledge-map-node:focus-visible circle:not(.knowledge-map-pulse) { stroke: var(--focus); stroke-width: 2.4; }
 .knowledge-map-node.active circle:not(.knowledge-map-pulse) { fill: var(--knowledge-node-active); stroke: var(--surface); stroke-width: 1.8; }
+.knowledge-map-node.needs-review.active circle:not(.knowledge-map-pulse) { stroke: var(--warning); }
+.knowledge-map-node.needs-review:focus-visible circle:not(.knowledge-map-pulse) { stroke: var(--focus); stroke-dasharray: 2 2; }
 
 .knowledge-map-label {
   fill: var(--text-primary);

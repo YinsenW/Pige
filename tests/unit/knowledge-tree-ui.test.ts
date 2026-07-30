@@ -185,6 +185,7 @@ describe("Knowledge Tree renderer", () => {
     expect(Number(dense.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")))
       .toBeGreaterThan(Number(sparse.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")));
     expect(dense.getAttribute("aria-description")).toContain("6 fragments, 4 sources, 10 leaves. Evidence density 10.");
+    expect(dense.getAttribute("aria-description")).toContain("Needs review.");
 
     await unmount(dom, mount.root);
   });

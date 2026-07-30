@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "Construction de l’arbre des connaissances…",
   "knowledgeTree.loadingDescription": "Les notes et sources restent disponibles pendant la préparation de l’index local.",
   "knowledgeTree.nodeSummary": "{title}. Poids {weight}. {fragments} fragments, {sources} sources, {leaves} feuilles. Densité des éléments probants {density}.",
+  "knowledgeTree.needsReview": "Révision nécessaire",
   "knowledgeTree.refresh": "Actualiser",
   "knowledgeTree.relatedBranches": "Branches associées",
   "knowledgeTree.related": "Pages associées",

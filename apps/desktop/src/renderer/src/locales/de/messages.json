@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "Wissensbaum wird aufgebaut…",
   "knowledgeTree.loadingDescription": "Notizen und Quellen bleiben verfügbar, während der lokale Index vorbereitet wird.",
   "knowledgeTree.nodeSummary": "{title}. Gewicht {weight}. {fragments} Fragmente, {sources} Quellen, {leaves} Blätter. Belegdichte {density}.",
+  "knowledgeTree.needsReview": "Überprüfung erforderlich",
   "knowledgeTree.refresh": "Aktualisieren",
   "knowledgeTree.relatedBranches": "Verwandte Zweige",
   "knowledgeTree.related": "Verwandte Seiten",

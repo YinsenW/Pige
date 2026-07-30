@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "지식 트리 구성 중…",
   "knowledgeTree.loadingDescription": "로컬 인덱스를 준비하는 동안에도 노트와 소스를 사용할 수 있습니다.",
   "knowledgeTree.nodeSummary": "{title}. 가중치 {weight}. 지식 조각 {fragments}개, 출처 {sources}개, 잎 {leaves}개. 근거 밀도 {density}.",
+  "knowledgeTree.needsReview": "검토 필요",
   "knowledgeTree.refresh": "새로 고침",
   "knowledgeTree.relatedBranches": "관련 가지",
   "knowledgeTree.related": "관련 페이지",

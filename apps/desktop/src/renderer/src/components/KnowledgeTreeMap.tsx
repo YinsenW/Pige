@@ -789,13 +789,14 @@ function evidenceDensityBand(density: number): 0 | 1 | 2 | 3 {
 }
 
 function formatNodeSummary(t: (key: string) => string, node: VisualNode): string {
-  return t("knowledgeTree.nodeSummary")
+  const summary = t("knowledgeTree.nodeSummary")
     .replace("{title}", node.title)
     .replace("{weight}", String(node.weight))
     .replace("{fragments}", String(node.fragmentCount))
     .replace("{sources}", String(node.sourceCount))
     .replace("{leaves}", String(node.leafCount))
     .replace("{density}", String(evidenceDensity(node)));
+  return node.status === "needs_review" ? `${summary} ${t("knowledgeTree.needsReview")}.` : summary;
 }
 
 function clamp(value: number, min: number, max: number): number {

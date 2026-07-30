@@ -622,6 +622,7 @@
   "knowledgeTree.loading": "正在重建知识树",
   "knowledgeTree.loadingDescription": "笔记和来源保持可用；这里会在本地索引准备好后自动更新。",
   "knowledgeTree.nodeSummary": "{title}。权重 {weight}。知识片段 {fragments}，来源 {sources}，叶节点 {leaves}。证据密度 {density}。",
+  "knowledgeTree.needsReview": "需要审核",
   "knowledgeTree.refresh": "刷新",
   "knowledgeTree.relatedBranches": "相关分支",
   "knowledgeTree.related": "相关页面",
