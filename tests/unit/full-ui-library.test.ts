@@ -7,6 +7,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   LibraryListResult,
+  LibraryMergeTagRequest,
+  LibraryMergeTagResult,
   LibraryRenameTagRequest,
   LibraryRenameTagResult,
   LibraryTagsRequest,
@@ -542,6 +544,15 @@ describe("full UI Library", () => {
       renameConfirm: "Rename tag",
       renamePending: "Renaming",
       renameFailed: "Rename failed",
+      merge: "Merge",
+      mergeTitle: "Merge tag",
+      mergeDescription: "Merge description",
+      mergeSource: "Source tag:",
+      mergeTarget: "Merge into",
+      mergeCancel: "Cancel",
+      mergeConfirm: "Merge tag",
+      mergePending: "Merging",
+      mergeFailed: "Merge failed",
       noteCount: (count) => `${count} notes`,
     };
     const opened: string[] = [];
@@ -610,6 +621,10 @@ describe("full UI Library", () => {
         });
       }),
       renameTag: vi.fn(async (request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
+      mergeTag: vi.fn(async (request: LibraryMergeTagRequest): Promise<LibraryMergeTagResult> => ({
         ...request,
         status: "failed",
       })),
@@ -703,6 +718,9 @@ describe("full UI Library", () => {
       renameTitle: "Rename tag", renameDescription: "Rename description", renameCurrent: "Current tag:",
       renameReplacement: "New tag", renameCancel: "Cancel", renameConfirm: "Rename tag",
       renamePending: "Renaming", renameFailed: "Rename failed", noteCount: (count) => `${count} notes`,
+      merge: "Merge", mergeTitle: "Merge tag", mergeDescription: "Merge description",
+      mergeSource: "Source tag:", mergeTarget: "Merge into", mergeCancel: "Cancel",
+      mergeConfirm: "Merge tag", mergePending: "Merging", mergeFailed: "Merge failed",
     };
     const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
     const renameRequests: LibraryRenameTagRequest[] = [];
@@ -732,6 +750,10 @@ describe("full UI Library", () => {
           renamedPageCount: 2,
         });
       }),
+      mergeTag: vi.fn(async (request: LibraryMergeTagRequest): Promise<LibraryMergeTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -779,6 +801,114 @@ describe("full UI Library", () => {
     const renamedRow = Array.from(container.querySelectorAll<HTMLButtonElement>("button.search-result"))
       .find((button) => button.textContent?.includes("field research"));
     await waitFor(dom, () => dom.window.document.activeElement === renamedRow);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("merges one exact loaded tag into another with snapshot CAS and focuses the authoritative target", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(0), 0),
+    });
+    const labels: LibraryTagsBrowserLabels = {
+      title: "Tags", loading: "Loading tags", empty: "No tags", failed: "Tags unavailable", retry: "Try again",
+      notesLoading: "Loading tagged notes", notesEmpty: "No tagged notes", notesFailed: "Tagged notes unavailable",
+      loadMore: "Load more", loadingMore: "Loading more", open: "Open", rename: "Rename",
+      renameTitle: "Rename tag", renameDescription: "Rename description", renameCurrent: "Current tag:",
+      renameReplacement: "New tag", renameCancel: "Cancel", renameConfirm: "Rename tag",
+      renamePending: "Renaming", renameFailed: "Rename failed",
+      merge: "Merge", mergeTitle: "Merge tag", mergeDescription: "Merge description",
+      mergeSource: "Source tag:", mergeTarget: "Merge into", mergeCancel: "Cancel",
+      mergeConfirm: "Merge tag", mergePending: "Merging", mergeFailed: "Merge failed",
+      noteCount: (count) => `${count} notes`,
+    };
+    const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
+    const mergeRequests: LibraryMergeTagRequest[] = [];
+    let committed = false;
+    let resolveStale!: (result: LibraryMergeTagResult) => void;
+    const api = {
+      tags: vi.fn(async (request: LibraryTagsRequest): Promise<LibraryTagsResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        mode: "list_tags",
+        status: "ready",
+        snapshotId,
+        tags: committed
+          ? [{ tag: "archive", pageCount: 3 }, { tag: "notes", pageCount: 7 }]
+          : [{ tag: "research", pageCount: 2 }, { tag: "archive", pageCount: 3 }, { tag: "notes", pageCount: 5 }],
+        total: committed ? 2 : 3,
+      })),
+      renameTag: vi.fn(async (request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
+      mergeTag: vi.fn((request: LibraryMergeTagRequest): Promise<LibraryMergeTagResult> => {
+        mergeRequests.push(request);
+        if (mergeRequests.length === 1) {
+          return new Promise((resolve) => { resolveStale = resolve; });
+        }
+        committed = true;
+        return Promise.resolve({
+          ...request,
+          status: "committed",
+          operationId: "operation_library_tag_merge",
+          mergedPageCount: 2,
+        });
+      }),
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LibraryTagsBrowser, {
+        activeVaultId: "vault_20260730_librarytags",
+        api,
+        labels,
+        onOpenNote: async () => undefined,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonWithLabel(container, "Merge: research");
+    await clickButton(dom, trigger);
+    const select = requireElement(container.querySelector<HTMLSelectElement>("select"));
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(["archive", "notes"]);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, "value")?.set?.call(select, "notes");
+      select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      await settle(dom);
+    });
+    const confirm = buttonNamed(container, "Merge tag");
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    expect(mergeRequests).toHaveLength(1);
+    expect(mergeRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260730_librarytags",
+      sourceTag: "research",
+      targetTag: "notes",
+      expectedSnapshotId: snapshotId,
+      expectedSourcePageCount: 2,
+      expectedTargetPageCount: 5,
+    });
+    expect(mergeRequests[0]?.requestId).toMatch(/^library_tag_merge_request_[a-z0-9]{16,64}$/u);
+    expect(JSON.stringify(mergeRequests[0])).not.toMatch(/pageId|path|body/u);
+    resolveStale({ ...mergeRequests[0]!, status: "stale" });
+    await waitFor(dom, () => container.textContent?.includes("Merge failed") === true);
+    expect(select.value).toBe("notes");
+    await waitFor(dom, () => dom.window.document.activeElement === select);
+
+    await clickButton(dom, buttonNamed(container, "Merge tag"));
+    await waitFor(dom, () => container.textContent?.includes("research") === false && container.querySelector("select") === null);
+    expect(mergeRequests).toHaveLength(2);
+    expect(api.tags).toHaveBeenCalledTimes(2);
+    await waitFor(dom, () =>
+      dom.window.document.activeElement?.matches("button.search-result") === true &&
+      dom.window.document.activeElement.textContent?.includes("notes") === true,
+    );
 
     await act(async () => root.unmount());
     dom.window.close();
