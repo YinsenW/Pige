@@ -4,6 +4,11 @@ import {
   AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  ConversationRestoreRequestSchema,
+  ConversationRestoreResultSchema,
+  ConversationTrashListResultSchema,
+  ConversationTrashRequestSchema,
+  ConversationTrashResultSchema,
   AgentConversationTurnSummarySchema,
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
@@ -405,6 +410,48 @@ describe("schemas", () => {
       status: "failed",
       error: "private"
     })).toThrow();
+  });
+
+  it("keeps conversation trash and restore contracts pathless, body-free, and revision-bound", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "conversationtrashreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260729_history01",
+      conversationId: "conv_20260729_history01",
+      expectedRevision: `conversationrev_${"a".repeat(64)}`
+    };
+    expect(ConversationTrashRequestSchema.parse(request)).toEqual(request);
+    expect(ConversationTrashResultSchema.parse({
+      ...request,
+      status: "committed",
+      trashEntryId: `conversationtrash_${"b".repeat(32)}`,
+      operationId: "op_20260731_conversationtrash"
+    })).toMatchObject({ status: "committed" });
+    expect(ConversationTrashListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId: request.activeVaultId,
+      status: "ready",
+      conversations: [{
+        trashEntryId: `conversationtrash_${"b".repeat(32)}`,
+        conversationId: request.conversationId,
+        safePreview: "Bounded preview",
+        updatedAt: "2026-07-29T12:00:00.000Z",
+        trashedAt: "2026-07-31T12:00:00.000Z",
+        revision: request.expectedRevision
+      }]
+    })).toMatchObject({ status: "ready" });
+    const restore = {
+      ...request,
+      requestId: "conversationtrashreq_restoreabcdefghij",
+      trashEntryId: `conversationtrash_${"b".repeat(32)}`
+    };
+    expect(ConversationRestoreRequestSchema.parse(restore)).toEqual(restore);
+    expect(ConversationRestoreResultSchema.parse({ ...restore, status: "restored", operationId: "op_20260731_conversationrestore" }))
+      .toMatchObject({ status: "restored" });
+    for (const privateField of ["path", "body", "providerResponse"] as const) {
+      expect(() => ConversationTrashRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
+      expect(() => ConversationRestoreRequestSchema.parse({ ...restore, [privateField]: "private" })).toThrow();
+    }
   });
 
   it("fences current-note append review and completion projections to exact states", () => {

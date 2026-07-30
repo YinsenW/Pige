@@ -11,6 +11,12 @@ import type {
   AgentConversationHistoryListResult,
   AgentConversationInitialTimeline,
   AgentConversationTimeline,
+  ConversationRestoreRequest,
+  ConversationRestoreResult,
+  ConversationTrashListRequest,
+  ConversationTrashListResult,
+  ConversationTrashRequest,
+  ConversationTrashResult,
   AppearanceSettingsSummary,
   CurrentNoteReplaceProposalDecisionRequest,
   CurrentNoteReplaceProposalDecisionResult,
@@ -4008,6 +4014,84 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("confirms conversation trash on Home, browses recoverable entries, and restores by opaque identity", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    const revision = `conversationrev_${"a".repeat(64)}` as const;
+    let active = true;
+    let trashed = false;
+    harness.loadConversationHistory = async (request) => ({
+      apiVersion: 1,
+      activeVaultId: request.activeVaultId,
+      status: "ready",
+      ...(active ? { currentConversationId: "conv_20260712_homefixture" } : {}),
+      conversations: active ? [{
+        conversationId: "conv_20260712_homefixture",
+        updatedAt: "2026-07-12T08:00:01.000Z",
+        safePreview: "Recover this private conversation",
+        tailEventId: "event_20260712_assistant01",
+        revision
+      }] : [],
+      hasMore: false
+    });
+    harness.trashConversation = async (request) => {
+      harness.conversationTrashRequests.push(request);
+      active = false;
+      trashed = true;
+      return { ...request, status: "committed", trashEntryId: `conversationtrash_${"b".repeat(32)}`, operationId: "op_20260731_conversationtrash" };
+    };
+    harness.loadConversationTrash = async (request) => {
+      harness.conversationTrashListRequests.push(request);
+      return {
+        ...request,
+        status: "ready",
+        conversations: trashed ? [{
+          trashEntryId: `conversationtrash_${"b".repeat(32)}`,
+          conversationId: "conv_20260712_homefixture",
+          safePreview: "Recover this private conversation",
+          updatedAt: "2026-07-12T08:00:01.000Z",
+          trashedAt: "2026-07-31T12:00:00.000Z",
+          revision
+        }] : []
+      };
+    };
+    harness.restoreConversation = async (request) => {
+      harness.conversationRestoreRequests.push(request);
+      active = true;
+      trashed = false;
+      return { ...request, status: "restored", operationId: "op_20260731_conversationrestore" };
+    };
+
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await clickButton(dom, container, enMessages["conversation.history"]);
+    await waitFor(dom, () => container.textContent?.includes("Recover this private conversation") === true);
+    await clickButton(dom, container, enMessages["conversation.moveToTrash"]);
+    expect(container.textContent).toContain(enMessages["conversation.trashConfirmPrompt"]);
+    const confirm = buttons(container, enMessages["conversation.trashConfirm"]).at(-1);
+    if (!confirm) throw new Error("Conversation trash confirmation was unavailable.");
+    await act(async () => { confirm.click(); await settle(dom); });
+    await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.lifecycle.trashed"]) === true);
+    expect(harness.conversationTrashRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      conversationId: "conv_20260712_homefixture",
+      expectedRevision: revision
+    });
+    expect(JSON.stringify(harness.conversationTrashRequests[0])).not.toContain("private conversation");
+
+    await clickButton(dom, container, enMessages["conversation.trash"]);
+    await waitFor(dom, () => buttons(container, enMessages["conversation.restore"]).length === 1);
+    await clickButton(dom, container, enMessages["conversation.restore"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.lifecycle.restored"]) === true);
+    expect(harness.conversationRestoreRequests[0]).toMatchObject({
+      trashEntryId: `conversationtrash_${"b".repeat(32)}`,
+      conversationId: "conv_20260712_homefixture",
+      expectedRevision: revision
+    });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps following the recovered conversation when its obsolete Job metadata is safely omitted", async () => {
     const dom = createDom();
     const { latestTurn: _obsoleteJob, ...recoveredTimeline } = completedTimeline();
@@ -5733,6 +5817,9 @@ interface ConversationHarness {
   readonly submitRequests: AgentSubmitTurnRequest[];
   readonly conversationRequests: AgentConversationRequest[];
   readonly conversationHistoryRequests: AgentConversationHistoryListRequest[];
+  readonly conversationTrashRequests: ConversationTrashRequest[];
+  readonly conversationTrashListRequests: ConversationTrashListRequest[];
+  readonly conversationRestoreRequests: ConversationRestoreRequest[];
   readonly collectionCitationRequests: CollectionOpenCitationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
@@ -5832,6 +5919,9 @@ interface ConversationHarness {
   installSpeechAsset: (request: SpeechAssetInstallRequest) => Promise<SpeechAssetInstallResult>;
   loadConversation: (request: AgentConversationRequest) => Promise<AgentConversationTimeline | AgentConversationEarlierPage | undefined>;
   loadConversationHistory: (request: AgentConversationHistoryListRequest) => Promise<AgentConversationHistoryListResult>;
+  trashConversation: (request: ConversationTrashRequest) => Promise<ConversationTrashResult>;
+  loadConversationTrash: (request: ConversationTrashListRequest) => Promise<ConversationTrashListResult>;
+  restoreConversation: (request: ConversationRestoreRequest) => Promise<ConversationRestoreResult>;
   openCollectionCitation: (request: CollectionOpenCitationRequest) => Promise<CollectionOpenCitationResult>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
@@ -5853,6 +5943,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     submitRequests: [],
     conversationRequests: [],
     conversationHistoryRequests: [],
+    conversationTrashRequests: [],
+    conversationTrashListRequests: [],
+    conversationRestoreRequests: [],
     collectionCitationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
@@ -6030,6 +6123,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
         hasMore: false
       };
     },
+    trashConversation: async (request) => ({ ...request, status: "failed" }),
+    loadConversationTrash: async (request) => ({ ...request, status: "ready", conversations: [] }),
+    restoreConversation: async (request) => ({ ...request, status: "failed" }),
     openCollectionCitation: async (request) => ({ ...request, status: "failed" }),
     submitTurn: async (request) => {
       harness.submitRequests.push(request);
@@ -6291,6 +6387,9 @@ function makePigeApi(harness: ConversationHarness): object {
       runtimeStatus: () => harness.loadAgentRuntimeStatus(),
       conversation: (request: AgentConversationRequest) => harness.loadConversation(request),
       conversationHistory: (request: AgentConversationHistoryListRequest) => harness.loadConversationHistory(request),
+      trashConversation: (request: ConversationTrashRequest) => harness.trashConversation(request),
+      conversationTrash: (request: ConversationTrashListRequest) => harness.loadConversationTrash(request),
+      restoreConversation: (request: ConversationRestoreRequest) => harness.restoreConversation(request),
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);

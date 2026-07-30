@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AgentConversationHistoryCursor,
-  AgentConversationHistorySummary
+  AgentConversationHistorySummary,
+  ConversationTrashSummary
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 
@@ -23,12 +24,17 @@ export function ConversationHistoryPanel(props: {
     conversationId: string,
     view: "current" | "history"
   ) => Promise<boolean>;
+  readonly onConversationTrashed: (conversationId: string) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [history, setHistory] = useState<HistoryState>(EMPTY_HISTORY);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [trashExpanded, setTrashExpanded] = useState(false);
+  const [trashed, setTrashed] = useState<readonly ConversationTrashSummary[]>([]);
+  const [pendingTrash, setPendingTrash] = useState<AgentConversationHistorySummary | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<"trashed" | "restored" | "failed" | null>(null);
   const requestSequenceRef = useRef(0);
   const operationRef = useRef(false);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -42,6 +48,10 @@ export function ConversationHistoryPanel(props: {
     setHistory(EMPTY_HISTORY);
     setLoading(false);
     setFailed(false);
+    setTrashExpanded(false);
+    setTrashed([]);
+    setPendingTrash(null);
+    setLifecycleNotice(null);
   }, [props.activeVaultId]);
 
   const loadHistory = async (cursor?: AgentConversationHistoryCursor): Promise<HistoryState | null> => {
@@ -124,6 +134,107 @@ export function ConversationHistoryPanel(props: {
     await open(current.currentConversationId, "current", trigger);
   };
 
+  const loadTrash = async (): Promise<void> => {
+    if (operationRef.current) return;
+    operationRef.current = true;
+    setLoading(true);
+    setFailed(false);
+    const sequence = ++requestSequenceRef.current;
+    const vaultId = props.activeVaultId;
+    try {
+      const result = await window.pige.agent.conversationTrash({ apiVersion: 1, activeVaultId: vaultId });
+      if (sequence !== requestSequenceRef.current || activeVaultIdRef.current !== vaultId) return;
+      if (result.status !== "ready") { setFailed(true); return; }
+      setTrashed(result.conversations);
+    } catch {
+      if (sequence === requestSequenceRef.current) setFailed(true);
+    } finally {
+      if (sequence === requestSequenceRef.current) {
+        operationRef.current = false;
+        setLoading(false);
+      }
+    }
+  };
+
+  const toggleTrash = async (): Promise<void> => {
+    const next = !trashExpanded;
+    setTrashExpanded(next);
+    if (next) await loadTrash();
+  };
+
+  const confirmTrash = async (): Promise<void> => {
+    const conversation = pendingTrash;
+    if (!conversation?.revision || operationRef.current || props.disabled) return;
+    operationRef.current = true;
+    setLoading(true);
+    setLifecycleNotice(null);
+    const vaultId = props.activeVaultId;
+    try {
+      const result = await window.pige.agent.trashConversation({
+        apiVersion: 1,
+        requestId: `conversationtrashreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+        activeVaultId: vaultId,
+        conversationId: conversation.conversationId,
+        expectedRevision: conversation.revision
+      });
+      if (activeVaultIdRef.current !== vaultId) return;
+      if (result.status !== "committed") { setLifecycleNotice("failed"); return; }
+      props.onConversationTrashed(conversation.conversationId);
+      setPendingTrash(null);
+      setLifecycleNotice("trashed");
+      setHistory(EMPTY_HISTORY);
+      await Promise.all([loadTrashUnlocked(vaultId), loadHistoryUnlocked(vaultId)]);
+    } catch {
+      setLifecycleNotice("failed");
+    } finally {
+      operationRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const restore = async (conversation: ConversationTrashSummary): Promise<void> => {
+    if (operationRef.current || props.disabled) return;
+    operationRef.current = true;
+    setLoading(true);
+    setLifecycleNotice(null);
+    const vaultId = props.activeVaultId;
+    try {
+      const result = await window.pige.agent.restoreConversation({
+        apiVersion: 1,
+        requestId: `conversationtrashreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+        activeVaultId: vaultId,
+        trashEntryId: conversation.trashEntryId,
+        conversationId: conversation.conversationId,
+        expectedRevision: conversation.revision
+      });
+      if (activeVaultIdRef.current !== vaultId) return;
+      if (result.status !== "restored" && result.status !== "already_restored") { setLifecycleNotice("failed"); return; }
+      setLifecycleNotice("restored");
+      setHistory(EMPTY_HISTORY);
+      await Promise.all([loadTrashUnlocked(vaultId), loadHistoryUnlocked(vaultId)]);
+    } catch {
+      setLifecycleNotice("failed");
+    } finally {
+      operationRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const loadTrashUnlocked = async (vaultId: string): Promise<void> => {
+    const result = await window.pige.agent.conversationTrash({ apiVersion: 1, activeVaultId: vaultId });
+    if (activeVaultIdRef.current === vaultId && result.status === "ready") setTrashed(result.conversations);
+  };
+
+  const loadHistoryUnlocked = async (vaultId: string): Promise<void> => {
+    const result = await window.pige.agent.conversationHistory({ apiVersion: 1, activeVaultId: vaultId, limit: 50 });
+    if (activeVaultIdRef.current === vaultId && result.status === "ready") setHistory({
+      conversations: result.conversations,
+      ...(result.currentConversationId ? { currentConversationId: result.currentConversationId } : {}),
+      hasMore: result.hasMore,
+      ...(result.nextCursor ? { nextCursor: result.nextCursor } : {})
+    });
+  };
+
   return (
     <div data-conversation-history-panel="true">
       <div className="settings-inline-actions">
@@ -148,24 +259,39 @@ export function ConversationHistoryPanel(props: {
             {props.t("conversation.current")}
           </button>
         ) : null}
+        <button type="button" className="quiet-button" disabled={props.disabled || loading} aria-expanded={trashExpanded} onClick={() => void toggleTrash()}>
+          {props.t("conversation.trash")}
+        </button>
       </div>
       {expanded ? (
         <div className="settings-card" aria-label={props.t("conversation.history")}>
           {history.conversations.map((conversation) => (
-            <button
-              type="button"
-              className="settings-row"
-              aria-current={props.selectedConversationId === conversation.conversationId ? "true" : undefined}
-              disabled={props.disabled || loading}
-              key={conversation.conversationId}
-              onClick={(event) => void open(conversation.conversationId, "history", event.currentTarget)}
-            >
-              <span>
-                <strong>{conversation.safePreview || props.t("conversation.previewUnavailable")}</strong>
-                <small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small>
-              </span>
-            </button>
+            <div className="conversation-history-row" key={conversation.conversationId}>
+              <button
+                type="button"
+                className="settings-row conversation-history-open"
+                aria-current={props.selectedConversationId === conversation.conversationId ? "true" : undefined}
+                disabled={props.disabled || loading}
+                onClick={(event) => void open(conversation.conversationId, "history", event.currentTarget)}
+              >
+                <span><strong>{conversation.safePreview || props.t("conversation.previewUnavailable")}</strong><small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small></span>
+              </button>
+              {conversation.revision && props.selectedConversationId !== conversation.conversationId ? (
+                <button type="button" className="quiet-button" disabled={props.disabled || loading} onClick={() => { setPendingTrash(conversation); setLifecycleNotice(null); }}>
+                  {props.t("conversation.moveToTrash")}
+                </button>
+              ) : null}
+            </div>
           ))}
+          {pendingTrash ? (
+            <div className="settings-row conversation-trash-confirm" role="group" aria-label={props.t("conversation.trashConfirmPrompt")}>
+              <span><strong>{props.t("conversation.trashConfirmPrompt")}</strong><small>{pendingTrash.safePreview}</small></span>
+              <div className="settings-inline-actions">
+                <button type="button" className="quiet-button" onClick={() => setPendingTrash(null)}>{props.t("conversation.trashCancel")}</button>
+                <button type="button" className="quiet-button" onClick={() => void confirmTrash()}>{props.t("conversation.trashConfirm")}</button>
+              </div>
+            </div>
+          ) : null}
           {!loading && history.conversations.length === 0 && !failed ? (
             <p className="settings-note">{props.t("conversation.historyEmpty")}</p>
           ) : null}
@@ -185,6 +311,18 @@ export function ConversationHistoryPanel(props: {
           ) : null}
         </div>
       ) : null}
+      {trashExpanded ? (
+        <div className="settings-card" aria-label={props.t("conversation.trash") }>
+          {trashed.map((conversation) => (
+            <div className="settings-row conversation-history-row" key={conversation.trashEntryId}>
+              <span><strong>{conversation.safePreview}</strong><small>{formatUpdatedAt(conversation.trashedAt, props.locale)}</small></span>
+              <button type="button" className="quiet-button" disabled={props.disabled || loading} onClick={() => void restore(conversation)}>{props.t("conversation.restore")}</button>
+            </div>
+          ))}
+          {!loading && trashed.length === 0 ? <p className="settings-note">{props.t("conversation.trashEmpty")}</p> : null}
+        </div>
+      ) : null}
+      {lifecycleNotice ? <p className={lifecycleNotice === "failed" ? "error" : "settings-note"} role={lifecycleNotice === "failed" ? "alert" : "status"}>{props.t(`conversation.lifecycle.${lifecycleNotice}`)}</p> : null}
     </div>
   );
 }

@@ -6290,7 +6290,7 @@ function HomeComposer(props: {
           selectedConversationId={selectedHistoryConversationId}
           disabled={composerSubmitActive || agentRunState === "accepted" || agentRunState === "running"}
           onOpenConversation={openConversationView}
-          t={props.t}
+          onConversationTrashed={(conversationId) => { if (conversationTimeline?.conversationId === conversationId) { selectedHistoryConversationIdRef.current = null; setSelectedHistoryConversationId(null); setConversationTimeline(undefined); } }} t={props.t}
         />
       ) : null}
       {proposalReviewJobs.length > 0 ? (

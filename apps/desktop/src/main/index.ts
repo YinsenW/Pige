@@ -10,6 +10,9 @@ import type {
   AddManualModelRequest,
   AgentConversationRequest,
   AgentConversationHistoryListRequest,
+  ConversationRestoreRequest,
+  ConversationTrashListRequest,
+  ConversationTrashRequest,
   AgentSubmitTurnRequest,
   AppHealth,
   AppearanceThemeMutationResult,
@@ -65,6 +68,12 @@ import {
   AgentConversationResultSchema,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  ConversationRestoreRequestSchema,
+  ConversationRestoreResultSchema,
+  ConversationTrashListRequestSchema,
+  ConversationTrashListResultSchema,
+  ConversationTrashRequestSchema,
+  ConversationTrashResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
@@ -228,6 +237,7 @@ import { ManagedCollectionService } from "./services/managed-collection-service"
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
+import { ConversationTrashService } from "./services/conversation-trash-service";
 import {
   HomeAgentService,
   scheduleAcceptedAgentTurn,
@@ -397,6 +407,7 @@ let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
+let conversationTrashService: ConversationTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteMergeService: NoteMergeService | undefined;
@@ -1621,6 +1632,10 @@ const getNoteTrashService = (): NoteTrashService => {
   noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
   return noteTrashService;
 };
+const getConversationTrashService = (): ConversationTrashService => {
+  conversationTrashService ??= new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
+  return conversationTrashService;
+};
 const getNoteArchiveService = (): NoteArchiveService => {
   noteArchiveService ??= new NoteArchiveService(getNotesService(), getNoteMarkdownEditorService());
   return noteArchiveService;
@@ -2356,6 +2371,18 @@ ipcMain.handle("agent.conversationHistory", (_event, request: AgentConversationH
   return AgentConversationHistoryListResultSchema.parse(
     getHomeAgentService().conversationHistory(parsedRequest)
   );
+});
+ipcMain.handle("agent.trashConversation", (_event, request: ConversationTrashRequest) => {
+  const parsedRequest = ConversationTrashRequestSchema.parse(request);
+  return ConversationTrashResultSchema.parse(getConversationTrashService().trash(parsedRequest));
+});
+ipcMain.handle("agent.conversationTrash", (_event, request: ConversationTrashListRequest) => {
+  const parsedRequest = ConversationTrashListRequestSchema.parse(request);
+  return ConversationTrashListResultSchema.parse(getConversationTrashService().list(parsedRequest));
+});
+ipcMain.handle("agent.restoreConversation", (_event, request: ConversationRestoreRequest) => {
+  const parsedRequest = ConversationRestoreRequestSchema.parse(request);
+  return ConversationRestoreResultSchema.parse(getConversationTrashService().restore(parsedRequest));
 });
 ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
   const parsedPayload = AgentSubmitTurnIpcPayloadSchema.parse(payload);
@@ -3222,6 +3249,7 @@ app.whenReady().then(async () => {
     noteMarkdownEditorActivityAdapter
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
+  conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());

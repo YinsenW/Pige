@@ -35,6 +35,14 @@ export interface AgentConversationHistoryPage {
   readonly nextCursor?: AgentConversationHistoryCursor;
 }
 
+export interface AgentConversationLifecycleTarget {
+  readonly absolutePath: string;
+  readonly relativePath: string;
+  readonly contentHash: string;
+  readonly revision: string;
+  readonly summary: AgentConversationHistoryEntry;
+}
+
 interface HistoryCursorBinding {
   readonly activeVaultId: string;
   readonly vaultPath: string;
@@ -125,6 +133,30 @@ export class AgentConversationHistory {
     return matches[0]?.type === "assistant_message" ? matches[0] : undefined;
   }
 
+  resolveLifecycleTarget(input: {
+    readonly vaultPath: string;
+    readonly conversationId: string;
+  }): AgentConversationLifecycleTarget | undefined {
+    const match = CONVERSATION_FILE_PATTERN.exec(`${input.conversationId}.jsonl`);
+    if (!match) throw unavailableHistory();
+    const root = assertSafeVaultRoot(input.vaultPath);
+    const dateKey = match[2]!;
+    const relativePath = [".pige", "conversations", dateKey.slice(0, 4), dateKey.slice(4, 6), `${input.conversationId}.jsonl`].join("/");
+    const absolutePath = path.join(root, ...relativePath.split("/"));
+    if (!lstatIfExists(absolutePath)) return undefined;
+    const data = readConversationFileData(absolutePath);
+    const summary = toHistoryEntry(input.conversationId, data.events);
+    if (!summary) throw unavailableHistory();
+    const digest = createHash("sha256").update(data.bytes).digest("hex");
+    return {
+      absolutePath,
+      relativePath,
+      contentHash: `sha256:${digest}`,
+      revision: `conversationrev_${digest}`,
+      summary: { ...summary, revision: `conversationrev_${digest}` }
+    };
+  }
+
   #registerCursor(binding: HistoryCursorBinding): AgentConversationHistoryCursor {
     const cursor = `conversation_history_${randomBytes(32).toString("hex")}` as AgentConversationHistoryCursor;
     this.#cursors.set(cursor, binding);
@@ -168,9 +200,12 @@ function readHistoryEntries(vaultPath: string): AgentConversationHistoryEntry[] 
         if (stat.size > MAX_CONVERSATION_FILE_BYTES || budget.bytes > MAX_DISCOVERY_BYTES) {
           throw unavailableHistory();
         }
-        const events = readConversationFile(filePath);
-        const entry = toHistoryEntry(conversationId, events);
-        if (entry) entries.push(entry);
+        const data = readConversationFileData(filePath);
+        const entry = toHistoryEntry(conversationId, data.events);
+        if (entry) {
+          const digest = createHash("sha256").update(data.bytes).digest("hex");
+          entries.push({ ...entry, revision: `conversationrev_${digest}` });
+        }
       }
     }
   }
@@ -208,6 +243,10 @@ function toHistoryEntry(
 }
 
 function readConversationFile(filePath: string): ConversationEvent[] {
+  return readConversationFileData(filePath).events;
+}
+
+function readConversationFileData(filePath: string): { readonly events: ConversationEvent[]; readonly bytes: Buffer } {
   const descriptor = openReadonly(filePath);
   try {
     const descriptorStat = fs.fstatSync(descriptor);
@@ -216,7 +255,8 @@ function readConversationFile(filePath: string): ConversationEvent[] {
     assertPrivateRegularFileStat(pathStat);
     if (descriptorStat.dev !== pathStat.dev || descriptorStat.ino !== pathStat.ino) throw unavailableHistory();
     if (descriptorStat.size > MAX_CONVERSATION_FILE_BYTES) throw unavailableHistory();
-    const text = fs.readFileSync(descriptor, "utf8");
+    const bytes = fs.readFileSync(descriptor);
+    const text = bytes.toString("utf8");
     const events: ConversationEvent[] = [];
     const ids = new Set<string>();
     for (const line of text.split("\n").filter(Boolean)) {
@@ -232,7 +272,7 @@ function readConversationFile(filePath: string): ConversationEvent[] {
       ids.add(event.id);
       events.push(event);
     }
-    return events;
+    return { events, bytes };
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
     throw unavailableHistory();

@@ -7,6 +7,12 @@ import type {
   AgentConversationResult,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
+  ConversationRestoreRequest,
+  ConversationRestoreResult,
+  ConversationTrashListRequest,
+  ConversationTrashListResult,
+  ConversationTrashRequest,
+  ConversationTrashResult,
   AgentSubmitTurnRequest,
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
@@ -300,6 +306,12 @@ import {
   AgentConversationResultSchema,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  ConversationRestoreRequestSchema,
+  ConversationRestoreResultSchema,
+  ConversationTrashListRequestSchema,
+  ConversationTrashListResultSchema,
+  ConversationTrashRequestSchema,
+  ConversationTrashResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
   CurrentNoteAppendProposalDecisionRequestSchema,
@@ -1253,6 +1265,18 @@ const api: PigeDesktopApi = {
       const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
       const result = await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown;
       return AgentConversationHistoryListResultSchema.parse(result);
+    },
+    trashConversation: async (request: ConversationTrashRequest): Promise<ConversationTrashResult> => {
+      const parsedRequest = ConversationTrashRequestSchema.parse(request);
+      return ConversationTrashResultSchema.parse(await ipcRenderer.invoke("agent.trashConversation", parsedRequest));
+    },
+    conversationTrash: async (request: ConversationTrashListRequest): Promise<ConversationTrashListResult> => {
+      const parsedRequest = ConversationTrashListRequestSchema.parse(request);
+      return ConversationTrashListResultSchema.parse(await ipcRenderer.invoke("agent.conversationTrash", parsedRequest));
+    },
+    restoreConversation: async (request: ConversationRestoreRequest): Promise<ConversationRestoreResult> => {
+      const parsedRequest = ConversationRestoreRequestSchema.parse(request);
+      return ConversationRestoreResultSchema.parse(await ipcRenderer.invoke("agent.restoreConversation", parsedRequest));
     },
     submitTurn: (async (
       request: AgentSubmitTurnRequest,
