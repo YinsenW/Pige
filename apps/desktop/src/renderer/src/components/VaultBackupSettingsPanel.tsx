@@ -16,6 +16,7 @@ import {
 } from "./BackupDestinationReconnectAction";
 import { VaultStorageRelocationAction } from "./VaultStorageRelocationAction";
 import { VaultDisplayNameEditor } from "./VaultDisplayNameEditor";
+import { RecentVaultLifecycleActions } from "./RecentVaultLifecycleActions";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -572,7 +573,7 @@ export interface VaultBackupSettingsPanelProps {
   readonly onCreate: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshDiagnostics: () => Promise<void>;
-  readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly onRecentVaultsChanged: (recentVaults: readonly RecentVaultSummary[]) => void;
   readonly onOpenMemory: () => void;
   readonly onError: (error: string | null) => void;
   readonly t: (key: string) => string;
@@ -867,25 +868,28 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
       {!restore.restorePreview && restore.restoreErrorKey ? <p className="error" role="alert">{props.t(restore.restoreErrorKey)}</p> : null}
       <p className="settings-note">{props.t("backup.recentVaultNote")}</p>
     </section>
-    <RecentVaults recentVaults={props.recentVaults} onRemoveRecent={props.onRemoveRecent} t={props.t} />
+    <RecentVaults recentVaults={props.recentVaults} activeVaultId={props.vault.vaultId}
+      onRecentVaultsChanged={props.onRecentVaultsChanged} t={props.t} />
     {props.error ? <p className="error">{props.error}</p> : null}
   </section>;
 }
 
 export function RecentVaults(props: {
   readonly recentVaults: readonly RecentVaultSummary[];
+  readonly activeVaultId?: string;
   readonly onOpenRecent?: (vaultId: string) => Promise<void>;
-  readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly onRecentVaultsChanged: (recentVaults: readonly RecentVaultSummary[]) => void;
   readonly openingVaultId?: string | null;
   readonly errorVaultId?: string | null;
   readonly disabled?: boolean;
   readonly t: (key: string) => string;
 }): React.JSX.Element | null {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   if (props.recentVaults.length === 0) return null;
 
   return (
     <section className="settings-section recent-list" aria-labelledby="recent-vaults-title">
-      <h2 className="settings-section-title" id="recent-vaults-title">{props.t("recent.title")}</h2>
+      <h2 ref={headingRef} tabIndex={-1} className="settings-section-title" id="recent-vaults-title">{props.t("recent.title")}</h2>
       <div className="settings-card">
         {props.recentVaults.map((recent) => (
           <div className="settings-row recent-vault-row" key={recent.vaultId}>
@@ -916,15 +920,15 @@ export function RecentVaults(props: {
                   {props.t(props.openingVaultId === recent.vaultId ? "recent.opening" : "recent.open")}
                 </button>
               ) : null}
-              <button
-                className="settings-button"
-                type="button"
-                aria-label={`${props.t("recent.remove")}: ${recent.name}`}
-                disabled={props.disabled}
-                onClick={() => void props.onRemoveRecent(recent.vaultId)}
-              >
-                {props.t("recent.remove")}
-              </button>
+              <RecentVaultLifecycleActions recent={recent} active={props.activeVaultId === recent.vaultId}
+                disabled={props.disabled === true} returnFocusRef={headingRef}
+                onRecentVaultsChanged={props.onRecentVaultsChanged} labels={{
+                  active: props.t("recent.active"), forget: props.t("recent.forget"),
+                  forgetting: props.t("recent.forgetting"), reconnect: props.t("recent.reconnect"),
+                  reconnecting: props.t("recent.reconnecting"), reconnected: props.t("recent.reconnected"),
+                  stale: props.t("recent.stale"), activeBlocked: props.t("recent.activeBlocked"),
+                  mismatch: props.t("recent.mismatch"), failed: props.t("recent.lifecycleFailed")
+                }} />
             </div>
           </div>
         ))}

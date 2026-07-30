@@ -852,6 +852,11 @@ Required controls:
   non-deleting recent-vault removal. Rename opens one inline editor; Cancel or Escape
   discards the draft and restores the Rename trigger. Stale/failure keeps the draft and
   exact action focus. Rename and Move Vault disable each other while either is pending.
+- Every non-active recent Vault offers Reconnect and Forget beside Open. Forget removes only the
+  machine-local recent entry; Reconnect uses the OS folder picker and accepts only the same stable
+  Vault ID. Pending disables sibling actions. Cancel keeps the row quiet; stale/not-found refreshes
+  the list, mismatch/failure keeps the selection, and completion restores the invoking button or the
+  recent-Vault heading when Forget removes its row. Active entries show status instead of mutations.
 - Unavailable external storage says “not connected” without fallback reveal. One busy,
   pathless localized surface fences storage actions and restores invoking focus.
 - This page alone owns restarted user Backup, valid actions and latest completion; never

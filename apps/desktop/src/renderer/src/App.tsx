@@ -987,11 +987,10 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const removeRecent = (vaultId: string): Promise<void> =>
-    runVaultAction(async () => {
-      setRecentVaultErrorId((current) => current === vaultId ? null : current);
-      setRecentVaults(await window.pige.vault.removeRecent(vaultId));
-    });
+  const acceptRecentVaults = (nextRecentVaults: readonly RecentVaultSummary[]): void => {
+    setRecentVaults(nextRecentVaults);
+    setRecentVaultErrorId(null);
+  };
 
   const refreshDiagnostics = async (): Promise<void> => {
     const [nextDiagnostics, nextDatabaseStatus, nextToolchainHealth] = await Promise.all([
@@ -2550,7 +2549,7 @@ export function App(): React.JSX.Element {
             onCreate={createVault}
             onOpen={openVault}
             onOpenRecent={openRecentVault}
-            onRemoveRecent={removeRecent}
+            onRecentVaultsChanged={acceptRecentVaults}
             openingRecentVaultId={openingRecentVaultId}
             recentVaultErrorId={recentVaultErrorId}
             onRestoreCompleted={async () => {
@@ -2895,7 +2894,7 @@ export function App(): React.JSX.Element {
                 onCreate={createVault}
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
-                onRemoveRecent={removeRecent}
+                onRecentVaultsChanged={acceptRecentVaults}
                 onOpenMemory={() => {
                   setSettingsSection("memory");
                   setDevelopmentNotice(null);
@@ -4157,7 +4156,7 @@ interface FirstRunPanelProps {
   readonly onCreate: () => Promise<void>;
   readonly onOpen: () => Promise<void>;
   readonly onOpenRecent: (vaultId: string) => Promise<void>;
-  readonly onRemoveRecent: (vaultId: string) => Promise<void>;
+  readonly onRecentVaultsChanged: (recentVaults: readonly RecentVaultSummary[]) => void;
   readonly openingRecentVaultId: string | null;
   readonly recentVaultErrorId: string | null;
   readonly onRestoreCompleted: () => Promise<void>;
@@ -4355,7 +4354,7 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
             <RecentVaults
               recentVaults={props.recentVaults}
               onOpenRecent={props.onOpenRecent}
-              onRemoveRecent={props.onRemoveRecent}
+              onRecentVaultsChanged={props.onRecentVaultsChanged}
               openingVaultId={props.openingRecentVaultId}
               errorVaultId={props.recentVaultErrorId}
               disabled={props.busy}

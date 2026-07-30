@@ -314,6 +314,11 @@ import type {
   ProviderAuthRequirement,
   ProviderEndpointProtocol,
   ProviderKind,
+  RecentVaultForgetRequest,
+  RecentVaultForgetResult,
+  RecentVaultReconnectRequest,
+  RecentVaultReconnectResult,
+  RecentVaultRevision,
   RetrievalSearchRequest,
   RetrievalSearchResult,
   RetrievalSearchResultItem,
@@ -810,6 +815,11 @@ export type {
   SkillSummary,
   SkillTrust,
   SkillUninstallRequest,
+  RecentVaultForgetRequest,
+  RecentVaultForgetResult,
+  RecentVaultReconnectRequest,
+  RecentVaultReconnectResult,
+  RecentVaultRevision,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
   VaultMigrationPreview,
@@ -859,6 +869,7 @@ export interface RecentVaultSummary {
   readonly pathDisplay: string;
   readonly schemaVersion: number;
   readonly lastOpenedAt: string;
+  readonly revision: RecentVaultRevision;
 }
 
 export interface OnboardingStatus {
@@ -2333,7 +2344,8 @@ export interface PigeDesktopApi {
     readonly relocateStorage: (
       request: VaultStorageRelocationRequest
     ) => Promise<VaultStorageRelocationResult>;
-    readonly removeRecent: (vaultId: string) => Promise<readonly RecentVaultSummary[]>;
+    readonly forgetRecent: (request: RecentVaultForgetRequest) => Promise<RecentVaultForgetResult>;
+    readonly reconnectRecent: (request: RecentVaultReconnectRequest) => Promise<RecentVaultReconnectResult>;
   };
   readonly maintenance: {
     readonly rebuildLocalDatabase: () => Promise<LocalDatabaseRebuildResult>;

@@ -189,6 +189,12 @@ writes fence the operation; the original Vault is never deleted. Machine-local r
 excluded from Vault backup and let restart adopt only the exact published destination or
 retain the original binding.
 
+Recent-Vault lifecycle also changes only machine-local state. Each projected entry carries an
+opaque revision derived from its stable Vault ID and binding metadata. Forget removes one exact
+non-active recent entry without reading, moving, or deleting Vault bytes. Reconnect uses a Main-owned
+directory picker, rechecks the entry revision and selected manifest snapshot, requires the same
+stable Vault ID, and atomically replaces only that entry path; cancellation or drift changes nothing.
+
 Rule:
 
 - Store outside the vault under OS app data.
