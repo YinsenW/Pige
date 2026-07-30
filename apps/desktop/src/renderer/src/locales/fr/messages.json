@@ -1935,6 +1935,7 @@
   "topbar.expanded": "Passer à la disposition large",
   "topbar.expandSidebar": "Afficher la barre latérale",
   "topbar.fullscreen": "Plein écran",
+  "topbar.exitFullscreen": "Quitter le plein écran",
   "topbar.pin": "Toujours au premier plan",
   "topbar.pinShort": "Épingler",
   "vaultSettings.createNew": "Créer un nouveau coffre",

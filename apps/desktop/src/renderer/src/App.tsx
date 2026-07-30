@@ -70,6 +70,7 @@ import {
   type HomeConversationTurnState
 } from "./components/HomeConversationTurnState";
 import { WindowModeToggle } from "./components/WindowModeToggle";
+import { ReaderFullscreenToggle } from "./components/ReaderFullscreenToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions, readerDocumentArchiveLabels, readerDocumentRestoreLabels, submitReaderNoteArchive, submitReaderNoteRestore, type ReaderNoteArchiveSubmit, type ReaderNoteRestoreSubmit } from "./components/ReaderDocumentActions"; import { readerNoteTagLabels, submitReaderNoteTag, submitReaderNoteTagRemoval, type ReaderNoteTagRemoveSubmit, type ReaderNoteTagSubmit } from "./components/ReaderNoteTagDialog";
 import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialog";
@@ -599,6 +600,16 @@ export function App(): React.JSX.Element {
     if (nextState.revision < windowLayoutRevisionRef.current) return false;
     windowLayoutRevisionRef.current = nextState.revision;
     setWindowLayoutState(nextState);
+    setWindowState((current) => {
+      if (!current) return current;
+      const mode = nextState.isFullScreen
+        ? "fullscreen"
+        : current.mode === "fullscreen"
+          ? "expanded"
+          : current.mode;
+      if (current.mode === mode && current.isFullScreen === nextState.isFullScreen) return current;
+      return { ...current, mode, isFullScreen: nextState.isFullScreen };
+    });
     setNoteAgentOpen(nextState.noteAgentOpen);
     return true;
   };
@@ -2441,6 +2452,15 @@ export function App(): React.JSX.Element {
         </div>
         <span className="topbar-title" aria-hidden="true">{currentTitle}</span>
         <div className="topbar-actions">
+          <ReaderFullscreenToggle
+            state={windowState}
+            visible={Boolean(selectedNote) || Boolean(windowState?.isFullScreen)}
+            enterLabel={t("topbar.fullscreen")}
+            exitLabel={t("topbar.exitFullscreen")}
+            tabIndex={sidebarModal ? -1 : undefined}
+            busy={windowControls.busy}
+            onToggle={() => void windowControls.toggleFullScreen()}
+          />
           <WindowModeToggle state={windowState} compactLabel={t("topbar.compact")} expandedLabel={t("topbar.expanded")} tabIndex={sidebarModal ? -1 : undefined} busy={windowControls.busy} onToggle={() => void windowControls.toggleWindowMode()} />
           <button
             type="button"

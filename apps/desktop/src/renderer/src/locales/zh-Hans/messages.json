@@ -1933,6 +1933,7 @@
   "topbar.expanded": "切换到宽布局",
   "topbar.expandSidebar": "展开侧边栏",
   "topbar.fullscreen": "全屏",
+  "topbar.exitFullscreen": "退出全屏",
   "topbar.pin": "置顶",
   "topbar.pinShort": "置顶",
   "vaultSettings.createNew": "创建新仓库",

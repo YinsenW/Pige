@@ -1935,6 +1935,7 @@
   "topbar.expanded": "넓은 레이아웃으로 전환",
   "topbar.expandSidebar": "사이드바 펼치기",
   "topbar.fullscreen": "전체 화면",
+  "topbar.exitFullscreen": "전체 화면 종료",
   "topbar.pin": "항상 위",
   "topbar.pinShort": "고정",
   "vaultSettings.createNew": "새 Vault 만들기",

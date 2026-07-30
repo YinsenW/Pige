@@ -1933,6 +1933,7 @@
   "topbar.expanded": "Switch to wide layout",
   "topbar.expandSidebar": "Expand sidebar",
   "topbar.fullscreen": "Full screen",
+  "topbar.exitFullscreen": "Exit full screen",
   "topbar.pin": "Pin on top",
   "topbar.pinShort": "Pin",
   "vaultSettings.createNew": "Create new vault",

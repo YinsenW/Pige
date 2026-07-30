@@ -122,6 +122,50 @@ describe("window mode service", () => {
     });
   });
 
+  it("enters and exits the native full-screen reading workspace through the stored mode", () => {
+    const store = makeStore();
+    const service = new WindowModeService(store);
+    const fakeWindow = new FakeWindow();
+
+    service.applyStoredState(fakeWindow);
+    const entered = service.setMode(fakeWindow, { mode: "fullscreen" });
+
+    expect(entered).toMatchObject({ mode: "fullscreen", isFullScreen: true });
+    expect(store.read().window?.mode).toBe("fullscreen");
+
+    const exited = service.setMode(fakeWindow, { mode: "expanded" });
+
+    expect(exited).toMatchObject({
+      mode: "expanded",
+      isFullScreen: false,
+      size: DEFAULT_EXPANDED_WINDOW_SIZE
+    });
+    expect(store.read().window?.mode).toBe("expanded");
+  });
+
+  it("converges system full-screen changes into restart-safe machine-local state", () => {
+    const store = makeStore();
+    const service = new WindowModeService(store);
+    const fakeWindow = new FakeWindow();
+
+    service.applyStoredState(fakeWindow);
+    fakeWindow.setFullScreen(true);
+    const entered = service.handleNativeLayoutChanged(fakeWindow);
+
+    expect(entered).toMatchObject({ revision: 1, isFullScreen: true });
+    expect(store.read().window?.mode).toBe("fullscreen");
+
+    fakeWindow.setFullScreen(false);
+    const exited = service.handleNativeLayoutChanged(fakeWindow);
+
+    expect(exited).toMatchObject({ revision: 2, isFullScreen: false });
+    expect(store.read().window?.mode).toBe("expanded");
+
+    const restartedWindow = new FakeWindow();
+    const restarted = new WindowModeService(store).applyStoredState(restartedWindow);
+    expect(restarted).toMatchObject({ mode: "expanded", isFullScreen: false });
+  });
+
   it("stores always-on-top and sidebar state without touching vault data", () => {
     const store = makeStore();
     const service = new WindowModeService(store);

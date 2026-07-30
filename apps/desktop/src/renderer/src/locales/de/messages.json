@@ -1935,6 +1935,7 @@
   "topbar.expanded": "Zum breiten Layout wechseln",
   "topbar.expandSidebar": "Seitenleiste öffnen",
   "topbar.fullscreen": "Vollbild",
+  "topbar.exitFullscreen": "Vollbild beenden",
   "topbar.pin": "Immer im Vordergrund",
   "topbar.pinShort": "Fixieren",
   "vaultSettings.createNew": "Neuen Tresor erstellen",
