@@ -2239,6 +2239,34 @@ export const NoteRelateResultSchema = z.discriminatedUnion("status", [
   )
 ]);
 
+export const NOTE_UNLINK_RELATION_CHANNEL = "notes.unlinkRelation" as const;
+export const NoteUnlinkRelationRequestIdSchema = z.string().regex(/^noteunlinkreq_[a-z0-9]{16,64}$/u);
+export const NoteUnlinkRelationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteUnlinkRelationRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true })
+}).strict().superRefine((request, context) => {
+  if (request.currentPageId === request.targetPageId) {
+    context.addIssue({ code: "custom", path: ["targetPageId"], message: "A note cannot unlink itself." });
+  }
+});
+const NoteUnlinkRelationResultIdentitySchema = NoteUnlinkRelationRequestSchema;
+export const NoteUnlinkRelationResultSchema = z.discriminatedUnion("status", [
+  NoteUnlinkRelationResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteUnlinkRelationResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+
 export const KNOWLEDGE_HEALTH_MAX_TARGET_CANDIDATES = 20;
 const KnowledgeHealthRepairProofFields = {
   apiVersion: z.literal(1),
@@ -10721,6 +10749,9 @@ export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;
 export type NoteRelateRequestId = z.infer<typeof NoteRelateRequestIdSchema>;
 export type NoteRelateRequest = z.infer<typeof NoteRelateRequestSchema>;
 export type NoteRelateResult = z.infer<typeof NoteRelateResultSchema>;
+export type NoteUnlinkRelationRequestId = z.infer<typeof NoteUnlinkRelationRequestIdSchema>;
+export type NoteUnlinkRelationRequest = z.infer<typeof NoteUnlinkRelationRequestSchema>;
+export type NoteUnlinkRelationResult = z.infer<typeof NoteUnlinkRelationResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;

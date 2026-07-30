@@ -273,12 +273,16 @@ describe("desktop shell build contract", () => {
       schemasSource.indexOf("export const KnowledgeHealthRepairRequestSchema"),
     );
     expect(relationSchemas).toContain('NOTE_RELATE_CHANNEL = "notes.relate"');
+    expect(relationSchemas).toContain('NOTE_UNLINK_RELATION_CHANNEL = "notes.unlinkRelation"');
     expect(relationSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
     expect(relationSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
     expect(relationSchemas).toContain("expectedTargetUpdatedAt: z.string().datetime({ offset: true })");
     expect(notesApi).toContain("readonly relate: (request: NoteRelateRequest) => Promise<NoteRelateResult>;");
+    expect(notesApi).toContain("readonly unlinkRelation: (request: NoteUnlinkRelationRequest) => Promise<NoteUnlinkRelationResult>;");
     expect(preloadSource).toContain("NoteRelateRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteRelateResultSchema.parse(");
+    expect(preloadSource).toContain("NoteUnlinkRelationRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteUnlinkRelationResultSchema.parse(");
     for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "relationType"]) {
       expect(relationSchemas).not.toContain(privateField);
     }

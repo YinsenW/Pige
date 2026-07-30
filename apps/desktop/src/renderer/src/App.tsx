@@ -141,6 +141,8 @@ import type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnlinkRelationRequest,
+  NoteUnlinkRelationResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -3719,6 +3721,8 @@ export function LibraryPanel(props: {
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
+          onUnlinkRelated={submitNoteUnlinkRelation}
+          onRelatedUnlinked={props.onCurrentNoteRelated ?? props.onCurrentNoteMerged}
           {...(props.onOpenSourceReference ? { onOpenSourceReference: props.onOpenSourceReference } : {})}
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           {...(props.onReconnectOriginalSource ? {
@@ -6732,6 +6736,8 @@ function HomeComposer(props: {
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}
                 onOpenRelated={openResult}
+                onUnlinkRelated={submitNoteUnlinkRelation}
+                onRelatedUnlinked={adoptMergedHomeNote}
                 {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
                 onDevelopment={props.onDevelopment}
                 t={props.t}
@@ -7281,6 +7287,10 @@ function createNoteMergeRequestId(): `notemergereq_${string}` {
 
 function submitNoteRelation(request: NoteRelateRequest): Promise<NoteRelateResult> {
   return window.pige.notes.relate(request);
+}
+
+function submitNoteUnlinkRelation(request: NoteUnlinkRelationRequest): Promise<NoteUnlinkRelationResult> {
+  return window.pige.notes.unlinkRelation(request);
 }
 
 function noteMergeIdentityMatches(request: NoteMergeRequest, result: NoteMergeResult): boolean {

@@ -3,6 +3,8 @@ import type {
   NoteRelateRequest,
   NoteRelateResult,
   NoteRenderResult,
+  NoteUnlinkRelationRequest,
+  NoteUnlinkRelationResult,
 } from "@pige/contracts";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { PageIdSchema } from "@pige/schemas";
@@ -80,6 +82,49 @@ export class NoteRelateService {
     ) return closed(request, "failed");
     return { ...request, status: "committed", operationId: saved.operationId, render: { ...render, renderContextId } };
   }
+
+  async unlink(ownerId: string, request: NoteUnlinkRelationRequest): Promise<NoteUnlinkRelationResult> {
+    const current = this.#targets.resolveTrashTarget(ownerId, {
+      activeVaultId: request.activeVaultId,
+      pageId: request.currentPageId,
+      renderContextId: request.renderContextId,
+      expectedRevision: request.expectedRevision,
+    });
+    if (current.status !== "ready") return unlinkClosed(request, current.status);
+    const vaultPath = this.#activeVaultPath();
+    if (!vaultPath || !current.assertCurrent()) return unlinkClosed(request, "stale");
+    const target = readTarget(vaultPath, request.targetPageId, request.expectedTargetUpdatedAt);
+    if (target.status !== "ready") return unlinkClosed(request, target.status);
+
+    const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.currentPageId });
+    if (opened.status !== "opened") return unlinkClosed(request, opened.status === "not_found" ? "not_found" : "failed");
+    if (opened.revisionId !== current.pageContentHash || !current.assertCurrent() || !target.assertCurrent()) {
+      return unlinkClosed(request, "stale");
+    }
+    const markdown = unlinkMarkdown(opened.markdown, request.targetPageId, this.#now().toISOString());
+    if (!markdown) return unlinkClosed(request, "ineligible");
+    const saved = this.#editor.save({
+      requestId: internalRequestId(request.requestId, "unlink"),
+      activeVaultId: request.activeVaultId,
+      pageId: request.currentPageId,
+      expectedRevisionId: opened.revisionId,
+      renderIdentity: opened.renderIdentity,
+      markdown,
+    });
+    if (saved.status !== "committed") return unlinkClosed(request, mapSaveStatus(saved.status));
+
+    let render: NoteRenderResult;
+    try {
+      render = await this.#targets.render({ pageId: request.currentPageId }, ownerId);
+    } catch {
+      return unlinkClosed(request, "failed");
+    }
+    if (!render.renderContextId || render.summary.pageId !== request.currentPageId ||
+      render.summary.pageType !== "note" || render.summary.status !== "active") {
+      return unlinkClosed(request, "failed");
+    }
+    return { ...request, status: "committed", operationId: saved.operationId, render: { ...render, renderContextId: render.renderContextId } };
+  }
 }
 
 function readTarget(vaultPath: string, pageId: string, expectedUpdatedAt: string):
@@ -127,6 +172,23 @@ function relateMarkdown(markdown: string, targetPageId: string, now: string): st
   return `${markdown.slice(0, rawStart)}${nextRaw}${markdown.slice(rawStart + parsed.raw.length)}`;
 }
 
+function unlinkMarkdown(markdown: string, targetPageId: string, now: string): string | undefined {
+  const parsed = parsePigeFrontmatter(markdown);
+  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
+  const related = readInlinePageIds(parsed.raw);
+  if (!Array.isArray(related) || !related.includes(targetPageId) ||
+      related.some((pageId) => !PageIdSchema.safeParse(pageId).success)) return undefined;
+  const updatedAt = monotonicTimestamp(String(parsed.frontmatter.updated_at ?? ""), now);
+  const relatedMatches = [...parsed.raw.matchAll(/^related_page_ids:[^\r\n]*$/gmu)];
+  const updatedMatches = [...parsed.raw.matchAll(/^updated_at:[^\r\n]*$/gmu)];
+  const rawStart = markdown.indexOf(parsed.raw);
+  if (relatedMatches.length !== 1 || updatedMatches.length !== 1 || rawStart < 0) return undefined;
+  const nextRaw = parsed.raw
+    .replace(/^related_page_ids:[^\r\n]*$/mu, `related_page_ids: ${JSON.stringify(related.filter((pageId) => pageId !== targetPageId))}`)
+    .replace(/^updated_at:[^\r\n]*$/mu, `updated_at: ${JSON.stringify(updatedAt)}`);
+  return `${markdown.slice(0, rawStart)}${nextRaw}${markdown.slice(rawStart + parsed.raw.length)}`;
+}
+
 function readInlinePageIds(raw: string): readonly string[] | undefined {
   const matches = raw.split(/\r?\n/u).filter((line) => line.startsWith("related_page_ids:"));
   if (matches.length !== 1) return undefined;
@@ -144,8 +206,8 @@ function monotonicTimestamp(previous: string, requested: string): string {
   return new Date(Number.isFinite(previousMs) && requestedMs <= previousMs ? previousMs + 1 : requestedMs).toISOString();
 }
 
-function internalRequestId(requestId: string): string {
-  const suffix = createHash("sha256").update(`pige.note-relate.v1\0${requestId}`, "utf8").digest("hex").slice(0, 32);
+function internalRequestId(requestId: string, action: "relate" | "unlink" = "relate"): string {
+  const suffix = createHash("sha256").update(`pige.note-${action}.v1\0${requestId}`, "utf8").digest("hex").slice(0, 32);
   return `noteeditreq_${suffix}`;
 }
 
@@ -154,5 +216,9 @@ function mapSaveStatus(status: "stale" | "not_found" | "invalid" | "failed"): "s
 }
 
 function closed(request: NoteRelateRequest, status: Exclude<NoteRelateResult["status"], "committed">): NoteRelateResult {
+  return { ...request, status };
+}
+
+function unlinkClosed(request: NoteUnlinkRelationRequest, status: Exclude<NoteUnlinkRelationResult["status"], "committed">): NoteUnlinkRelationResult {
   return { ...request, status };
 }

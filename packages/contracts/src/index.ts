@@ -232,6 +232,8 @@ import type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnlinkRelationRequest,
+  NoteUnlinkRelationResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
@@ -643,6 +645,8 @@ export type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnlinkRelationRequest,
+  NoteUnlinkRelationResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
@@ -2286,6 +2290,7 @@ export interface PigeDesktopApi {
     readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
     readonly merge: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
     readonly relate: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
+    readonly unlinkRelation: (request: NoteUnlinkRelationRequest) => Promise<NoteUnlinkRelationResult>;
     readonly importMarkdown: (
       request: NoteImportMarkdownRequest
     ) => Promise<NoteImportMarkdownResult>;

@@ -124,6 +124,52 @@ describe("NoteRelateService", () => {
     expect(activity.undo(operation, operation.after?.id)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(sourcePath, "utf8")).toBe(before);
   });
+
+  it("unlinks one exact edge and restores it through the same Activity Undo owner", async () => {
+    const vaultPath = createVault();
+    const sourcePath = path.join(vaultPath, "wiki", "source.md");
+    const before = noteMarkdown(request.currentPageId, "Source note", "2026-07-30T09:00:00.000Z", [request.targetPageId]);
+    fs.writeFileSync(sourcePath, before, "utf8");
+    const vaults = {
+      current: () => ({
+        vaultId: request.activeVaultId, name: "Relate vault", activeVaultPathDisplay: "Relate vault",
+        knowledgeRootDisplay: "Relate vault", sourceAssetRootDisplay: "Sources",
+        sourceAssetRootKind: "vault_internal", defaultSourceStorageStrategy: "managed_copy", schemaVersion: 1,
+      }),
+      activeVaultPath: () => vaultPath,
+    } as never;
+    const activity = new NoteMarkdownEditorActivityAdapter(vaults);
+    const editor = new NoteMarkdownEditorService(vaults, activity, {
+      now: () => new Date("2026-07-30T12:00:00.000Z"), randomId: () => "unlink-activity-fixture",
+    });
+    const notes = new NotesService(vaults, undefined, undefined, editor);
+    const ownerId = "reader_unlink_integration";
+    const rendered = await notes.render({ pageId: request.currentPageId }, ownerId);
+    const expectedRevision = rendered.trashEligibility?.revision;
+    if (!rendered.renderContextId || !expectedRevision) throw new Error("Expected an editable Reader render.");
+    const service = new NoteRelateService(notes, editor, () => vaultPath,
+      () => new Date("2026-07-30T12:00:00.000Z"));
+
+    const result = await service.unlink(ownerId, {
+      ...request,
+      requestId: "noteunlinkreq_abcdefghijklmnop",
+      renderContextId: rendered.renderContextId,
+      expectedRevision,
+    });
+    expect(result.status).toBe("committed");
+    if (result.status !== "committed") throw new Error("Expected unlink commit.");
+    expect(fs.readFileSync(sourcePath, "utf8")).toContain("related_page_ids: []");
+    const operation = readOperation(vaultPath, result.operationId);
+    expect(activity.activitySummary(operation)).toMatchObject({ kind: "update_page", canUndo: true });
+    expect(activity.undo(operation, operation.after?.id)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(sourcePath, "utf8")).toBe(before);
+    await expect(service.unlink(ownerId, {
+      ...request,
+      requestId: "noteunlinkreq_qrstuvwxyzabcdef",
+      renderContextId: rendered.renderContextId,
+      expectedRevision,
+    })).resolves.toMatchObject({ status: "stale" });
+  });
 });
 
 function createVault(): string {
