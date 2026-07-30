@@ -5,6 +5,7 @@ import { parseDocument } from "yaml";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const issueTemplateRoot = path.join(root, ".github", "ISSUE_TEMPLATE");
+const supportPolicyPath = path.join(root, "SUPPORT.md");
 const FORM_TYPES = new Set(["input", "textarea", "dropdown", "checkboxes", "markdown"]);
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -123,7 +124,79 @@ export async function validateIssueTemplateDirectory(directory = issueTemplateRo
   return files;
 }
 
+function findBodyItem(form, id, fileName) {
+  const item = form.body.find((candidate) => candidate?.id === id);
+  assert(item, `${fileName} is missing body item ${id}`);
+  return item;
+}
+
+function assertRequired(item, label) {
+  assert(item.validations?.required === true, `${label} must be required`);
+}
+
+export async function validateSupportSurface({
+  directory = issueTemplateRoot,
+  supportPath = supportPolicyPath,
+} = {}) {
+  await validateIssueTemplateDirectory(directory);
+  const [support, bugSource, securitySource, configSource] = await Promise.all([
+    readFile(supportPath, "utf8"),
+    readFile(path.join(directory, "bug_report.yml"), "utf8"),
+    readFile(path.join(directory, "security_contact_request.yml"), "utf8"),
+    readFile(path.join(directory, "config.yml"), "utf8"),
+  ]);
+
+  for (const heading of [
+    "## Where To Ask",
+    "## What To Include",
+    "## What Not To Include",
+    "## Maintainer Triage",
+    "## AI Agent Handling",
+  ]) {
+    assert(support.includes(heading), `SUPPORT.md is missing ${heading}`);
+  }
+  for (const statement of [
+    "enabled private reporting route",
+    "synthetic or redacted",
+    "Redirect security-sensitive reports to `SECURITY.md`",
+    "Avoid asking users to upload private vaults or source files",
+    "Update design docs and tests when support findings reveal a product or architecture gap",
+  ]) {
+    assert(support.includes(statement), `SUPPORT.md is missing support boundary: ${statement}`);
+  }
+
+  const bug = parseYaml(bugSource, "bug_report.yml");
+  for (const id of ["problem", "expected", "reproduce", "area"]) {
+    assertRequired(findBodyItem(bug, id, "bug_report.yml"), `bug_report.yml.${id}`);
+  }
+  const bugMarkdown = bug.body.filter((item) => item.type === "markdown").map((item) => item.attributes.value).join("\n");
+  assert(bugMarkdown.includes("synthetic or redacted"), "bug_report.yml must require redacted reproduction data");
+  assert(bugMarkdown.includes("Security issues must follow SECURITY.md"), "bug_report.yml must redirect security reports");
+  const safety = findBodyItem(bug, "safety", "bug_report.yml");
+  assert(safety.type === "checkboxes", "bug_report.yml.safety must be checkboxes");
+  assert(safety.attributes.options.length >= 2, "bug_report.yml.safety must contain privacy and security confirmations");
+  assert(safety.attributes.options.every((option) => option.required === true), "bug_report.yml.safety options must be required");
+
+  const security = parseYaml(securitySource, "security_contact_request.yml");
+  const securityMarkdown = security.body
+    .filter((item) => item.type === "markdown")
+    .map((item) => item.attributes.value)
+    .join("\n");
+  assert(securityMarkdown.includes("Do not include vulnerability details"), "security contact form must prohibit public details");
+  const confirmation = findBodyItem(security, "confirmation", "security_contact_request.yml");
+  assert(confirmation.type === "checkboxes", "security_contact_request.yml.confirmation must be checkboxes");
+  assert(
+    confirmation.attributes.options.length >= 2 && confirmation.attributes.options.every((option) => option.required === true),
+    "security contact confirmations must be required",
+  );
+
+  const config = parseYaml(configSource, "config.yml");
+  const privateReporting = config.contact_links.find((link) => link.url === "https://github.com/YinsenW/Pige/security/advisories/new");
+  assert(privateReporting, "config.yml must expose the enabled private vulnerability reporting route");
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const files = await validateIssueTemplateDirectory();
+  await validateSupportSurface();
   console.log(`public issue template verification passed (${files.length} files)`);
 }

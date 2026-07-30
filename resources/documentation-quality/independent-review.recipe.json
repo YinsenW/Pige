@@ -12,6 +12,7 @@
       ".github/workflows/packageability.yml",
       "AGENTS.md",
       "SECURITY.md",
+      "SUPPORT.md",
       "PRIVACY.md",
       "docs/AI_DEVELOPMENT_GUIDE.md",
       "docs/TECH_ARCHITECTURE.md",
@@ -51,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope and acceptance reconciliation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation and public support governance.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "07a7eea360f56bf0423fc5b59db388470ea17cdb629cb3cb5c85169d100b3501"
+    "reviewedSha256": "1e50717b9d9a38520a2939f24b42b5e59668884a342c2a80eb922af13733604a"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2 migration and Alpha convergence",
+    "task": "Vault v2, Alpha convergence and public support governance",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -66,19 +67,19 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform and ledger claims; Development/UI supplied executable evidence."
+    "independence": "Planning reviewed durable migration, language, platform, ledger and public support claims; Development/UI supplied executable evidence."
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language and release owners share exact v2/macOS truth."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, migration, language, release and public support owners share exact truth."},
     {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Backup, checkpoints, manifest-last commit and restart adoption are tested."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public issue and maintainer triage boundaries are policy-owned and executable."},
     {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner docs and compact trace projections absorb the delta."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
     {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2 and macOS Phase 1 decisions are synchronized."},
-    {"command":"npm run verify:boundaries && npm run verify:independent-documentation-review","status":"passed","evidence":"Three new service owners and reviewed bytes are hash-bound."}
+    {"command":"npm run verify:public-issue-templates && npm run verify:independent-documentation-review","status":"passed","evidence":"All public forms and the reviewed support surface are fail-closed."}
   ],
   "coordination": {
     "taskId": "vault-v2-alpha-convergence-20260729",
