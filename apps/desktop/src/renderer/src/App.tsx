@@ -30,6 +30,7 @@ import {
   type LibraryFamily,
   type LibrarySearchState,
 } from "./components/library-panel-model";
+import { useLibraryBrowse } from "./components/useLibraryBrowse";
 export { filterLibraryPages } from "./components/library-panel-model";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
@@ -464,7 +465,6 @@ export function App(): React.JSX.Element {
   const [memoryActivityFocusRequest, setMemoryActivityFocusRequest] =
     useState<AgentMemoryFocusRequest | null>(null);
   const [activityBlockedIds, setActivityBlockedIds] = useState<readonly string[]>([]);
-  const [libraryList, setLibraryList] = useState<LibraryListResult | null>(null);
   const [collectionCatalog, setCollectionCatalog] = useState<CollectionListResult | null>(null);
   const [collectionCatalogLoading, setCollectionCatalogLoading] = useState(false);
   const [librarySearchFocusRequest, setLibrarySearchFocusRequest] = useState(0);
@@ -782,6 +782,9 @@ export function App(): React.JSX.Element {
   }, [locale, settingsOpen, settingsSection]);
 
   const t = useCallback((key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
+  const { libraryList, refresh: refreshLibrary, loadMore: loadMoreLibrary,
+    canLoadMore: libraryCanLoadMore, loadingMore: libraryLoadingMore,
+    loadMoreFailed: libraryLoadMoreFailed } = useLibraryBrowse(onboarding?.activeVault?.vaultId, setLibraryError, t("error.generic"));
   const windowControls = useWindowControls(windowState, setWindowState, () => setCaptureToast({ kind: "error", message: t("error.generic") }));
 
   const refreshVaultState = async (): Promise<void> => {
@@ -1169,14 +1172,6 @@ export function App(): React.JSX.Element {
     setDevelopmentNotice({ surface, capability, state });
   };
 
-  const refreshLibrary = async (): Promise<void> => {
-    setLibraryError(null);
-    try {
-      setLibraryList(await window.pige.library.list({ limit: 50 }));
-    } catch {
-      setLibraryError(t("error.generic"));
-    }
-  };
 
   const loadNoteMergeTargets = async (currentPageId: string): Promise<readonly ReaderNoteMergeTarget[]> => {
     const vaultId = activeVaultIdRef.current;
@@ -2673,6 +2668,10 @@ export function App(): React.JSX.Element {
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
+            canLoadMore={libraryCanLoadMore}
+            loadingMore={libraryLoadingMore}
+            loadMoreFailed={libraryLoadMoreFailed}
+            onLoadMore={loadMoreLibrary}
             onGoHome={navigateHome}
             onImportMarkdown={(request) => window.pige.notes.importMarkdown(request)}
             onNoteImported={adoptMergedNote}
@@ -3300,6 +3299,10 @@ export function LibraryPanel(props: {
   readonly selectedNoteRelated: NoteRelatedState;
   readonly noteLoadingPageId: string | null;
   readonly error: string | null;
+  readonly canLoadMore?: boolean;
+  readonly loadingMore?: boolean;
+  readonly loadMoreFailed?: boolean;
+  readonly onLoadMore?: () => Promise<void>;
   readonly readerBackLabel?: string;
   readonly onGoHome: () => void;
   readonly onImportMarkdown?: (request: NoteImportMarkdownRequest) => Promise<NoteImportMarkdownResult>;
@@ -3979,6 +3982,22 @@ export function LibraryPanel(props: {
               </section>
             );
           })}
+          {normalizedQuery.length === 0 && props.canLoadMore && props.onLoadMore ? (
+            <div className="library-load-more">
+              {props.loadMoreFailed ? (
+                <p role="alert">{props.t("library.loadMoreFailed")}</p>
+              ) : null}
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={props.loadingMore}
+                aria-busy={props.loadingMore}
+                onClick={() => void props.onLoadMore?.()}
+              >
+                {props.loadingMore ? props.t("library.loadingMore") : props.t("library.loadMore")}
+              </button>
+            </div>
+          ) : null}
         </>
       )}
         </div>
@@ -3986,6 +4005,7 @@ export function LibraryPanel(props: {
     </section>
   );
 }
+
 
 export function KnowledgeTreePanel(props: {
   readonly tree: KnowledgeTreeResult | null;

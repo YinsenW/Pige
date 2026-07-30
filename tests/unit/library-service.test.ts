@@ -259,6 +259,135 @@ source_ids: []
       roots: []
     });
   });
+
+  it("browses every Library page through an opaque stable continuation", () => {
+    const { vaultPath, vault } = makeVault();
+    const { library } = makeServices(vaultPath, vault);
+    for (let index = 0; index < 53; index += 1) {
+      writeLibraryPage(vaultPath, `wiki/page-${String(index).padStart(2, "0")}.md`, {
+        id: `page_20260731_browse${String(index).padStart(2, "0")}`,
+        title: `Browse ${index}`,
+        body: "Body stays out of the browse DTO."
+      });
+    }
+
+    const first = library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_1111111111111111",
+      activeVaultId: vault.vaultId,
+      limit: 50
+    });
+    expect(first.status).toBe("ready");
+    if (first.status !== "ready" || !first.nextCursor) throw new Error("Expected continuation.");
+    expect(first.pages).toHaveLength(50);
+    expect(JSON.stringify(first)).not.toContain(vaultPath);
+
+    const second = library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_2222222222222222",
+      activeVaultId: vault.vaultId,
+      limit: 50,
+      snapshotId: first.snapshotId,
+      cursor: first.nextCursor
+    });
+    expect(second.status).toBe("ready");
+    if (second.status !== "ready") throw new Error("Expected final page.");
+    expect(second.pages).toHaveLength(3);
+    expect(second.nextCursor).toBeUndefined();
+    expect(new Set([...first.pages, ...second.pages].map((page) => page.pageId)).size).toBe(53);
+    expect(library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_9999999999999999",
+      activeVaultId: vault.vaultId,
+      limit: 50,
+      snapshotId: first.snapshotId,
+      cursor: first.nextCursor
+    }).status).toBe("stale");
+  });
+
+  it("fails closed when Markdown changes between Library pages", () => {
+    const { vaultPath, vault } = makeVault();
+    const { library } = makeServices(vaultPath, vault);
+    for (let index = 0; index < 3; index += 1) {
+      writeLibraryPage(vaultPath, `wiki/drift-${index}.md`, {
+        id: `page_20260731_drift000${index}`,
+        title: `Drift ${index}`,
+        body: "Initial body."
+      });
+    }
+    const first = library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_3333333333333333",
+      activeVaultId: vault.vaultId,
+      limit: 1
+    });
+    if (first.status !== "ready" || !first.nextCursor) throw new Error("Expected continuation.");
+    writeLibraryPage(vaultPath, "wiki/new-page.md", {
+      id: "page_20260731_newpage01",
+      title: "New page",
+      body: "This changes the snapshot."
+    });
+    expect(library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_4444444444444444",
+      activeVaultId: vault.vaultId,
+      limit: 1,
+      snapshotId: first.snapshotId,
+      cursor: first.nextCursor
+    }).status).toBe("stale");
+  });
+
+  it("uses the rebuildable local index for stable Library page slices", () => {
+    const { vaultPath, vault } = makeVault();
+    for (let index = 0; index < 3; index += 1) {
+      writeLibraryPage(vaultPath, `wiki/indexed-browse-${index}.md`, {
+        id: `page_20260731_indexbr0${index}`,
+        title: `Indexed browse ${index}`,
+        body: "Indexed body."
+      });
+    }
+    const library = makeIndexedLibrary(vaultPath, vault);
+    const first = library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_7777777777777777",
+      activeVaultId: vault.vaultId,
+      limit: 2
+    });
+    if (first.status !== "ready" || !first.nextCursor) throw new Error("Expected indexed continuation.");
+    const second = library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_8888888888888888",
+      activeVaultId: vault.vaultId,
+      limit: 2,
+      snapshotId: first.snapshotId,
+      cursor: first.nextCursor
+    });
+    expect(second.status).toBe("ready");
+    expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(true);
+    expect(second.status === "ready" ? second.pages : []).toHaveLength(1);
+  });
+
+  it("rejects unknown and cross-vault Library continuations", () => {
+    const { vaultPath, vault } = makeVault();
+    writeLibraryPage(vaultPath, "wiki/one.md", {
+      id: "page_20260731_onepage01", title: "One", body: "One"
+    });
+    const { library } = makeServices(vaultPath, vault);
+    expect(library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_5555555555555555",
+      activeVaultId: "vault_20260731_other0001",
+      limit: 1
+    }).status).toBe("stale");
+    expect(library.browse({
+      apiVersion: 1,
+      requestId: "library_browse_request_6666666666666666",
+      activeVaultId: vault.vaultId,
+      limit: 1,
+      snapshotId: `library_browse_snapshot_${"a".repeat(64)}`,
+      cursor: `library_browse_cursor_${"b".repeat(64)}`
+    }).status).toBe("stale");
+  });
 });
 
 function writeLibraryPage(vaultPath: string, relativePath: string, input: {

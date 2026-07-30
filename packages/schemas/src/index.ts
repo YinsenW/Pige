@@ -5805,11 +5805,89 @@ export const DatasetQueryScalarSchema = z.union([
 ]);
 
 export const LIBRARY_TAGS_CHANNEL = "library.tags" as const;
+export const LIBRARY_BROWSE_CHANNEL = "library.browse" as const;
 export const LIBRARY_RENAME_TAG_CHANNEL = "library.renameTag" as const;
 export const LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag" as const;
 export const LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag" as const;
 export const LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag" as const;
 export const LIBRARY_TAGS_PAGE_SIZE_MAX = 50;
+export const LIBRARY_BROWSE_PAGE_SIZE_MAX = 50;
+export const LibraryBrowseRequestIdSchema = z.string().regex(
+  /^library_browse_request_[a-z0-9]{16,64}$/
+);
+export const LibraryBrowseSnapshotIdSchema = z.string().regex(
+  /^library_browse_snapshot_[a-f0-9]{64}$/
+);
+export const LibraryBrowseCursorSchema = z.string().regex(
+  /^library_browse_cursor_[a-f0-9]{64}$/
+);
+export const LibraryBrowseRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LibraryBrowseRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  limit: z.number().int().min(1).max(LIBRARY_BROWSE_PAGE_SIZE_MAX),
+  snapshotId: LibraryBrowseSnapshotIdSchema.optional(),
+  cursor: LibraryBrowseCursorSchema.optional()
+}).strict().superRefine((request, context) => {
+  if ((request.snapshotId === undefined) !== (request.cursor === undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: [request.snapshotId === undefined ? "snapshotId" : "cursor"],
+      message: "Library continuation requires both its snapshot and cursor."
+    });
+  }
+});
+const LibraryRelativePagePathSchema = z.string().min(1).max(1_024).refine((value) => {
+  if (value.includes("\\") || /[\u0000-\u001f\u007f]/u.test(value)) return false;
+  const segments = value.split("/");
+  return (segments[0] === "wiki" || segments[0] === "sources") && segments.length >= 2 &&
+    segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..") &&
+    (segments.at(-1)?.toLocaleLowerCase("en-US").endsWith(".md") ?? false);
+}, "Library page paths must identify a vault Markdown page.");
+export const LibraryPageSummarySchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  pageType: MarkdownPageTypeSchema,
+  status: MarkdownPageStatusSchema,
+  pagePath: LibraryRelativePagePathSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  language: z.string().min(1).max(64).optional(),
+  sourceIds: z.array(SourceIdSchema).max(1_000).readonly()
+}).strict();
+const LibraryBrowseResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LibraryBrowseRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const LibraryBrowseResultSchema = z.discriminatedUnion("status", [
+  LibraryBrowseResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    snapshotId: LibraryBrowseSnapshotIdSchema,
+    scannedAt: z.string().datetime({ offset: true }),
+    total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    invalidPageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    pages: z.array(LibraryPageSummarySchema).max(LIBRARY_BROWSE_PAGE_SIZE_MAX).readonly(),
+    nextCursor: LibraryBrowseCursorSchema.optional()
+  }).strict(),
+  LibraryBrowseResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  LibraryBrowseResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "ready") return;
+  if (result.total < result.pages.length) {
+    context.addIssue({ code: "custom", path: ["total"], message: "Library totals must include every returned page." });
+  }
+  if (new Set(result.pages.map((page) => page.pageId)).size !== result.pages.length) {
+    context.addIssue({ code: "custom", path: ["pages"], message: "Library page identities must be unique." });
+  }
+  for (let index = 1; index < result.pages.length; index += 1) {
+    const previous = result.pages[index - 1]!, current = result.pages[index]!;
+    if (previous.updatedAt < current.updatedAt ||
+      (previous.updatedAt === current.updatedAt && previous.pagePath >= current.pagePath)) {
+      context.addIssue({ code: "custom", path: ["pages", index], message: "Library pages must use stable browse order." });
+    }
+  }
+});
 export const LibraryTagsRequestIdSchema = z.string().regex(
   /^library_tags_request_[a-z0-9]{16,64}$/
 );
@@ -10261,6 +10339,12 @@ export type CollectionDatasetSummary = z.infer<typeof CollectionDatasetSummarySc
 export type CollectionDatasetTableSummary = z.infer<typeof CollectionDatasetTableSummarySchema>;
 export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
+export type LibraryBrowseRequestId = z.infer<typeof LibraryBrowseRequestIdSchema>;
+export type LibraryBrowseSnapshotId = z.infer<typeof LibraryBrowseSnapshotIdSchema>;
+export type LibraryBrowseCursor = z.infer<typeof LibraryBrowseCursorSchema>;
+export type LibraryPageSummary = z.infer<typeof LibraryPageSummarySchema>;
+export type LibraryBrowseRequest = z.infer<typeof LibraryBrowseRequestSchema>;
+export type LibraryBrowseResult = z.infer<typeof LibraryBrowseResultSchema>;
 export type LibraryTagsRequestId = z.infer<typeof LibraryTagsRequestIdSchema>;
 export type LibraryTagsSnapshotId = z.infer<typeof LibraryTagsSnapshotIdSchema>;
 export type LibraryTagsCursor = z.infer<typeof LibraryTagsCursorSchema>;

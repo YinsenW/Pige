@@ -1,5 +1,6 @@
 import type {
   LibraryListResult,
+  LibraryBrowseResult,
   LibraryPageSummary,
   RetrievalSearchRequest,
   RetrievalSearchResult,
@@ -59,6 +60,21 @@ export function libraryBrowseItems(
   return pages
     .filter((page) => family === "all" || libraryResultGroup(page) === family)
     .map((summary) => ({ summary, score: 0, snippets: [], matchReasons: [] }));
+}
+
+export function appendLibraryBrowsePage(
+  current: LibraryListResult,
+  result: Extract<LibraryBrowseResult, { status: "ready" }>
+): LibraryListResult | undefined {
+  if (current.activeVaultId !== result.activeVaultId || current.total !== result.total ||
+    current.invalidPageCount !== result.invalidPageCount) return undefined;
+  const pageIds = new Set(current.pages.map((page) => page.pageId));
+  if (result.pages.some((page) => pageIds.has(page.pageId))) return undefined;
+  const previous = current.pages.at(-1);
+  const next = result.pages[0];
+  if (previous && next && (previous.updatedAt < next.updatedAt ||
+    (previous.updatedAt === next.updatedAt && previous.pagePath >= next.pagePath))) return undefined;
+  return { ...current, scannedAt: result.scannedAt, pages: [...current.pages, ...result.pages] };
 }
 
 export function libraryResultIconLabel(pageType: LibraryPageSummary["pageType"]): string {

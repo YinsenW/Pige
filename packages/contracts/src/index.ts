@@ -142,6 +142,8 @@ import type {
   KnowledgeHealthOrphanParentSearchResult,
   KnowledgeHealthOrphanRepairRequest,
   KnowledgeHealthOrphanRepairResult,
+  LibraryBrowseRequest,
+  LibraryBrowseResult,
   Locale,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
@@ -444,6 +446,8 @@ export type {
   AppearanceThemePreference,
   GeneratedKnowledgeLanguage,
   KnowledgeLanguageMutationResult,
+  LibraryBrowseRequest,
+  LibraryBrowseResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
   BackupReconnectDestinationRequest,
@@ -1488,17 +1492,7 @@ export interface LibraryListRequest {
   readonly pageTypes?: readonly MarkdownPageType[];
 }
 
-export interface LibraryPageSummary {
-  readonly pageId: string;
-  readonly title: string;
-  readonly pageType: MarkdownPageType;
-  readonly status: MarkdownPageStatus;
-  readonly pagePath: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly language?: string;
-  readonly sourceIds: readonly string[];
-}
+export type LibraryPageSummary = import("@pige/schemas").LibraryPageSummary;
 
 export interface LibraryListResult {
   readonly scannedAt: string;
@@ -2269,6 +2263,7 @@ export interface PigeDesktopApi {
   };
   readonly library: {
     readonly list: (request?: LibraryListRequest) => Promise<LibraryListResult>;
+    readonly browse: (request: LibraryBrowseRequest) => Promise<LibraryBrowseResult>;
     readonly tree: () => Promise<KnowledgeTreeResult>;
     readonly related: (request: LibraryRelatedRequest) => Promise<LibraryRelatedResult>;
     readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
