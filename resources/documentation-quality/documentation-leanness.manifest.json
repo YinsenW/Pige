@@ -11,10 +11,10 @@
     "maximumMarkdownFiles": 56,
     "maximumMarkdownLines": 23820,
     "maximumMarkdownWords": 163500,
-    "maximumMarkdownBytes": 1220833,
+    "maximumMarkdownBytes": 1222042,
     "maximumAlwaysReadWords": 3700,
     "maximumTraceManifestLines": 5500,
-    "maximumTraceManifestBytes": 252127
+    "maximumTraceManifestBytes": 253156
   },
   "fileCountPolicy": {
     "mode": "reviewed_ratchet",

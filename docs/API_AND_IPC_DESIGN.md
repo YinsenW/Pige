@@ -456,6 +456,12 @@ base hash or Operation internals.
 
 #### 6.4.1 Knowledge Activity And Undo
 
+`activity.list` returns bounded pages in deterministic `createdAt` descending then
+`operationId` ascending order. Its opaque cursor is process-local and bound to the active
+Vault, canonical Vault path, full snapshot hash, page offset, and prior-page boundary;
+invented, restarted, cross-Vault, or changed-snapshot cursors fail stale without exposing
+paths or Operation bodies.
+
 `activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row/column
 updates. `activity.undo` binds its exact revision and writes forward or returns stale; page
 Undo and the body/path/hash ban remain.

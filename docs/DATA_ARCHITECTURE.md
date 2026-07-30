@@ -411,6 +411,11 @@ Lifecycle rules:
 - Cancelling a job stops or prevents later processing only; it must not delete source records, source assets, conversation events, proposals, operations, memory, or Markdown.
 - If an object participates in future sync, deletion must leave enough metadata to distinguish intentional deletion from missing local data.
 
+Activity History is a rebuildable, bounded projection over append-only Operation records,
+not a new durable data owner. Paging cursors are opaque process-local capability state
+bound to the active Vault identity/path, the full ordered snapshot, and the previous-page
+boundary; restart, Vault change, or Operation drift invalidates them.
+
 | Data class | User action | Pige Agent / external extension action | Automatic cleanup | Record required | Backup behavior |
 | --- | --- | --- | --- | --- | --- |
 | Source/wiki pages | Archive/trash with Undo; permanent delete confirms | Pige auto-maintains recoverably; extensions use brokered services | No permanent cleanup | Operation/tombstone | Trash included |
