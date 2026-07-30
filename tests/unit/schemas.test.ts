@@ -96,6 +96,8 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  KnowledgeHealthTargetSearchRequestSchema,
+  KnowledgeHealthTargetSearchResultSchema,
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
@@ -2783,6 +2785,9 @@ describe("schemas", () => {
 
   it("binds only one deterministic broken-reference unlink repair without exposing content authority", () => {
     const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
+    const sourceRevision = `noteeditrev_${"1".repeat(64)}`;
+    const sourceRenderProof = `knowledge_health_render_${"2".repeat(64)}`;
+    const occurrenceId = `knowledge_health_occurrence_${"3".repeat(64)}`;
     const indexGeneration = "2026-07-27T11:59:00.000Z#0123456789abcdef0123456789abcdef";
     const reportRequest = {
       apiVersion: 1,
@@ -2808,7 +2813,10 @@ describe("schemas", () => {
         kind: "broken_link",
         page: { pageId: "page_20260727_broken01", title: "Broken link" },
         unresolvedLinkCount: 1,
-        repairContextId
+        repairContextId,
+        sourceRevision,
+        sourceRenderProof,
+        occurrenceId
       }],
       truncated: false
     } as const;
@@ -2842,11 +2850,15 @@ describe("schemas", () => {
       apiVersion: 1,
       requestId: "knowledge_health_repair_request_abcdefghijklmnop",
       activeVaultId: reportRequest.activeVaultId,
+      reportRequestId: reportRequest.requestId,
       indexGeneration,
       issueKind: "broken_link",
       pageId: eligibleReport.issues[0].page.pageId,
       action: "unlink_broken_reference",
-      repairContextId
+      repairContextId,
+      sourceRevision,
+      sourceRenderProof,
+      occurrenceId
     } as const;
     expect(KnowledgeHealthRepairRequestSchema.parse(request)).toEqual(request);
     const committed = {
@@ -2881,6 +2893,46 @@ describe("schemas", () => {
       ...request,
       issueKind: "orphan_page"
     })).toThrow();
+
+    const { action: _unlinkAction, ...searchProof } = request;
+    const targetSearch = {
+      ...searchProof,
+      requestId: "knowledge_health_target_search_abcdefghijklmnop",
+      query: "current page"
+    } as const;
+    expect(KnowledgeHealthTargetSearchRequestSchema.parse(targetSearch)).toEqual(targetSearch);
+    const target = {
+      page: { pageId: "page_20260727_current01", title: "Current page" },
+      pageType: "note",
+      targetContextId: `knowledge_health_target_context_${"4".repeat(32)}`,
+      targetRevision: `noteeditrev_${"5".repeat(64)}`,
+      targetRenderProof: `knowledge_health_render_${"6".repeat(64)}`
+    } as const;
+    expect(KnowledgeHealthTargetSearchResultSchema.parse({
+      ...targetSearch,
+      status: "ready",
+      targets: [target],
+      truncated: false
+    })).toMatchObject({ status: "ready", targets: [target] });
+    const retarget = {
+      ...request,
+      action: "retarget_broken_reference",
+      targetPageId: target.page.pageId,
+      targetContextId: target.targetContextId,
+      targetRevision: target.targetRevision,
+      targetRenderProof: target.targetRenderProof
+    } as const;
+    expect(KnowledgeHealthRepairRequestSchema.parse(retarget)).toEqual(retarget);
+    expect(() => KnowledgeHealthRepairRequestSchema.parse({ ...retarget, targetRevision: undefined })).toThrow();
+    expect(() => KnowledgeHealthRepairRequestSchema.parse({ ...retarget, targetPageId: request.pageId })).toThrow();
+    for (const unsafe of [{ path: "/private/page.md" }, { body: "Target body" }]) {
+      expect(() => KnowledgeHealthTargetSearchResultSchema.parse({
+        ...targetSearch,
+        status: "ready",
+        targets: [{ ...target, ...unsafe }],
+        truncated: false
+      })).toThrow();
+    }
   });
 
   it("keeps the single local semantic asset lifecycle strict, revision-fenced, and renderer-safe", () => {

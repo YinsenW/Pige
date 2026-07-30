@@ -6,6 +6,7 @@ import { KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES, type OperationRecord } from "@p
 import { KnowledgeHealthService } from
   "../../apps/desktop/src/main/services/knowledge-health-service";
 import {
+  NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService,
   type NoteMarkdownEditorActivityPort
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
@@ -117,19 +118,14 @@ describe("KnowledgeHealthService", () => {
     expect(report.status).toBe("ready");
     if (report.status !== "ready") throw new Error("Expected a ready report.");
     const issue = report.issues.find((entry) => entry.kind === "broken_link");
-    if (!issue || issue.kind !== "broken_link" || !issue.repairContextId) {
+    if (!isRepairable(issue)) {
       throw new Error("Expected an eligible repair context.");
     }
 
     const result = fixture.service.repair(fixture.vaultPath, {
-      apiVersion: 1,
+      ...repairProof(report, issue),
       requestId: "knowledge_health_repair_request_abcdefghijklmnop",
-      activeVaultId: request.activeVaultId,
-      indexGeneration,
-      issueKind: "broken_link",
-      pageId,
-      action: "unlink_broken_reference",
-      repairContextId: issue.repairContextId
+      action: "unlink_broken_reference"
     });
 
     expect(result).toMatchObject({ status: "committed", pageId });
@@ -143,20 +139,15 @@ describe("KnowledgeHealthService", () => {
     const report = fixture.service.run(fixture.vaultPath, request);
     if (report.status !== "ready") throw new Error("Expected a ready report.");
     const issue = report.issues.find((entry) => entry.kind === "broken_link");
-    if (!issue || issue.kind !== "broken_link" || !issue.repairContextId) {
+    if (!isRepairable(issue)) {
       throw new Error("Expected an eligible repair context.");
     }
     fixture.setIndexGeneration("2026-07-27T12:31:00.000Z#successorgeneration");
 
     expect(fixture.service.repair(fixture.vaultPath, {
-      apiVersion: 1,
+      ...repairProof(report, issue),
       requestId: "knowledge_health_repair_request_staleabcdefghijklmnop",
-      activeVaultId: request.activeVaultId,
-      indexGeneration,
-      issueKind: "broken_link",
-      pageId,
-      action: "unlink_broken_reference",
-      repairContextId: issue.repairContextId
+      action: "unlink_broken_reference"
     })).toMatchObject({ status: "stale" });
     expect(fixture.operations).toEqual([]);
 
@@ -164,7 +155,7 @@ describe("KnowledgeHealthService", () => {
     const freshReport = externallyChanged.service.run(externallyChanged.vaultPath, request);
     if (freshReport.status !== "ready") throw new Error("Expected a ready report.");
     const freshIssue = freshReport.issues.find((entry) => entry.kind === "broken_link");
-    if (!freshIssue || freshIssue.kind !== "broken_link" || !freshIssue.repairContextId) {
+    if (!isRepairable(freshIssue)) {
       throw new Error("Expected an eligible repair context.");
     }
     fs.writeFileSync(
@@ -173,58 +164,148 @@ describe("KnowledgeHealthService", () => {
       "utf8"
     );
     expect(externallyChanged.service.repair(externallyChanged.vaultPath, {
-      apiVersion: 1,
+      ...repairProof(freshReport, freshIssue),
       requestId: "knowledge_health_repair_request_revisionabcdefghijkl",
-      activeVaultId: request.activeVaultId,
-      indexGeneration,
-      issueKind: "broken_link",
-      pageId,
-      action: "unlink_broken_reference",
-      repairContextId: freshIssue.repairContextId
+      action: "unlink_broken_reference"
     })).toMatchObject({ status: "stale" });
     expect(externallyChanged.operations).toEqual([]);
   });
 
   it("invalidates the prior report context and mints a fresh eligible context on rerun", () => {
-    const fixture = createRepairFixture("See [[Missing Page]].", "Missing Page");
+    const fixture = createRepairFixture("See [[Missing Page]].", "Missing Page", true);
     const first = fixture.service.run(fixture.vaultPath, request);
     if (first.status !== "ready") throw new Error("Expected a ready report.");
     const firstIssue = first.issues.find((entry) => entry.kind === "broken_link");
-    if (!firstIssue || firstIssue.kind !== "broken_link" || !firstIssue.repairContextId) {
+    if (!isRepairable(firstIssue)) {
       throw new Error("Expected the first repair context.");
     }
+    const firstSearch = fixture.service.searchTargets(fixture.vaultPath, {
+      ...repairProof(first, firstIssue),
+      requestId: "knowledge_health_target_search_firstcontextabcd",
+      query: ""
+    });
+    if (firstSearch.status !== "ready" || firstSearch.targets.length !== 1) {
+      throw new Error("Expected the first target proof.");
+    }
+    const firstTarget = firstSearch.targets[0]!;
     const second = fixture.service.run(fixture.vaultPath, {
       ...request,
       requestId: "knowledge_health_request_rerunabcdefghijkl"
     });
     if (second.status !== "ready") throw new Error("Expected a ready rerun.");
     const secondIssue = second.issues.find((entry) => entry.kind === "broken_link");
-    if (!secondIssue || secondIssue.kind !== "broken_link" || !secondIssue.repairContextId) {
+    if (!isRepairable(secondIssue)) {
       throw new Error("Expected the replacement repair context.");
     }
     expect(secondIssue.repairContextId).not.toBe(firstIssue.repairContextId);
 
     expect(fixture.service.repair(fixture.vaultPath, {
-      apiVersion: 1,
+      ...repairProof(first, firstIssue),
       requestId: "knowledge_health_repair_request_oldcontextabcdef",
-      activeVaultId: request.activeVaultId,
-      indexGeneration,
-      issueKind: "broken_link",
-      pageId,
-      action: "unlink_broken_reference",
-      repairContextId: firstIssue.repairContextId
+      action: "retarget_broken_reference",
+      targetPageId: firstTarget.page.pageId,
+      targetContextId: firstTarget.targetContextId,
+      targetRevision: firstTarget.targetRevision,
+      targetRenderProof: firstTarget.targetRenderProof
     })).toEqual({
-      apiVersion: 1,
+      ...repairProof(first, firstIssue),
       requestId: "knowledge_health_repair_request_oldcontextabcdef",
-      activeVaultId: request.activeVaultId,
-      indexGeneration,
-      issueKind: "broken_link",
-      pageId,
-      action: "unlink_broken_reference",
-      repairContextId: firstIssue.repairContextId,
+      action: "retarget_broken_reference",
+      targetPageId: firstTarget.page.pageId,
+      targetContextId: firstTarget.targetContextId,
+      targetRevision: firstTarget.targetRevision,
+      targetRenderProof: firstTarget.targetRenderProof,
       status: "not_found"
     });
     expect(fixture.operations).toEqual([]);
+  });
+
+  it("retargets one explicit current note and preserves Activity and restart-safe Undo", () => {
+    const fixture = createRepairFixture("See [[Missing Page|missing context]] now.", "Missing Page", true);
+    const report = fixture.service.run(fixture.vaultPath, request);
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues.find((entry) => entry.kind === "broken_link");
+    if (!isRepairable(issue)) throw new Error("Expected an eligible repair context.");
+    const searchRequest = {
+      ...repairProof(report, issue),
+      requestId: "knowledge_health_target_search_abcdefghijklmnop",
+      query: "current"
+    } as const;
+    const searched = fixture.service.searchTargets(fixture.vaultPath, searchRequest);
+    expect(searched.status).toBe("ready");
+    if (searched.status !== "ready" || searched.targets.length !== 1) {
+      throw new Error("Expected one explicit current target.");
+    }
+    const target = searched.targets[0]!;
+    expect(JSON.stringify(searched)).not.toContain(fixture.vaultPath);
+    expect(JSON.stringify(searched)).not.toContain("Target body");
+
+    const result = fixture.service.repair(fixture.vaultPath, {
+      ...repairProof(report, issue),
+      requestId: "knowledge_health_repair_request_retargetabcdefgh",
+      action: "retarget_broken_reference",
+      targetPageId: target.page.pageId,
+      targetContextId: target.targetContextId,
+      targetRevision: target.targetRevision,
+      targetRenderProof: target.targetRenderProof
+    });
+    expect(result).toMatchObject({ status: "committed", action: "retarget_broken_reference" });
+    if (result.status !== "committed") throw new Error("Expected a committed retarget.");
+    expect(fs.readFileSync(fixture.pagePath, "utf8"))
+      .toContain(`See [[${fixture.targetPageId}|missing context]] now.`);
+    expect(JSON.stringify(result)).not.toContain(fixture.vaultPath);
+
+    const operation = readOperation(fixture.vaultPath, result.operationId);
+    const restartedActivity = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+    expect(restartedActivity.activitySummary(operation)).toMatchObject({
+      operationId: result.operationId,
+      kind: "update_page",
+      status: "applied",
+      canUndo: true
+    });
+    expect(restartedActivity.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(restartedActivity.undo(operation)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
+  it("fails stale without mutation when an explicitly selected target changes", () => {
+    const fixture = createRepairFixture("See [[Missing Page]].", "Missing Page", true);
+    const report = fixture.service.run(fixture.vaultPath, request);
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues.find((entry) => entry.kind === "broken_link");
+    if (!isRepairable(issue)) throw new Error("Expected an eligible repair context.");
+    const searched = fixture.service.searchTargets(fixture.vaultPath, {
+      ...repairProof(report, issue),
+      requestId: "knowledge_health_target_search_targetdriftabcdefgh",
+      query: ""
+    });
+    if (searched.status !== "ready" || searched.targets.length !== 1) throw new Error("Expected a target.");
+    const target = searched.targets[0]!;
+    fs.writeFileSync(fixture.targetPagePath, fixture.targetMarkdown.replace("Target body.", "Changed target."), "utf8");
+
+    expect(fixture.service.repair(fixture.vaultPath, {
+      ...repairProof(report, issue),
+      requestId: "knowledge_health_repair_request_targetdriftabcdefgh",
+      action: "retarget_broken_reference",
+      targetPageId: target.page.pageId,
+      targetContextId: target.targetContextId,
+      targetRevision: target.targetRevision,
+      targetRenderProof: target.targetRenderProof
+    })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    expect(fixture.operations).toEqual([]);
+
+    const sourceDrift = createRepairFixture("See [[Missing Page]].", "Missing Page", true);
+    const sourceReport = sourceDrift.service.run(sourceDrift.vaultPath, request);
+    if (sourceReport.status !== "ready") throw new Error("Expected a ready report.");
+    const sourceIssue = sourceReport.issues.find((entry) => entry.kind === "broken_link");
+    if (!isRepairable(sourceIssue)) throw new Error("Expected an eligible repair context.");
+    fs.writeFileSync(sourceDrift.pagePath, sourceDrift.markdown.replace("See ", "Changed "), "utf8");
+    expect(sourceDrift.service.searchTargets(sourceDrift.vaultPath, {
+      ...repairProof(sourceReport, sourceIssue),
+      requestId: "knowledge_health_target_search_sourcedriftabcde",
+      query: ""
+    })).toMatchObject({ status: "stale" });
   });
 
   it("offers only the three exact forms and excludes unsafe or ambiguous occurrences", () => {
@@ -251,21 +332,28 @@ describe("KnowledgeHealthService", () => {
   });
 });
 
-function createRepairFixture(body: string, target: string) {
+function createRepairFixture(body: string, target: string, persistentActivity = false) {
   const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-health-repair-"));
   roots.push(vaultPath);
   fs.mkdirSync(path.join(vaultPath, "wiki"), { recursive: true });
   const pagePath = path.join(vaultPath, "wiki", `${pageId}.md`);
   const markdown = `---\nid: ${pageId}\nschema_version: 1\ntitle: Repair page\ntype: note\ncreated_at: 2026-07-27T12:00:00.000Z\nupdated_at: 2026-07-27T12:00:00.000Z\nstatus: active\n---\n${body}\n`;
   fs.writeFileSync(pagePath, markdown, "utf8");
+  const targetPageId = "page_20260727_currenttarget";
+  const targetPagePath = path.join(vaultPath, "wiki", `${targetPageId}.md`);
+  const targetMarkdown = `---\nid: ${targetPageId}\nschema_version: 1\ntitle: Current target\ntype: note\ncreated_at: 2026-07-27T12:00:00.000Z\nupdated_at: 2026-07-27T12:00:00.000Z\nstatus: active\n---\nTarget body.\n`;
+  if (persistentActivity) fs.writeFileSync(targetPagePath, targetMarkdown, "utf8");
   const operations: OperationRecord[] = [];
-  const activity: NoteMarkdownEditorActivityPort = {
-    recordPageUpdate: ({ operation }) => operations.push(operation)
-  };
-  const editor = new NoteMarkdownEditorService({
+  const vaults = {
     current: () => ({ vaultId: request.activeVaultId } as never),
     activeVaultPath: () => vaultPath
-  }, activity, {
+  };
+  const activity: NoteMarkdownEditorActivityPort = persistentActivity
+    ? new NoteMarkdownEditorActivityAdapter(vaults)
+    : {
+    recordPageUpdate: ({ operation }) => operations.push(operation)
+  };
+  const editor = new NoteMarkdownEditorService(vaults, activity, {
     now: () => new Date("2026-07-27T12:30:00.000Z"),
     randomId: () => "11111111-1111-4111-8111-111111111111"
   });
@@ -293,6 +381,10 @@ function createRepairFixture(body: string, target: string) {
     vaultPath,
     pagePath,
     markdown,
+    targetPageId,
+    targetPagePath,
+    targetMarkdown,
+    vaults,
     operations,
     setIndexGeneration: (value: string) => { currentIndexGeneration = value; },
     service: new KnowledgeHealthService(
@@ -302,4 +394,50 @@ function createRepairFixture(body: string, target: string) {
       () => "22222222-2222-4222-8222-222222222222"
     )
   };
+}
+
+function isRepairable(issue: unknown): issue is {
+  readonly kind: "broken_link";
+  readonly page: { readonly pageId: string };
+  readonly repairContextId: string;
+  readonly sourceRevision: `noteeditrev_${string}`;
+  readonly sourceRenderProof: `knowledge_health_render_${string}`;
+  readonly occurrenceId: `knowledge_health_occurrence_${string}`;
+} {
+  if (!issue || typeof issue !== "object") return false;
+  const value = issue as Record<string, unknown>;
+  return value.kind === "broken_link" && typeof value.repairContextId === "string" &&
+    typeof value.sourceRevision === "string" && typeof value.sourceRenderProof === "string" &&
+    typeof value.occurrenceId === "string";
+}
+
+function repairProof(
+  report: Extract<ReturnType<KnowledgeHealthService["run"]>, { readonly status: "ready" }>,
+  issue: ReturnType<typeof requireRepairable>
+) {
+  return {
+    apiVersion: 1 as const,
+    activeVaultId: report.activeVaultId,
+    reportRequestId: report.requestId,
+    indexGeneration: report.indexGeneration,
+    issueKind: "broken_link" as const,
+    pageId: issue.page.pageId,
+    repairContextId: issue.repairContextId,
+    sourceRevision: issue.sourceRevision,
+    sourceRenderProof: issue.sourceRenderProof,
+    occurrenceId: issue.occurrenceId
+  };
+}
+
+function requireRepairable(issue: unknown) {
+  if (!isRepairable(issue)) throw new Error("Expected repair proof.");
+  return issue;
+}
+
+function readOperation(vaultPath: string, operationId: string): OperationRecord {
+  const dateKey = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!dateKey) throw new Error("Invalid Operation identity.");
+  return JSON.parse(fs.readFileSync(path.join(
+    vaultPath, ".pige", "operations", dateKey.slice(0, 4), dateKey.slice(4, 6), `${operationId}.json`
+  ), "utf8")) as OperationRecord;
 }

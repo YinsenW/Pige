@@ -267,10 +267,10 @@ type LocalDatabaseStatus = {
 ```
 
 `maintenance.runKnowledgeHealth` returns a strict body-free generation report; complete
-coverage may give one missing link an opaque context.
-`maintenance.repairKnowledgeHealth` binds vault/generation/page/action/context. `committed`
-adds safe revision/Operation ID, `stale` revision, and other closed states no body. Main
-re-proves generation, page revision/render, target and occurrence; reruns invalidate context.
+coverage may give one missing link an opaque context for unlink or explicit retarget.
+`maintenance.repairKnowledgeHealth` binds vault/generation/page/action/context and, for
+retarget, one existing target page ID. `committed` adds safe revision/Operation ID;
+other states stay body-free. Main re-proves report/index/source/target/occurrence currentness.
 
 Rules:
 

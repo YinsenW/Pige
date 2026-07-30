@@ -3,6 +3,7 @@ import type {
   KnowledgeHealthIssueKind,
   KnowledgeHealthIssueSummary,
   KnowledgeHealthRunResult,
+  KnowledgeHealthTargetCandidate,
   LocalDatabaseStatus
 } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
@@ -14,6 +15,19 @@ type KnowledgeHealthState =
 type KnowledgeHealthRepairState =
   | { readonly kind: "repairing"; readonly issueKey: string }
   | { readonly kind: "committed" | "stale" | "failed" }
+  | null;
+
+type RepairableBrokenLink = Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
+  readonly repairContextId: string;
+  readonly sourceRevision: string;
+  readonly sourceRenderProof: string;
+  readonly occurrenceId: string;
+};
+
+type KnowledgeHealthRetargetState =
+  | { readonly kind: "open" | "searching" | "failed" | "stale"; readonly issue: RepairableBrokenLink; readonly query: string }
+  | { readonly kind: "ready"; readonly issue: RepairableBrokenLink; readonly query: string;
+    readonly targets: readonly KnowledgeHealthTargetCandidate[]; readonly truncated: boolean }
   | null;
 
 const KNOWLEDGE_HEALTH_KINDS: readonly KnowledgeHealthIssueKind[] = [
@@ -41,6 +55,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const [resetConfirming, setResetConfirming] = useState(false);
   const [knowledgeHealthState, setKnowledgeHealthState] = useState<KnowledgeHealthState>({ kind: "not_run" });
   const [knowledgeHealthRepairState, setKnowledgeHealthRepairState] = useState<KnowledgeHealthRepairState>(null);
+  const [knowledgeHealthRetargetState, setKnowledgeHealthRetargetState] = useState<KnowledgeHealthRetargetState>(null);
   const [knowledgeHealthOpenFailed, setKnowledgeHealthOpenFailed] = useState(false);
   const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
@@ -48,6 +63,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const activeVaultIdRef = useRef(props.activeVaultId);
   const knowledgeHealthSequenceRef = useRef(0);
   const knowledgeHealthRepairSequenceRef = useRef(0);
+  const knowledgeHealthTargetSearchSequenceRef = useRef(0);
   const knowledgeHealthRepairBusyRef = useRef(false);
   const knowledgeHealthStateRef = useRef(knowledgeHealthState);
   activeVaultIdRef.current = props.activeVaultId;
@@ -59,6 +75,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       mountedRef.current = false;
       knowledgeHealthSequenceRef.current += 1;
       knowledgeHealthRepairSequenceRef.current += 1;
+      knowledgeHealthTargetSearchSequenceRef.current += 1;
       knowledgeHealthRepairBusyRef.current = false;
     };
   }, []);
@@ -66,9 +83,11 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   useEffect(() => {
     knowledgeHealthSequenceRef.current += 1;
     knowledgeHealthRepairSequenceRef.current += 1;
+    knowledgeHealthTargetSearchSequenceRef.current += 1;
     knowledgeHealthRepairBusyRef.current = false;
     setKnowledgeHealthState({ kind: "not_run" });
     setKnowledgeHealthRepairState(null);
+    setKnowledgeHealthRetargetState(null);
     setKnowledgeHealthOpenFailed(false);
   }, [props.activeVaultId]);
 
@@ -137,6 +156,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       knowledgeHealthRepairSequenceRef.current += 1;
       knowledgeHealthRepairBusyRef.current = false;
       setKnowledgeHealthRepairState(null);
+      setKnowledgeHealthRetargetState(null);
     }
     const activeVaultId = props.activeVaultId;
     const sequence = knowledgeHealthSequenceRef.current + 1;
@@ -172,9 +192,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   };
 
   const repairKnowledgeHealthIssue = async (
-    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
-      readonly repairContextId: string;
-    }
+    issue: RepairableBrokenLink,
+    target?: KnowledgeHealthTargetCandidate
   ): Promise<void> => {
     const reportState = knowledgeHealthStateRef.current;
     if (reportState.kind !== "ready" || knowledgeHealthRepairBusyRef.current) return;
@@ -189,11 +208,21 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       apiVersion: 1 as const,
       requestId: `knowledge_health_repair_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
       activeVaultId,
+      reportRequestId: report.requestId,
       indexGeneration: report.indexGeneration,
       issueKind: "broken_link" as const,
       pageId: issue.page.pageId,
-      action: "unlink_broken_reference" as const,
-      repairContextId: issue.repairContextId
+      action: target ? "retarget_broken_reference" as const : "unlink_broken_reference" as const,
+      repairContextId: issue.repairContextId,
+      sourceRevision: issue.sourceRevision,
+      sourceRenderProof: issue.sourceRenderProof,
+      occurrenceId: issue.occurrenceId,
+      ...(target ? {
+        targetPageId: target.page.pageId,
+        targetContextId: target.targetContextId,
+        targetRevision: target.targetRevision,
+        targetRenderProof: target.targetRenderProof
+      } : {})
     };
     setKnowledgeHealthOpenFailed(false);
     setKnowledgeHealthRepairState({ kind: "repairing", issueKey });
@@ -220,16 +249,25 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       if (
         result.requestId !== request.requestId ||
         result.activeVaultId !== request.activeVaultId ||
+        result.reportRequestId !== request.reportRequestId ||
         result.indexGeneration !== request.indexGeneration ||
         result.issueKind !== request.issueKind ||
         result.pageId !== request.pageId ||
         result.action !== request.action ||
-        result.repairContextId !== request.repairContextId
+        result.repairContextId !== request.repairContextId ||
+        result.sourceRevision !== request.sourceRevision ||
+        result.sourceRenderProof !== request.sourceRenderProof ||
+        result.occurrenceId !== request.occurrenceId ||
+        result.targetPageId !== request.targetPageId ||
+        result.targetContextId !== request.targetContextId ||
+        result.targetRevision !== request.targetRevision ||
+        result.targetRenderProof !== request.targetRenderProof
       ) {
         setKnowledgeHealthRepairState({ kind: "failed" });
         return;
       }
       if (result.status === "committed") {
+        setKnowledgeHealthRetargetState(null);
         setKnowledgeHealthRepairState({ kind: "committed" });
         await runKnowledgeHealth(true);
         return;
@@ -247,6 +285,67 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     } finally {
       if (repairSequence === knowledgeHealthRepairSequenceRef.current) {
         knowledgeHealthRepairBusyRef.current = false;
+      }
+    }
+  };
+
+  const openKnowledgeHealthRetarget = (issue: RepairableBrokenLink): void => {
+    if (knowledgeHealthRepairBusyRef.current) return;
+    knowledgeHealthTargetSearchSequenceRef.current += 1;
+    setKnowledgeHealthRetargetState({ kind: "open", issue, query: "" });
+  };
+
+  const updateKnowledgeHealthRetargetQuery = (query: string): void => {
+    knowledgeHealthTargetSearchSequenceRef.current += 1;
+    setKnowledgeHealthRetargetState((state) => state
+      ? { kind: "open", issue: state.issue, query: query.slice(0, 120) }
+      : state);
+  };
+
+  const searchKnowledgeHealthTargets = async (): Promise<void> => {
+    const picker = knowledgeHealthRetargetState;
+    const reportState = knowledgeHealthStateRef.current;
+    if (!picker || reportState.kind !== "ready" || picker.kind === "searching") return;
+    const report = reportState.result;
+    const activeVaultId = props.activeVaultId;
+    const reportSequence = knowledgeHealthSequenceRef.current;
+    const searchSequence = knowledgeHealthTargetSearchSequenceRef.current + 1;
+    knowledgeHealthTargetSearchSequenceRef.current = searchSequence;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `knowledge_health_target_search_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId,
+      reportRequestId: report.requestId,
+      indexGeneration: report.indexGeneration,
+      issueKind: "broken_link" as const,
+      pageId: picker.issue.page.pageId,
+      repairContextId: picker.issue.repairContextId,
+      sourceRevision: picker.issue.sourceRevision,
+      sourceRenderProof: picker.issue.sourceRenderProof,
+      occurrenceId: picker.issue.occurrenceId,
+      query: picker.query
+    };
+    setKnowledgeHealthRetargetState({ kind: "searching", issue: picker.issue, query: picker.query });
+    try {
+      const result = await window.pige.maintenance.searchKnowledgeHealthTargets(request);
+      const current = knowledgeHealthStateRef.current;
+      if (!mountedRef.current || searchSequence !== knowledgeHealthTargetSearchSequenceRef.current ||
+        reportSequence !== knowledgeHealthSequenceRef.current || activeVaultIdRef.current !== activeVaultId ||
+        current.kind !== "ready" || current.result.requestId !== report.requestId ||
+        current.result.indexGeneration !== report.indexGeneration ||
+        result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId ||
+        result.reportRequestId !== request.reportRequestId || result.indexGeneration !== request.indexGeneration ||
+        result.issueKind !== request.issueKind || result.pageId !== request.pageId ||
+        result.repairContextId !== request.repairContextId || result.sourceRevision !== request.sourceRevision ||
+        result.sourceRenderProof !== request.sourceRenderProof || result.occurrenceId !== request.occurrenceId ||
+        result.query !== request.query) return;
+      setKnowledgeHealthRetargetState(result.status === "ready"
+        ? { kind: "ready", issue: picker.issue, query: picker.query, targets: result.targets, truncated: result.truncated }
+        : { kind: result.status === "failed" ? "failed" : "stale", issue: picker.issue, query: picker.query });
+    } catch {
+      if (mountedRef.current && searchSequence === knowledgeHealthTargetSearchSequenceRef.current &&
+        reportSequence === knowledgeHealthSequenceRef.current && activeVaultIdRef.current === activeVaultId) {
+        setKnowledgeHealthRetargetState({ kind: "failed", issue: picker.issue, query: picker.query });
       }
     }
   };
@@ -370,9 +469,69 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
               locale={props.locale}
               onOpenPage={openKnowledgePage}
               onRepairIssue={repairKnowledgeHealthIssue}
+              onRetargetIssue={openKnowledgeHealthRetarget}
               repairState={knowledgeHealthRepairState}
               t={props.t}
             />
+          ) : null}
+          {knowledgeHealthRetargetState ? (
+            <div className="settings-row tall" role="group" aria-labelledby="knowledge-health-retarget-title">
+              <div className="settings-row-copy">
+                <strong id="knowledge-health-retarget-title">{props.t("maintenance.knowledgeHealth.retargetTitle")}</strong>
+                <span>{props.t("maintenance.knowledgeHealth.retargetDescription")}</span>
+                <label htmlFor="knowledge-health-target-query">{props.t("maintenance.knowledgeHealth.targetQuery")}</label>
+                <input
+                  id="knowledge-health-target-query"
+                  className="settings-input"
+                  value={knowledgeHealthRetargetState.query}
+                  maxLength={120}
+                  disabled={knowledgeHealthRetargetState.kind === "searching" || knowledgeHealthRepairState?.kind === "repairing"}
+                  onChange={(event) => updateKnowledgeHealthRetargetQuery(event.target.value)}
+                />
+                {knowledgeHealthRetargetState.kind === "ready" ? (
+                  knowledgeHealthRetargetState.targets.length > 0 ? (
+                    <span>
+                      {knowledgeHealthRetargetState.targets.map((target) => (
+                        <button
+                          key={target.targetContextId}
+                          className="settings-button"
+                          type="button"
+                          disabled={knowledgeHealthRepairState?.kind === "repairing"}
+                          onClick={() => void repairKnowledgeHealthIssue(knowledgeHealthRetargetState.issue, target)}
+                        >
+                          {target.page.title}
+                        </button>
+                      ))}
+                    </span>
+                  ) : <span>{props.t("maintenance.knowledgeHealth.noTargets")}</span>
+                ) : knowledgeHealthRetargetState.kind === "failed" ? (
+                  <span role="alert">{props.t("maintenance.knowledgeHealth.targetSearchFailed")}</span>
+                ) : knowledgeHealthRetargetState.kind === "stale" ? (
+                  <span role="alert">{props.t("maintenance.knowledgeHealth.repairStale")}</span>
+                ) : null}
+                {knowledgeHealthRetargetState.kind === "ready" && knowledgeHealthRetargetState.truncated
+                  ? <span>{props.t("maintenance.knowledgeHealth.targetResultsTruncated")}</span>
+                  : null}
+              </div>
+              <div className="settings-row-control">
+                <button className="settings-button" type="button" onClick={() => {
+                  knowledgeHealthTargetSearchSequenceRef.current += 1;
+                  setKnowledgeHealthRetargetState(null);
+                }}>
+                  {props.t("backup.restoreCancel")}
+                </button>
+                <button
+                  className="settings-button primary"
+                  type="button"
+                  disabled={knowledgeHealthRetargetState.kind === "searching" || knowledgeHealthRepairState?.kind === "repairing"}
+                  onClick={() => void searchKnowledgeHealthTargets()}
+                >
+                  {props.t(knowledgeHealthRetargetState.kind === "searching"
+                    ? "maintenance.knowledgeHealth.targetSearching"
+                    : "maintenance.knowledgeHealth.searchTargets")}
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
         {knowledgeHealthState.kind === "not_run" ? (
@@ -484,10 +643,9 @@ function KnowledgeHealthReadyResult(props: {
   readonly locale: Locale;
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (
-    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
-      readonly repairContextId: string;
-    }
+    issue: RepairableBrokenLink
   ) => Promise<void>;
+  readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -542,6 +700,7 @@ function KnowledgeHealthReadyResult(props: {
                 issue={issue}
                 onOpenPage={props.onOpenPage}
                 onRepairIssue={props.onRepairIssue}
+                onRetargetIssue={props.onRetargetIssue}
                 repairState={props.repairState}
                 t={props.t}
               />
@@ -557,10 +716,9 @@ function KnowledgeHealthIssueRow(props: {
   readonly issue: KnowledgeHealthIssueSummary;
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (
-    issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
-      readonly repairContextId: string;
-    }
+    issue: RepairableBrokenLink
   ) => Promise<void>;
+  readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -586,10 +744,9 @@ function KnowledgeHealthIssueRow(props: {
     : "";
   const page = props.issue.page;
   const issueKey = knowledgeHealthIssueKey(props.issue);
-  const repairableIssue = props.issue.kind === "broken_link" && props.issue.repairContextId
-    ? props.issue as Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
-      readonly repairContextId: string;
-    }
+  const repairableIssue = props.issue.kind === "broken_link" && props.issue.repairContextId &&
+    props.issue.sourceRevision && props.issue.sourceRenderProof && props.issue.occurrenceId
+    ? props.issue as RepairableBrokenLink
     : null;
   return (
     <span>
@@ -604,11 +761,20 @@ function KnowledgeHealthIssueRow(props: {
             className="settings-button"
             type="button"
             disabled={props.repairState?.kind === "repairing"}
+            onClick={() => props.onRetargetIssue(repairableIssue)}
+          >
+            {props.t("maintenance.knowledgeHealth.retarget")}
+          </button>
+          {" · "}
+          <button
+            className="settings-button"
+            type="button"
+            disabled={props.repairState?.kind === "repairing"}
             onClick={() => void props.onRepairIssue(repairableIssue)}
           >
             {props.t(props.repairState?.kind === "repairing" && props.repairState.issueKey === issueKey
               ? "maintenance.knowledgeHealth.repairing"
-              : "maintenance.knowledgeHealth.repair")}
+              : "maintenance.knowledgeHealth.removeBrokenLink")}
           </button>
         </>
       ) : null}

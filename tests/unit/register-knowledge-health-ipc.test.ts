@@ -15,11 +15,29 @@ const repairRequest = {
   apiVersion: 1,
   requestId: "knowledge_health_repair_request_abcdefghijklmnop",
   activeVaultId: request.activeVaultId,
+  reportRequestId: request.requestId,
   indexGeneration: "2026-07-27T12:00:00.000Z#abcdefghijklmnop",
   issueKind: "broken_link",
   pageId: "page_20260727_healthrepair",
   action: "unlink_broken_reference",
-  repairContextId: `knowledge_health_repair_context_${"a".repeat(32)}`
+  repairContextId: `knowledge_health_repair_context_${"a".repeat(32)}`,
+  sourceRevision: `noteeditrev_${"b".repeat(64)}`,
+  sourceRenderProof: `knowledge_health_render_${"c".repeat(64)}`,
+  occurrenceId: `knowledge_health_occurrence_${"d".repeat(64)}`
+} as const;
+const targetSearchRequest = {
+  apiVersion: repairRequest.apiVersion,
+  requestId: "knowledge_health_target_search_abcdefghijklmnop",
+  activeVaultId: repairRequest.activeVaultId,
+  reportRequestId: repairRequest.reportRequestId,
+  indexGeneration: repairRequest.indexGeneration,
+  issueKind: repairRequest.issueKind,
+  pageId: repairRequest.pageId,
+  repairContextId: repairRequest.repairContextId,
+  sourceRevision: repairRequest.sourceRevision,
+  sourceRenderProof: repairRequest.sourceRenderProof,
+  occurrenceId: repairRequest.occurrenceId,
+  query: "current"
 } as const;
 
 function readyResult() {
@@ -46,10 +64,17 @@ function readyResult() {
 function makeHarness(options: {
   readonly getActiveVaultBinding?: () => typeof binding | undefined;
   readonly runKnowledgeHealth?: (...args: unknown[]) => unknown;
+  readonly searchKnowledgeHealthTargets?: (...args: unknown[]) => unknown;
   readonly repairKnowledgeHealth?: (...args: unknown[]) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const runKnowledgeHealth = vi.fn(options.runKnowledgeHealth ?? (() => readyResult()));
+  const searchKnowledgeHealthTargets = vi.fn(options.searchKnowledgeHealthTargets ?? (() => ({
+    ...targetSearchRequest,
+    status: "ready" as const,
+    targets: [],
+    truncated: false
+  })));
   const repairKnowledgeHealth = vi.fn(options.repairKnowledgeHealth ?? (() => ({
     ...repairRequest,
     status: "committed" as const,
@@ -62,17 +87,19 @@ function makeHarness(options: {
     } as Pick<IpcMain, "handle">,
     getActiveVaultBinding: options.getActiveVaultBinding ?? (() => binding),
     runKnowledgeHealth,
+    searchKnowledgeHealthTargets,
     repairKnowledgeHealth
   });
-  return { handlers, runKnowledgeHealth, repairKnowledgeHealth };
+  return { handlers, runKnowledgeHealth, searchKnowledgeHealthTargets, repairKnowledgeHealth };
 }
 
 describe("registerKnowledgeHealthIpc", () => {
   it("registers and strictly delegates the maintenance channel", async () => {
-    const { handlers, runKnowledgeHealth, repairKnowledgeHealth } = makeHarness();
+    const { handlers, runKnowledgeHealth, searchKnowledgeHealthTargets, repairKnowledgeHealth } = makeHarness();
 
     expect([...handlers.keys()]).toEqual([
       "maintenance.runKnowledgeHealth",
+      "maintenance.searchKnowledgeHealthTargets",
       "maintenance.repairKnowledgeHealth"
     ]);
     await expect(handlers.get("maintenance.runKnowledgeHealth")!(
@@ -80,6 +107,11 @@ describe("registerKnowledgeHealthIpc", () => {
       request
     )).resolves.toEqual(readyResult());
     expect(runKnowledgeHealth).toHaveBeenCalledWith(binding.vaultPath, request);
+    await expect(handlers.get("maintenance.searchKnowledgeHealthTargets")!(
+      {} as IpcMainInvokeEvent,
+      targetSearchRequest
+    )).resolves.toMatchObject({ status: "ready", targets: [] });
+    expect(searchKnowledgeHealthTargets).toHaveBeenCalledWith(binding.vaultPath, targetSearchRequest);
     await expect(handlers.get("maintenance.repairKnowledgeHealth")!(
       {} as IpcMainInvokeEvent,
       repairRequest
@@ -88,7 +120,7 @@ describe("registerKnowledgeHealthIpc", () => {
   });
 
   it("fails closed before service access for malformed or inactive-vault requests", async () => {
-    const { handlers, runKnowledgeHealth, repairKnowledgeHealth } = makeHarness({
+    const { handlers, runKnowledgeHealth, searchKnowledgeHealthTargets, repairKnowledgeHealth } = makeHarness({
       getActiveVaultBinding: () => ({ ...binding, vaultId: "vault_20260727_elsewhere" })
     });
     await expect(handlers.get("maintenance.runKnowledgeHealth")!(
@@ -101,6 +133,11 @@ describe("registerKnowledgeHealthIpc", () => {
       repairRequest
     )).resolves.toEqual({ ...repairRequest, status: "not_found" });
     expect(repairKnowledgeHealth).not.toHaveBeenCalled();
+    await expect(handlers.get("maintenance.searchKnowledgeHealthTargets")!(
+      {} as IpcMainInvokeEvent,
+      targetSearchRequest
+    )).resolves.toEqual({ ...targetSearchRequest, status: "not_found" });
+    expect(searchKnowledgeHealthTargets).not.toHaveBeenCalled();
     await expect(handlers.get("maintenance.runKnowledgeHealth")!(
       {} as IpcMainInvokeEvent,
       { ...request, path: "/private/vault" }
@@ -142,5 +179,13 @@ describe("registerKnowledgeHealthIpc", () => {
       {} as IpcMainInvokeEvent,
       repairRequest
     )).resolves.toEqual({ ...repairRequest, status: "failed" });
+
+    const targetThrown = makeHarness({
+      searchKnowledgeHealthTargets: () => { throw new Error("/private/vault Target body"); }
+    });
+    await expect(targetThrown.handlers.get("maintenance.searchKnowledgeHealthTargets")!(
+      {} as IpcMainInvokeEvent,
+      targetSearchRequest
+    )).resolves.toEqual({ ...targetSearchRequest, status: "failed" });
   });
 });

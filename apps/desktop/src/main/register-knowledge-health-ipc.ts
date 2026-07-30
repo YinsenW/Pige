@@ -3,13 +3,17 @@ import type {
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
   KnowledgeHealthRunRequest,
-  KnowledgeHealthRunResult
+  KnowledgeHealthRunResult,
+  KnowledgeHealthTargetSearchRequest,
+  KnowledgeHealthTargetSearchResult
 } from "@pige/contracts";
 import {
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
   KnowledgeHealthRunRequestSchema,
-  KnowledgeHealthRunResultSchema
+  KnowledgeHealthRunResultSchema,
+  KnowledgeHealthTargetSearchRequestSchema,
+  KnowledgeHealthTargetSearchResultSchema
 } from "@pige/schemas";
 
 interface ActiveVaultBinding {
@@ -28,6 +32,10 @@ interface RegisterKnowledgeHealthIpcOptions {
     vaultPath: string,
     request: KnowledgeHealthRepairRequest
   ) => KnowledgeHealthRepairResult | Promise<KnowledgeHealthRepairResult>;
+  readonly searchKnowledgeHealthTargets: (
+    vaultPath: string,
+    request: KnowledgeHealthTargetSearchRequest
+  ) => KnowledgeHealthTargetSearchResult | Promise<KnowledgeHealthTargetSearchResult>;
 }
 
 export function registerKnowledgeHealthIpc(options: RegisterKnowledgeHealthIpcOptions): void {
@@ -50,6 +58,26 @@ export function registerKnowledgeHealthIpc(options: RegisterKnowledgeHealthIpcOp
       return current?.vaultId === binding.vaultId && current.vaultPath === binding.vaultPath
         ? failed(parsed)
         : unavailable(parsed);
+    }
+  });
+  options.ipcMain.handle("maintenance.searchKnowledgeHealthTargets", async (_event, request: unknown) => {
+    const parsed = KnowledgeHealthTargetSearchRequestSchema.parse(request);
+    const binding = options.getActiveVaultBinding();
+    if (!binding || binding.vaultId !== parsed.activeVaultId) return targetSearchNotFound(parsed);
+    try {
+      const result = KnowledgeHealthTargetSearchResultSchema.parse(
+        await options.searchKnowledgeHealthTargets(binding.vaultPath, parsed)
+      );
+      if (!sameTargetSearchIdentity(parsed, result)) return targetSearchFailed(parsed);
+      const current = options.getActiveVaultBinding();
+      return current?.vaultId === binding.vaultId && current.vaultPath === binding.vaultPath
+        ? result
+        : targetSearchNotFound(parsed);
+    } catch {
+      const current = options.getActiveVaultBinding();
+      return current?.vaultId === binding.vaultId && current.vaultPath === binding.vaultPath
+        ? targetSearchFailed(parsed)
+        : targetSearchNotFound(parsed);
     }
   });
   options.ipcMain.handle("maintenance.repairKnowledgeHealth", async (_event, request: unknown) => {
@@ -90,8 +118,28 @@ function sameRepairIdentity(
     result.indexGeneration === request.indexGeneration &&
     result.issueKind === request.issueKind &&
     result.pageId === request.pageId &&
+    result.reportRequestId === request.reportRequestId &&
+    result.sourceRevision === request.sourceRevision &&
+    result.sourceRenderProof === request.sourceRenderProof &&
+    result.occurrenceId === request.occurrenceId &&
     result.action === request.action &&
-    result.repairContextId === request.repairContextId;
+    result.repairContextId === request.repairContextId &&
+    result.targetPageId === request.targetPageId &&
+    result.targetContextId === request.targetContextId &&
+    result.targetRevision === request.targetRevision &&
+    result.targetRenderProof === request.targetRenderProof;
+}
+
+function sameTargetSearchIdentity(
+  request: KnowledgeHealthTargetSearchRequest,
+  result: KnowledgeHealthTargetSearchResult
+): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.reportRequestId === request.reportRequestId &&
+    result.indexGeneration === request.indexGeneration && result.issueKind === request.issueKind &&
+    result.pageId === request.pageId && result.repairContextId === request.repairContextId &&
+    result.sourceRevision === request.sourceRevision && result.sourceRenderProof === request.sourceRenderProof &&
+    result.occurrenceId === request.occurrenceId && result.query === request.query;
 }
 
 function unavailable(request: KnowledgeHealthRunRequest): KnowledgeHealthRunResult {
@@ -108,4 +156,12 @@ function repairNotFound(request: KnowledgeHealthRepairRequest): KnowledgeHealthR
 
 function repairFailed(request: KnowledgeHealthRepairRequest): KnowledgeHealthRepairResult {
   return KnowledgeHealthRepairResultSchema.parse({ ...request, status: "failed" });
+}
+
+function targetSearchNotFound(request: KnowledgeHealthTargetSearchRequest): KnowledgeHealthTargetSearchResult {
+  return KnowledgeHealthTargetSearchResultSchema.parse({ ...request, status: "not_found" });
+}
+
+function targetSearchFailed(request: KnowledgeHealthTargetSearchRequest): KnowledgeHealthTargetSearchResult {
+  return KnowledgeHealthTargetSearchResultSchema.parse({ ...request, status: "failed" });
 }
