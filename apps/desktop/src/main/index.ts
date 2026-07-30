@@ -274,6 +274,7 @@ import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
+import { NoteArchiveService } from "./services/note-archive-service";
 import { NoteMergeService } from "./services/note-merge-service";
 import {
   NoteMarkdownEditorActivityAdapter,
@@ -379,6 +380,7 @@ let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
+let noteArchiveService: NoteArchiveService | undefined;
 let noteMergeService: NoteMergeService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
@@ -1595,6 +1597,10 @@ const getNoteTrashService = (): NoteTrashService => {
   noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
   return noteTrashService;
 };
+const getNoteArchiveService = (): NoteArchiveService => {
+  noteArchiveService ??= new NoteArchiveService(getNotesService(), getNoteMarkdownEditorService());
+  return noteArchiveService;
+};
 const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
   return noteMergeService;
@@ -2698,8 +2704,10 @@ registerReaderIpc({
   getReaderSourceRevealService,
   getReaderSourceReconnectService,
   getNoteTrashService,
+  getNoteArchiveService,
   getNoteMergeService,
-  onNoteTrashCommitted: scheduleActivityIndexRebuild
+  onNoteTrashCommitted: scheduleActivityIndexRebuild,
+  onNoteArchiveCommitted: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
   ipcMain,
@@ -3193,6 +3201,7 @@ app.whenReady().then(async () => {
     noteMarkdownEditorActivityAdapter
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
+  noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),

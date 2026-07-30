@@ -168,6 +168,28 @@ describe("NoteMarkdownEditorService", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
   });
 
+  it("persists archive_page Activity and Undo restores the exact active bytes", () => {
+    const fixture = createAdapterFixture();
+    const opened = requireOpened(fixture.service);
+    const markdown = opened.markdown
+      .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z")
+      .replace('status: "active"', "status: archived");
+    const committed = fixture.service.save({
+      requestId: "noteeditreq_archivefixture",
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      expectedRevisionId: opened.revisionId,
+      renderIdentity: opened.renderIdentity,
+      markdown
+    }, "archive_page");
+    expect(committed.status).toBe("committed");
+    if (committed.status !== "committed") throw new Error("Expected archive to commit.");
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    expect(fixture.adapter.activitySummary(operation)).toMatchObject({ kind: "archive_page", canUndo: true });
+    expect(fixture.adapter.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
   it("fails closed when a governed Markdown parent becomes a symlink", () => {
     const fixture = createFixture();
     const opened = requireOpened(fixture.service);

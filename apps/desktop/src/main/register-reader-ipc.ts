@@ -12,6 +12,8 @@ import type {
   NoteReconnectOriginalSourceRequest,
   NoteRevealSourceRequest,
   NoteRenderRequest,
+  NoteArchiveCurrentRequest,
+  NoteArchiveCurrentResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -38,6 +40,9 @@ import {
   NoteReconnectOriginalSourceResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
+  NOTE_ARCHIVE_CURRENT_CHANNEL,
+  NoteArchiveCurrentRequestSchema,
+  NoteArchiveCurrentResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -65,6 +70,7 @@ import type { ReaderSelectionCreateNoteActionService } from "./services/reader-s
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import type { NoteTrashService } from "./services/note-trash-service";
+import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 
 interface RegisterReaderIpcOptions {
@@ -81,8 +87,10 @@ interface RegisterReaderIpcOptions {
     readonly filePaths: readonly string[];
   }>;
   readonly getNoteTrashService: () => NoteTrashService;
+  readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getNoteMergeService: () => NoteMergeService;
   readonly onNoteTrashCommitted: () => void;
+  readonly onNoteArchiveCommitted: () => void;
 }
 
 function failedEditorOpen(request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -204,6 +212,25 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteTrashCommitted();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    return result;
+  });
+  options.ipcMain.handle(NOTE_ARCHIVE_CURRENT_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteArchiveCurrentRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteArchiveCurrentResult;
+    try {
+      rawResult = await options.getNoteArchiveService().archive(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteArchiveCurrentResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteArchiveCommitted();
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteArchiveCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
   });
