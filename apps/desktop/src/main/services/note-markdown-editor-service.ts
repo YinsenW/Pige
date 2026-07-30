@@ -32,6 +32,7 @@ import {
   type MarkdownFileSignatureRecord
 } from "./markdown-page-index";
 import { createUserPageUpdateRedoOperationId, createUserPageUpdateUndoOperationId } from "./note-markdown-editor-activity-ids";
+import { isEditableMarkdownPage, preservesEditableMarkdownOwnership } from "./markdown-source-editor-policy";
 export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
@@ -138,7 +139,7 @@ export class NoteMarkdownEditorService {
         located.signature,
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       );
-      if (!validateEditableNoteMarkdown(content.markdown, request.pageId)) return { status: "failed" };
+      if (!validateEditableMarkdown(content.markdown, request.pageId)) return { status: "failed" };
       if (!this.#scopeMatches(scope.activeVaultId, scope.vaultPath)) return { status: "failed" };
       const revisionId = hashMarkdown(content.markdown);
       const renderIdentity = createRenderIdentity({
@@ -174,7 +175,7 @@ export class NoteMarkdownEditorService {
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
       return { status: "invalid", ...identity };
     }
-    if (!isNotePageMarkdown(request.markdown)) {
+    if (!isEditableMarkdownPage(request.markdown)) {
       return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     const binding = this.#bindings.get(request.renderIdentity);
@@ -201,6 +202,9 @@ export class NoteMarkdownEditorService {
     }
     if (hashMarkdown(beforeMarkdown) !== binding.revisionId) {
       return { status: "stale", ...identity };
+    }
+    if (!preservesEditableMarkdownOwnership(beforeMarkdown, request.markdown)) {
+      return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     if (request.markdown === beforeMarkdown) {
       return { status: "invalid", ...identity };
@@ -306,7 +310,7 @@ export class NoteMarkdownEditorService {
         signature,
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       ).markdown;
-      if (committed !== afterMarkdown || !validateEditableNoteMarkdown(committed, binding.pageId)) {
+      if (committed !== afterMarkdown || !validateEditableMarkdown(committed, binding.pageId)) {
         throw new Error("The committed Markdown page could not be verified.");
       }
       return signature;
@@ -370,8 +374,9 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       !binding ||
       hashMarkdown(input.beforeMarkdown) !== binding.beforeHash ||
       hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
-      !validateEditableNoteMarkdown(input.beforeMarkdown, binding.pageId) ||
-      !validateEditableNoteMarkdown(input.afterMarkdown, binding.pageId)
+      !validateEditableMarkdown(input.beforeMarkdown, binding.pageId) ||
+      !validateEditableMarkdown(input.afterMarkdown, binding.pageId) ||
+      !preservesEditableMarkdownOwnership(input.beforeMarkdown, input.afterMarkdown)
     ) {
       throw new Error("The Markdown Activity update binding is invalid.");
     }
@@ -474,7 +479,7 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       binding.beforeHash,
       MAX_NOTE_MARKDOWN_EDITOR_BYTES
     );
-    if (!validateEditableNoteMarkdown(before, binding.pageId)) {
+    if (!validateEditableMarkdown(before, binding.pageId)) {
       throw new Error("The Markdown Activity before-image is invalid.");
     }
     const undo = createUserPageUpdateUndoOperation(operation, binding);
@@ -582,11 +587,8 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
     (reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target)
   );
 }
-export function validateEditableNoteMarkdown(markdown: string, expectedPageId: string): boolean {
-  return validatePortableMarkdown(markdown, expectedPageId) && isNotePageMarkdown(markdown);
-}
-function isNotePageMarkdown(markdown: string): boolean {
-  return parsePigeFrontmatter(markdown)?.frontmatter.type === "note";
+export function validateEditableMarkdown(markdown: string, expectedPageId: string): boolean {
+  return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPage(markdown);
 }
 function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
   const required = ["id", "schema_version", "title", "type", "created_at", "updated_at", "status"];

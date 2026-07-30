@@ -135,8 +135,39 @@ describe("NoteMarkdownEditorService", () => {
     expect(fixture.records).toEqual([]);
   });
 
-  it("fails closed for every non-note page type and rejects a page-type change on save", () => {
-    for (const pageType of ["source", "concept", "entity", "topic", "claim", "question"] as const) {
+  it("edits a Source Page body while preserving its source-owned identity fields", () => {
+    const fixture = createFixture({ pageType: "source", pageRelativePath: `sources/${PAGE_ID}.md` });
+    const opened = requireOpened(fixture.service);
+    const edited = opened.markdown.replace("Original body.", "User-maintained source notes.");
+    expect(fixture.service.save({
+      requestId: "request_source_page_edit",
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      expectedRevisionId: opened.revisionId,
+      renderIdentity: opened.renderIdentity,
+      markdown: edited
+    })).toMatchObject({ status: "committed" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(edited);
+    expect(fixture.records).toHaveLength(1);
+
+    const reopened = requireOpened(fixture.service);
+    for (const changedOwner of [
+      reopened.markdown.replace(`source_ids: ["${SOURCE_ID}"]`, "source_ids: []"),
+      reopened.markdown.replace('type: "source"', 'type: "note"'),
+      reopened.markdown.replace('status: "active"', 'status: "missing_source"'),
+      reopened.markdown.replace('created_at: "2026-07-27T10:00:00.000Z"', 'created_at: "2026-07-28T10:00:00.000Z"')
+    ]) expect(fixture.service.save({
+      requestId: "request_source_owner_change",
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      expectedRevisionId: reopened.revisionId,
+      renderIdentity: reopened.renderIdentity,
+      markdown: changedOwner
+    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+  });
+
+  it("fails closed for unsupported page types and rejects a page-type change on save", () => {
+    for (const pageType of ["concept", "entity", "topic", "claim", "question"] as const) {
       const fixture = createFixture({ pageType });
       expect(fixture.service.open({ activeVaultId: VAULT_ID, pageId: PAGE_ID })).toEqual({ status: "failed" });
       expect(fixture.records).toEqual([]);
@@ -331,6 +362,17 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
       status: "already_undone",
       undoOperationId: undo.id
     });
+  });
+
+  it("records and restores a Source Page sidecar edit without changing its source ownership", () => {
+    const fixture = createAdapterFixture({ pageType: "source", pageRelativePath: `sources/${PAGE_ID}.md` });
+    const committed = commitEdit(fixture);
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    expect(operation).toMatchObject({ kind: "update_page", targetRefs: [{ kind: "page", id: PAGE_ID }] });
+    expect(fixture.adapter.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
+    expect(fixture.adapter.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
   });
 
   it("recovers only an exact interrupted forward Undo and remains idempotent", () => {

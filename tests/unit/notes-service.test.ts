@@ -187,13 +187,13 @@ describe("notes service", () => {
     expect(rendered.aliasing).toBeUndefined();
   });
 
-  it("keeps non-note pages out of editor sessions and reports page-type mutation explicitly", async () => {
+  it("opens Source Pages for bounded sidecar edits and keeps other page types out", async () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
     const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
     const notes = new NotesService(vaults, undefined, undefined, editor);
 
-    for (const [index, pageType] of ["source", "concept", "entity", "topic", "claim", "question"].entries()) {
+    for (const [index, pageType] of ["concept", "entity", "topic", "claim", "question"].entries()) {
       const pageId = `page_20260709_noneditable${index}`;
       writePage({
         vaultPath,
@@ -211,6 +211,26 @@ describe("notes service", () => {
         renderContextId: rendered.renderContextId!
       })).toMatchObject({ status: "failed" });
     }
+
+    const sourcePageId = "page_20260709_editablesource";
+    writePage({
+      vaultPath, fileName: "editable-source.md", pageId: sourcePageId, title: "Editable source",
+      pageType: "source", sourceIds: ["src_20260709_editsource"], body: "Source sidecar notes"
+    });
+    const sourceRender = await notes.render({ pageId: sourcePageId }, OWNER_ID);
+    const sourceOpen = notes.openEditor(OWNER_ID, {
+      apiVersion: 1, requestId: "noteeditreq_sourceopen", activeVaultId: vault.vaultId,
+      pageId: sourcePageId, renderContextId: sourceRender.renderContextId!
+    });
+    expect(sourceOpen.status).toBe("ready");
+    if (sourceOpen.status !== "ready") throw new Error("Expected Source Page editor to open.");
+    const sourceSave = await notes.saveEditor(OWNER_ID, {
+      apiVersion: 1, requestId: "noteeditreq_sourcesave", activeVaultId: vault.vaultId,
+      pageId: sourcePageId, renderContextId: sourceOpen.renderContextId,
+      expectedRevision: sourceOpen.revision,
+      markdown: sourceOpen.markdown.replace("Source sidecar notes", "Edited source sidecar notes")
+    });
+    expect(sourceSave).toMatchObject({ status: "committed", render: { summary: { pageType: "source" } } });
 
     const pageId = "page_20260709_typechange12";
     writePage({ vaultPath, fileName: "type-change.md", pageId, title: "Type change", body: "Before" });
