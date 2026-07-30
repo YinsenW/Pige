@@ -36,6 +36,10 @@ import type {
   DiagnosticsHealth,
   DiagnosticsClearLocalRequest,
   DiagnosticsClearLocalResult,
+  DiagnosticsPreviewSupportBundleRequest,
+  DiagnosticsSupportBundleMutationRequest,
+  DiagnosticsSupportBundleMutationResult,
+  DiagnosticsWorkflowSummary,
   ExportSupportBundleRequest,
   CancelSupportBundleExportRequest,
   CancelSupportBundleExportResult,
@@ -304,8 +308,20 @@ import {
   AppearanceThemeMutationResultSchema,
   KnowledgeLanguageMutationResultSchema,
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
+  DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL,
+  DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
+  DiagnosticsExportSupportBundleRequestSchema,
+  DiagnosticsExportSupportBundleResultSchema,
+  DiagnosticsPreviewSupportBundleRequestSchema,
+  DiagnosticsSupportBundleMutationRequestSchema,
+  DiagnosticsSupportBundleMutationResultSchema,
+  DiagnosticsWorkflowSummarySchema,
+  SupportBundlePreviewSchema,
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
@@ -1938,6 +1954,8 @@ const api: PigeDesktopApi = {
   diagnostics: {
     health: async (): Promise<DiagnosticsHealth> =>
       ipcRenderer.invoke("diagnostics.health") as Promise<DiagnosticsHealth>,
+    workflowSummary: async (): Promise<DiagnosticsWorkflowSummary> =>
+      DiagnosticsWorkflowSummarySchema.parse(await ipcRenderer.invoke(DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL)),
     clearLocalDiagnostics: async (
       request: DiagnosticsClearLocalRequest
     ): Promise<DiagnosticsClearLocalResult> => {
@@ -1946,14 +1964,30 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(DIAGNOSTICS_CLEAR_LOCAL_CHANNEL, parsedRequest)
       );
     },
-    previewSupportBundle: async (): Promise<SupportBundlePreview> =>
-      ipcRenderer.invoke("diagnostics.previewSupportBundle") as Promise<SupportBundlePreview>,
+    previewSupportBundle: async (request: DiagnosticsPreviewSupportBundleRequest): Promise<SupportBundlePreview> =>
+      SupportBundlePreviewSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsPreviewSupportBundleRequestSchema.parse(request)
+      )),
     exportSupportBundle: async (request: ExportSupportBundleRequest): Promise<SupportBundleExportResult> =>
-      ipcRenderer.invoke("diagnostics.exportSupportBundle", request) as Promise<SupportBundleExportResult>,
+      DiagnosticsExportSupportBundleResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsExportSupportBundleRequestSchema.parse(request)
+      )),
     cancelSupportBundleExport: async (
       request: CancelSupportBundleExportRequest
     ): Promise<CancelSupportBundleExportResult> =>
-      ipcRenderer.invoke("diagnostics.cancelSupportBundleExport", request) as Promise<CancelSupportBundleExportResult>
+      DiagnosticsSupportBundleMutationResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsSupportBundleMutationRequestSchema.parse(request)
+      )),
+    retrySupportBundleExport: async (
+      request: DiagnosticsSupportBundleMutationRequest
+    ): Promise<DiagnosticsSupportBundleMutationResult> =>
+      DiagnosticsSupportBundleMutationResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsSupportBundleMutationRequestSchema.parse(request)
+      ))
   },
   models: {
     summary: async (): Promise<ModelProviderSettingsSummary> =>

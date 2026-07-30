@@ -15,11 +15,6 @@ import type {
   AppearanceThemeMutationResult,
   KnowledgeLanguageMutationResult,
   CreateVaultRequest,
-  CancelSupportBundleExportRequest,
-  CancelSupportBundleExportResult,
-  DiagnosticsClearLocalRequest,
-  DiagnosticsClearLocalResult,
-  ExportSupportBundleRequest,
   HighRiskConfirmationResolveRequest,
   JobActionRequest,
   JobActionResult,
@@ -53,7 +48,6 @@ import type {
   SpeechSessionRequest,
   SpeechStartRequest,
   ToolchainRepairRequest,
-  SupportBundlePreview,
   UpdateApplyRequest,
   UpdateCheckRequest,
   UpdateDownloadRequest,
@@ -122,9 +116,6 @@ import {
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
-  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
-  DiagnosticsClearLocalRequestSchema,
-  DiagnosticsClearLocalResultSchema,
   LIBRARY_MERGE_TAG_CHANNEL,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
@@ -164,6 +155,7 @@ import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
+import { registerDiagnosticsIpc } from "./register-diagnostics-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import {
@@ -195,6 +187,7 @@ import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
+import { DiagnosticsLifecycleService } from "./services/diagnostics-lifecycle-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
 import { DatasetService } from "./services/dataset-service";
@@ -356,6 +349,7 @@ import { getWindowShellOptions } from "./window-shell-options";
 let vaultService: VaultService | undefined;
 let localSettingsStore: LocalSettingsStore | undefined;
 let diagnosticsService: DiagnosticsService | undefined;
+let diagnosticsLifecycleService: DiagnosticsLifecycleService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
@@ -437,12 +431,6 @@ let taskExecutionPlanService: TaskExecutionPlanService | undefined;
 let taskExecutionPlanRunner: TaskExecutionPlanRunner | undefined;
 let taskExecutionRecipeService: TaskExecutionRecipeService | undefined;
 let taskExecutionIpcUnsubscribe: (() => void) | undefined;
-let latestSupportBundlePreview: SupportBundlePreview | undefined;
-const activeSupportBundleExports = new Map<string, {
-  readonly senderId: number;
-  readonly controller: AbortController;
-}>();
-let diagnosticsClearInFlight = false;
 const speechTrackedSenders = new Set<number>();
 const PACKAGED_RUNTIME_SMOKE_ARGUMENT = "--pige-packaged-runtime-smoke-report=";
 
@@ -1901,6 +1889,15 @@ const getDiagnosticsService = (): DiagnosticsService => {
   return diagnosticsService;
 };
 
+const getDiagnosticsLifecycleService = (): DiagnosticsLifecycleService => {
+  diagnosticsLifecycleService ??= new DiagnosticsLifecycleService({
+    userDataPath: app.getPath("userData"),
+    diagnostics: getDiagnosticsService(),
+    getActiveVaultId: () => getVaultService().current()?.vaultId
+  });
+  return diagnosticsLifecycleService;
+};
+
 const getLocalDatabaseService = (): LocalDatabaseService => {
   if (!localDatabaseService) {
     localDatabaseService = new LocalDatabaseService(undefined, new LocalDatabaseRebuildWorkerService());
@@ -2961,113 +2958,31 @@ ipcMain.handle("maintenance.localDatabaseStatus", () => {
   if (!activeVaultPath) throw new Error("No active vault for local database status.");
   return getLocalDatabaseService().status(activeVaultPath);
 });
-ipcMain.handle("diagnostics.health", () => getDiagnosticsService().health());
-ipcMain.handle("diagnostics.previewSupportBundle", () => {
-  latestSupportBundlePreview = getDiagnosticsService().previewSupportBundle();
-  return latestSupportBundlePreview;
+registerDiagnosticsIpc({
+  ipcMain,
+  isTrustedSender: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return !!window && mainWindows.has(window);
+  },
+  health: () => getDiagnosticsService().health(),
+  workflowSummary: () => getDiagnosticsLifecycleService().summary(),
+  preview: (request) => getDiagnosticsLifecycleService().preview(request),
+  chooseDestination: async (sender) => {
+    const parentWindow = BrowserWindow.fromWebContents(sender);
+    if (!parentWindow) return undefined;
+    const selection = await dialog.showSaveDialog(parentWindow, {
+      title: "Export Pige Support Bundle",
+      defaultPath: `pige-support-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: "JSON", extensions: ["json"] }]
+    });
+    return selection.canceled ? undefined : selection.filePath;
+  },
+  replayStart: (request) => getDiagnosticsLifecycleService().replayStart(request),
+  start: (request, destinationPath) => getDiagnosticsLifecycleService().start(request, destinationPath),
+  cancel: (request) => getDiagnosticsLifecycleService().cancel(request),
+  retry: (request) => getDiagnosticsLifecycleService().retry(request),
+  clear: (request) => getDiagnosticsLifecycleService().clear(request)
 });
-ipcMain.handle("diagnostics.exportSupportBundle", async (event, request: ExportSupportBundleRequest) => {
-  if (!request || !isDiagnosticsExportRequestId(request.exportRequestId)) {
-    throw new Error("Support bundle export request is invalid.");
-  }
-  const preview = latestSupportBundlePreview;
-  if (!preview || preview.previewId !== request.previewId) {
-    throw new Error("Create a current support bundle preview before exporting.");
-  }
-  const parentWindow = BrowserWindow.fromWebContents(event.sender);
-  if (!parentWindow) throw new Error("No active window for support bundle export.");
-  const selection = await dialog.showSaveDialog(parentWindow, {
-    title: "Export Pige Support Bundle",
-    defaultPath: `pige-support-${new Date().toISOString().slice(0, 10)}.json`,
-    filters: [{ name: "JSON", extensions: ["json"] }]
-  });
-  if (selection.canceled || !selection.filePath) {
-    return { status: "canceled" };
-  }
-  if (activeSupportBundleExports.has(request.exportRequestId) ||
-    [...activeSupportBundleExports.values()].some((active) => active.senderId === event.sender.id)) {
-    throw new Error("Support bundle export request is already active.");
-  }
-  const controller = new AbortController();
-  const abortOnSenderDestroyed = (): void => controller.abort();
-  event.sender.once("destroyed", abortOnSenderDestroyed);
-  activeSupportBundleExports.set(request.exportRequestId, {
-    senderId: event.sender.id,
-    controller
-  });
-  try {
-    return await getDiagnosticsService().exportSupportBundle(
-      selection.filePath,
-      preview,
-      { signal: controller.signal }
-    );
-  } finally {
-    event.sender.removeListener("destroyed", abortOnSenderDestroyed);
-    const active = activeSupportBundleExports.get(request.exportRequestId);
-    if (active?.controller === controller) activeSupportBundleExports.delete(request.exportRequestId);
-  }
-});
-ipcMain.handle(
-  "diagnostics.cancelSupportBundleExport",
-  (event, request: CancelSupportBundleExportRequest): CancelSupportBundleExportResult => {
-    if (!request || !isDiagnosticsExportRequestId(request.exportRequestId)) return { status: "not_found" };
-    const active = activeSupportBundleExports.get(request.exportRequestId);
-    if (!active || active.senderId !== event.sender.id) return { status: "not_found" };
-    active.controller.abort();
-    return { status: "cancel_requested" };
-  }
-);
-ipcMain.handle(
-  DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
-  (_event, request: DiagnosticsClearLocalRequest): DiagnosticsClearLocalResult => {
-    const parsed = DiagnosticsClearLocalRequestSchema.parse(request);
-    if (diagnosticsClearInFlight || activeSupportBundleExports.size > 0) {
-      return DiagnosticsClearLocalResultSchema.parse({
-        apiVersion: 1,
-        requestId: parsed.requestId,
-        status: "busy",
-        health: getDiagnosticsService().health()
-      });
-    }
-    diagnosticsClearInFlight = true;
-    try {
-      const health = getDiagnosticsService().clearOwnedEvents({
-        assertClearAllowed: () => {
-          if (!diagnosticsClearInFlight || activeSupportBundleExports.size > 0) {
-            throw new Error("Diagnostics clear ownership changed.");
-          }
-        }
-      });
-      latestSupportBundlePreview = undefined;
-      return DiagnosticsClearLocalResultSchema.parse({
-        apiVersion: 1,
-        requestId: parsed.requestId,
-        status: "cleared",
-        health
-      });
-    } catch {
-      if (activeSupportBundleExports.size > 0) {
-        return DiagnosticsClearLocalResultSchema.parse({
-          apiVersion: 1,
-          requestId: parsed.requestId,
-          status: "busy",
-          health: getDiagnosticsService().health()
-        });
-      }
-      return DiagnosticsClearLocalResultSchema.parse({
-        apiVersion: 1,
-        requestId: parsed.requestId,
-        status: "failed"
-      });
-    } finally {
-      diagnosticsClearInFlight = false;
-    }
-  }
-);
-
-function isDiagnosticsExportRequestId(value: unknown): value is string {
-  return typeof value === "string" && /^[a-f0-9-]{16,64}$/u.test(value);
-}
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
 ipcMain.handle("models.addPresetProvider", async (_event, request: AddPresetProviderRequest) => {
   const parsedRequest = AddPresetProviderRequestSchema.parse(request);
@@ -3349,6 +3264,7 @@ app.whenReady().then(async () => {
     getOcrLanguagePreferenceService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"));
+  getDiagnosticsLifecycleService();
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();
   if (restoreRecovery.recovered > 0 || restoreRecovery.failed > 0) {
     diagnosticsService.recordEvent({
@@ -3383,6 +3299,7 @@ app.on("before-quit", () => {
   appearanceServiceUnsubscribe?.();
   appearanceServiceUnsubscribe = undefined;
   appearanceService?.dispose();
+  diagnosticsLifecycleService?.close();
   restoreCoordinatorService?.close();
   vaultService?.close();
 });

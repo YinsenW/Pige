@@ -88,6 +88,8 @@ Rules:
 - Job records must not store large source bodies, full wiki page bodies after operation application, raw prompts, raw model responses, or secrets by default.
 - Vault-scoped job records are included in vault backup by default according to backup policy.
 - Machine-local job records are excluded from vault backup by default and exportable only through explicit diagnostics/settings export.
+- Support-bundle export is one machine-local maintenance Job with private destination/payload
+  bindings, bounded safe progress, cancel/retry and restart adoption; it never enters a Vault backup.
 - A successful machine-local Restore Job may link to a vault-scoped `restore_applied`
   Operation: `Operation.jobId` points to the Job and Job `operationIds`/`outputRefs` point
   back. The cross-scope link does not migrate or duplicate the Job into the vault.
@@ -728,6 +730,8 @@ Settings:
 - Vault & Note Storage alone owns restarted user Backup state, valid Cancel/Retry and
   typed redacted failure; rollback children stay hidden.
 - Diagnostics can export redacted job/operation summaries.
+- Diagnostics owns one pathless support-export Job card with exact Cancel/Retry and clear-local
+  fences; a failed/restarted card preserves safe repair action without exposing its destination.
 
 Rules:
 

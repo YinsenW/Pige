@@ -3419,8 +3419,25 @@ export const SettingPermissionRequirementSchema = z.enum([
 ]);
 
 export const DIAGNOSTICS_CLEAR_LOCAL_CHANNEL = "diagnostics.clearLocalDiagnostics" as const;
+export const DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL = "diagnostics.workflowSummary" as const;
+export const DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL = "diagnostics.previewSupportBundle" as const;
+export const DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL = "diagnostics.exportSupportBundle" as const;
+export const DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.cancelSupportBundleExport" as const;
+export const DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL = "diagnostics.retrySupportBundleExport" as const;
 export const DiagnosticsClearRequestIdSchema = z.string()
   .regex(/^diagclearreq_[a-z0-9]{16,64}$/u);
+export const DiagnosticsWorkflowRequestIdSchema = z.string()
+  .regex(/^diag(?:preview|export|cancel|retry)req_[a-z0-9]{16,64}$/u);
+export const DiagnosticsPreviewRequestIdSchema = z.string()
+  .regex(/^diagpreviewreq_[a-z0-9]{16,64}$/u);
+export const DiagnosticsExportRequestIdSchema = z.string()
+  .regex(/^diagexportreq_[a-z0-9]{16,64}$/u);
+export const DiagnosticsMutationRequestIdSchema = z.string()
+  .regex(/^diag(?:cancel|retry)req_[a-z0-9]{16,64}$/u);
+export const DiagnosticsScopeContextIdSchema = z.string()
+  .regex(/^diagctx_[a-f0-9]{32,64}$/u);
+export const SupportBundlePreviewIdSchema = z.string()
+  .regex(/^supportpreview_[a-f0-9]{32,64}$/u);
 export const DiagnosticsHealthSchema = z.object({
   status: z.enum(["ok", "degraded"]),
   checkedAt: z.string().datetime({ offset: true }),
@@ -3432,19 +3449,113 @@ export const DiagnosticsHealthSchema = z.object({
     message: z.string().min(1).max(240)
   }).strict()).max(32)
 }).strict();
+export const DiagnosticsSupportBundleJobSummarySchema = z.object({
+  jobId: JobIdSchema,
+  state: z.enum([
+    "queued", "running", "cancel_requested", "completed", "completed_with_warnings",
+    "failed_retryable", "failed_final", "cancelled"
+  ]),
+  progress: z.object({
+    completedUnits: z.number().int().min(0).max(3),
+    totalUnits: z.literal(3),
+    percent: z.number().int().min(0).max(100),
+    messageKey: z.string().min(1).max(120)
+  }).strict(),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true }),
+  finishedAt: z.string().datetime({ offset: true }).optional(),
+  canCancel: z.boolean(),
+  canRetry: z.boolean(),
+  repairAction: z.enum(["none", "retry", "choose_destination", "clear"]),
+  error: z.lazy(() => PigeErrorSummarySchema).optional()
+}).strict();
+export const DiagnosticsWorkflowSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  activeVaultId: VaultIdSchema.nullable(),
+  localOnly: z.literal(true),
+  ownedArtifactCount: z.number().int().nonnegative().max(10_000),
+  job: DiagnosticsSupportBundleJobSummarySchema.optional()
+}).strict();
+export const SupportBundleCategorySchema = z.object({
+  id: z.string().min(1).max(64).regex(/^[a-z][a-z0-9_]*$/u),
+  label: z.string().min(1).max(240),
+  included: z.boolean(),
+  reason: z.string().min(1).max(320)
+}).strict();
+export const SupportBundlePreviewSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsPreviewRequestIdSchema,
+  previewId: SupportBundlePreviewIdSchema,
+  generatedAt: z.string().datetime({ offset: true }),
+  localOnly: z.literal(true),
+  estimatedBytes: z.number().int().nonnegative().max(2 * 1024 * 1024),
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  activeVaultId: VaultIdSchema.nullable(),
+  includedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
+  excludedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
+  privacyWarnings: z.array(z.string().min(1).max(320)).min(1).max(16)
+}).strict();
+export const DiagnosticsPreviewSupportBundleRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsPreviewRequestIdSchema
+}).strict();
+export const DiagnosticsExportSupportBundleRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsExportRequestIdSchema,
+  previewId: SupportBundlePreviewIdSchema,
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+const DiagnosticsExportSupportBundleIdentitySchema = DiagnosticsExportSupportBundleRequestSchema;
+export const DiagnosticsExportSupportBundleResultSchema = z.discriminatedUnion("status", [
+  DiagnosticsExportSupportBundleIdentitySchema.extend({ status: z.literal("started"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsExportSupportBundleIdentitySchema.extend({ status: z.literal("canceled"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsExportSupportBundleIdentitySchema.extend({ status: z.literal("stale"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsExportSupportBundleIdentitySchema.extend({ status: z.literal("busy"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsExportSupportBundleIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const DiagnosticsSupportBundleMutationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsMutationRequestIdSchema,
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  jobId: JobIdSchema
+}).strict();
+const DiagnosticsSupportBundleMutationIdentitySchema = DiagnosticsSupportBundleMutationRequestSchema;
+export const DiagnosticsSupportBundleMutationResultSchema = z.discriminatedUnion("status", [
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("accepted"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("completed"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("stale"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("not_found"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("ineligible"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const DiagnosticsClearLocalRequestSchema = z.object({
   apiVersion: z.literal(1),
-  requestId: DiagnosticsClearRequestIdSchema
+  requestId: DiagnosticsClearRequestIdSchema,
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
 const DiagnosticsClearLocalIdentitySchema = DiagnosticsClearLocalRequestSchema;
 export const DiagnosticsClearLocalResultSchema = z.discriminatedUnion("status", [
   DiagnosticsClearLocalIdentitySchema.extend({
     status: z.literal("cleared"),
-    health: DiagnosticsHealthSchema
+    health: DiagnosticsHealthSchema,
+    workflow: DiagnosticsWorkflowSummarySchema,
+    clearedArtifactCount: z.number().int().nonnegative().max(10_000)
   }).strict(),
   DiagnosticsClearLocalIdentitySchema.extend({
     status: z.literal("busy"),
-    health: DiagnosticsHealthSchema
+    health: DiagnosticsHealthSchema,
+    workflow: DiagnosticsWorkflowSummarySchema
+  }).strict(),
+  DiagnosticsClearLocalIdentitySchema.extend({
+    status: z.literal("stale"),
+    health: DiagnosticsHealthSchema,
+    workflow: DiagnosticsWorkflowSummarySchema
   }).strict(),
   DiagnosticsClearLocalIdentitySchema.extend({
     status: z.literal("failed")
@@ -9194,6 +9305,17 @@ export type ReferencedOriginalReconnectJobProjection = z.infer<
 >;
 export type ReferencedOriginalReconnectResult = z.infer<typeof ReferencedOriginalReconnectResultSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
+export type DiagnosticsWorkflowRequestId = z.infer<typeof DiagnosticsWorkflowRequestIdSchema>;
+export type DiagnosticsScopeContextId = z.infer<typeof DiagnosticsScopeContextIdSchema>;
+export type DiagnosticsSupportBundleJobSummary = z.infer<typeof DiagnosticsSupportBundleJobSummarySchema>;
+export type DiagnosticsWorkflowSummary = z.infer<typeof DiagnosticsWorkflowSummarySchema>;
+export type SupportBundleCategory = z.infer<typeof SupportBundleCategorySchema>;
+export type SupportBundlePreview = z.infer<typeof SupportBundlePreviewSchema>;
+export type DiagnosticsPreviewSupportBundleRequest = z.infer<typeof DiagnosticsPreviewSupportBundleRequestSchema>;
+export type DiagnosticsExportSupportBundleRequest = z.infer<typeof DiagnosticsExportSupportBundleRequestSchema>;
+export type DiagnosticsExportSupportBundleResult = z.infer<typeof DiagnosticsExportSupportBundleResultSchema>;
+export type DiagnosticsSupportBundleMutationRequest = z.infer<typeof DiagnosticsSupportBundleMutationRequestSchema>;
+export type DiagnosticsSupportBundleMutationResult = z.infer<typeof DiagnosticsSupportBundleMutationResultSchema>;
 export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
 export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;
 export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequestSchema>;

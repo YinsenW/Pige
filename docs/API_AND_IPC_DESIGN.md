@@ -827,12 +827,13 @@ Commands:
 
 - `diagnostics.exportSupportBundle`
 - `diagnostics.cancelSupportBundleExport`
+- `diagnostics.retrySupportBundleExport`
 - `diagnostics.clearLocalDiagnostics`
-- `diagnostics.openSupportBundleFolder`
 
 Queries:
 
 - `diagnostics.health`
+- `diagnostics.workflowSummary`
 - `diagnostics.recentErrors`
 - `diagnostics.previewSupportBundle`
 
@@ -852,37 +853,10 @@ type DiagnosticsHealth = {
 };
 ```
 
-Support bundle DTOs:
-
-```ts
-type SupportBundleCategory = {
-  id: string;
-  label: string;
-  included: boolean;
-  reason: string;
-};
-
-type SupportBundlePreview = {
-  previewId: string;
-  generatedAt: string;
-  localOnly: true;
-  estimatedBytes: number;
-  includedCategories: SupportBundleCategory[];
-  excludedCategories: SupportBundleCategory[];
-  privacyWarnings: string[];
-};
-
-type ExportSupportBundleRequest = { previewId: string; exportRequestId: string };
-type CancelSupportBundleExportRequest = { exportRequestId: string };
-type CancelSupportBundleExportResult = { status: "cancel_requested" | "not_found" };
-
-type SupportBundleExportResult = {
-  status: "exported" | "canceled";
-  exportedAt?: string;
-  outputPath?: string;
-  bytesWritten?: number;
-};
-```
+Canonical strict schemas are `DiagnosticsWorkflowSummary`, preview/export, shared
+cancel/retry mutation, and clear-local request/results in `@pige/schemas`. They bind
+request, machine/vault scope context, workflow revision and exact Job; readable outcomes
+return the authoritative workflow, while `failed` remains identity-only.
 
 Rules:
 
@@ -890,9 +864,9 @@ Rules:
 - Support bundle export is user-initiated, previewed, cancelable, and local-only in v0.1.
 - `diagnostics.exportSupportBundle` requires a current `previewId` from `diagnostics.previewSupportBundle`.
 - Export uses a trusted OS save dialog; canceling the dialog returns `status: "canceled"` without creating a file.
-- A renderer owns at most one bounded `exportRequestId`; only that sender may cancel it,
-  and sender destruction aborts it. Completion/cancel races adopt only an exact
-  verified committed output and otherwise fail closed.
+- Main owns the destination and durable machine-local Job. Start, retry and cancel recheck
+  scope/revision/Job identity; restart adopts exact prepared or published state once. Clear is
+  trash-first, refuses an active export and never touches Vault data or user-created bundles.
 - Diagnostics APIs never return raw secrets. Default diagnostics also exclude full source bodies, full notes, full memory, and raw prompts/responses; an explicit support export may add only separately reviewed, redacted content categories.
 
 ### 6.10 Backup And Restore

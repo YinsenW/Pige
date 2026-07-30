@@ -52,6 +52,11 @@ import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSe
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
+import {
+  DiagnosticsJobCard,
+  SupportBundlePreviewCard,
+  supportBundlePreviewIsFullyProjected
+} from "./components/DiagnosticsWorkflowCards";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -156,6 +161,7 @@ import type {
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
   StartupDestinationSummary,
+  DiagnosticsWorkflowSummary,
   SupportBundlePreview,
   ToolchainHealth,
   ToolchainRepairResult,
@@ -989,9 +995,15 @@ export function App(): React.JSX.Element {
 
   const clearLocalDiagnostics = async (): Promise<DiagnosticsClearLocalResult> => {
     const requestId = `diagclearreq_${crypto.randomUUID().replaceAll("-", "")}`;
-    const result = await window.pige.diagnostics.clearLocalDiagnostics({ apiVersion: 1, requestId });
+    const workflow = await window.pige.diagnostics.workflowSummary();
+    const result = await window.pige.diagnostics.clearLocalDiagnostics({
+      apiVersion: 1,
+      requestId,
+      scopeContextId: workflow.scopeContextId,
+      expectedRevision: workflow.revision
+    });
     if (result.requestId !== requestId) throw new Error("diagnostics_clear_identity_mismatch");
-    if (result.status === "cleared" || result.status === "busy") {
+    if (result.status === "cleared" || result.status === "busy" || result.status === "stale") {
       setDiagnosticsHealth(result.health);
     }
     return result;
@@ -8121,56 +8133,6 @@ function DevelopmentSettingsSection(props: {
   );
 }
 
-type SupportBundleCategoryProjection = {
-  readonly titleKey: string;
-  readonly descriptionKey: string;
-};
-
-function projectSupportBundleCategory(categoryId: string): SupportBundleCategoryProjection | null {
-  const projections: Readonly<Record<string, SupportBundleCategoryProjection>> = {
-    app_runtime: {
-      titleKey: "support.category.appRuntime",
-      descriptionKey: "support.category.appRuntimeDescription"
-    },
-    diagnostics_health: {
-      titleKey: "support.category.diagnosticsHealth",
-      descriptionKey: "support.category.diagnosticsHealthDescription"
-    },
-    recent_errors: {
-      titleKey: "support.category.recentErrors",
-      descriptionKey: "support.category.recentErrorsDescription"
-    },
-    secrets: {
-      titleKey: "support.category.secrets",
-      descriptionKey: "support.category.secretsDescription"
-    },
-    content: {
-      titleKey: "support.category.privateContent",
-      descriptionKey: "support.category.privateContentDescription"
-    },
-    binaries: {
-      titleKey: "support.category.binaries",
-      descriptionKey: "support.category.binariesDescription"
-    }
-  };
-  return projections[categoryId] ?? null;
-}
-
-function projectSupportBundlePrivacyWarning(warning: string): string | null {
-  const projections: Readonly<Record<string, string>> = {
-    "The bundle is created locally and is not uploaded automatically.": "support.warning.localOnly",
-    "Paths, emails, and common secret patterns are redacted by default.": "support.warning.redacted",
-    "Review the preview before exporting.": "support.warning.review"
-  };
-  return projections[warning] ?? null;
-}
-
-function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): boolean {
-  return preview.includedCategories.every((category) => projectSupportBundleCategory(category.id) !== null) &&
-    preview.excludedCategories.every((category) => projectSupportBundleCategory(category.id) !== null) &&
-    preview.privacyWarnings.every((warning) => projectSupportBundlePrivacyWarning(warning) !== null);
-}
-
 function updateSummaryDescription(
   summary: UpdateSummary,
   locale: Locale,
@@ -8310,13 +8272,12 @@ export function SystemSettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
+  const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null);
   const [clearConfirming, setClearConfirming] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [updateBusy, setUpdateBusy] = useState<"check" | "download" | "apply" | null>(null);
-  const supportBundleExportRequestRef = useRef<string | null>(null);
-  const supportBundleCancelRequestRef = useRef<string | null>(null);
   const clearInFlightRef = useRef(false);
   const clearTriggerRef = useRef<HTMLButtonElement | null>(null);
   const clearCancelRef = useRef<HTMLButtonElement | null>(null);
@@ -8365,12 +8326,22 @@ export function SystemSettingsPanel(props: {
     };
   }, []);
 
-  useEffect(() => () => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
-    void window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId }).catch(() => undefined);
-  }, []);
+  useEffect(() => {
+    if (props.surface !== "diagnostics") return;
+    let active = true;
+    const refresh = async (): Promise<void> => {
+      try {
+        const summary = await window.pige.diagnostics.workflowSummary();
+        if (!active) return;
+        setDiagnosticsWorkflow((current) => !current || summary.revision >= current.revision ? summary : current);
+      } catch {
+        if (active) setDiagnosticsWorkflow(null);
+      }
+    };
+    void refresh();
+    const interval = setInterval(() => void refresh(), 500);
+    return () => { active = false; clearInterval(interval); };
+  }, [props.surface]);
 
   useEffect(() => {
     if (clearConfirming) {
@@ -8399,6 +8370,7 @@ export function SystemSettingsPanel(props: {
     setNotice(null);
     try {
       const result = await props.onClearDiagnostics();
+      if (result.status !== "failed") setDiagnosticsWorkflow(result.workflow);
       if (result.status === "cleared") {
         setNotice({ kind: "success", key: "system.clearDiagnosticsCompleted" });
       } else if (result.status === "busy") {
@@ -8435,7 +8407,10 @@ export function SystemSettingsPanel(props: {
     setDiagnosticsBusy("preview");
     setNotice(null);
     try {
-      props.onSupportBundlePreviewChange(await window.pige.diagnostics.previewSupportBundle());
+      const requestId = `diagpreviewreq_${crypto.randomUUID().replaceAll("-", "")}`;
+      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId });
+      if (preview.requestId !== requestId) throw new Error("diagnostics_preview_identity_mismatch");
+      props.onSupportBundlePreviewChange(preview);
     } catch {
       setNotice({ kind: "error", key: "system.previewFailed" });
     } finally {
@@ -8447,50 +8422,85 @@ export function SystemSettingsPanel(props: {
     if (
       !props.supportBundlePreview ||
       !supportBundlePreviewIsFullyProjected(props.supportBundlePreview) ||
-      diagnosticsBusy ||
-      supportBundleExportRequestRef.current
+      diagnosticsBusy
     ) return;
-    const exportRequestId = crypto.randomUUID();
-    supportBundleExportRequestRef.current = exportRequestId;
+    const requestId = `diagexportreq_${crypto.randomUUID().replaceAll("-", "")}`;
     setDiagnosticsBusy("export");
     setNotice(null);
     try {
       const result = await window.pige.diagnostics.exportSupportBundle({
+        apiVersion: 1,
+        requestId,
         previewId: props.supportBundlePreview.previewId,
-        exportRequestId
+        scopeContextId: props.supportBundlePreview.scopeContextId,
+        expectedRevision: props.supportBundlePreview.expectedRevision
       });
-      if (result.status === "exported") {
+      if (result.requestId !== requestId) throw new Error("diagnostics_export_identity_mismatch");
+      if (result.status === "started" || result.status === "stale" || result.status === "busy" || result.status === "canceled") {
+        setDiagnosticsWorkflow(result.workflow);
+      }
+      if (result.status === "started") {
         props.onSupportBundlePreviewChange(null);
-        await props.onRefreshDiagnostics();
-        setNotice({ kind: "success", key: "system.exported" });
+        setNotice({ kind: "success", key: "system.exportStarted" });
+      } else if (result.status === "stale") {
+        setNotice({ kind: "error", key: "system.diagnosticsStale" });
+      } else if (result.status === "busy") {
+        setNotice({ kind: "error", key: "system.exportBusy" });
       }
     } catch {
-      if (supportBundleCancelRequestRef.current !== exportRequestId) {
-        setNotice({ kind: "error", key: "support.exportFailed" });
-      }
+      setNotice({ kind: "error", key: "support.exportFailed" });
     } finally {
-      if (supportBundleExportRequestRef.current === exportRequestId) {
-        supportBundleExportRequestRef.current = null;
-        setDiagnosticsBusy(null);
-      }
-      if (supportBundleCancelRequestRef.current === exportRequestId) {
-        supportBundleCancelRequestRef.current = null;
-      }
+      setDiagnosticsBusy(null);
     }
   };
 
   const cancelSupportBundleExport = async (): Promise<void> => {
-    const exportRequestId = supportBundleExportRequestRef.current;
-    if (!exportRequestId || supportBundleCancelRequestRef.current === exportRequestId) return;
-    supportBundleCancelRequestRef.current = exportRequestId;
+    const workflow = diagnosticsWorkflow;
+    if (!workflow?.job?.canCancel || diagnosticsBusy) return;
+    const requestId = `diagcancelreq_${crypto.randomUUID().replaceAll("-", "")}`;
     setDiagnosticsBusy("cancel");
     try {
-      await window.pige.diagnostics.cancelSupportBundleExport({ exportRequestId });
-      setNotice({ kind: "success", key: "system.exportCanceled" });
+      const result = await window.pige.diagnostics.cancelSupportBundleExport({
+        apiVersion: 1,
+        requestId,
+        jobId: workflow.job.jobId,
+        scopeContextId: workflow.scopeContextId,
+        expectedRevision: workflow.revision
+      });
+      if (result.requestId !== requestId) throw new Error("diagnostics_cancel_identity_mismatch");
+      if (result.status !== "failed") setDiagnosticsWorkflow(result.workflow);
+      setNotice({ kind: result.status === "accepted" || result.status === "completed" ? "success" : "error",
+        key: result.status === "accepted" || result.status === "completed" ? "system.exportCanceled" : "system.diagnosticsStale" });
     } catch {
-      supportBundleCancelRequestRef.current = null;
-      setDiagnosticsBusy("export");
       setNotice({ kind: "error", key: "support.exportFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const retrySupportBundleExport = async (): Promise<void> => {
+    const workflow = diagnosticsWorkflow;
+    if (!workflow?.job?.canRetry || diagnosticsBusy) return;
+    const requestId = `diagretryreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    setDiagnosticsBusy("export");
+    setNotice(null);
+    try {
+      const result = await window.pige.diagnostics.retrySupportBundleExport({
+        apiVersion: 1,
+        requestId,
+        jobId: workflow.job.jobId,
+        scopeContextId: workflow.scopeContextId,
+        expectedRevision: workflow.revision
+      });
+      if (result.requestId !== requestId) throw new Error("diagnostics_retry_identity_mismatch");
+      if (result.status !== "failed") setDiagnosticsWorkflow(result.workflow);
+      const retryAccepted = result.status === "accepted" || result.status === "completed";
+      setNotice({ kind: retryAccepted ? "success" : "error",
+        key: retryAccepted ? "system.exportRetryStarted" : "system.diagnosticsStale" });
+    } catch {
+      setNotice({ kind: "error", key: "support.exportFailed" });
+    } finally {
+      setDiagnosticsBusy(null);
     }
   };
 
@@ -8623,15 +8633,6 @@ export function SystemSettingsPanel(props: {
       }
     }
   };
-  const supportPreviewProjection = props.supportBundlePreview
-    ? {
-        included: props.supportBundlePreview.includedCategories.map((category) => projectSupportBundleCategory(category.id)),
-        excluded: props.supportBundlePreview.excludedCategories.map((category) => projectSupportBundleCategory(category.id)),
-        warnings: props.supportBundlePreview.privacyWarnings.map(projectSupportBundlePrivacyWarning),
-        complete: supportBundlePreviewIsFullyProjected(props.supportBundlePreview)
-      }
-    : null;
-
   return (
     <section className={`settings-page settings-system-page settings-${props.surface}-page`} aria-labelledby={`settings-${props.surface}-title`}>
       <header className="settings-panel-header">
@@ -8777,7 +8778,7 @@ export function SystemSettingsPanel(props: {
               ref={clearTriggerRef}
               className="settings-button"
               type="button"
-              disabled={!props.onClearDiagnostics || Boolean(diagnosticsBusy)}
+              disabled={!props.onClearDiagnostics || Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
               title={props.onClearDiagnostics ? undefined : props.t("development.state.unavailable")}
               aria-expanded={clearConfirming}
               onClick={() => {
@@ -8817,60 +8818,25 @@ export function SystemSettingsPanel(props: {
           ) : null}
         </div>
 
-        {props.supportBundlePreview && supportPreviewProjection ? (
-          <div className="support-preview system-support-preview" aria-label={props.t("support.previewReady")}>
-            <strong>{props.t("support.previewReady")}</strong>
-            <span>{props.t("support.estimatedSize")}: {Math.ceil(props.supportBundlePreview.estimatedBytes / 1024)} KB</span>
-            <section className="support-preview-section" aria-labelledby="support-preview-included">
-              <h3 id="support-preview-included">{props.t("support.included")}</h3>
-              <ul className="support-preview-list">
-                {supportPreviewProjection.included.map((projection, index) => projection ? (
-                  <li key={props.supportBundlePreview?.includedCategories[index]?.id ?? `included-${index}`}>
-                    <strong>{props.t(projection.titleKey)}</strong>
-                    <span>{props.t(projection.descriptionKey)}</span>
-                  </li>
-                ) : null)}
-              </ul>
-            </section>
-            <section className="support-preview-section" aria-labelledby="support-preview-excluded">
-              <h3 id="support-preview-excluded">{props.t("support.excluded")}</h3>
-              <ul className="support-preview-list">
-                {supportPreviewProjection.excluded.map((projection, index) => projection ? (
-                  <li key={props.supportBundlePreview?.excludedCategories[index]?.id ?? `excluded-${index}`}>
-                    <strong>{props.t(projection.titleKey)}</strong>
-                    <span>{props.t(projection.descriptionKey)}</span>
-                  </li>
-                ) : null)}
-              </ul>
-            </section>
-            <section className="support-preview-section" aria-labelledby="support-preview-warnings">
-              <h3 id="support-preview-warnings">{props.t("system.privacyWarnings")}</h3>
-              <ul className="support-preview-list warnings">
-                {supportPreviewProjection.warnings.map((warningKey, index) => warningKey ? (
-                  <li key={warningKey}>{props.t(warningKey)}</li>
-                ) : null)}
-              </ul>
-            </section>
-            {!supportPreviewProjection.complete ? (
-              <p className="error" role="alert">{props.t("support.previewUnsafe")}</p>
-            ) : null}
-            <div className="settings-inline-actions">
-              {diagnosticsBusy === "export" || diagnosticsBusy === "cancel" ? (
-                <button className="settings-button" type="button" disabled={diagnosticsBusy === "cancel"} onClick={() => void cancelSupportBundleExport()}>
-                  {props.t("maintenance.cancelSupportExport")}
-                </button>
-              ) : (
-                <button
-                  className="settings-button primary"
-                  type="button"
-                  disabled={!supportPreviewProjection.complete}
-                  onClick={() => void exportSupportBundle()}
-                >
-                  {props.t("maintenance.exportSupport")}
-                </button>
-              )}
-            </div>
-          </div>
+        {diagnosticsWorkflow?.job ? (
+          <DiagnosticsJobCard
+            job={diagnosticsWorkflow.job}
+            busy={Boolean(diagnosticsBusy)}
+            onCancel={() => void cancelSupportBundleExport()}
+            onRetry={() => void retrySupportBundleExport()}
+            onChooseDestination={() => void previewSupportBundle()}
+            t={props.t}
+          />
+        ) : null}
+
+        {props.supportBundlePreview ? (
+          <SupportBundlePreviewCard
+            preview={props.supportBundlePreview}
+            busy={Boolean(diagnosticsBusy)}
+            exportBlocked={diagnosticsWorkflow?.job?.canCancel === true}
+            onExport={() => void exportSupportBundle()}
+            t={props.t}
+          />
         ) : null}
         {notice ? (
           <p className={notice.kind === "error" ? "error" : "muted"} role={notice.kind === "error" ? "alert" : "status"} aria-live="polite">

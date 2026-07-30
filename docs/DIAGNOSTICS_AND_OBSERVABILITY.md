@@ -189,17 +189,15 @@ crash recovery. Credentials; full notes, sources, conversations, memory, model t
 unsafe output; binaries; and unredacted grants stay excluded. Selected redacted excerpts,
 paths, or Provider metadata require preview review.
 
-UX shows categories, estimated size, privacy warning, preview, cancel, and a trusted local
-destination; it never uploads. Current B1.14 evidence binds the preview and one
-`exportRequestId` to its sender, then writes at most 2 MiB in a worker limited to 64 MiB
-old-generation and 30 seconds. Main holds the temp descriptor. Existing output binds a
-POSIX held descriptor or closed Windows 2 MiB-bounded stable size+SHA-256 readback;
-recheck precedes rename. Changed bytes fail; equal Windows content may replace; owned
-fds close.
-Unsafe bodies, symlink/root drift, redaction failure, cancel, sender loss, or timeout fail
-closed; post-publication cancel adopts the exact output. Export is process-local,
-not a durable Job. Final check-to-rename/release-to-unlink syscall windows, optional content,
-progress, restart, and broader platform/path evidence remain open.
+UX shows categories, estimated size, privacy warning, preview, cancel, retry and a trusted
+local destination; it never uploads. Preview, scope context and revision create one bounded
+machine-local Job before writing. Main owns the picker/path and records only a private
+destination binding; renderer receives bounded pathless progress, eligibility and safe error.
+Restart/retry adopts the exact Job and verified output without duplicate publication. Cancel
+before publication preserves no output; a completed output wins the race. Clear is trash-first,
+blocked by active export, and removes only Pige-owned machine diagnostics artifacts.
+Unsafe bodies, symlink/root/destination drift, redaction failure or changed payload fail closed.
+Final syscall windows, optional content and broader platform/path evidence remain open.
 
 ## 10. Redaction Rules
 
@@ -240,7 +238,7 @@ Default retention:
 - Performance summaries: 14 days or 10 MB.
 - Tool/provider health summaries: latest snapshot plus 30 days of changes.
 - Crash recovery records: 10 most recent recoveries.
-- Support bundles: user-created files only; Pige may track recent export metadata but does not delete user-selected files.
+- Support bundles: user-created files remain user-owned; Pige clears only private workflow metadata, not exported files.
 
 Rules:
 

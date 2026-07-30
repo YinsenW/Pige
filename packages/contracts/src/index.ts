@@ -46,6 +46,14 @@ import type {
   DurableLanguageFact,
   DiagnosticsClearLocalRequest,
   DiagnosticsClearLocalResult,
+  DiagnosticsExportSupportBundleRequest,
+  DiagnosticsExportSupportBundleResult,
+  DiagnosticsPreviewSupportBundleRequest,
+  DiagnosticsScopeContextId,
+  DiagnosticsSupportBundleJobSummary,
+  DiagnosticsSupportBundleMutationRequest,
+  DiagnosticsSupportBundleMutationResult,
+  DiagnosticsWorkflowSummary,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
   CollectionCellEditRequest,
@@ -223,6 +231,8 @@ import type {
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
   PiPackageUpdateResult,
+  SupportBundleCategory,
+  SupportBundlePreview,
   PigeErrorSummary,
   ProposalState,
   ProposalTrustLevel,
@@ -371,12 +381,22 @@ export type {
   DurableLanguageFact,
   DiagnosticsClearLocalRequest,
   DiagnosticsClearLocalResult,
+  DiagnosticsExportSupportBundleRequest,
+  DiagnosticsExportSupportBundleResult,
+  DiagnosticsPreviewSupportBundleRequest,
+  DiagnosticsScopeContextId,
+  DiagnosticsSupportBundleJobSummary,
+  DiagnosticsSupportBundleMutationRequest,
+  DiagnosticsSupportBundleMutationResult,
+  DiagnosticsWorkflowSummary,
   PigeError,
   PigeErrorAction,
   PigeErrorDomain,
   PigeErrorSeverity,
   PigeErrorSummary,
   PigeWarning,
+  SupportBundleCategory,
+  SupportBundlePreview,
   EffectiveAppearanceTheme,
   ExternalWebSkillHttpsOrigin,
   ExternalWebSkillReadRequest,
@@ -832,42 +852,10 @@ export interface DiagnosticsHealth {
   }[];
 }
 
-export interface SupportBundleCategory {
-  readonly id: string;
-  readonly label: string;
-  readonly included: boolean;
-  readonly reason: string;
-}
-
-export interface SupportBundlePreview {
-  readonly previewId: string;
-  readonly generatedAt: string;
-  readonly localOnly: true;
-  readonly estimatedBytes: number;
-  readonly includedCategories: readonly SupportBundleCategory[];
-  readonly excludedCategories: readonly SupportBundleCategory[];
-  readonly privacyWarnings: readonly string[];
-}
-
-export interface SupportBundleExportResult {
-  readonly status: "exported" | "canceled";
-  readonly exportedAt?: string;
-  readonly outputPath?: string;
-  readonly bytesWritten?: number;
-}
-
-export interface ExportSupportBundleRequest {
-  readonly previewId: string;
-  readonly exportRequestId: string;
-}
-
-export interface CancelSupportBundleExportRequest {
-  readonly exportRequestId: string;
-}
-
-export interface CancelSupportBundleExportResult {
-  readonly status: "cancel_requested" | "not_found";
-}
+export type SupportBundleExportResult = DiagnosticsExportSupportBundleResult;
+export type ExportSupportBundleRequest = DiagnosticsExportSupportBundleRequest;
+export type CancelSupportBundleExportRequest = DiagnosticsSupportBundleMutationRequest;
+export type CancelSupportBundleExportResult = DiagnosticsSupportBundleMutationResult;
 
 export interface LocalDatabaseResetResult {
   readonly resetAt: string;
@@ -2201,14 +2189,20 @@ export interface PigeDesktopApi {
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;
+    readonly workflowSummary: () => Promise<DiagnosticsWorkflowSummary>;
     readonly clearLocalDiagnostics: (
       request: DiagnosticsClearLocalRequest
     ) => Promise<DiagnosticsClearLocalResult>;
-    readonly previewSupportBundle: () => Promise<SupportBundlePreview>;
+    readonly previewSupportBundle: (
+      request: DiagnosticsPreviewSupportBundleRequest
+    ) => Promise<SupportBundlePreview>;
     readonly exportSupportBundle: (request: ExportSupportBundleRequest) => Promise<SupportBundleExportResult>;
     readonly cancelSupportBundleExport: (
       request: CancelSupportBundleExportRequest
     ) => Promise<CancelSupportBundleExportResult>;
+    readonly retrySupportBundleExport: (
+      request: DiagnosticsSupportBundleMutationRequest
+    ) => Promise<DiagnosticsSupportBundleMutationResult>;
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;
