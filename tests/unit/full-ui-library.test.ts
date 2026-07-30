@@ -7,6 +7,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   LibraryListResult,
+  LibraryRenameTagRequest,
+  LibraryRenameTagResult,
   LibraryTagsRequest,
   LibraryTagsResult,
   NoteArchiveCurrentRequest,
@@ -531,6 +533,15 @@ describe("full UI Library", () => {
       loadMore: "Load more",
       loadingMore: "Loading more",
       open: "Open",
+      rename: "Rename",
+      renameTitle: "Rename tag",
+      renameDescription: "Rename description",
+      renameCurrent: "Current tag:",
+      renameReplacement: "New tag",
+      renameCancel: "Cancel",
+      renameConfirm: "Rename tag",
+      renamePending: "Renaming",
+      renameFailed: "Rename failed",
       noteCount: (count) => `${count} notes`,
     };
     const opened: string[] = [];
@@ -598,6 +609,10 @@ describe("full UI Library", () => {
           total: 2,
         });
       }),
+      renameTag: vi.fn(async (request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> => ({
+        ...request,
+        status: "failed",
+      })),
     };
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -670,6 +685,100 @@ describe("full UI Library", () => {
       .map((element) => element.textContent))).toEqual(
         new Set(["research", "Research brief", "Source review"]),
       );
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("renames one exact tag with snapshot CAS and reloads before focusing the authoritative row", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => dom.window.setTimeout(() => callback(0), 0),
+    });
+    const labels: LibraryTagsBrowserLabels = {
+      title: "Tags", loading: "Loading tags", empty: "No tags", failed: "Tags unavailable", retry: "Try again",
+      notesLoading: "Loading tagged notes", notesEmpty: "No tagged notes", notesFailed: "Tagged notes unavailable",
+      loadMore: "Load more", loadingMore: "Loading more", open: "Open", rename: "Rename",
+      renameTitle: "Rename tag", renameDescription: "Rename description", renameCurrent: "Current tag:",
+      renameReplacement: "New tag", renameCancel: "Cancel", renameConfirm: "Rename tag",
+      renamePending: "Renaming", renameFailed: "Rename failed", noteCount: (count) => `${count} notes`,
+    };
+    const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
+    const renameRequests: LibraryRenameTagRequest[] = [];
+    let committed = false;
+    let resolveStale!: (result: LibraryRenameTagResult) => void;
+    const api = {
+      tags: vi.fn(async (request: LibraryTagsRequest): Promise<LibraryTagsResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        mode: "list_tags",
+        status: "ready",
+        snapshotId,
+        tags: [{ tag: committed ? "field research" : "research", pageCount: 2 }],
+        total: 1,
+      })),
+      renameTag: vi.fn((request: LibraryRenameTagRequest): Promise<LibraryRenameTagResult> => {
+        renameRequests.push(request);
+        if (renameRequests.length === 1) {
+          return new Promise((resolve) => { resolveStale = resolve; });
+        }
+        committed = true;
+        return Promise.resolve({
+          ...request,
+          status: "committed",
+          operationId: "operation_library_tag_rename",
+          renamedPageCount: 2,
+        });
+      }),
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LibraryTagsBrowser, {
+        activeVaultId: "vault_20260730_librarytags",
+        api,
+        labels,
+        onOpenNote: async () => undefined,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonWithLabel(container, "Rename: research");
+    await clickButton(dom, trigger);
+    const input = requireElement(container.querySelector<HTMLInputElement>("input"));
+    expect(input.value).toBe("research");
+    await inputText(dom, input, "  field   research  ");
+    const confirm = buttonNamed(container, "Rename tag");
+    expect(confirm.disabled).toBe(false);
+    await act(async () => {
+      confirm.click();
+      confirm.click();
+      await settle(dom);
+    });
+    expect(renameRequests).toHaveLength(1);
+    expect(renameRequests[0]).toMatchObject({
+      activeVaultId: "vault_20260730_librarytags",
+      tag: "research",
+      replacementTag: "field research",
+      expectedSnapshotId: snapshotId,
+      expectedPageCount: 2,
+    });
+    expect(renameRequests[0]?.requestId).toMatch(/^library_tag_rename_request_[a-z0-9]{16,64}$/u);
+    expect(JSON.stringify(renameRequests[0])).not.toMatch(/pageId|path|body/u);
+    resolveStale({ ...renameRequests[0]!, status: "stale" });
+    await waitFor(dom, () => container.textContent?.includes("Rename failed") === true);
+    expect(container.textContent).toContain("research");
+    expect(input.value).toBe("  field   research  ");
+    await waitFor(dom, () => dom.window.document.activeElement === input);
+
+    await clickButton(dom, buttonNamed(container, "Rename tag"));
+    await waitFor(dom, () => container.textContent?.includes("field research") === true && container.querySelector("input") === null);
+    expect(renameRequests).toHaveLength(2);
+    expect(api.tags).toHaveBeenCalledTimes(2);
+    const renamedRow = Array.from(container.querySelectorAll<HTMLButtonElement>("button.search-result"))
+      .find((button) => button.textContent?.includes("field research"));
+    await waitFor(dom, () => dom.window.document.activeElement === renamedRow);
 
     await act(async () => root.unmount());
     dom.window.close();
