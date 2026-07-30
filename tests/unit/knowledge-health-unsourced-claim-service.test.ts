@@ -6,8 +6,8 @@ import type { OperationRecord } from "@pige/schemas";
 import { KnowledgeHealthUnsourcedClaimService } from
   "../../apps/desktop/src/main/services/knowledge-health-unsourced-claim-service";
 import {
-  NoteMarkdownEditorService,
-  type NoteMarkdownEditorActivityPort
+  NoteMarkdownEditorActivityAdapter,
+  NoteMarkdownEditorService
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 
 const roots: string[] = [];
@@ -57,6 +57,7 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
       page: { pageId: sourcePageId, title: "Evidence source" }
     });
     expect(JSON.stringify(search)).not.toContain(sourceId);
+    const before = fs.readFileSync(fixture.claimPath, "utf8");
 
     const repaired = fixture.service.repair(fixture.vaultPath, {
       ...proof,
@@ -68,12 +69,16 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
     const markdown = fs.readFileSync(fixture.claimPath, "utf8");
     expect(markdown).toContain(`source_ids: ["${sourceId}"]`);
     expect(markdown).toContain(`  evidence: ["${sourceId}#source"]`);
-    expect(fixture.operations).toHaveLength(1);
-    expect(fixture.operations[0]).toMatchObject({
+    if (repaired.status !== "committed") throw new Error("Expected a committed repair.");
+    const operation = readOperation(fixture.vaultPath, repaired.operationId);
+    expect(operation).toMatchObject({
       kind: "update_page",
       targetRefs: [{ kind: "page", id: claimPageId }],
       reversible: "yes"
     });
+    expect(fixture.activity.activitySummary(operation)).toMatchObject({ kind: "update_page", canUndo: true });
+    expect(fixture.activity.undo(operation, operation.after?.id)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.claimPath, "utf8")).toBe(before);
   });
 
   it("fails closed when the chosen SourceRecord or claim revision drifts", () => {
@@ -97,7 +102,7 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
       requestId: "knowledge_health_claim_source_repair_driftabcdefghijk", action: "bind_claim_source",
       sourceContextId: search.sources[0]!.sourceContextId })).toMatchObject({ status: "stale" });
     expect(fs.readFileSync(fixture.claimPath, "utf8")).toBe(before);
-    expect(fixture.operations).toHaveLength(0);
+    expect(fs.existsSync(path.join(fixture.vaultPath, ".pige", "operations"))).toBe(false);
   });
 });
 
@@ -117,17 +122,24 @@ function createFixture() {
     knowledgePageId: sourcePageId, knowledgePagePath: `sources/${sourcePageId}.md`,
     original: { uri: `pige-test://${sourceId}` }, artifacts: [], metadata: {},
     createdAt: "2026-07-31T12:00:00.000Z", updatedAt: "2026-07-31T12:00:00.000Z" }), "utf8");
-  const operations: OperationRecord[] = [];
   const vaults = { current: () => ({ vaultId } as never), activeVaultPath: () => vaultPath };
-  const activity: NoteMarkdownEditorActivityPort = { recordPageUpdate: ({ operation }) => operations.push(operation) };
+  const activity = new NoteMarkdownEditorActivityAdapter(vaults);
   const editor = new NoteMarkdownEditorService(vaults, activity, {
     now: () => new Date("2026-07-31T12:30:00.000Z"), randomId: () => "claim-source-operation",
     allowClaim: true
   });
   const snapshot = () => readySnapshot();
-  return { vaultPath, claimPath, recordPath, operations,
+  return { vaultPath, claimPath, recordPath, activity,
     service: new KnowledgeHealthUnsourcedClaimService(snapshotPort(snapshot), editor,
       () => "2026-07-31T12:30:00.000Z", () => "claim-source-context") };
+}
+
+function readOperation(vaultPath: string, operationId: string): OperationRecord {
+  const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!date) throw new Error("Expected a dated operation identity.");
+  return JSON.parse(fs.readFileSync(path.join(
+    vaultPath, ".pige", "operations", date.slice(0, 4), date.slice(4, 6), `${operationId}.json`
+  ), "utf8")) as OperationRecord;
 }
 
 function snapshotPort(snapshot: () => ReturnType<typeof readySnapshot>) {

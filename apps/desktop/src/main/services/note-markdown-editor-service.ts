@@ -32,7 +32,7 @@ import {
   type MarkdownFileSignatureRecord
 } from "./markdown-page-index";
 import { createUserPageUpdateRedoOperationId, createUserPageUpdateUndoOperationId } from "./note-markdown-editor-activity-ids";
-import { isEditableMarkdownPage, preservesEditableMarkdownOwnership } from "./markdown-source-editor-policy";
+import { isEditableMarkdownPage, isEditableMarkdownPageType, preservesEditableMarkdownOwnership, preservesEditableMarkdownPageOwnership } from "./markdown-source-editor-policy";
 export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
@@ -170,7 +170,7 @@ export class NoteMarkdownEditorService {
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
       return { status: "invalid", ...identity };
     }
-    if (!isEditablePageType(request.markdown, this.#allowClaim)) {
+    if (!isEditableMarkdownPageType(request.markdown, this.#allowClaim)) {
       return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     const binding = this.#bindings.get(request.renderIdentity);
@@ -198,7 +198,7 @@ export class NoteMarkdownEditorService {
     if (hashMarkdown(beforeMarkdown) !== binding.revisionId) {
       return { status: "stale", ...identity };
     }
-    if (!preservesEditablePageOwnership(beforeMarkdown, request.markdown, this.#allowClaim)) {
+    if (!preservesEditableMarkdownPageOwnership(beforeMarkdown, request.markdown, this.#allowClaim)) {
       return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     if (request.markdown === beforeMarkdown) {
@@ -372,7 +372,7 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
       !validateActivityMarkdown(input.beforeMarkdown, binding.pageId) ||
       !validateActivityMarkdown(input.afterMarkdown, binding.pageId) ||
-      !preservesActivityMarkdownOwnership(input.beforeMarkdown, input.afterMarkdown)
+      !preservesEditableMarkdownPageOwnership(input.beforeMarkdown, input.afterMarkdown, true)
     ) {
       throw new Error("The Markdown Activity update binding is invalid.");
     }
@@ -585,24 +585,9 @@ export function validateEditableMarkdown(markdown: string, expectedPageId: strin
   return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPage(markdown);
 }
 function validateEditablePageMarkdown(markdown: string, expectedPageId: string, allowClaim: boolean): boolean {
-  return validatePortableMarkdown(markdown, expectedPageId) && isEditablePageType(markdown, allowClaim);
+  return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPageType(markdown, allowClaim);
 }
-function isEditablePageType(markdown: string, allowClaim: boolean): boolean {
-  const type = parsePigeFrontmatter(markdown)?.frontmatter.type;
-  return isEditableMarkdownPage(markdown) || (allowClaim && type === "claim");
-}
-function preservesEditablePageOwnership(before: string, after: string, allowClaim: boolean): boolean {
-  if (preservesEditableMarkdownOwnership(before, after)) return true;
-  if (!allowClaim) return false;
-  return parsePigeFrontmatter(before)?.frontmatter.type === "claim" &&
-    parsePigeFrontmatter(after)?.frontmatter.type === "claim";
-}
-export function validateActivityMarkdown(markdown: string, expectedPageId: string): boolean {
-  return validateEditablePageMarkdown(markdown, expectedPageId, true);
-}
-export function preservesActivityMarkdownOwnership(before: string, after: string): boolean {
-  return preservesEditablePageOwnership(before, after, true);
-}
+export function validateActivityMarkdown(markdown: string, expectedPageId: string): boolean { return validateEditablePageMarkdown(markdown, expectedPageId, true); }
 function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
   const required = ["id", "schema_version", "title", "type", "created_at", "updated_at", "status"];
   return required.every((key) => raw.split(/\r?\n/u).filter((line) => line.startsWith(`${key}:`)).length === 1);
