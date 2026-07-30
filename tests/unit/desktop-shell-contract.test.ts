@@ -782,6 +782,23 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("wires exact note tag removal through Main, preload, Library Reader, and Home Reader", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const readerIpcSource = fs.readFileSync(path.resolve("apps/desktop/src/main/register-reader-ipc.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    expect(readerIpcSource).toContain("NOTE_REMOVE_TAG_CHANNEL");
+    expect(readerIpcSource).toContain("NoteRemoveTagRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteRemoveTagResultSchema.parse(rawResult)");
+    expect(preloadSource).toContain("NOTE_REMOVE_TAG_CHANNEL");
+    expect(preloadSource).toContain("NoteRemoveTagRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteRemoveTagResultSchema.parse(");
+    expect(contractsSource).toContain("readonly removeTag: (request: NoteRemoveTagRequest) => Promise<NoteRemoveTagResult>;");
+    expect(appSource).toContain("onRemoveNoteTag={(request) => window.pige.notes.removeTag(request)}");
+    expect(appSource).toContain("onRemoveTag={removeTagFromSelectedNote}");
+    expect(appSource).toContain("onRemoveTag={removeTagFromSelectedHomeNote}");
+  });
+
   it("keeps Knowledge Health behind a strict registrar and body-free preload boundary", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const registrarSource = fs.readFileSync(
