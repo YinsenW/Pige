@@ -107,6 +107,8 @@ import type {
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteMergeRequest,
+  NoteMergeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteDocument,
@@ -400,6 +402,9 @@ import {
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NOTE_MERGE_CHANNEL,
+  NoteMergeRequestSchema,
+  NoteMergeResultSchema,
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -1458,6 +1463,10 @@ const api: PigeDesktopApi = {
           "notes.saveEditor",
           NoteEditorSaveRequestSchema.parse(request)
         )
+      ),
+    merge: async (request: NoteMergeRequest): Promise<NoteMergeResult> =>
+      NoteMergeResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_MERGE_CHANNEL, NoteMergeRequestSchema.parse(request))
       ),
     trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
       NoteTrashCurrentResultSchema.parse(

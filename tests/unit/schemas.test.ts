@@ -118,6 +118,8 @@ import {
   NoteEditorPortableMarkdownSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NoteMergeRequestSchema,
+  NoteMergeResultSchema,
   NoteRenderResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -3679,6 +3681,26 @@ describe("schemas", () => {
       requestId: "noteref_abcdefghijklmnop",
       status: "revealed"
     })).toThrow();
+  });
+
+  it("keeps note merge identity-bound and renderer path/body free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "notemergereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`,
+      targetPageId: "page_20260730_target12345",
+      expectedTargetUpdatedAt: "2026-07-30T08:00:00.000Z"
+    } as const;
+    expect(NoteMergeRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteMergeResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
+    }
+    expect(() => NoteMergeRequestSchema.parse({ ...request, targetPageId: request.currentPageId })).toThrow();
+    expect(() => NoteMergeResultSchema.parse({ ...request, status: "failed", path: "/private/note.md" })).toThrow();
+    expect(() => NoteMergeResultSchema.parse({ ...request, status: "failed", markdown: "private body" })).toThrow();
   });
 
   it("keeps current-note trash revision-bound, pathless, and Activity-restorable", () => {
