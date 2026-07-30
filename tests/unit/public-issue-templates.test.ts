@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import {
   validateIssueForm,
   validateIssueTemplateConfig,
   validateIssueTemplateDirectory,
+  validateSupportSurface,
 } from "../../scripts/verify/public-issue-templates.mjs";
 
 describe("public issue template governance", () => {
@@ -52,5 +53,27 @@ contact_links:
     );
     await writeFile(path.join(directory, "broken.yml"), "name: Broken\ndescription: Missing body\n");
     await expect(validateIssueTemplateDirectory(directory)).rejects.toThrow("body must be a non-empty array");
+  });
+
+  it("verifies the public support and maintainer-triage boundary", async () => {
+    await expect(validateSupportSurface()).resolves.toBeUndefined();
+  });
+
+  it("fails closed when public bug safety or maintainer triage drifts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "pige-support-surface-"));
+    const directory = path.join(root, "templates");
+    await cp(path.resolve(".github/ISSUE_TEMPLATE"), directory, { recursive: true });
+    const supportPath = path.join(root, "SUPPORT.md");
+    await writeFile(supportPath, await readFile(path.resolve("SUPPORT.md"), "utf8"));
+
+    const bugPath = path.join(directory, "bug_report.yml");
+    const bug = (await readFile(bugPath, "utf8")).replace("This is not a security vulnerability report.\n          required: true", "This is not a security vulnerability report.\n          required: false");
+    await writeFile(bugPath, bug);
+    await expect(validateSupportSurface({ directory, supportPath })).rejects.toThrow("safety options must be required");
+
+    await cp(path.resolve(".github/ISSUE_TEMPLATE/bug_report.yml"), bugPath);
+    const support = (await readFile(supportPath, "utf8")).replace("## Maintainer Triage", "## Triage");
+    await writeFile(supportPath, support);
+    await expect(validateSupportSurface({ directory, supportPath })).rejects.toThrow("missing ## Maintainer Triage");
   });
 });
