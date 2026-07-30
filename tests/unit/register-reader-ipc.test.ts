@@ -4,6 +4,7 @@ import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-ipc";
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
+import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 
@@ -24,7 +25,8 @@ function makeHarness(
   revealService?: Partial<ReaderSourceRevealService>,
   noteTrashService?: Partial<NoteTrashService>,
   onNoteTrashCommitted = vi.fn(),
-  noteMergeService?: Partial<NoteMergeService>
+  noteMergeService?: Partial<NoteMergeService>,
+  reconnectService?: Partial<ReaderSourceReconnectService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -47,6 +49,12 @@ function makeHarness(
       if (revealService) return revealService as ReaderSourceRevealService;
       throw new Error("Reader source reveal service was not expected.");
     },
+    getReaderSourceReconnectService: () => {
+      if (reconnectService) return reconnectService as ReaderSourceReconnectService;
+      throw new Error("Reader source reconnect service was not expected.");
+    },
+    getWindow: () => ({}) as never,
+    showOpenDialog: async () => ({ canceled: false, filePaths: ["/private/replacement.txt"] }),
     getNoteTrashService: () => {
       if (noteTrashService) return noteTrashService as NoteTrashService;
       throw new Error("Note trash service was not expected.");
@@ -73,6 +81,7 @@ describe("registerReaderIpc", () => {
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",
+      "notes.reconnectOriginalSource",
       "readerSelection.resolve",
       "readerSelection.submitAction",
       "readerSelection.submitLink",
@@ -453,5 +462,50 @@ describe("registerReaderIpc", () => {
     expect(reveal).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     await expect(handlers.get("notes.revealSource")!({ sender: makeSender(16) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "stale" });
+  });
+
+  it("binds source reconnect to the tracked Reader owner and Main-owned picker", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260730_current1234", title: "Current", pageType: "note",
+        pagePath: "wiki/current.md", sourceIds: ["src_20260730_source1234"],
+        status: "active", updatedAt: "2026-07-30T12:00:00.000Z"
+      },
+      html: "<p>Current</p>", byteSize: 7,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    });
+    const reconnect = vi.fn(async (_ownerId: string, request: any, picker: { pick(): Promise<string | undefined> }) => ({
+      ...request,
+      status: await picker.pick() ? "cancelled" : "failed"
+    }));
+    const handlers = makeHarness(
+      { render } as Partial<NotesService>,
+      undefined,
+      undefined,
+      vi.fn(),
+      undefined,
+      { reconnect }
+    );
+    const sender = makeSender(30);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, {
+      pageId: "page_20260730_current1234"
+    });
+    const reconnectRequest = {
+      apiVersion: 1, requestId: "notesourcereconnect_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260730_source1234"
+    } as const;
+
+    await expect(handlers.get("notes.reconnectOriginalSource")!(
+      { sender } as IpcMainInvokeEvent,
+      reconnectRequest
+    )).resolves.toEqual({ ...reconnectRequest, status: "cancelled" });
+    expect(reconnect).toHaveBeenCalledWith(
+      expect.stringMatching(/^notes_owner_/u),
+      reconnectRequest,
+      expect.objectContaining({ pick: expect.any(Function) })
+    );
   });
 });

@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import type { NoteRevealSourceRequest, NoteRevealSourceResult } from "@pige/contracts";
+import type {
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
+  NoteRenderResult,
+  NoteRevealSourceRequest,
+  NoteRevealSourceResult
+} from "@pige/contracts";
 
 export type ReaderSourceActionOutcome =
   | "revealed"
+  | "reconnected"
   | "cancelled"
   | "stale"
   | "not_found"
+  | "ineligible"
   | "unavailable"
   | "failed";
 
@@ -13,6 +21,7 @@ export interface ReaderSourceActionItem {
   readonly sourceId: string;
   readonly label: string;
   readonly canRevealOriginal: boolean;
+  readonly canReconnectOriginal: boolean;
 }
 
 export interface ReaderSourceActionLabels {
@@ -24,6 +33,11 @@ export interface ReaderSourceActionLabels {
   readonly notFound: string;
   readonly unavailable: string;
   readonly failed: string;
+  readonly reconnect: string;
+  readonly reconnecting: string;
+  readonly reconnected: string;
+  readonly reconnectIneligible: string;
+  readonly reconnectFailed: string;
 }
 
 export function readerSourceActionLabels(t: (key: string) => string): ReaderSourceActionLabels {
@@ -35,52 +49,81 @@ export function readerSourceActionLabels(t: (key: string) => string): ReaderSour
     stale: t("note.revealSource.stale"),
     notFound: t("note.revealSource.notFound"),
     unavailable: t("note.revealSource.unavailable"),
-    failed: t("note.revealSource.failed")
+    failed: t("note.revealSource.failed"),
+    reconnect: t("note.reconnectOriginalSource.action"),
+    reconnecting: t("note.reconnectOriginalSource.reconnecting"),
+    reconnected: t("note.reconnectOriginalSource.reconnected"),
+    reconnectIneligible: t("note.reconnectOriginalSource.ineligible"),
+    reconnectFailed: t("note.reconnectOriginalSource.failed")
   };
 }
 
-interface PendingReveal {
+interface PendingSourceAction {
   readonly ownerIdentity: string;
   readonly sourceId: string;
+  readonly action: "reveal" | "reconnect";
 }
 
 type ReaderSourceActionNotice = Exclude<ReaderSourceActionOutcome, "cancelled">;
+type ReaderSourceReconnectResponse = {
+  readonly outcome: Exclude<ReaderSourceActionOutcome, "revealed" | "unavailable">;
+  readonly render?: NoteRenderResult;
+};
 
 export function ReaderSourceActions(props: {
   readonly ownerIdentity: string;
   readonly sources: readonly ReaderSourceActionItem[];
   readonly labels: ReaderSourceActionLabels;
   readonly onRevealOriginal: (sourceId: string) => Promise<ReaderSourceActionOutcome>;
+  readonly onReconnectOriginal?: (sourceId: string) => Promise<ReaderSourceReconnectResponse>;
+  readonly onReconnected?: (sourceId: string, render: NoteRenderResult) => void;
 }): React.JSX.Element | null {
-  const eligibleSources = props.sources.filter((source) => source.canRevealOriginal === true);
+  const eligibleSources = props.sources.filter((source) =>
+    source.canRevealOriginal === true || source.canReconnectOriginal === true
+  );
   const ownerIdentityRef = useRef(props.ownerIdentity);
-  const pendingRef = useRef<PendingReveal | null>(null);
+  const pendingRef = useRef<PendingSourceAction | null>(null);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
-  const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingSourceAction | null>(null);
   const [notice, setNotice] = useState<{
     readonly sourceId: string;
+    readonly action: "reveal" | "reconnect";
     readonly outcome: ReaderSourceActionNotice;
   } | null>(null);
 
   useEffect(() => {
     ownerIdentityRef.current = props.ownerIdentity;
     pendingRef.current = null;
-    setPendingSourceId(null);
+    setPendingAction(null);
     setNotice(null);
   }, [props.ownerIdentity]);
 
-  const revealOriginal = async (source: ReaderSourceActionItem): Promise<void> => {
-    if (!source.canRevealOriginal || pendingRef.current) return;
-    const pending: PendingReveal = {
+  const activate = async (
+    source: ReaderSourceActionItem,
+    action: "reveal" | "reconnect"
+  ): Promise<void> => {
+    if (
+      pendingRef.current ||
+      (action === "reveal" && !source.canRevealOriginal) ||
+      (action === "reconnect" && (!source.canReconnectOriginal || !props.onReconnectOriginal))
+    ) return;
+    const pending: PendingSourceAction = {
       ownerIdentity: props.ownerIdentity,
-      sourceId: source.sourceId
+      sourceId: source.sourceId,
+      action
     };
     pendingRef.current = pending;
-    setPendingSourceId(source.sourceId);
+    setPendingAction(pending);
     setNotice(null);
     let outcome: ReaderSourceActionOutcome = "failed";
+    let reconnectedRender: NoteRenderResult | undefined;
     try {
-      outcome = await props.onRevealOriginal(source.sourceId);
+      if (action === "reveal") outcome = await props.onRevealOriginal(source.sourceId);
+      else {
+        const response = await props.onReconnectOriginal!(source.sourceId);
+        outcome = response.outcome;
+        reconnectedRender = response.render;
+      }
     } catch {
       outcome = "failed";
     } finally {
@@ -89,10 +132,13 @@ export function ReaderSourceActions(props: {
         pendingRef.current !== pending
       ) return;
       pendingRef.current = null;
-      setPendingSourceId(null);
-      setNotice(outcome === "cancelled" ? null : { sourceId: source.sourceId, outcome });
+      setPendingAction(null);
+      setNotice(outcome === "cancelled" ? null : { sourceId: source.sourceId, action, outcome });
+      if (action === "reconnect" && outcome === "reconnected" && reconnectedRender) {
+        props.onReconnected?.(source.sourceId, reconnectedRender);
+      }
       const restoreFocus = (): void => {
-        const trigger = triggerRefs.current.get(source.sourceId);
+        const trigger = triggerRefs.current.get(`${action}:${source.sourceId}`);
         if (trigger?.isConnected) trigger.focus();
       };
       if (typeof window.requestAnimationFrame === "function") {
@@ -108,26 +154,48 @@ export function ReaderSourceActions(props: {
   return (
     <div aria-label={props.labels.region}>
       {eligibleSources.map((source) => {
-        const pending = pendingSourceId === source.sourceId;
-        const outcome = notice?.sourceId === source.sourceId ? notice.outcome : null;
+        const outcome = notice?.sourceId === source.sourceId ? notice : null;
         return (
           <div key={source.sourceId}>
-            <button
-              ref={(element) => {
-                if (element) triggerRefs.current.set(source.sourceId, element);
-                else triggerRefs.current.delete(source.sourceId);
-              }}
-              className="ghost"
-              type="button"
-              disabled={pendingSourceId !== null}
-              aria-label={`${props.labels.reveal}: ${source.label}`}
-              aria-busy={pending}
-              data-reader-source-reveal={source.sourceId}
-              onClick={() => void revealOriginal(source)}
-            >{pending ? props.labels.revealing : props.labels.reveal}</button>
+            {source.canRevealOriginal ? (
+              <button
+                ref={(element) => {
+                  const key = `reveal:${source.sourceId}`;
+                  if (element) triggerRefs.current.set(key, element);
+                  else triggerRefs.current.delete(key);
+                }}
+                className="ghost"
+                type="button"
+                disabled={pendingAction !== null}
+                aria-label={`${props.labels.reveal}: ${source.label}`}
+                aria-busy={pendingAction?.sourceId === source.sourceId && pendingAction.action === "reveal"}
+                data-reader-source-reveal={source.sourceId}
+                onClick={() => void activate(source, "reveal")}
+              >{pendingAction?.sourceId === source.sourceId && pendingAction.action === "reveal"
+                  ? props.labels.revealing
+                  : props.labels.reveal}</button>
+            ) : null}
+            {source.canReconnectOriginal && props.onReconnectOriginal ? (
+              <button
+                ref={(element) => {
+                  const key = `reconnect:${source.sourceId}`;
+                  if (element) triggerRefs.current.set(key, element);
+                  else triggerRefs.current.delete(key);
+                }}
+                className="ghost"
+                type="button"
+                disabled={pendingAction !== null}
+                aria-label={`${props.labels.reconnect}: ${source.label}`}
+                aria-busy={pendingAction?.sourceId === source.sourceId && pendingAction.action === "reconnect"}
+                data-reader-source-reconnect={source.sourceId}
+                onClick={() => void activate(source, "reconnect")}
+              >{pendingAction?.sourceId === source.sourceId && pendingAction.action === "reconnect"
+                  ? props.labels.reconnecting
+                  : props.labels.reconnect}</button>
+            ) : null}
             {outcome ? (
-              <p role={outcome === "failed" ? "alert" : "status"} aria-live="polite" aria-atomic="true">
-                {sourceActionNotice(outcome, props.labels)}
+              <p role={outcome.outcome === "failed" ? "alert" : "status"} aria-live="polite" aria-atomic="true">
+                {sourceActionNotice(outcome.action, outcome.outcome, props.labels)}
               </p>
             ) : null}
           </div>
@@ -137,23 +205,32 @@ export function ReaderSourceActions(props: {
   );
 }
 
-export function ReaderSourceRevealAction(props: {
+export function ReaderSourceActionSurface(props: {
   readonly activeVaultId?: string;
   readonly currentPageId: string;
   readonly renderContextId?: string;
-  readonly sourceId: string;
-  readonly sourceLabel: string;
+  readonly sources: readonly {
+    readonly sourceId: string;
+    readonly sourceLabel: string;
+    readonly canRevealOriginal: boolean;
+    readonly canReconnectOriginal: boolean;
+  }[];
   readonly labels: ReaderSourceActionLabels;
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onReconnectOriginalSource?: (
+    request: NoteReconnectOriginalSourceRequest
+  ) => Promise<NoteReconnectOriginalSourceResult>;
+  readonly onReconnected?: (sourceId: string, render: NoteRenderResult) => void;
 }): React.JSX.Element | null {
   return (
     <ReaderSourceActions
       ownerIdentity={`${props.activeVaultId ?? "unavailable"}:${props.currentPageId}:${props.renderContextId ?? "unavailable"}`}
-      sources={[{
-        sourceId: props.sourceId,
-        label: props.sourceLabel,
-        canRevealOriginal: Boolean(props.onRevealSource)
-      }]}
+      sources={props.sources.map((source) => ({
+        sourceId: source.sourceId,
+        label: source.sourceLabel,
+        canRevealOriginal: source.canRevealOriginal && Boolean(props.onRevealSource),
+        canReconnectOriginal: source.canReconnectOriginal && Boolean(props.onReconnectOriginalSource)
+      }))}
       labels={props.labels}
       onRevealOriginal={async (sourceId) => {
         const { activeVaultId, currentPageId, renderContextId, onRevealSource } = props;
@@ -169,6 +246,99 @@ export function ReaderSourceRevealAction(props: {
         const result = await onRevealSource(request);
         return revealResultMatches(request, result) ? result.status : "failed";
       }}
+      {...(props.onReconnectOriginalSource ? {
+        onReconnectOriginal: async (sourceId: string): Promise<ReaderSourceReconnectResponse> => {
+          const { activeVaultId, currentPageId, renderContextId, onReconnectOriginalSource } = props;
+          if (!activeVaultId || !renderContextId || !onReconnectOriginalSource) return { outcome: "failed" };
+          const request: NoteReconnectOriginalSourceRequest = {
+            apiVersion: 1,
+            requestId: `notesourcereconnect_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+            activeVaultId,
+            currentPageId,
+            renderContextId,
+            sourceId
+          };
+          const result = await onReconnectOriginalSource(request);
+          if (!reconnectResultMatches(request, result)) return { outcome: "failed" };
+          return result.status === "reconnected"
+            ? { outcome: "reconnected", render: result.render }
+            : { outcome: result.status };
+        }
+      } : {})}
+      {...(props.onReconnected ? { onReconnected: props.onReconnected } : {})}
+    />
+  );
+}
+
+export function NoteReaderSourceActions(props: {
+  readonly activeVaultId?: string;
+  readonly currentPageId: string;
+  readonly renderContextId?: string;
+  readonly sourceIds: readonly string[];
+  readonly reconnectOriginalSourceIds?: readonly string[];
+  readonly labels: ReaderSourceActionLabels;
+  readonly sourceLabel: (number: number) => string;
+  readonly getFocusRoot: () => HTMLElement | null;
+  readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onReconnectOriginalSource?: (request: NoteReconnectOriginalSourceRequest) => Promise<NoteReconnectOriginalSourceResult>;
+  readonly onSourceReconnected?: (render: NoteRenderResult) => void;
+}): React.JSX.Element | null {
+  const visibleSourceIds = props.sourceIds.slice(0, 5);
+  const reconnectSourceIds = props.reconnectOriginalSourceIds ?? [];
+  return <ReaderSourceActionSurface
+    currentPageId={props.currentPageId}
+    sources={Array.from(new Set([...visibleSourceIds, ...reconnectSourceIds.filter((id) => props.sourceIds.includes(id))])).map((sourceId) => ({
+      sourceId,
+      sourceLabel: props.sourceLabel(props.sourceIds.indexOf(sourceId) + 1),
+      canRevealOriginal: visibleSourceIds.includes(sourceId),
+      canReconnectOriginal: reconnectSourceIds.includes(sourceId)
+    }))}
+    labels={props.labels}
+    {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+    {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
+    {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+    {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
+    {...(props.onSourceReconnected ? { onReconnected: (sourceId: string, render: NoteRenderResult) => {
+      props.onSourceReconnected?.(render);
+      window.requestAnimationFrame(() => {
+        const root = props.getFocusRoot();
+        (root?.querySelector<HTMLElement>(`[data-reader-source-open="${sourceId}"]`) ?? root)?.focus({ preventScroll: true });
+      });
+    } } : {})}
+  />;
+}
+
+export function ReaderSourceRevealAction(props: {
+  readonly activeVaultId?: string;
+  readonly currentPageId: string;
+  readonly renderContextId?: string;
+  readonly sourceId: string;
+  readonly sourceLabel: string;
+  readonly canReconnectOriginal?: boolean;
+  readonly labels: ReaderSourceActionLabels;
+  readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
+  readonly onReconnectOriginalSource?: (
+    request: NoteReconnectOriginalSourceRequest
+  ) => Promise<NoteReconnectOriginalSourceResult>;
+  readonly onReconnected?: (sourceId: string, render: NoteRenderResult) => void;
+}): React.JSX.Element | null {
+  return (
+    <ReaderSourceActionSurface
+      currentPageId={props.currentPageId}
+      sources={[{
+        sourceId: props.sourceId,
+        sourceLabel: props.sourceLabel,
+        canRevealOriginal: true,
+        canReconnectOriginal: props.canReconnectOriginal === true
+      }]}
+      labels={props.labels}
+      {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+      {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
+      {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+      {...(props.onReconnectOriginalSource ? {
+        onReconnectOriginalSource: props.onReconnectOriginalSource
+      } : {})}
+      {...(props.onReconnected ? { onReconnected: props.onReconnected } : {})}
     />
   );
 }
@@ -184,10 +354,28 @@ function revealResultMatches(
     result.sourceId === request.sourceId;
 }
 
+function reconnectResultMatches(
+  request: NoteReconnectOriginalSourceRequest,
+  result: NoteReconnectOriginalSourceResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.currentPageId === request.currentPageId &&
+    result.renderContextId === request.renderContextId &&
+    result.sourceId === request.sourceId &&
+    (result.status !== "reconnected" || result.render.summary.pageId === request.currentPageId);
+}
+
 function sourceActionNotice(
+  action: "reveal" | "reconnect",
   outcome: ReaderSourceActionNotice,
   labels: ReaderSourceActionLabels
 ): string {
+  if (action === "reconnect") {
+    if (outcome === "reconnected") return labels.reconnected;
+    if (outcome === "ineligible") return labels.reconnectIneligible;
+    if (outcome === "failed") return labels.reconnectFailed;
+  }
   if (outcome === "revealed") return labels.revealed;
   if (outcome === "stale") return labels.stale;
   if (outcome === "not_found") return labels.notFound;

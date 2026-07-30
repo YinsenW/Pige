@@ -20,7 +20,12 @@ const labels: ReaderSourceActionLabels = {
   stale: "This source changed. Review the current source.",
   notFound: "This source is no longer available.",
   unavailable: "The original source cannot be opened here.",
-  failed: "The original source could not be opened."
+  failed: "The original source could not be opened.",
+  reconnect: "Reconnect original",
+  reconnecting: "Choosing original…",
+  reconnected: "Original reconnected.",
+  reconnectIneligible: "This source cannot be reconnected.",
+  reconnectFailed: "The original source could not be reconnected."
 };
 
 afterEach(() => {
@@ -36,7 +41,12 @@ afterEach(() => {
 describe("Reader source actions", () => {
   it("renders nothing without exact Main-projected eligibility", async () => {
     const harness = await mount({
-      sources: [{ sourceId: "source_1", label: "Saved source 1", canRevealOriginal: false }],
+      sources: [{
+        sourceId: "source_1",
+        label: "Saved source 1",
+        canRevealOriginal: false,
+        canReconnectOriginal: false
+      }],
       onRevealOriginal: vi.fn()
     });
     expect(harness.container.textContent).toBe("");
@@ -124,12 +134,61 @@ describe("Reader source actions", () => {
     expect(newTrigger.disabled).toBe(false);
     await harness.unmount();
   });
+
+  it("single-flights reconnect and adopts an authoritative render only for the current owner", async () => {
+    const render = {
+      summary: {
+        pageId: "page_20260730_reader001",
+        title: "Source",
+        pageType: "source",
+        status: "active",
+        pagePath: "wiki/sources/source.md",
+        sourceIds: ["src_20260730_reader001"],
+        createdAt: "2026-07-30T00:00:00.000Z",
+        updatedAt: "2026-07-30T00:00:00.000Z",
+        language: "en"
+      },
+      html: "<p>Reconnected.</p>",
+      byteSize: 12,
+      renderContextId: `notectx_${"b".repeat(32)}`
+    } as const;
+    const pending = deferred<{ readonly outcome: "reconnected"; readonly render: typeof render }>();
+    const onReconnectOriginal = vi.fn(async () => pending.promise);
+    const onReconnected = vi.fn();
+    const harness = await mount({
+      sources: [{
+        sourceId: "src_20260730_reader001",
+        label: "Saved source 1",
+        canRevealOriginal: true,
+        canReconnectOriginal: true
+      }],
+      onRevealOriginal: vi.fn(async () => "revealed"),
+      onReconnectOriginal,
+      onReconnected
+    });
+    const reconnect = reconnectButton(harness.container, "src_20260730_reader001");
+    await act(async () => {
+      reconnect.click();
+      reconnect.click();
+      await settle(harness.dom);
+    });
+    expect(onReconnectOriginal).toHaveBeenCalledTimes(1);
+    expect(reconnect.getAttribute("aria-busy")).toBe("true");
+    await act(async () => {
+      pending.resolve({ outcome: "reconnected", render });
+      await pending.promise;
+      await settle(harness.dom);
+    });
+    expect(onReconnected).toHaveBeenCalledWith("src_20260730_reader001", render);
+    expect(harness.container.textContent).toContain(labels.reconnected);
+    await harness.unmount();
+  });
 });
 
 function eligibleSources() {
   return [
-    { sourceId: "source_1", label: "Saved source 1", canRevealOriginal: true },
-    { sourceId: "source_2", label: "Saved source 2", canRevealOriginal: true }
+    { sourceId: "source_1", label: "Saved source 1", canRevealOriginal: true, canReconnectOriginal: false },
+    { sourceId: "source_2", label: "Saved source 2", canRevealOriginal: true, canReconnectOriginal: false }
   ] as const;
 }
 
@@ -138,8 +197,11 @@ async function mount(props: {
     readonly sourceId: string;
     readonly label: string;
     readonly canRevealOriginal: boolean;
+    readonly canReconnectOriginal: boolean;
   }[];
   readonly onRevealOriginal: (sourceId: string) => Promise<ReaderSourceActionOutcome>;
+  readonly onReconnectOriginal?: Parameters<typeof ReaderSourceActions>[0]["onReconnectOriginal"];
+  readonly onReconnected?: Parameters<typeof ReaderSourceActions>[0]["onReconnected"];
 }) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: "http://localhost/"
@@ -151,7 +213,9 @@ async function mount(props: {
       ownerIdentity: "vault_1:page_1:render_1",
       sources: props.sources,
       labels,
-      onRevealOriginal: props.onRevealOriginal
+      onRevealOriginal: props.onRevealOriginal,
+      ...(props.onReconnectOriginal ? { onReconnectOriginal: props.onReconnectOriginal } : {}),
+      ...(props.onReconnected ? { onReconnected: props.onReconnected } : {})
     }));
     await settle(dom);
   });
@@ -164,6 +228,12 @@ async function mount(props: {
       dom.window.close();
     }
   };
+}
+
+function reconnectButton(container: Element, sourceId: string): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>(`[data-reader-source-reconnect="${sourceId}"]`);
+  if (!button) throw new Error(`Missing reconnect action for ${sourceId}.`);
+  return button;
 }
 
 function revealButton(container: Element, sourceId: string): HTMLButtonElement {

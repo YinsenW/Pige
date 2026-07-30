@@ -41,11 +41,10 @@ import {
   readMarkdownPageByRelativePath
 } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
+import { reconnectableOriginalSourceIds } from "./reader-source-reconnect-service";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
-const MAX_RENDER_CONTEXTS_PER_OWNER = 16;
-const MAX_RENDER_CONTEXT_HREFS = 128;
-const RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
+const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024;
 const UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 
@@ -221,6 +220,7 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
+      ...(ownerId === undefined ? {} : { reconnectOriginalSourceIds: reconnectableOriginalSourceIds(vaultPath, stable.document.summary.sourceIds) }),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"

@@ -125,6 +125,8 @@ import {
   NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NoteReconnectOriginalSourceRequestSchema,
+  NoteReconnectOriginalSourceResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   OperationRecordSchema,
@@ -3680,6 +3682,52 @@ describe("schemas", () => {
       ...request,
       requestId: "noteref_abcdefghijklmnop",
       status: "revealed"
+    })).toThrow();
+  });
+
+  it("keeps Reader original reconnect pathless and returns only an authoritative refreshed render", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "notesourcereconnect_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260730_source1234"
+    } as const;
+    expect(NoteReconnectOriginalSourceRequestSchema.parse(request)).toEqual(request);
+    expect(() => NoteReconnectOriginalSourceRequestSchema.parse({
+      ...request,
+      path: "/private/replacement.pdf"
+    })).toThrow();
+    for (const status of ["cancelled", "stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteReconnectOriginalSourceResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    const render = {
+      summary: {
+        pageId: request.currentPageId,
+        title: "Current",
+        pageType: "note",
+        status: "active",
+        pagePath: "wiki/current.md",
+        createdAt: "2026-07-30T08:00:00.000Z",
+        updatedAt: "2026-07-30T08:00:00.000Z",
+        sourceIds: [request.sourceId]
+      },
+      html: "<p>Current</p>",
+      byteSize: 7,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      reconnectOriginalSourceIds: []
+    } as const;
+    expect(NoteReconnectOriginalSourceResultSchema.parse({
+      ...request,
+      status: "reconnected",
+      render
+    })).toMatchObject({ status: "reconnected", render: { reconnectOriginalSourceIds: [] } });
+    expect(() => NoteReconnectOriginalSourceResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/replacement.pdf"
     })).toThrow();
   });
 

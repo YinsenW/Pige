@@ -194,6 +194,17 @@ export const NoteRevealSourceResultSchema = z.discriminatedUnion("status", [
   NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("unavailable") }).strict(),
   NoteRevealSourceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
+export const NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "notes.reconnectOriginalSource" as const;
+export const NoteReconnectOriginalSourceRequestIdSchema = z.string()
+  .regex(/^notesourcereconnect_[a-z0-9]{16,64}$/);
+export const NoteReconnectOriginalSourceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteReconnectOriginalSourceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema
+}).strict();
 export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
 export const ReaderSelectionSegmentIdSchema = z.string().regex(/^readerseg_[a-f0-9]{16}$/);
 export const ReaderSelectionEndpointSchema = z.object({
@@ -1430,8 +1441,19 @@ export const NoteRenderResultSchema = z.object({
   html: NoteRenderedHtmlSchema,
   byteSize: z.number().int().nonnegative().max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES),
   renderContextId: NoteRenderContextIdSchema.optional(),
-  trashEligibility: NoteTrashEligibilitySchema.optional()
+  trashEligibility: NoteTrashEligibilitySchema.optional(),
+  reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional()
 }).strict();
+const NoteReconnectOriginalSourceResultIdentitySchema = NoteReconnectOriginalSourceRequestSchema;
+export const NoteReconnectOriginalSourceResultSchema = z.discriminatedUnion("status", [
+  NoteReconnectOriginalSourceResultIdentitySchema.extend({
+    status: z.literal("reconnected"),
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["cancelled", "stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteReconnectOriginalSourceResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 const NoteEditorResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: NoteEditorRequestIdSchema,
@@ -8717,6 +8739,9 @@ export type NoteOpenSourceReferenceResult = z.infer<typeof NoteOpenSourceReferen
 export type NoteRevealSourceRequestId = z.infer<typeof NoteRevealSourceRequestIdSchema>;
 export type NoteRevealSourceRequest = z.infer<typeof NoteRevealSourceRequestSchema>;
 export type NoteRevealSourceResult = z.infer<typeof NoteRevealSourceResultSchema>;
+export type NoteReconnectOriginalSourceRequestId = z.infer<typeof NoteReconnectOriginalSourceRequestIdSchema>;
+export type NoteReconnectOriginalSourceRequest = z.infer<typeof NoteReconnectOriginalSourceRequestSchema>;
+export type NoteReconnectOriginalSourceResult = z.infer<typeof NoteReconnectOriginalSourceResultSchema>;
 export type ReaderSelectionEndpoint = z.infer<typeof ReaderSelectionEndpointSchema>;
 export type ReaderSelectionActionRequestId = z.infer<typeof ReaderSelectionActionRequestIdSchema>;
 export type ReaderSelectionActionRequest = z.infer<typeof ReaderSelectionActionRequestSchema>;

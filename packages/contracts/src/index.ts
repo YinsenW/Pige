@@ -178,6 +178,8 @@ import type {
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -477,6 +479,9 @@ export type {
   NoteRevealSourceRequestId,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
+  NoteReconnectOriginalSourceRequestId,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -2037,6 +2042,9 @@ export interface PigeDesktopApi {
     readonly revealSource: (
       request: NoteRevealSourceRequest
     ) => Promise<NoteRevealSourceResult>;
+    readonly reconnectOriginalSource: (
+      request: NoteReconnectOriginalSourceRequest
+    ) => Promise<NoteReconnectOriginalSourceResult>;
   };
   readonly localCapabilities: {
     readonly ocrLanguagePreference: (

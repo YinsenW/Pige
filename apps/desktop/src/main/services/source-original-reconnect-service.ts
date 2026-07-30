@@ -89,6 +89,12 @@ export class SourceOriginalReconnectService {
   }
 }
 
+export function canReconnectOriginalSource(sourceRecord: SourceRecord): boolean {
+  return sourceRecord.storageStrategy === "reference_original" &&
+    Boolean(sourceRecord.original?.checksum) &&
+    sourceRecord.original?.lastKnownSize !== undefined;
+}
+
 function canonicalRegularFile(selectedPath: string): string {
   if (!path.isAbsolute(selectedPath) || selectedPath.includes("\0")) {
     throw new PigeDomainError("source.reconnect_invalid", "The selected source path is invalid.");
