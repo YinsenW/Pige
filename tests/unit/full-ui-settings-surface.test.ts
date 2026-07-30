@@ -1102,11 +1102,12 @@ describe("full UI Settings surface", () => {
       canRestore: true as const
     };
     const listTrash = vi.fn(async (request: NoteTrashListRequest) => ({ ...request, status: "ready" as const, notes: [note] }));
-    let mode: "stale" | "committed" = "stale";
+    let mode: "stale" | "wrong_render" | "committed" = "stale";
     const restoreTrash = vi.fn(async (request: NoteTrashRestoreRequest): Promise<NoteTrashRestoreResult> => mode === "stale"
       ? { ...request, status: "stale" }
       : { ...request, status: "committed", operationId: "op_20260731_restorenoteui12", render: {
-        summary: { pageId: note.pageId, title: note.title, pageType: "note", status: "active",
+        summary: { pageId: mode === "wrong_render" ? "page_20260731_wrongrestoreui" : note.pageId,
+          title: note.title, pageType: "note", status: "active",
           pagePath: "wiki/restored.md", createdAt: "2026-07-31T07:00:00.000Z",
           updatedAt: "2026-07-31T08:00:00.000Z", sourceIds: [] },
         html: "<h1>Restore after restart</h1>", byteSize: 64,
@@ -1127,6 +1128,11 @@ describe("full UI Settings surface", () => {
     await act(async () => { restore.click(); await settle(dom); await settle(dom); });
     expect(container.textContent).toContain("changed");
     expect(container.querySelector("[data-restorable-note-id]")).not.toBeNull();
+    mode = "wrong_render";
+    await act(async () => { restore.click(); await settle(dom); await settle(dom); });
+    expect(opened).toEqual([]);
+    expect(container.querySelector("[data-restorable-note-id]")).not.toBeNull();
+    expect(container.textContent).toContain("could not restore");
     mode = "committed";
     await act(async () => { restore.click(); await settle(dom); await settle(dom); });
     expect(restoreTrash).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -1136,6 +1142,34 @@ describe("full UI Settings surface", () => {
     expect(opened).toEqual([note.pageId]);
     expect(container.querySelector("[data-restorable-note-id]")).toBeNull();
     expect(container.textContent).toContain("restored and opened");
+    expect(dom.window.document.activeElement).toBe(container.querySelector("[aria-labelledby='activity-trash-title']"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps recoverable-note load failures distinct and retries only the exact current vault request", async () => {
+    const dom = createDom();
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const root = createRoot(container);
+    const activeVaultId = "vault_20260731_notetrashretry";
+    let returnWrongIdentity = true;
+    const listTrash = vi.fn(async (request: NoteTrashListRequest) => returnWrongIdentity
+      ? { ...request, requestId: "notetrashlistreq_wrongidentity1234", status: "ready" as const, notes: [] }
+      : { ...request, status: "ready" as const, notes: [] });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      notes: { listTrash, restoreTrash: vi.fn() }, vault: { current: async () => ({ vaultId: activeVaultId }) }
+    } });
+    await act(async () => {
+      root.render(createElement(NoteTrashRestorePanel, { activeVaultId, locale: "en",
+        onCommitted: async () => false, t }));
+      await settle(dom); await settle(dom);
+    });
+    expect(container.textContent).toContain("could not check recoverable notes");
+    expect(container.textContent).not.toContain("No recoverable notes");
+    returnWrongIdentity = false;
+    await act(async () => { buttonNamed(container, "Try again").click(); await settle(dom); await settle(dom); });
+    expect(listTrash).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("No recoverable notes");
     await act(async () => root.unmount());
     dom.window.close();
   });

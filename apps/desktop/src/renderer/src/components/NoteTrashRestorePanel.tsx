@@ -12,33 +12,44 @@ export function NoteTrashRestorePanel(props: {
 }): React.JSX.Element {
   const [notes, setNotes] = useState<readonly NoteTrashSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [listFailed, setListFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<RestoreNotice | null>(null);
   const sequenceRef = useRef(0);
+  const sectionRef = useRef<HTMLElement>(null);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
 
   useEffect(() => {
     const sequence = ++sequenceRef.current;
     setLoaded(false);
+    setListFailed(false);
     setNotes([]);
     setNotice(null);
     const activeVaultId = props.activeVaultId;
     if (!activeVaultId) { setLoaded(true); return; }
+    const requestId = `notetrashlistreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}` as const;
     void window.pige.notes.listTrash({
       apiVersion: 1,
-      requestId: `notetrashlistreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      requestId,
       activeVaultId
     }).then((result) => {
-      if (sequence !== sequenceRef.current || result.activeVaultId !== activeVaultId) return;
-      setNotes(result.status === "ready" ? result.notes : []);
+      if (sequence !== sequenceRef.current) return;
+      if (result.requestId !== requestId || result.activeVaultId !== activeVaultId || result.status !== "ready") {
+        setListFailed(true);
+      } else setNotes(result.notes);
       setLoaded(true);
-    }).catch(() => { if (sequence === sequenceRef.current) setLoaded(true); });
-  }, [props.activeVaultId]);
+    }).catch(() => {
+      if (sequence === sequenceRef.current) { setListFailed(true); setLoaded(true); }
+    });
+  }, [props.activeVaultId, reloadKey]);
 
   const restore = async (note: NoteTrashSummary): Promise<void> => {
     const activeVaultId = props.activeVaultId;
     if (!activeVaultId || pendingId || !note.canRestore) return;
     const sequence = ++sequenceRef.current;
+    const noteIndex = notes.findIndex((candidate) => candidate.trashOperationId === note.trashOperationId);
+    let focusOperationId = note.trashOperationId;
     const requestId = `notetrashrestorereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}` as const;
     setPendingId(note.trashOperationId);
     setNotice(null);
@@ -57,6 +68,12 @@ export function NoteTrashRestorePanel(props: {
         result.pageId !== note.pageId || result.trashOperationId !== note.trashOperationId ||
         result.expectedTrashRevision !== note.expectedTrashRevision) return;
       if (result.status === "committed") {
+        if (!result.render.renderContextId || result.render.summary.pageId !== note.pageId ||
+          result.render.summary.pageType !== "note" || result.render.summary.status !== "active") {
+          setNotice("failed");
+          return;
+        }
+        focusOperationId = notes[noteIndex + 1]?.trashOperationId ?? notes[noteIndex - 1]?.trashOperationId ?? "";
         setNotes((current) => current.filter((item) => item.trashOperationId !== note.trashOperationId));
         setNotice(await props.onCommitted(note.pageId) ? "restored" : "failed");
       } else setNotice(result.status === "failed" ? "failed" : "stale");
@@ -65,7 +82,9 @@ export function NoteTrashRestorePanel(props: {
     } finally {
       if (sequence === sequenceRef.current) {
         setPendingId(null);
-        const restoreFocus = (): void => { triggerRefs.current.get(note.trashOperationId)?.focus(); };
+        const restoreFocus = (): void => {
+          (triggerRefs.current.get(focusOperationId) ?? sectionRef.current)?.focus({ preventScroll: true });
+        };
         if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(restoreFocus);
         else window.setTimeout(restoreFocus, 0);
       }
@@ -73,9 +92,15 @@ export function NoteTrashRestorePanel(props: {
   };
 
   const dateLocale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
-  return <section className="settings-section" aria-labelledby="activity-trash-title">
+  return <section ref={sectionRef} className="settings-section" aria-labelledby="activity-trash-title" tabIndex={-1}>
     <h2 className="settings-section-title" id="activity-trash-title">{props.t("activity.trashTitle")}</h2>
     {!loaded ? <p className="settings-note">{props.t("activity.trashLoading")}</p>
+      : listFailed ? <div className="settings-state-copy">
+        <p className="error" role="alert">{props.t("activity.trashLoadFailed")}</p>
+        <button type="button" className="settings-button" onClick={() => setReloadKey((current) => current + 1)}>
+          {props.t("activity.trashRetry")}
+        </button>
+      </div>
       : notes.length === 0 ? <p className="settings-note">{props.t("activity.trashEmpty")}</p>
         : <div className="settings-card">{notes.map((note) => <div className="settings-row" key={note.trashOperationId}
           data-restorable-note-id={note.pageId}>

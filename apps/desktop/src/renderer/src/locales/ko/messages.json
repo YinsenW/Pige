@@ -15,6 +15,8 @@
   "activity.restoringFromTrash": "복원 중...",
   "activity.trashEmpty": "휴지통에 복원 가능한 노트가 없습니다.",
   "activity.trashLoading": "휴지통 확인 중...",
+  "activity.trashLoadFailed": "복구 가능한 노트를 확인하지 못했습니다.",
+  "activity.trashRetry": "다시 시도",
   "activity.trashTitle": "복원 가능한 노트",
   "activity.open": "열기",
   "activity.recent": "최근 변경",

@@ -2968,7 +2968,7 @@ export function App(): React.JSX.Element {
               undoingId={activityUndoingId} openingId={activityOpeningId}
               blockedIds={activityBlockedIds} locale={locale}
               onOpen={openActivityTarget}
-              onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); if (opened) { setView("library"); setSettingsOpen(false); void refreshLibrary(); } return opened; }}
+              onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); void refreshLibrary(); if (opened) { setView("library"); setSettingsOpen(false); } return opened; }}
               onUndo={undoActivity}
               t={t}
             />

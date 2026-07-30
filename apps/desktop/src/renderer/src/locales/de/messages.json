@@ -15,6 +15,8 @@
   "activity.restoringFromTrash": "Wird wiederhergestellt...",
   "activity.trashEmpty": "Im Papierkorb befinden sich keine wiederherstellbaren Notizen.",
   "activity.trashLoading": "Papierkorb wird geprüft...",
+  "activity.trashLoadFailed": "Pige konnte die wiederherstellbaren Notizen nicht prüfen.",
+  "activity.trashRetry": "Erneut versuchen",
   "activity.trashTitle": "Wiederherstellbare Notizen",
   "activity.open": "Öffnen",
   "activity.recent": "Letzte Änderungen",

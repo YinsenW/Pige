@@ -15,6 +15,8 @@
   "activity.restoringFromTrash": "復元中...",
   "activity.trashEmpty": "ゴミ箱に復元可能なノートはありません。",
   "activity.trashLoading": "ゴミ箱を確認中...",
+  "activity.trashLoadFailed": "復元可能なノートを確認できませんでした。",
+  "activity.trashRetry": "もう一度試す",
   "activity.trashTitle": "復元可能なノート",
   "activity.open": "開く",
   "activity.recent": "最近の変更",

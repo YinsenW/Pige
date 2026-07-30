@@ -15,6 +15,8 @@
   "activity.restoringFromTrash": "Restoring...",
   "activity.trashEmpty": "No recoverable notes are in Trash.",
   "activity.trashLoading": "Checking Trash...",
+  "activity.trashLoadFailed": "Pige could not check recoverable notes.",
+  "activity.trashRetry": "Try again",
   "activity.trashTitle": "Recoverable notes",
   "activity.open": "Open",
   "activity.recent": "Recent changes",
