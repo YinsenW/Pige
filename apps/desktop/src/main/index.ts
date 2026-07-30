@@ -308,6 +308,7 @@ import { NoteTrashService } from "./services/note-trash-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteMergeService } from "./services/note-merge-service";
+import { NoteRenameService } from "./services/note-rename-service";
 import { NoteRelateService } from "./services/note-relate-service";
 import {
   NoteMarkdownEditorActivityAdapter,
@@ -429,6 +430,7 @@ let conversationTrashService: ConversationTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteMergeService: NoteMergeService | undefined;
+let noteRenameService: NoteRenameService | undefined;
 let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
 let sourceOriginalReconnectService: SourceOriginalReconnectService | undefined;
@@ -1720,6 +1722,10 @@ const getKnowledgeHealthDuplicateTopicService = (): KnowledgeHealthDuplicateTopi
   );
   return knowledgeHealthDuplicateTopicService;
 };
+const getNoteRenameService = (): NoteRenameService => {
+  noteRenameService ??= new NoteRenameService(getVaultService(), getNotesService());
+  return noteRenameService;
+};
 const getNoteRelateService = (): NoteRelateService => {
   noteRelateService ??= new NoteRelateService(
     getNotesService(),
@@ -1736,19 +1742,21 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   const trash = getNoteTrashService();
   const merge = getNoteMergeService();
   const duplicateTopics = getKnowledgeHealthDuplicateTopicService();
+  const rename = getNoteRenameService();
   const tagRename = getLibraryTagRenameService();
   return {
-    activitySummary: (operation, undo) => duplicateTopics.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
-    findUndoOperation: (operation, operations) => duplicateTopics.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
-    undo: (operation) => duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    activitySummary: (operation, undo) => duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
+    findUndoOperation: (operation, operations) => duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
       const tagRenameResult = tagRename.recoverIncompleteOperations();
       const mergeResult = merge.recoverIncompleteOperations();
       const trashResult = trash.recoverIncompleteOperations();
       const duplicateTopicResult = duplicateTopics.recoverIncompleteOperations();
+      const renameResult = rename.recoverIncompleteOperations();
       return {
-        recovered: tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered + duplicateTopicResult.recovered,
-        failed: tagRenameResult.failed + mergeResult.failed + trashResult.failed + duplicateTopicResult.failed
+        recovered: duplicateTopicResult.recovered + renameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
+        failed: duplicateTopicResult.failed + renameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
       };
     }
   };
@@ -2993,6 +3001,7 @@ registerReaderIpc({
   getNoteArchiveService,
   getNoteTagService,
   getNoteMergeService,
+  getNoteRenameService,
   getNoteRelateService,
   getNoteMarkdownImportService,
   getNoteRevisionHistoryService,
@@ -3432,6 +3441,7 @@ app.whenReady().then(async () => {
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
+  noteRenameService = new NoteRenameService(getVaultService(), getNotesService());
   libraryTagRenameService = new LibraryTagRenameService(getVaultService());
   noteRelateService = new NoteRelateService(
     getNotesService(),

@@ -522,6 +522,7 @@ Rules:
 
 - IDs are opaque and stable.
 - Slugs and filenames may change, but IDs remain.
+- Active-note rename atomically changes title/filename while preserving `page_id`, exact body/unrelated frontmatter, and an old-title alias; derived indexes rebuild after commit.
 - IDs appear in frontmatter or sidecar metadata.
 - Cross-links should prefer human-readable wiki links plus hidden stable IDs in metadata when needed.
 - Chunks are derived and can be regenerated, but chunk IDs should be stable where the source span is stable.

@@ -71,6 +71,7 @@ Required ID rules:
   the machine-local path binding remain unchanged, and metadata-revision drift fails stale.
 - IDs appear in frontmatter or sidecar JSON for durable objects.
 - Slugs and filenames are display/location hints, not identity.
+- Active-note title/filename rename preserves `page_id`, retains the previous title as an alias, and fails closed on revision drift or destination collision through one recoverable `rename_page` Operation.
 - Duplicate detection must compare IDs first, then checksums, canonical URLs, aliases, and semantic similarity.
 
 Canonical emitted ID vocabulary is defined by the shared schemas in `packages/schemas/src/index.ts`. Representative shapes:

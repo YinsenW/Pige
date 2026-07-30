@@ -4260,6 +4260,21 @@ References:
 - `docs/PRD.md`; `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`;
   `docs/PROMPT_DESIGN.md`; `docs/UI_PROTOTYPE.md`
 
+### D-20260731-Exact-Note-Title-And-Filename-Rename
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Reader/Library may rename one exact active note through Main-owned revision CAS, preserving `page_id` while atomically updating title, old-title alias, and deterministic Git-friendly filename.
+
+Consequences:
+
+The renderer never receives paths. Conflict/stale/ineligible/failure retains draft and durable truth; commit records recoverable `rename_page`, rebuilds indexes, and supports Activity Undo/restart without rewriting body or unrelated frontmatter.
+
+References: `docs/MARKDOWN_SCHEMA.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

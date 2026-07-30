@@ -1838,6 +1838,8 @@ describe("desktop shell build contract", () => {
     expect(activityPanelSource).toContain('className="settings-page settings-history-page"');
     expect(activityPanelSource).toContain('activity.kind === "update_page"');
     expect(activityPanelSource).toContain('"activity.updatedPage"');
+    expect(activityPanelSource).toContain('activity.kind === "rename_page"');
+    expect(activityPanelSource).toContain('"activity.renamedPage"');
     expect(activityPanelSource).toContain('"activity.createdPage"');
     expect(rendererSource).toContain('onUndo={undoActivity}');
     expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
