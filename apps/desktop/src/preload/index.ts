@@ -234,6 +234,8 @@ import type {
   SupportBundleExportResult,
   SupportBundlePreview,
   ToolchainHealth,
+  ToolchainRepairRequest,
+  ToolchainRepairResult,
   UpdateApplyRequest,
   UpdateApplyResult,
   UpdateCheckRequest,
@@ -434,6 +436,9 @@ import {
   TaskInteractionOpenRequestSchema,
   TaskInteractionOpenResultSchema,
   TaskInteractionPendingResultSchema,
+  TOOLCHAIN_REPAIR_CHANNEL,
+  ToolchainRepairRequestSchema,
+  ToolchainRepairResultSchema,
   UpdateApplyRequestSchema,
   UpdateApplyResultSchema,
   UpdateCheckRequestSchema,
@@ -1924,7 +1929,27 @@ const api: PigeDesktopApi = {
   },
   system: {
     toolchainHealth: async (): Promise<ToolchainHealth> =>
-      ipcRenderer.invoke("system.toolchainHealth") as Promise<ToolchainHealth>
+      ipcRenderer.invoke("system.toolchainHealth") as Promise<ToolchainHealth>,
+    repairToolchain: async (
+      request: ToolchainRepairRequest
+    ): Promise<ToolchainRepairResult> => {
+      const parsedRequest = ToolchainRepairRequestSchema.parse(request);
+      const result = ToolchainRepairResultSchema.parse(
+        await ipcRenderer.invoke(TOOLCHAIN_REPAIR_CHANNEL, parsedRequest)
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.expectedHealthId !== parsedRequest.expectedHealthId ||
+        result.expectedMissingRequiredToolIds.length !==
+          parsedRequest.expectedMissingRequiredToolIds.length ||
+        result.expectedMissingRequiredToolIds.some(
+          (toolId, index) => toolId !== parsedRequest.expectedMissingRequiredToolIds[index]
+        )
+      ) {
+        throw new Error("Invalid toolchain repair response identity.");
+      }
+      return result;
+    }
   }
 };
 

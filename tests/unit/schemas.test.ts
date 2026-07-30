@@ -200,6 +200,11 @@ import {
   TaskInteractionOpenResultSchema,
   TaskInteractionPendingResultSchema,
   ToolchainManifestSchema,
+  TOOLCHAIN_REPAIR_CHANNEL,
+  TOOLCHAIN_REPAIR_MAX_MISSING_TOOLS,
+  ToolchainRepairEligibilitySchema,
+  ToolchainRepairRequestSchema,
+  ToolchainRepairResultSchema,
   Bcp47LanguageTagSchema,
   ConversationLanguageContinuitySchema,
   CurrentVaultManifestSchema,
@@ -4658,6 +4663,62 @@ describe("schemas", () => {
       schemaVersion: 1,
       tools: [{ id: "invalid", name: "Invalid", required: true }]
     })).toThrow();
+  });
+
+  it("keeps bundled-toolchain repair currentness-bound, sorted, and body-free", () => {
+    expect(TOOLCHAIN_REPAIR_CHANNEL).toBe("system.repairToolchain");
+    const healthId = `toolchain_health_${"a".repeat(64)}`;
+    const missingRequiredToolIds = ["office-parser", "pdf-parser"] as const;
+    const request = {
+      apiVersion: 1,
+      requestId: "toolchain_repair_request_abcdefghijklmnop",
+      expectedHealthId: healthId,
+      expectedMissingRequiredToolIds: missingRequiredToolIds
+    } as const;
+    expect(ToolchainRepairEligibilitySchema.parse({
+      healthId,
+      missingRequiredToolIds
+    })).toEqual({ healthId, missingRequiredToolIds });
+    expect(ToolchainRepairRequestSchema.parse(request)).toEqual(request);
+    expect(() => ToolchainRepairRequestSchema.parse({
+      ...request,
+      expectedMissingRequiredToolIds: [...missingRequiredToolIds].reverse()
+    })).toThrow("unique and sorted");
+    expect(() => ToolchainRepairRequestSchema.parse({
+      ...request,
+      expectedMissingRequiredToolIds: ["pdf-parser", "pdf-parser"]
+    })).toThrow("unique and sorted");
+    expect(() => ToolchainRepairRequestSchema.parse({
+      ...request,
+      expectedMissingRequiredToolIds: []
+    })).toThrow();
+    expect(() => ToolchainRepairRequestSchema.parse({
+      ...request,
+      expectedMissingRequiredToolIds: Array.from(
+        { length: TOOLCHAIN_REPAIR_MAX_MISSING_TOOLS + 1 },
+        (_, index) => `tool-${String(index).padStart(2, "0")}`
+      )
+    })).toThrow();
+
+    for (const status of ["opened", "stale", "not_needed", "failed"] as const) {
+      expect(ToolchainRepairResultSchema.parse({ ...request, status })).toEqual({
+        ...request,
+        status
+      });
+    }
+    for (const privateField of [
+      "resolvedPath",
+      "repairHint",
+      "releaseUrl",
+      "body",
+      "rawError"
+    ] as const) {
+      expect(() => ToolchainRepairResultSchema.parse({
+        ...request,
+        status: "opened",
+        [privateField]: "private"
+      })).toThrow();
+    }
   });
 
   it("validates file source records and canonical job states", () => {
