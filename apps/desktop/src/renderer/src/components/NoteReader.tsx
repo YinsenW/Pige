@@ -6,8 +6,7 @@ import type {
   NoteRenderResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
-  ReaderSelectionCreateNoteRequest,
-  ReaderSelectionCreateNoteResult,
+  ReaderSelectionCreateNoteRequest, ReaderSelectionCreateNoteResult, ReaderSelectionCreatePageAction,
   ReaderSelectionEndpoint,
   ReaderSelectionIdentity,
   ReaderSelectionLinkRequest,
@@ -20,7 +19,7 @@ import type {
 import type { Locale } from "@pige/schemas";
 import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./ReaderInlineReferenceSurface";
 import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
-import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog";
+import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
 
 function readerSelectionEndpoint(
@@ -121,7 +120,7 @@ export function NoteReader(props: {
   } | null>(null);
   const [selectionPosition, setSelectionPosition] = useState<{ readonly left: number; readonly top: number } | null>(null);
   const [selectionActionIndex, setSelectionActionIndex] = useState(0);
-  const [selectionMoreOpen, setSelectionMoreOpen] = useState(false);
+  const [selectionMoreOpen, setSelectionMoreOpen] = useState(false); const [selectionCreateOpen, setSelectionCreateOpen] = useState(false);
   const [selectionMoreActionIndex, setSelectionMoreActionIndex] = useState(0);
   const [selectionMorePlacement, setSelectionMorePlacement] = useState<"above" | "below">("below");
   const [selectionFeedback, setSelectionFeedback] = useState<string | null>(null);
@@ -221,7 +220,7 @@ export function NoteReader(props: {
     selectionFocusTransition.current = false;
     selectionMoreOpenRef.current = false;
     dismissedSelectionRef.current = currentSelectionRef.current;
-    setSelectionMoreOpen(false);
+    setSelectionMoreOpen(false); setSelectionCreateOpen(false);
     setSelectionAnchor(null);
     setSelectionPosition(null);
     if (!restoreFocus) return;
@@ -565,7 +564,7 @@ export function NoteReader(props: {
     }
   };
 
-  const submitSelectionCreateNote = async (selection: ReaderSelectionIdentity): Promise<void> => {
+  const submitSelectionCreateNote = async (selection: ReaderSelectionIdentity, action: ReaderSelectionCreatePageAction): Promise<void> => {
     if (selectionActionPending || selectionCreateNoteInFlightRef.current) return;
     const resolveSequence = selectionResolveSequence.current;
     const activeVaultId = props.activeVaultId;
@@ -575,7 +574,7 @@ export function NoteReader(props: {
     const request: ReaderSelectionCreateNoteRequest = {
       apiVersion: 1,
       requestId: createReaderSelectionActionRequestId(),
-      action: "create_note",
+      action,
       activeVaultId,
       renderContextId,
       selection,
@@ -789,7 +788,7 @@ export function NoteReader(props: {
                     }
                     if (action === "createNote") {
                       if (selectionResolution.kind === "resolved" && props.onSubmitSelectionCreateNote) {
-                        void submitSelectionCreateNote(selectionResolution.selection);
+                        selectionMoreOpenRef.current = false; setSelectionMoreOpen(false); setSelectionCreateOpen(true);
                       } else {
                         closeSelectionToolbar(true);
                         props.onDevelopment("selection_actions");
@@ -808,7 +807,7 @@ export function NoteReader(props: {
                     props.onDevelopment("selection_actions");
                   }}
                 >
-                  {props.t(`note.selection.${action}`)}
+                  {props.t(action === "createNote" ? "note.selection.turnInto" : `note.selection.${action}`)}
                   {((action === "translate" || action === "polish" || action === "expand") &&
                   !props.onSubmitSelectionTransform) || (action === "createNote" && !props.onSubmitSelectionCreateNote) ? (
                     <span>{props.t("note.selection.unavailable")}</span>
@@ -817,6 +816,7 @@ export function NoteReader(props: {
               ))}
             </div>
           ) : null}
+          {selectionCreateOpen && selectionResolution.kind === "resolved" ? <ReaderSelectionCreateChooser ownerIdentity={`${props.note.summary.pageId}:${props.note.renderContextId ?? ""}:${selectionResolution.selection.pageContentHash}:${selectionResolution.selection.span.start}:${selectionResolution.selection.span.endExclusive}:${selectionResolution.selection.selectedContentHash}`} t={props.t} onCancel={() => { setSelectionCreateOpen(false); window.requestAnimationFrame(() => selectionActionRefs.current.get(selectionActions.length - 1)?.focus({ preventScroll: true })); }} onChoose={(action) => { setSelectionCreateOpen(false); window.requestAnimationFrame(() => selectionActionRefs.current.get(selectionActions.length - 1)?.focus({ preventScroll: true })); void submitSelectionCreateNote(selectionResolution.selection, action); }} /> : null}
         </div>) : null}
       </> : null}
       {selectionFeedback ? (

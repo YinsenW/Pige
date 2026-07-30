@@ -374,7 +374,7 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("reviews a Reader create-note selection, retains it on reject or stale, and opens only the created note", async () => {
+  it("reviews a Reader create-question selection and opens only an authoritative question page", async () => {
     const dom = createDom(1200);
     const harness = createHarness(undefined);
     harness.sidebarOpen = true;
@@ -382,11 +382,12 @@ describe("Home durable Agent conversation UI", () => {
     harness.windowLayoutWidth = 1200;
     harness.startupDestination = "failed";
     const renderNote = harness.renderNote;
+    let createdPageType: "note" | "question" = "note";
     harness.renderNote = async (pageId) => {
       const note = await renderNote(pageId);
       return pageId === "page_20260715_note0001"
         ? { ...note, html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Approved reader fixture.</span></p>' }
-        : note;
+        : { ...note, summary: { ...note.summary, pageType: createdPageType } };
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
     await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
@@ -415,13 +416,16 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
-    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
-    const createNote = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]'));
-    await clickElement(dom, createNote);
+    const chooseQuestion = async (): Promise<void> => {
+      await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+      await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]')));
+      await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-create-action="create_question"]')));
+    };
+    await chooseQuestion();
     await waitFor(dom, () => harness.readerCreateNoteRequests.length === 1);
     await waitFor(dom, () => buttons(container, enMessages["note.proposal.reject"]).length === 1);
     expect(harness.readerCreateNoteRequests[0]).toMatchObject({
-      action: "create_note",
+      action: "create_question",
       activeVaultId: "vault_home_conversation",
       renderContextId: `notectx_${"a".repeat(32)}`,
       selection: { pageId: "page_20260715_note0001" }
@@ -431,22 +435,29 @@ describe("Home durable Agent conversation UI", () => {
     harness.readerProposalDecisionMode = "rejected";
     await clickButton(dom, container, enMessages["note.proposal.reject"]);
     await waitFor(dom, () => harness.readerProposalDecisionRequests.length === 1);
-    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[data-selection-action="more"]')).not.toBeNull();
     expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
 
-    await clickElement(dom, createNote);
+    await chooseQuestion();
     await waitFor(dom, () => harness.readerCreateNoteRequests.length === 2);
     harness.readerProposalDecisionMode = "stale";
     await clickButton(dom, container, enMessages["note.proposal.apply"]);
     await waitFor(dom, () => container.textContent?.includes(enMessages["note.proposal.stale"]) === true);
-    expect(container.querySelector('[data-selection-more-action="createNote"]')).not.toBeNull();
+    expect(container.querySelector('[data-selection-action="more"]')).not.toBeNull();
     expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
 
     harness.readerProposalDecisionMode = "applied";
     await clickButton(dom, container, enMessages["note.proposal.apply"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["note.selection.actionFailed"]) === true);
+    expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+
+    await chooseQuestion();
+    await waitFor(dom, () => harness.readerCreateNoteRequests.length === 3);
+    createdPageType = "question";
+    await clickButton(dom, container, enMessages["note.proposal.apply"]);
     await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note B");
-    expect(harness.readerProposalDecisionRequests).toHaveLength(3);
-    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", "page_20260715_note0002"]);
+    expect(harness.readerProposalDecisionRequests).toHaveLength(4);
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", "page_20260715_note0002", "page_20260715_note0002"]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -6522,19 +6533,19 @@ function makePigeApi(harness: ConversationHarness): object {
           conversationEventId: `evt_20260729_createuser${harness.readerCreateNoteRequests.length}`,
           conversationId: `conv_20260729_createnote${harness.readerCreateNoteRequests.length}`,
           tailEventId: `evt_20260729_createassistant${harness.readerCreateNoteRequests.length}`,
-          proposal: readerCreateNoteProposal(harness.readerCreateNoteRequests.length)
+          proposal: readerCreateNoteProposal(harness.readerCreateNoteRequests.length, request.action)
         };
       },
       currentProposal: async () => ({
         apiVersion: 1 as const,
         status: "available" as const,
-        proposal: readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length))
+        proposal: readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length), harness.readerCreateNoteRequests.at(-1)?.action)
       }),
       decideProposal: async (
         request: ReaderSelectionProposalDecisionRequest
       ): Promise<ReaderSelectionProposalDecisionResult> => {
         harness.readerProposalDecisionRequests.push(request);
-        const proposal = readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length));
+        const proposal = readerCreateNoteProposal(Math.max(1, harness.readerCreateNoteRequests.length), harness.readerCreateNoteRequests.at(-1)?.action);
         if (harness.readerProposalDecisionMode === "applied") {
           return {
             apiVersion: 1,
@@ -6730,10 +6741,10 @@ function testRenderedNote(pageId: string): NoteRenderResult {
   };
 }
 
-function readerCreateNoteProposal(sequence: number): ReaderSelectionProposalPreview {
+function readerCreateNoteProposal(sequence: number, action: ReaderSelectionCreateNoteRequest["action"] = "create_note"): ReaderSelectionProposalPreview {
   return {
     proposalId: `proposal_20260729_createnote${sequence}`,
-    action: "create_note",
+    action,
     state: "ready",
     revision: sequence,
     lines: [{ kind: "added", text: "Create a durable note from the selected passage" }]
