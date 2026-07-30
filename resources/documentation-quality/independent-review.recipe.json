@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-30T00:00:00Z",
+  "reviewedAt": "2026-07-31T00:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, recoverable source refresh/reimport and complete Activity history browsing.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, source refresh/reimport and complete Activity history browsing.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "9e5c5e7e436083e566856f7c93b31c8e5293ce082b81a4aee234b89edb4656ee"
+    "reviewedSha256": "a41dfeb4de4000cdd3cd95cd021021c0d3378778f9d29680dc726b1ff064d1bc"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, active-Vault relocation, source refresh/reimport and Activity history browsing",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name rename, source refresh/reimport and Activity history browsing",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation, source-refresh and Activity-history claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination, Vault-relocation/display-name, source-refresh and Activity-history claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Activity History keeps bounded Load more, stale/failure row preservation and deterministic focus recovery inside Settings."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, data, UI and Job owners agree on a pathless process-local Activity cursor bound to Vault, snapshot and page boundary while existing Undo remains unchanged."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; Activity history adds exact pagination and focus-safe failure evidence without promoting broader Job requirements."},
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Vault rename is one calm inline action with Cancel/Escape focus recovery and a mutual-exclusion lock against relocation."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, Settings, data, API, sync and UI owners agree that display-name CAS is pathless, portable and does not change Vault ID or path."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; Vault rename adds exact schema, service, UI and backup evidence without promoting broader Vault requirements."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the delta; the Markdown byte cap ratchets narrowly to 1,222,042 and the trace byte cap to 253,156."}
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb the bounded Vault rename delta without a new document."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
-    {"command":"npm run verify:decisions","status":"passed","evidence":"Vault v2, macOS Phase 1, successful-Job compaction, grounded knowledge-page creation and machine-local startup-destination decisions are synchronized."},
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Vault rename product semantics, owner routing, inventory and links remain structurally synchronized."},
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "activity-history-browsing-bind-20260731",
-    "taskTitle": "Complete Activity history browsing bind",
+    "taskId": "vault-display-name-bind-20260731",
+    "taskTitle": "Bind path-independent Vault display-name rename",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns the pathless process-local cursor, fences Vault/snapshot/boundary drift, orders Activity deterministically, and leaves the existing forward-writing Undo contract unchanged.",
-    "acknowledgement": "Planning binds complete Activity history browsing while PIGE-JOB-007 and E2.09 remain partial for Activity progress, non-Agent cancel, Permission UI and packaged proof. UI Design P0/P1 is clear."
+    "compatibility": "Main owns strict pathless metadata-revision CAS; display rename preserves Vault ID/path/unknown manifest fields and is mutually exclusive with relocation while pending.",
+    "acknowledgement": "Planning binds the implemented Vault display-name slice while PIGE-VAULT-005 and E1.04 remain partial for external managed-copy setup and broader create acceptance. UI Design P0/P1 is clear."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

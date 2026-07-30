@@ -538,6 +538,7 @@ table_20260713_ef34ab56
 ```json
 {
   "vault_id": "vault_20260709_ab12cd",
+  "display_name": "Research library",
   "vault_schema_version": 2,
   "created_at": "2026-07-09T00:00:00.000Z",
   "updated_at": "2026-07-09T00:00:00.000Z",
@@ -570,6 +571,9 @@ table_20260713_ef34ab56
 Rules:
 
 - Manifest changes require atomic writes.
+- `display_name` is optional portable metadata for legacy compatibility. Rename preserves
+  the stable `vault_id`, folder path, unknown manifest fields, and every durable root; it
+  updates only `display_name` and `updated_at` after metadata-revision CAS.
 - Unknown future fields must be preserved during edits.
 - Manifest schema migrations must be reversible or accompanied by a backup step.
 

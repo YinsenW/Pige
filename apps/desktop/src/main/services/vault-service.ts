@@ -11,6 +11,8 @@ import type {
   VaultActionResult,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
+  VaultRenameDisplayNameRequest,
+  VaultRenameDisplayNameResult,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -32,6 +34,7 @@ import {
   acquireVaultWriterLease
 } from "./vault-writer-lease";
 import { VaultMigrationService } from "./vault-migration-service";
+import { VaultMetadataService } from "./vault-metadata-service";
 
 export interface VaultWriterLeasePort {
   readonly vaultPath: string;
@@ -73,6 +76,7 @@ export class VaultService {
   readonly #revealPath: VaultPathRevealer;
   readonly #migration: VaultMigrationService;
   readonly #managedRoots: VaultManagedCopyRootPort | undefined;
+  readonly #metadata: VaultMetadataService;
   #activeVaultPath: string | undefined;
   #activeVault: VaultSummary | undefined;
   #activeWriterLease: VaultWriterLeasePort | undefined;
@@ -84,7 +88,8 @@ export class VaultService {
     acquireWriterLease: VaultWriterLeaseFactory = acquireVaultWriterLease,
     revealPath: VaultPathRevealer = (targetPath) => shell.openPath(targetPath),
     migration = new VaultMigrationService(app.getPath("userData") || process.cwd()),
-    managedRoots?: VaultManagedCopyRootPort
+    managedRoots?: VaultManagedCopyRootPort,
+    metadata = new VaultMetadataService()
   ) {
     this.#settings = settings;
     this.#hasDefaultModel = hasDefaultModel;
@@ -92,6 +97,7 @@ export class VaultService {
     this.#revealPath = revealPath;
     this.#migration = migration;
     this.#managedRoots = managedRoots;
+    this.#metadata = metadata;
     this.#restoreActiveVaultFromSettings();
   }
 
@@ -259,6 +265,33 @@ export class VaultService {
     this.#activeVault = this.#decorateVault(activeVaultPath, vault);
     this.#settings.setActiveVault(activeVaultPath, this.#activeVault);
     return this.#activeVault;
+  }
+
+  renameDisplayName(request: VaultRenameDisplayNameRequest): VaultRenameDisplayNameResult {
+    const identity = { ...request };
+    const current = this.current();
+    const activeVaultPath = this.activeVaultPath();
+    if (!current || !activeVaultPath || current.vaultId !== request.activeVaultId) {
+      return { ...identity, status: "not_found" };
+    }
+    this.#assertActiveWriterLease();
+    const result = this.#metadata.renameDisplayName(
+      { vaultId: current.vaultId, vaultPath: activeVaultPath },
+      request
+    );
+    this.#assertActiveWriterLease();
+    if (result.status === "renamed" || result.status === "stale") {
+      const authoritative = this.#decorateVault(activeVaultPath, loadVaultSummary(activeVaultPath));
+      if (
+        authoritative.vaultId !== result.metadata.activeVaultId ||
+        authoritative.metadataRevision !== result.metadata.revision
+      ) {
+        return { ...identity, status: "failed" };
+      }
+      this.#activeVault = authoritative;
+      this.#settings.setActiveVault(activeVaultPath, authoritative);
+    }
+    return result;
   }
 
   async configureManagedCopyRoot(

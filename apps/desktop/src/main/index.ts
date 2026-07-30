@@ -170,6 +170,7 @@ import { registerVaultStorageRelocationIpc } from "./register-vault-storage-relo
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import { registerConversationHistoryIpc } from "./register-conversation-history-ipc";
+import { registerVaultMetadataIpc } from "./register-vault-metadata-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -3040,9 +3041,8 @@ ipcMain.handle("vault.revealSourceAssetRoot", (event) => {
   requireWindow(event.sender);
   return getVaultService().revealSourceAssetRoot();
 });
-ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) =>
-  getVaultService().updateSourceStoragePolicy(request)
-);
+ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) => getVaultService().updateSourceStoragePolicy(request));
+registerVaultMetadataIpc({ ipcMain, renameDisplayName: (request) => getVaultService().renameDisplayName(request) });
 ipcMain.handle(MANAGED_COPY_ROOT_CONFIGURE_CHANNEL, async (event, request: ManagedCopyRootConfigureRequest) => {
   const parentWindow = BrowserWindow.fromWebContents(event.sender);
   if (!parentWindow) throw new Error("No active window for managed-copy root selection.");

@@ -536,6 +536,9 @@ v0.1 product rules:
 - One vault path has at most one active Pige window; simultaneous multi-vault work is
   outside v0.1.
 - The active path is a machine-local preference, not portable vault identity.
+- The Vault display name is portable manifest metadata. Renaming it never changes the
+  stable Vault ID or filesystem path and commits only against the exact current metadata
+  revision.
 - External Markdown changes are never silently overwritten; a conflict becomes a
   visible proposal.
 - Agent actions never rewrite source evidence. Deletion is explicit and trash-first.
@@ -715,7 +718,7 @@ Navigation:
   user-authored intent may request a separately confirmed or reviewed ambient capability.
 - Settings IA grouped as Basic, Knowledge Base, AI, Security, Extensions, and System.
 - Setting ownership, scope, storage, backup behavior, permission requirement, and apply behavior are governed by `docs/SETTINGS_AND_PREFERENCES.md`.
-- Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, explicit safe relocation that preserves the original Vault, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
+- Knowledge Base settings must include a real Vault & Note Storage page for local note storage: current vault name with a path-independent rename action, active vault path, knowledge root path, managed source-copy path (the v1 UI compatibility label is Source asset root), default source storage strategy, reveal in file manager, explicit safe relocation that preserves the original Vault, open existing vault folder, create new vault, recent vaults, backup, restore, trash policy, and safe index repair entry points.
 - Models settings contain BYOK provider details, model list status, and one default Pi Agent model. Advanced/Fast model assignment is not a v0.1 visible setting unless a real Pi-compatible routing layer exists.
 - Local Capabilities settings contain local RAG, embeddings/reranking downloads, OCR, speech input, document parsers, and bundled toolchain health.
 - Permissions & Privacy settings contain API key storage, exact connected-Provider send

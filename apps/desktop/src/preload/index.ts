@@ -320,6 +320,8 @@ import type {
   VaultStorageRelocationRequest,
   VaultStorageRelocationResult,
   VaultStorageRelocationStatus,
+  VaultRenameDisplayNameRequest,
+  VaultRenameDisplayNameResult,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -595,6 +597,7 @@ import {
   ReaderSelectionResolveResultSchema,
   OpenRecentVaultRequestSchema,
   VAULT_APPLY_MIGRATION_CHANNEL,
+  VAULT_RENAME_DISPLAY_NAME_CHANNEL,
   SpeechAvailabilityRequestSchema,
   SpeechAvailabilityResultSchema,
   SpeechAssetInstallEventSchema,
@@ -669,7 +672,9 @@ import {
   WindowLayoutStateSchema,
   VaultActionResultSchema,
   VaultMigrationApplyRequestSchema,
-  VaultMigrationApplyResultSchema
+  VaultMigrationApplyResultSchema,
+  VaultRenameDisplayNameRequestSchema,
+  VaultRenameDisplayNameResultSchema
 } from "@pige/schemas";
 import type {
   CollectionAddFormulaColumnRequest,
@@ -1179,6 +1184,7 @@ function projectVaultActionResult(value: unknown): VaultActionResult {
 function projectVaultSummary(vault: {
   readonly vaultId: string;
   readonly name: string;
+  readonly metadataRevision?: VaultSummary["metadataRevision"];
   readonly activeVaultPathDisplay: string;
   readonly knowledgeRootDisplay: string;
   readonly sourceAssetRootDisplay: string;
@@ -1192,6 +1198,7 @@ function projectVaultSummary(vault: {
   return {
     vaultId: vault.vaultId,
     name: vault.name,
+    ...(vault.metadataRevision ? { metadataRevision: vault.metadataRevision } : {}),
     activeVaultPathDisplay: vault.activeVaultPathDisplay,
     knowledgeRootDisplay: vault.knowledgeRootDisplay,
     sourceAssetRootDisplay: vault.sourceAssetRootDisplay,
@@ -2124,6 +2131,22 @@ const api: PigeDesktopApi = {
         VAULT_APPLY_MIGRATION_CHANNEL,
         VaultMigrationApplyRequestSchema.parse(request)
       )),
+    renameDisplayName: async (
+      request: VaultRenameDisplayNameRequest
+    ): Promise<VaultRenameDisplayNameResult> => {
+      const parsed = VaultRenameDisplayNameRequestSchema.parse(request);
+      const result = VaultRenameDisplayNameResultSchema.parse(
+        await ipcRenderer.invoke(VAULT_RENAME_DISPLAY_NAME_CHANNEL, parsed)
+      );
+      if (
+        result.requestId !== parsed.requestId ||
+        result.activeVaultId !== parsed.activeVaultId ||
+        result.expectedMetadataRevision !== parsed.expectedMetadataRevision ||
+        result.displayName !== parsed.displayName ||
+        ("metadata" in result && result.metadata.activeVaultId !== parsed.activeVaultId)
+      ) throw new Error("Invalid Vault display-name response identity.");
+      return result;
+    },
     revealKnowledgeRoot: async (): Promise<VaultRevealResult> =>
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root"),
     revealSourceAssetRoot: async (): Promise<VaultRevealResult> =>

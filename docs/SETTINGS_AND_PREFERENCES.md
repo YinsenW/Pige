@@ -52,6 +52,8 @@ Rules:
 
 - Active vault path and recent vault list are `machine_local`.
 - Vault ID and schema version are `vault_identity`.
+- Vault display name is backed-up `vault_identity` metadata; changing it does not rename
+  the folder, change the Vault ID, or change the active machine binding.
 - Active absolute paths must not be written into `.pige/manifest.json`.
 - An in-vault managed-copy root is `vault_portable`.
 - An external managed-copy root is a `machine_vault_binding` with a stable `root_` ID and must appear in backup/restore manifests as an external dependency. The absolute path remains machine-local.
@@ -125,6 +127,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Startup destination (`home` or `library`) | General | `machine_local` | Settings Service, Vault Runtime Service, Renderer | OS app data | No | `none` | Next launch, after active-vault restoration |
 | Active vault path | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data plus machine-local relocation receipt while in flight | No | `permission_and_confirmation` | Safe user switch, confirmed copy-verify-relocate binding CAS, or restore-owned exact binding CAS after destination commit |
 | Recent vault list | Vault & Note Storage | `machine_local` | Vault Runtime Service | OS app data | No | `none` | Immediate |
+| Vault display name | Vault & Note Storage | `vault_identity` | Vault Metadata Service | `.pige/manifest.json` | Yes | `none` | Explicit Save against the current metadata revision; updates active/recent projections without changing Vault ID or path |
 | First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
 | Vault ID | Vault & Note Storage | `vault_identity` | Vault Runtime Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Immutable after creation unless migration |
 | Vault schema version | Vault & Note Storage | `vault_identity` | Migration Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Migration controlled |
@@ -173,6 +176,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `window.sidebarOpen` | `none` | Validated window preference IPC |
 | `vault.activePath` | `permission_and_confirmation` | Main-process native folder selection plus safe switch; relocation additionally fences active work, confirms, verifies the full copy, atomically changes the binding, and retains the original Vault |
 | `vault.recentVaults` | `none` | Main-process recent-vault store |
+| `vault.displayName` | `none` | Strict pathless Main IPC plus manifest metadata-revision CAS; rename and relocation are mutually exclusive while either action is pending |
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
