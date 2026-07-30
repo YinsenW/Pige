@@ -3941,6 +3941,48 @@ export const ToolchainManifestSchema = z.object({
   )
 });
 
+export const TOOLCHAIN_REPAIR_CHANNEL = "system.repairToolchain" as const;
+export const TOOLCHAIN_REPAIR_MAX_MISSING_TOOLS = 32;
+export const ToolchainToolIdSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/);
+export const ToolchainRepairRequestIdSchema = z.string().regex(
+  /^toolchain_repair_request_[a-z0-9]{16,64}$/
+);
+export const ToolchainHealthIdSchema = z.string().regex(/^toolchain_health_[a-f0-9]{64}$/);
+export const ToolchainMissingRequiredToolIdsSchema = z.array(ToolchainToolIdSchema)
+  .min(1)
+  .max(TOOLCHAIN_REPAIR_MAX_MISSING_TOOLS)
+  .readonly()
+  .superRefine((toolIds, context) => {
+    for (let index = 1; index < toolIds.length; index += 1) {
+      if (toolIds[index - 1]! >= toolIds[index]!) {
+        context.addIssue({
+          code: "custom",
+          path: [index],
+          message: "Required missing tool IDs must be unique and sorted in ascending order."
+        });
+      }
+    }
+  });
+
+export const ToolchainRepairEligibilitySchema = z.object({
+  healthId: ToolchainHealthIdSchema,
+  missingRequiredToolIds: ToolchainMissingRequiredToolIdsSchema
+}).strict();
+
+const ToolchainRepairIdentityShape = {
+  apiVersion: z.literal(1),
+  requestId: ToolchainRepairRequestIdSchema,
+  expectedHealthId: ToolchainHealthIdSchema,
+  expectedMissingRequiredToolIds: ToolchainMissingRequiredToolIdsSchema
+} as const;
+
+export const ToolchainRepairRequestSchema = z.object(ToolchainRepairIdentityShape).strict();
+
+export const ToolchainRepairResultSchema = z.object({
+  ...ToolchainRepairIdentityShape,
+  status: z.enum(["opened", "stale", "not_needed", "failed"])
+}).strict();
+
 export const SourceSemanticOrchestrationSchema = z.enum([
   "legacy_agent_ingest",
   "agent_turn"
@@ -8765,6 +8807,12 @@ export type SourceKind = z.infer<typeof SourceKindSchema>;
 export type SourceRecord = z.infer<typeof SourceRecordSchema>;
 export type SourceStorageStrategy = z.infer<typeof SourceStorageStrategySchema>;
 export type ToolchainManifest = z.infer<typeof ToolchainManifestSchema>;
+export type ToolchainToolId = z.infer<typeof ToolchainToolIdSchema>;
+export type ToolchainRepairRequestId = z.infer<typeof ToolchainRepairRequestIdSchema>;
+export type ToolchainHealthId = z.infer<typeof ToolchainHealthIdSchema>;
+export type ToolchainRepairEligibility = z.infer<typeof ToolchainRepairEligibilitySchema>;
+export type ToolchainRepairRequest = z.infer<typeof ToolchainRepairRequestSchema>;
+export type ToolchainRepairResult = z.infer<typeof ToolchainRepairResultSchema>;
 export type VaultConfig = z.infer<typeof VaultConfigSchema>;
 export type VaultManifest = z.infer<typeof VaultManifestSchema>;
 export type VaultManifestV1 = z.infer<typeof VaultManifestV1Schema>;

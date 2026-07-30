@@ -1045,7 +1045,7 @@ Bun: Bundled
 uv / Python: Bundled
 PDF tools: Bundled
 Office tools: Bundled
-Repair
+Open reinstall page
 
 Local RAG
 Status: Index ready
@@ -1088,8 +1088,10 @@ Choose Image
 ```
 
 Local Tools is Settings, not a marketplace: show capability, status, privacy and relevant
-actions. Bundled tools read "Ready"; show repair only when blocked, and RAG detail only
-for download, indexing or retrieval troubleshooting.
+actions. Bundled tools read "Ready"; required-missing tools show one identity-fenced
+reinstall action that re-probes in Main and opens only the fixed Pige Releases page. It
+never downloads, installs or executes a package; `Check again` explicitly refreshes health.
+Show RAG detail only for download, indexing or retrieval troubleshooting.
 
 B6.05 shows only this lifecycle. `Ready` means verified bytes, not vector readiness;
 lexical remains. Hide provider/routing, path, URL and checksum.

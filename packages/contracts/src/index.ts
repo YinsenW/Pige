@@ -240,6 +240,9 @@ import type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  ToolchainRepairEligibility,
+  ToolchainRepairRequest,
+  ToolchainRepairResult,
   SkillDiscardStagedRequest,
   SkillDiscardStagedResult,
   SkillDisableRequest,
@@ -546,6 +549,12 @@ export type {
   TaskInteractionOpenRequest,
   TaskInteractionOpenResult,
   TaskInteractionPendingResult,
+  ToolchainHealthId,
+  ToolchainRepairEligibility,
+  ToolchainRepairRequest,
+  ToolchainRepairRequestId,
+  ToolchainRepairResult,
+  ToolchainToolId,
   MemoryDeleteRequest,
   MemoryDisableRequest,
   MemoryEditRequest,
@@ -1622,6 +1631,7 @@ export interface ToolchainHealth {
   readonly status: "ready" | "needs_repair";
   readonly checkedAt: string;
   readonly tools: readonly ToolchainToolStatus[];
+  readonly repair?: ToolchainRepairEligibility;
 }
 
 export interface WindowSize {
@@ -2134,6 +2144,9 @@ export interface PigeDesktopApi {
   };
   readonly system: {
     readonly toolchainHealth: () => Promise<ToolchainHealth>;
+    readonly repairToolchain: (
+      request: ToolchainRepairRequest
+    ) => Promise<ToolchainRepairResult>;
   };
   readonly speech: {
     readonly availability: (request: SpeechAvailabilityRequest) => Promise<SpeechAvailabilityResult>;

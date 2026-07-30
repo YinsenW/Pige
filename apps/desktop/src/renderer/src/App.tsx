@@ -133,6 +133,7 @@ import type {
   StartupDestinationSummary,
   SupportBundlePreview,
   ToolchainHealth,
+  ToolchainRepairResult,
   UpdateSummary,
   VaultSummary,
   VaultActionResult,
@@ -393,6 +394,8 @@ export function App(): React.JSX.Element {
   const [appearanceThemeError, setAppearanceThemeError] = useState<string | null>(null);
   const [appearanceLoadState, setAppearanceLoadState] = useState<AppearanceLoadState>("loading");
   const [toolchainHealth, setToolchainHealth] = useState<ToolchainHealth | null>(null);
+  const toolchainHealthRef = useRef<ToolchainHealth | null>(null);
+  toolchainHealthRef.current = toolchainHealth;
   const [speechAvailability, setSpeechAvailability] = useState<SpeechAvailabilityResult | null>(null);
   const [speechAvailabilityLoading, setSpeechAvailabilityLoading] = useState(false);
   const [speechAvailabilityFailed, setSpeechAvailabilityFailed] = useState(false);
@@ -984,6 +987,41 @@ export function App(): React.JSX.Element {
     ]);
     if (results.some((result) => result.status === "rejected")) {
       throw new Error("One or more local capability checks failed.");
+    }
+  };
+
+  const openToolchainReinstall = async (): Promise<ToolchainRepairResult["status"]> => {
+    const repair = toolchainHealthRef.current?.repair;
+    if (!repair) return "not_needed";
+    const expectedMissingRequiredToolIds = Object.freeze([...repair.missingRequiredToolIds]);
+    const requestId = `toolchain_repair_request_${crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+    try {
+      const result = await window.pige.system.repairToolchain({
+        apiVersion: 1,
+        requestId,
+        expectedHealthId: repair.healthId,
+        expectedMissingRequiredToolIds
+      });
+      if (
+        result.requestId !== requestId ||
+        result.expectedHealthId !== repair.healthId ||
+        result.expectedMissingRequiredToolIds.length !== expectedMissingRequiredToolIds.length ||
+        result.expectedMissingRequiredToolIds.some(
+          (toolId, index) => toolId !== expectedMissingRequiredToolIds[index]
+        )
+      ) return "failed";
+      const currentRepair = toolchainHealthRef.current?.repair;
+      if (
+        !currentRepair ||
+        currentRepair.healthId !== repair.healthId ||
+        currentRepair.missingRequiredToolIds.length !== expectedMissingRequiredToolIds.length ||
+        currentRepair.missingRequiredToolIds.some(
+          (toolId, index) => toolId !== expectedMissingRequiredToolIds[index]
+        )
+      ) return "stale";
+      return result.status;
+    } catch {
+      return "failed";
     }
   };
 
@@ -2738,6 +2776,7 @@ export function App(): React.JSX.Element {
               speechLanguageTag={locale}
               onRefreshSpeechAvailability={refreshSpeechAvailability}
               onRefresh={refreshLocalCapabilities}
+              onOpenToolchainReinstall={openToolchainReinstall}
               onOpenSpeechSettings={() => window.pige.speech.openSystemSettings()
                 .then(() => undefined)
                 .catch(() => setSpeechAvailabilityFailed(true))}

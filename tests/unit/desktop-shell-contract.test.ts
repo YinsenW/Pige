@@ -17,6 +17,45 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one Main-owned pathless bundled-toolchain repair action", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const systemApi = contractsSource.slice(
+      contractsSource.indexOf("readonly system: {"),
+      contractsSource.indexOf("readonly speech: {")
+    );
+
+    expect(schemasSource).toContain(
+      'TOOLCHAIN_REPAIR_CHANNEL = "system.repairToolchain"'
+    );
+    expect(schemasSource).toContain("ToolchainRepairEligibilitySchema");
+    expect(schemasSource).toContain("expectedHealthId: ToolchainHealthIdSchema");
+    expect(schemasSource).toContain(
+      "expectedMissingRequiredToolIds: ToolchainMissingRequiredToolIdsSchema"
+    );
+    expect(schemasSource).toContain('["opened", "stale", "not_needed", "failed"]');
+    expect(contractsSource).toContain("readonly repair?: ToolchainRepairEligibility;");
+    expect(systemApi).toContain("readonly repairToolchain: (");
+    expect(systemApi).toContain("request: ToolchainRepairRequest");
+    expect(systemApi).toContain(") => Promise<ToolchainRepairResult>;");
+    expect(preloadSource).toContain("ToolchainRepairRequestSchema.parse(request)");
+    expect(preloadSource).toContain(
+      "await ipcRenderer.invoke(TOOLCHAIN_REPAIR_CHANNEL, parsedRequest)"
+    );
+    expect(preloadSource).toContain("ToolchainRepairResultSchema.parse(");
+    expect(preloadSource).toContain("Invalid toolchain repair response identity.");
+    for (const privateField of [
+      "resolvedPath",
+      "repairHint",
+      "releaseUrl",
+      "path",
+      "body"
+    ]) {
+      expect(systemApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one strict pathless Library tag browsing channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

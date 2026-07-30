@@ -2,10 +2,13 @@ import type { IpcMain } from "electron";
 import {
   OCR_LANGUAGE_PREFERENCE_CHANNEL,
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  TOOLCHAIN_REPAIR_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
   SetOcrLanguagePreferenceRequestSchema,
   SetOcrLanguagePreferenceResultSchema,
+  ToolchainRepairRequestSchema,
+  ToolchainRepairResultSchema,
   PADDLE_OCR_ENGINE_ID,
   PaddleOcrDisableRequestSchema,
   PaddleOcrDisableResultSchema,
@@ -34,7 +37,9 @@ import {
   type OcrLanguagePreferenceRequest,
   type OcrLanguagePreferenceResult,
   type SetOcrLanguagePreferenceRequest,
-  type SetOcrLanguagePreferenceResult
+  type SetOcrLanguagePreferenceResult,
+  type ToolchainRepairRequest,
+  type ToolchainRepairResult
 } from "@pige/schemas";
 
 type Awaitable<T> = T | Promise<T>;
@@ -65,6 +70,9 @@ export interface RegisterLocalCapabilitiesIpcOptions {
   readonly removePaddleOcr: (
     request: PaddleOcrRemoveRequest
   ) => Awaitable<PaddleOcrRemoveResult>;
+  readonly repairToolchain: (
+    request: ToolchainRepairRequest
+  ) => Awaitable<ToolchainRepairResult>;
 }
 
 type MutationRequest = PaddleOcrInstallRequest;
@@ -164,6 +172,21 @@ export function registerLocalCapabilitiesIpc(
       );
     }
   );
+
+  options.ipcMain.handle(
+    TOOLCHAIN_REPAIR_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = ToolchainRepairRequestSchema.parse(request);
+      try {
+        const result = ToolchainRepairResultSchema.parse(await options.repairToolchain(parsed));
+        return sameToolchainRepairIdentity(parsed, result)
+          ? result
+          : ToolchainRepairResultSchema.parse(failedToolchainRepair(parsed));
+      } catch {
+        return ToolchainRepairResultSchema.parse(failedToolchainRepair(parsed));
+      }
+    }
+  );
 }
 
 async function invokeMutation<T extends MutationResult>(
@@ -186,6 +209,27 @@ function failedMutation(request: MutationRequest): MutationResult & { readonly s
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     engineId: PADDLE_OCR_ENGINE_ID,
+    status: "failed"
+  };
+}
+
+function sameToolchainRepairIdentity(
+  request: ToolchainRepairRequest,
+  result: ToolchainRepairResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.expectedHealthId === request.expectedHealthId &&
+    result.expectedMissingRequiredToolIds.length === request.expectedMissingRequiredToolIds.length &&
+    result.expectedMissingRequiredToolIds.every(
+      (toolId, index) => toolId === request.expectedMissingRequiredToolIds[index]
+    );
+}
+
+function failedToolchainRepair(
+  request: ToolchainRepairRequest
+): ToolchainRepairResult {
+  return {
+    ...request,
     status: "failed"
   };
 }

@@ -4208,6 +4208,12 @@ describe("full UI Settings surface", () => {
     });
     const onRefresh = vi.fn(async () => undefined);
     const onDevelopment = vi.fn();
+    let settleFirstReinstall!: (status: "opened" | "stale" | "not_needed" | "failed") => void;
+    const onOpenToolchainReinstall = vi.fn<() => Promise<"opened" | "stale" | "not_needed" | "failed">>()
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        settleFirstReinstall = resolve;
+      }))
+      .mockResolvedValueOnce("opened");
     const semanticRetrievalApi = semanticAssetApi("ready");
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -4217,6 +4223,10 @@ describe("full UI Settings surface", () => {
         toolchainHealth: {
           status: "needs_repair",
           checkedAt: "2026-07-16T01:00:00.000Z",
+          repair: {
+            healthId: `toolchain_health_${"a".repeat(64)}`,
+            missingRequiredToolIds: ["archive-tools", "pdf-tools"]
+          },
           tools: [
             {
               id: "git",
@@ -4224,6 +4234,12 @@ describe("full UI Settings surface", () => {
               required: true,
               status: "ready",
               resolvedPath: "/private/hidden/bin/git"
+            },
+            {
+              id: "archive-tools",
+              name: "Archive tools",
+              required: true,
+              status: "missing"
             },
             {
               id: "pdf-tools",
@@ -4249,6 +4265,7 @@ describe("full UI Settings surface", () => {
         speechAvailabilityFailed: false,
         onRefresh,
         onOpenSpeechSettings: vi.fn(async () => undefined),
+        onOpenToolchainReinstall,
         onDevelopment,
         t
       }));
@@ -4259,6 +4276,7 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Local Capabilities");
     expect(container.textContent).toContain("Needs repair");
     expect(container.textContent).toContain("Git");
+    expect(container.textContent).toContain("Archive tools");
     expect(container.textContent).toContain("PDF tools");
     expect(container.textContent).toContain("Ready");
     expect(container.textContent).toContain("Missing");
@@ -4285,13 +4303,36 @@ describe("full UI Settings surface", () => {
 
     await act(async () => {
       buttonNamed(container, "Check again").click();
-      buttonNamed(container, "Repair...").click();
+      const reinstall = buttonNamed(container, "Open reinstall page");
+      reinstall.focus();
+      reinstall.click();
+      reinstall.click();
       await settle(dom);
     });
     expect(onRefresh).toHaveBeenCalledOnce();
-    expect(onDevelopment).toHaveBeenCalledTimes(1);
+    expect(onOpenToolchainReinstall).toHaveBeenCalledOnce();
+    expect(onOpenToolchainReinstall).toHaveBeenCalledWith();
+    expect(buttonNamed(container, "Opening...").hasAttribute("disabled")).toBe(true);
+    expect(onDevelopment).not.toHaveBeenCalled();
     expect(voice.textContent).toBe("Language resource needed");
     expect(ipcRead).toBe(false);
+
+    await act(async () => {
+      settleFirstReinstall("stale");
+      await settle(dom);
+    });
+    const reinstallAfterFailure = buttonNamed(container, "Open reinstall page");
+    expect(container.textContent).toContain("Tool status changed.");
+    expect(container.textContent).toContain("Archive tools");
+    expect(dom.window.document.activeElement).toBe(reinstallAfterFailure);
+
+    await act(async () => {
+      reinstallAfterFailure.click();
+      await settle(dom);
+    });
+    expect(onOpenToolchainReinstall).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Release page opened.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Open reinstall page"));
 
     await act(async () => {
       root.render(createElement(LocalCapabilitiesSettingsPanel, {
@@ -4316,6 +4357,7 @@ describe("full UI Settings surface", () => {
           ]
         },
         onRefresh,
+        onOpenToolchainReinstall,
         onDevelopment,
         t
       }));
@@ -4325,13 +4367,30 @@ describe("full UI Settings surface", () => {
     expect(container.querySelector('[aria-label="Bun: Not installed"]')).not.toBeNull();
     expect(container.textContent).not.toContain("Missing required tools");
     expect(
-      Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Repair...")
+      Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Open reinstall page")
     ).toBe(false);
-    expect(onDevelopment).toHaveBeenCalledTimes(1);
+    expect(onOpenToolchainReinstall).toHaveBeenCalledTimes(2);
     expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("keeps toolchain repair identity-fenced and leaves health re-probing explicit", () => {
+    const appSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/App.tsx"),
+      "utf8"
+    );
+    const repairOwner = appSource.slice(
+      appSource.indexOf("const openToolchainReinstall"),
+      appSource.indexOf("const setHomeDefaultModel")
+    );
+
+    expect(repairOwner).toContain("window.pige.system.repairToolchain({");
+    expect(repairOwner).toContain("expectedHealthId: repair.healthId");
+    expect(repairOwner).toContain("toolchainHealthRef.current?.repair");
+    expect(repairOwner).not.toContain("window.pige.system.toolchainHealth()");
+    expect(appSource).toContain("onOpenToolchainReinstall={openToolchainReinstall}");
   });
 
   it("installs one missing speech language asset and rechecks authoritative availability", async () => {

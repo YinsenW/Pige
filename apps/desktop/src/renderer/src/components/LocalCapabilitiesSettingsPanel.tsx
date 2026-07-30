@@ -22,7 +22,8 @@ import type {
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
   SpeechAvailabilityResult,
-  ToolchainHealth
+  ToolchainHealth,
+  ToolchainRepairResult
 } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
 import {
@@ -35,6 +36,7 @@ type PaddleOcrReadState = "loading" | "ready" | "failed";
 type PaddleOcrNotice = "denied" | "stale" | "failed" | null;
 type OcrLanguagePreferenceValue = "automatic" | Locale;
 type OcrLanguagePreferenceNotice = "stale" | "failed" | null;
+type ToolchainReinstallNotice = ToolchainRepairResult["status"] | null;
 
 export interface OcrLanguagePreferenceApi {
   readonly ocrLanguagePreference: (
@@ -72,6 +74,7 @@ export interface LocalCapabilitiesSettingsPanelProps {
   readonly onRefreshSpeechAvailability?: () => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onOpenSpeechSettings?: () => Promise<void>;
+  readonly onOpenToolchainReinstall?: () => Promise<ToolchainRepairResult["status"]>;
   readonly onDevelopment: () => void;
   readonly t: Translate;
 }
@@ -450,6 +453,8 @@ export function LocalCapabilitiesSettingsPanel(
 ): React.JSX.Element {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
+  const [toolchainReinstallPending, setToolchainReinstallPending] = useState(false);
+  const [toolchainReinstallNotice, setToolchainReinstallNotice] = useState<ToolchainReinstallNotice>(null);
   const [speechAssetState, setSpeechAssetState] = useState<"idle" | "installing" | "failed">("idle");
   const [speechAssetProgress, setSpeechAssetProgress] = useState<number | null>(null);
   const speechAssetRequestRef = useRef<string | null>(null);
@@ -458,10 +463,11 @@ export function LocalCapabilitiesSettingsPanel(
   const speechAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
   const speechAssetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const speechStatusRef = useRef<HTMLSpanElement | null>(null);
+  const toolchainReinstallActiveRef = useRef(false);
+  const toolchainReinstallTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const toolchainRefreshTriggerRef = useRef<HTMLButtonElement | null>(null);
   const currentSpeechLanguageRef = useRef(props.speechLanguageTag);
   currentSpeechLanguageRef.current = props.speechLanguageTag;
-  const missingRequiredTools =
-    props.toolchainHealth?.tools.filter((tool) => tool.required && tool.status === "missing") ?? [];
   const toolchainState = props.toolchainHealth?.status ?? "checking";
   const speechCapabilityState = props.speechAvailabilityLoading
     ? "checking"
@@ -587,6 +593,25 @@ export function LocalCapabilitiesSettingsPanel(
     }
   };
 
+  const openToolchainReinstall = async (): Promise<void> => {
+    if (toolchainReinstallActiveRef.current || toolchainReinstallPending) return;
+    if (!props.toolchainHealth?.repair || !props.onOpenToolchainReinstall) return;
+    toolchainReinstallActiveRef.current = true;
+    setToolchainReinstallPending(true);
+    setToolchainReinstallNotice(null);
+    try {
+      setToolchainReinstallNotice(await props.onOpenToolchainReinstall());
+    } catch {
+      setToolchainReinstallNotice("failed");
+    } finally {
+      toolchainReinstallActiveRef.current = false;
+      setToolchainReinstallPending(false);
+      window.setTimeout(() => (
+        toolchainReinstallTriggerRef.current ?? toolchainRefreshTriggerRef.current
+      )?.focus(), 0);
+    }
+  };
+
   return (
     <section className="settings-page capabilities-settings-page" aria-labelledby="settings-capabilities-title">
       <header className="settings-panel-header">
@@ -640,6 +665,7 @@ export function LocalCapabilitiesSettingsPanel(
               )}
             </div>
             <button
+              ref={toolchainRefreshTriggerRef}
               className="settings-button"
               type="button"
               disabled={refreshing}
@@ -649,15 +675,38 @@ export function LocalCapabilitiesSettingsPanel(
               {props.t(refreshing ? "capabilities.checking" : "capabilities.checkAgain")}
             </button>
           </div>
-          {missingRequiredTools.length > 0 ? (
-            <div className="settings-row">
+          {props.toolchainHealth?.repair && props.onOpenToolchainReinstall ? (
+            <div className="settings-row" data-toolchain-reinstall>
               <div className="settings-row-copy">
                 <strong>{props.t("capabilities.repairTitle")}</strong>
                 <span>{props.t("capabilities.repairDescription")}</span>
               </div>
-              <button className="settings-button" type="button" onClick={props.onDevelopment}>
-                {props.t("capabilities.repair")}
-              </button>
+              <div className="settings-row-control">
+                <button
+                  ref={toolchainReinstallTriggerRef}
+                  className="settings-button"
+                  type="button"
+                  disabled={toolchainReinstallPending}
+                  aria-describedby={toolchainReinstallNotice ? "capabilities-toolchain-reinstall-notice" : undefined}
+                  onClick={() => void openToolchainReinstall()}
+                >
+                  {props.t(toolchainReinstallPending
+                    ? "capabilities.reinstallOpening"
+                    : "capabilities.reinstall")}
+                </button>
+              </div>
+              {toolchainReinstallNotice ? (
+                <p
+                  className={toolchainReinstallNotice === "failed"
+                    ? "settings-inline-status error"
+                    : "settings-inline-status"}
+                  id="capabilities-toolchain-reinstall-notice"
+                  role={toolchainReinstallNotice === "failed" ? "alert" : "status"}
+                  aria-live="polite"
+                >
+                  {props.t(`capabilities.reinstallNotice.${toolchainReinstallNotice}`)}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
