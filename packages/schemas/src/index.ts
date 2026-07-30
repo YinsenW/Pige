@@ -7248,6 +7248,17 @@ export const WaitingDependencySummarySchema = z.object({
   messageKey: z.string().min(1)
 });
 
+export const JobCompactionSummarySchema = z.object({
+  schemaVersion: z.literal(1),
+  compactedAt: z.string().datetime({ offset: true }),
+  retentionCutoff: z.string().datetime({ offset: true }),
+  previousState: z.enum(["completed", "completed_with_warnings"]),
+  detailSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  removedCheckpointCount: z.number().int().nonnegative(),
+  retainedReferenceCount: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative().optional()
+}).strict();
+
 export const JobRecordSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: JobIdSchema,
@@ -7313,6 +7324,7 @@ export const JobRecordSchema = z.object({
     usedShell: z.boolean(),
     accessedExternalFiles: z.boolean()
   }).optional(),
+  compaction: JobCompactionSummarySchema.optional(),
   message: z.string().min(1)
 }).strict().superRefine((job, context) => {
   if (
@@ -7330,6 +7342,13 @@ export const JobRecordSchema = z.object({
       code: "custom",
       path: ["cancellation", "durableWritesApplied"],
       message: "A cancelled job cannot have durableWritesApplied set to true."
+    });
+  }
+  if ((job.state === "compacted") !== (job.compaction !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["compaction"],
+      message: "A compacted Job must include exactly one compaction summary."
     });
   }
 });
