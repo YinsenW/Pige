@@ -287,6 +287,7 @@ import {
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
+import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { writeBackupCreatedOperation } from "./services/restore-job-store";
@@ -1621,6 +1622,12 @@ const getReaderSourceRevealService = (): ReaderSourceRevealService =>
     }
   });
 
+const getReaderSourceReconnectService = (): ReaderSourceReconnectService =>
+  new ReaderSourceReconnectService(
+    getNotesService(),
+    new SourceOriginalReconnectService(getVaultService())
+  );
+
 const getNoteMarkdownEditorActivityAdapter = (): NoteMarkdownEditorActivityAdapter => {
   if (!noteMarkdownEditorActivityAdapter) {
     noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
@@ -2682,11 +2689,14 @@ ipcMain.handle("library.tags", (_event, request: LibraryTagsRequest) => {
 });
 registerReaderIpc({
   ipcMain,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   getNotesService,
   getReaderSelectionActionService,
   getReaderSelectionProposalService,
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
   getReaderSourceRevealService,
+  getReaderSourceReconnectService,
   getNoteTrashService,
   getNoteMergeService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild

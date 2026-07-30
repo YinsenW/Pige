@@ -115,6 +115,8 @@ import type {
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteReconnectOriginalSourceRequest,
+  NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -410,6 +412,9 @@ import {
   NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+  NoteReconnectOriginalSourceRequestSchema,
+  NoteReconnectOriginalSourceResultSchema,
   NOTE_REVEAL_SOURCE_CHANNEL,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
@@ -1500,6 +1505,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           NOTE_REVEAL_SOURCE_CHANNEL,
           NoteRevealSourceRequestSchema.parse(request)
+        )
+      ),
+    reconnectOriginalSource: async (
+      request: NoteReconnectOriginalSourceRequest
+    ): Promise<NoteReconnectOriginalSourceResult> =>
+      NoteReconnectOriginalSourceResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+          NoteReconnectOriginalSourceRequestSchema.parse(request)
         )
       )
   },

@@ -816,6 +816,42 @@ status: "active"
     expect(resolved.assertCurrent()).toBe(false);
   });
 
+  it("projects only bounded reconnectable original identities into an owned Reader", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_reconnect12";
+    const pageId = "page_20260709_current1234";
+    writePage({ vaultPath, fileName: "current.md", pageId, title: "Current", sourceIds: [sourceId] });
+    const dateKey = "20260709";
+    const recordPath = path.join(
+      vaultPath, ".pige", "source-records", dateKey.slice(0, 4), dateKey.slice(4, 6), `${sourceId}.json`
+    );
+    fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+    fs.writeFileSync(recordPath, JSON.stringify({
+      schemaVersion: 1,
+      id: sourceId,
+      kind: "plain_text_file",
+      storageStrategy: "reference_original",
+      semanticOrchestration: "agent_turn",
+      original: {
+        uri: "file:///private/missing.txt",
+        path: "/private/missing.txt",
+        displayName: "missing.txt",
+        checksum: sha256("missing bytes"),
+        lastKnownSize: 13
+      },
+      artifacts: [],
+      metadata: {},
+      createdAt: "2026-07-09T12:00:00.000Z",
+      updatedAt: "2026-07-09T12:00:00.000Z"
+    }), "utf8");
+    const notes = makeNotes(vaultPath, vault);
+
+    await expect(notes.render({ pageId }, OWNER_ID)).resolves.toMatchObject({
+      reconnectOriginalSourceIds: [sourceId]
+    });
+    await expect(notes.render({ pageId })).resolves.not.toHaveProperty("reconnectOriginalSourceIds");
+  });
+
   it("does not resolve saved-source rows without the bounded reference index", async () => {
     const { vaultPath, vault } = makeVault();
     const sourceId = "src_20260709_noindex12";

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { IpcMain, WebContents } from "electron";
+import type { BrowserWindow, IpcMain, OpenDialogOptions, WebContents } from "electron";
 import type {
   NoteGetRequest,
   NoteEditorOpenRequest,
@@ -9,6 +9,7 @@ import type {
   NoteMergeRequest,
   NoteMergeResult,
   NoteOpenSourceReferenceRequest,
+  NoteReconnectOriginalSourceRequest,
   NoteRevealSourceRequest,
   NoteRenderRequest,
   NoteTrashCurrentRequest,
@@ -32,6 +33,9 @@ import {
   NoteMergeResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+  NoteReconnectOriginalSourceRequestSchema,
+  NoteReconnectOriginalSourceResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   NoteResolveInlineReferenceRequestSchema,
@@ -59,6 +63,7 @@ import type { ReaderSelectionActionService } from "./services/reader-selection-a
 import type { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
+import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 
@@ -69,6 +74,12 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
   readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
+  readonly getReaderSourceReconnectService: () => ReaderSourceReconnectService;
+  readonly getWindow: (sender: WebContents) => BrowserWindow | undefined;
+  readonly showOpenDialog: (window: BrowserWindow, options: OpenDialogOptions) => Promise<{
+    readonly canceled: boolean;
+    readonly filePaths: readonly string[];
+  }>;
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteMergeService: () => NoteMergeService;
   readonly onNoteTrashCommitted: () => void;
@@ -245,6 +256,32 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
         ? { ...parsed, status: "stale" }
         : await options.getReaderSourceRevealService().reveal(ownerId, parsed)
     );
+  });
+  options.ipcMain.handle(NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL, async (
+    event,
+    request: NoteReconnectOriginalSourceRequest
+  ) => {
+    const parsed = NoteReconnectOriginalSourceRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const window = options.getWindow(event.sender);
+    if (ownerId === undefined || event.sender.isDestroyed() || !window) {
+      return NoteReconnectOriginalSourceResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    const result = await options.getReaderSourceReconnectService().reconnect(ownerId, parsed, {
+      pick: async () => {
+        const selection = await options.showOpenDialog(window, {
+          title: "Reconnect referenced source",
+          properties: ["openFile"]
+        });
+        return selection.canceled || selection.filePaths.length !== 1
+          ? undefined
+          : selection.filePaths[0];
+      }
+    });
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteReconnectOriginalSourceResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    return NoteReconnectOriginalSourceResultSchema.parse(result);
   });
   options.ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {
     const parsed = ReaderSelectionResolveRequestSchema.parse(request);

@@ -42,6 +42,7 @@ import {
 } from "./markdown-page-index";
 import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+import { canReconnectOriginalSource } from "./source-original-reconnect-service";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16;
 const MAX_RENDER_CONTEXT_HREFS = 128;
@@ -221,6 +222,14 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
+      ...(ownerId === undefined ? {} : {
+        reconnectOriginalSourceIds: stable.document.summary.sourceIds
+          .slice(0, 5)
+          .filter((sourceId) => {
+            const source = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
+            return source ? canReconnectOriginalSource(source.record) : false;
+          })
+      }),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"
