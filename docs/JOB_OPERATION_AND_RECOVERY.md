@@ -575,6 +575,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
 - `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `add_collection_lookup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
+- `trash_conversation`, `restore_conversation`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
 - `install_skill`, `disable_skill`, `uninstall_skill`.
@@ -592,6 +593,7 @@ Lifecycle coverage:
 | Durable artifact | create/trash/restore artifact |
 | Dataset revision | create dataset revision with manifest/schema/payload/source hashes |
 | Markdown page | create/update/rename/archive/trash/restore page |
+| Conversation | trash/restore exact JSONL without replay |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |
 | Settings/policy | change a sensitive setting with exact effect evidence |
@@ -602,6 +604,8 @@ Reader save writes one `update_page` with private before/after bytes; Undo check
 and writes forward. Merge uses one two-page receipt/Operation; replay/Undo restore exact originals.
 Drift preserves live bytes. Memory mutations likewise commit revision-bound private receipts before
 `update_memory`/`trash_memory`; Undo writes `restore_memory`, and restart adopts exact pairs.
+Conversation trash/restore binds exact JSONL hash/revision/private receipt; startup adopts one
+Operation, while conflicts preserve current history and never replay Provider work.
 
 Rules:
 

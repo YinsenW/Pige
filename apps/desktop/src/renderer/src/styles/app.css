@@ -5686,6 +5686,45 @@ dd {
   border-bottom: 0;
 }
 
+.conversation-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: .5px solid var(--border-default);
+  padding-right: 14px;
+}
+
+.conversation-history-row:last-child {
+  border-bottom: 0;
+}
+
+.conversation-history-row > span,
+.conversation-history-open {
+  min-width: 0;
+  flex: 1;
+}
+
+.conversation-history-open {
+  display: flex;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.conversation-history-open span,
+.conversation-history-row > span,
+.conversation-trash-confirm > span {
+  display: grid;
+  gap: 3px;
+}
+
+.conversation-history-open small,
+.conversation-history-row small,
+.conversation-trash-confirm small {
+  color: var(--text-secondary);
+}
+
 .permission-mode-fieldset {
   min-width: 0;
   display: block;

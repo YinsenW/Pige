@@ -7354,6 +7354,9 @@ export const AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS = 240;
 export const AgentConversationHistoryCursorSchema = z.string()
   .regex(/^conversation_history_[a-f0-9]{64}$/)
   .max(96);
+export const ConversationRevisionSchema = z.string().regex(/^conversationrev_[a-f0-9]{64}$/);
+export const ConversationTrashRequestIdSchema = z.string().regex(/^conversationtrashreq_[a-z0-9]{16,64}$/);
+export const ConversationTrashEntryIdSchema = z.string().regex(/^conversationtrash_[a-f0-9]{32}$/);
 export const AgentConversationHistoryListRequestSchema = z.object({
   apiVersion: z.literal(1),
   activeVaultId: VaultIdSchema,
@@ -7375,6 +7378,7 @@ export const AgentConversationHistorySummarySchema = z.object({
   updatedAt: z.string().datetime({ offset: true }),
   safePreview: AgentConversationHistoryPreviewSchema,
   tailEventId: ConversationEventIdSchema,
+  revision: ConversationRevisionSchema.optional(),
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
   inputPresentation: AgentConversationInputPresentationSchema.optional(),
   latestTurnState: JobStateSchema.optional()
@@ -7434,6 +7438,57 @@ export const AgentConversationHistoryFailedResultSchema = AgentConversationHisto
 export const AgentConversationHistoryListResultSchema = z.discriminatedUnion("status", [
   AgentConversationHistoryReadyResultSchema,
   AgentConversationHistoryFailedResultSchema
+]);
+export const ConversationTrashRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ConversationTrashRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema,
+  expectedRevision: ConversationRevisionSchema
+}).strict();
+const ConversationTrashResultIdentitySchema = ConversationTrashRequestSchema;
+export const ConversationTrashResultSchema = z.discriminatedUnion("status", [
+  ConversationTrashResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    trashEntryId: ConversationTrashEntryIdSchema,
+    operationId: OperationIdSchema
+  }).strict(),
+  ConversationTrashResultIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
+]);
+export const ConversationTrashListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema
+}).strict();
+export const ConversationTrashSummarySchema = z.object({
+  trashEntryId: ConversationTrashEntryIdSchema,
+  conversationId: ConversationIdSchema,
+  safePreview: AgentConversationHistoryPreviewSchema,
+  updatedAt: z.string().datetime({ offset: true }),
+  trashedAt: z.string().datetime({ offset: true }),
+  revision: ConversationRevisionSchema
+}).strict();
+export const ConversationTrashListResultSchema = z.discriminatedUnion("status", [
+  ConversationTrashListRequestSchema.extend({
+    status: z.literal("ready"),
+    conversations: z.array(ConversationTrashSummarySchema).max(256).readonly()
+  }).strict(),
+  ConversationTrashListRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const ConversationRestoreRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ConversationTrashRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  trashEntryId: ConversationTrashEntryIdSchema,
+  conversationId: ConversationIdSchema,
+  expectedRevision: ConversationRevisionSchema
+}).strict();
+const ConversationRestoreResultIdentitySchema = ConversationRestoreRequestSchema;
+export const ConversationRestoreResultSchema = z.discriminatedUnion("status", [
+  ConversationRestoreResultIdentitySchema.extend({
+    status: z.enum(["restored", "already_restored"]),
+    operationId: OperationIdSchema
+  }).strict(),
+  ConversationRestoreResultIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
 ]);
 export const AgentConversationMessageSchema = z.object({
   id: ConversationEventIdSchema,
@@ -8516,6 +8571,7 @@ export const OperationRefSchema = z.object({
     "root_binding",
     "external_resource",
     "backup",
+    "conversation",
     "operation",
     "proposal"
   ]),
@@ -8684,6 +8740,8 @@ export const OperationRecordSchema = z.object({
     "archive_page",
     "trash_page",
     "restore_page",
+    "trash_conversation",
+    "restore_conversation",
     "update_index",
     "create_memory",
     "update_memory",
@@ -9142,6 +9200,16 @@ export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHi
 export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
 export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
 export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;
+export type ConversationRevision = z.output<typeof ConversationRevisionSchema>;
+export type ConversationTrashRequestId = z.output<typeof ConversationTrashRequestIdSchema>;
+export type ConversationTrashEntryId = z.output<typeof ConversationTrashEntryIdSchema>;
+export type ConversationTrashRequest = z.input<typeof ConversationTrashRequestSchema>;
+export type ConversationTrashResult = z.output<typeof ConversationTrashResultSchema>;
+export type ConversationTrashListRequest = z.input<typeof ConversationTrashListRequestSchema>;
+export type ConversationTrashSummary = z.output<typeof ConversationTrashSummarySchema>;
+export type ConversationTrashListResult = z.output<typeof ConversationTrashListResultSchema>;
+export type ConversationRestoreRequest = z.input<typeof ConversationRestoreRequestSchema>;
+export type ConversationRestoreResult = z.output<typeof ConversationRestoreResultSchema>;
 export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
 export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;
 export type AgentConversationInitialRequest = z.input<typeof AgentConversationInitialRequestSchema>;
