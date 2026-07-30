@@ -72,6 +72,8 @@ import type {
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  KnowledgeHealthTargetSearchRequest,
+  KnowledgeHealthTargetSearchResult,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -410,6 +412,8 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  KnowledgeHealthTargetSearchRequestSchema,
+  KnowledgeHealthTargetSearchResultSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
@@ -1987,6 +1991,14 @@ const api: PigeDesktopApi = {
       const parsedRequest = KnowledgeHealthRunRequestSchema.parse(request);
       return KnowledgeHealthRunResultSchema.parse(
         await ipcRenderer.invoke("maintenance.runKnowledgeHealth", parsedRequest)
+      );
+    },
+    searchKnowledgeHealthTargets: async (
+      request: KnowledgeHealthTargetSearchRequest
+    ): Promise<KnowledgeHealthTargetSearchResult> => {
+      const parsedRequest = KnowledgeHealthTargetSearchRequestSchema.parse(request);
+      return KnowledgeHealthTargetSearchResultSchema.parse(
+        await ipcRenderer.invoke("maintenance.searchKnowledgeHealthTargets", parsedRequest)
       );
     },
     repairKnowledgeHealth: async (

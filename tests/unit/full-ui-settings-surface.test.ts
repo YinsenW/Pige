@@ -868,6 +868,9 @@ describe("full UI Settings surface", () => {
   it("repairs only eligible broken references and refreshes the authoritative report", async () => {
     const dom = createDom();
     const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
+    const sourceRevision = `noteeditrev_${"1".repeat(64)}`;
+    const sourceRenderProof = `knowledge_health_render_${"2".repeat(64)}`;
+    const occurrenceId = `knowledge_health_occurrence_${"3".repeat(64)}`;
     const readyReport = (request: { readonly requestId: string; readonly activeVaultId: string }, issues: unknown[]) => ({
       ...request,
       apiVersion: 1,
@@ -892,7 +895,10 @@ describe("full UI Settings surface", () => {
         kind: "broken_link",
         page: { pageId: "page_health_repairable", title: "Repairable page" },
         unresolvedLinkCount: 1,
-        repairContextId
+        repairContextId,
+        sourceRevision,
+        sourceRenderProof,
+        occurrenceId
       },
       {
         kind: "broken_link",
@@ -927,11 +933,24 @@ describe("full UI Settings surface", () => {
         revision: `noteeditrev_${"c".repeat(32)}`,
         operationId: `operation_${"d".repeat(32)}`
       }));
+    const searchKnowledgeHealthTargets = vi.fn(async (request) => ({
+      ...request,
+      status: "ready",
+      targets: [{
+        page: { pageId: "page_health_current_target", title: "Current target" },
+        pageType: "note",
+        targetContextId: `knowledge_health_target_context_${"4".repeat(32)}`,
+        targetRevision: `noteeditrev_${"5".repeat(64)}`,
+        targetRenderProof: `knowledge_health_render_${"6".repeat(64)}`
+      }],
+      truncated: false
+    }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
         maintenance: {
           runKnowledgeHealth,
+          searchKnowledgeHealthTargets,
           repairKnowledgeHealth,
           rebuildLocalDatabase: vi.fn(),
           resetLocalDatabase: vi.fn()
@@ -960,12 +979,13 @@ describe("full UI Settings surface", () => {
     });
 
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
-    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Repair")).toHaveLength(1);
+    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Remove link")).toHaveLength(1);
+    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Choose target")).toHaveLength(1);
     expect(page.textContent).toContain("Manual page");
     expect(page.textContent).toContain("Orphan page");
 
     await act(async () => {
-      const repairButton = buttonNamed(page, "Repair");
+      const repairButton = buttonNamed(page, "Remove link");
       repairButton.click();
       repairButton.click();
       await settle(dom);
@@ -987,12 +1007,28 @@ describe("full UI Settings surface", () => {
     expect(onOpenPage).not.toHaveBeenCalled();
 
     await act(async () => {
-      buttonNamed(page, "Repair").click();
+      buttonNamed(page, "Choose target").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Search pages").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(page, "Current target").click();
       await settle(dom);
     });
     expect(repairKnowledgeHealth).toHaveBeenCalledTimes(2);
+    expect(searchKnowledgeHealthTargets).toHaveBeenCalledOnce();
+    expect(repairKnowledgeHealth.mock.calls[1]![0]).toMatchObject({
+      action: "retarget_broken_reference",
+      targetPageId: "page_health_current_target",
+      targetContextId: `knowledge_health_target_context_${"4".repeat(32)}`,
+      targetRevision: `noteeditrev_${"5".repeat(64)}`,
+      targetRenderProof: `knowledge_health_render_${"6".repeat(64)}`
+    });
     expect(runKnowledgeHealth).toHaveBeenCalledTimes(2);
-    expect(page.textContent).toContain("Broken reference removed");
+    expect(page.textContent).toContain("Broken reference repaired");
     expect(page.textContent).toContain("No issues found.");
     expect(page.textContent).not.toContain("Repairable page");
     expect(page.textContent).not.toContain("operation_");
@@ -1006,6 +1042,9 @@ describe("full UI Settings surface", () => {
     const dom = createDom();
     let resolveRepair!: (result: unknown) => void;
     const repairContextId = `knowledge_health_repair_context_${"e".repeat(32)}`;
+    const sourceRevision = `noteeditrev_${"7".repeat(64)}`;
+    const sourceRenderProof = `knowledge_health_render_${"8".repeat(64)}`;
+    const occurrenceId = `knowledge_health_occurrence_${"9".repeat(64)}`;
     const runKnowledgeHealth = vi.fn(async (request) => ({
       ...request,
       status: "ready",
@@ -1025,7 +1064,10 @@ describe("full UI Settings surface", () => {
         kind: "broken_link",
         page: { pageId: "page_health_fenced", title: "Fenced page" },
         unresolvedLinkCount: 1,
-        repairContextId
+        repairContextId,
+        sourceRevision,
+        sourceRenderProof,
+        occurrenceId
       }],
       truncated: false
     }));
@@ -1035,6 +1077,7 @@ describe("full UI Settings surface", () => {
       value: {
         maintenance: {
           runKnowledgeHealth,
+          searchKnowledgeHealthTargets: vi.fn(),
           repairKnowledgeHealth,
           rebuildLocalDatabase: vi.fn(),
           resetLocalDatabase: vi.fn()
@@ -1065,7 +1108,7 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     await act(async () => {
-      buttonNamed(dom.window.document, "Repair").click();
+      buttonNamed(dom.window.document, "Remove link").click();
       await settle(dom);
     });
     const repairRequest = repairKnowledgeHealth.mock.calls[0]![0];
@@ -1081,7 +1124,7 @@ describe("full UI Settings surface", () => {
     });
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
     expect(page.textContent).toContain("No check has been run yet.");
-    expect(page.textContent).not.toContain("Broken reference removed");
+    expect(page.textContent).not.toContain("Broken reference repaired");
     expect(runKnowledgeHealth).toHaveBeenCalledOnce();
 
     await act(async () => root.unmount());

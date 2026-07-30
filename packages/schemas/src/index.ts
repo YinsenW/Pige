@@ -1271,9 +1271,22 @@ export const KnowledgeHealthRequestIdSchema = z.string()
   .regex(/^knowledge_health_request_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthRepairRequestIdSchema = z.string()
   .regex(/^knowledge_health_repair_request_[a-z0-9]{16,64}$/);
+export const KnowledgeHealthTargetSearchRequestIdSchema = z.string()
+  .regex(/^knowledge_health_target_search_[a-z0-9]{16,64}$/);
 export const KnowledgeHealthRepairContextIdSchema = z.string()
   .regex(/^knowledge_health_repair_context_[a-z0-9]{32,64}$/);
-export const KnowledgeHealthRepairActionSchema = z.literal("unlink_broken_reference");
+export const KnowledgeHealthTargetContextIdSchema = z.string()
+  .regex(/^knowledge_health_target_context_[a-z0-9]{32,64}$/);
+export const KnowledgeHealthOccurrenceIdSchema = z.string()
+  .regex(/^knowledge_health_occurrence_[a-f0-9]{64}$/);
+export const KnowledgeHealthRenderProofSchema = z.string()
+  .regex(/^knowledge_health_render_[a-f0-9]{64}$/);
+export const KnowledgeHealthPageRevisionSchema = z.string()
+  .regex(/^noteeditrev_[a-f0-9]{64}$/);
+export const KnowledgeHealthRepairActionSchema = z.enum([
+  "unlink_broken_reference",
+  "retarget_broken_reference"
+]);
 export const KnowledgeHealthIndexGenerationSchema = z.string()
   .min(1)
   .max(160)
@@ -1292,8 +1305,16 @@ const KnowledgeHealthBrokenLinkIssueSchema = z.object({
   kind: z.literal("broken_link"),
   page: KnowledgeHealthPageRefSchema,
   unresolvedLinkCount: z.number().int().min(1).max(10_000_000),
-  repairContextId: KnowledgeHealthRepairContextIdSchema.optional()
-}).strict();
+  repairContextId: KnowledgeHealthRepairContextIdSchema.optional(),
+  sourceRevision: KnowledgeHealthPageRevisionSchema.optional(),
+  sourceRenderProof: KnowledgeHealthRenderProofSchema.optional(),
+  occurrenceId: KnowledgeHealthOccurrenceIdSchema.optional()
+}).strict().superRefine((issue, context) => {
+  const proofs = [issue.repairContextId, issue.sourceRevision, issue.sourceRenderProof, issue.occurrenceId];
+  if (proofs.some((value) => value !== undefined) && proofs.some((value) => value === undefined)) {
+    context.addIssue({ code: "custom", path: ["repairContextId"], message: "Broken-link repair proof must be complete." });
+  }
+});
 const KnowledgeHealthOrphanPageIssueSchema = z.object({
   kind: z.literal("orphan_page"),
   page: KnowledgeHealthPageRefSchema
@@ -1412,6 +1433,7 @@ export const KnowledgeHealthRunResultSchema = z.discriminatedUnion("status", [
     context.addIssue({ code: "custom", path: [], message: "Knowledge Health result exceeds its UTF-8 byte bound." });
   }
 });
+
 export const ArtifactIdSchema = z.string().regex(/^art_[a-z0-9][a-z0-9_]{2,}$/);
 export const RootBindingIdSchema = z.string().regex(/^root_[a-z0-9][a-z0-9_]{5,}$/);
 export const BackupIdSchema = z.string().regex(/^backup_\d{8}_[a-z0-9]{8,}$/);
@@ -1841,31 +1863,85 @@ export const NoteRelateResultSchema = z.discriminatedUnion("status", [
   )
 ]);
 
-export const KnowledgeHealthRepairRequestSchema = z.object({
+export const KNOWLEDGE_HEALTH_MAX_TARGET_CANDIDATES = 20;
+const KnowledgeHealthRepairProofFields = {
   apiVersion: z.literal(1),
-  requestId: KnowledgeHealthRepairRequestIdSchema,
   activeVaultId: VaultIdSchema,
+  reportRequestId: KnowledgeHealthRequestIdSchema,
   indexGeneration: KnowledgeHealthIndexGenerationSchema,
   issueKind: z.literal("broken_link"),
   pageId: PageIdSchema,
-  action: KnowledgeHealthRepairActionSchema,
-  repairContextId: KnowledgeHealthRepairContextIdSchema
+  repairContextId: KnowledgeHealthRepairContextIdSchema,
+  sourceRevision: KnowledgeHealthPageRevisionSchema,
+  sourceRenderProof: KnowledgeHealthRenderProofSchema,
+  occurrenceId: KnowledgeHealthOccurrenceIdSchema
+} as const;
+export const KnowledgeHealthTargetCandidateSchema = z.object({
+  page: KnowledgeHealthPageRefSchema,
+  pageType: z.literal("note"),
+  targetContextId: KnowledgeHealthTargetContextIdSchema,
+  targetRevision: KnowledgeHealthPageRevisionSchema,
+  targetRenderProof: KnowledgeHealthRenderProofSchema
 }).strict();
-const KnowledgeHealthRepairResultIdentitySchema = KnowledgeHealthRepairRequestSchema;
+export const KnowledgeHealthTargetSearchRequestSchema = z.object({
+  ...KnowledgeHealthRepairProofFields,
+  requestId: KnowledgeHealthTargetSearchRequestIdSchema,
+  query: z.string().max(120).refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Knowledge Health target search contains unsafe control text."
+  )
+}).strict();
+const KnowledgeHealthTargetSearchIdentitySchema = KnowledgeHealthTargetSearchRequestSchema;
+export const KnowledgeHealthTargetSearchResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthTargetSearchIdentitySchema.extend({
+    status: z.literal("ready"),
+    targets: z.array(KnowledgeHealthTargetCandidateSchema).max(KNOWLEDGE_HEALTH_MAX_TARGET_CANDIDATES),
+    truncated: z.boolean()
+  }).strict(),
+  KnowledgeHealthTargetSearchIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthTargetSearchIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthTargetSearchIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+const KnowledgeHealthRepairIdentitySchema = z.object({
+  ...KnowledgeHealthRepairProofFields,
+  requestId: KnowledgeHealthRepairRequestIdSchema,
+  action: KnowledgeHealthRepairActionSchema,
+  targetPageId: PageIdSchema.optional(),
+  targetContextId: KnowledgeHealthTargetContextIdSchema.optional(),
+  targetRevision: KnowledgeHealthPageRevisionSchema.optional(),
+  targetRenderProof: KnowledgeHealthRenderProofSchema.optional()
+}).strict();
+function validateKnowledgeHealthRepairTarget(
+  request: z.infer<typeof KnowledgeHealthRepairIdentitySchema>,
+  context: z.RefinementCtx
+): void {
+  const target = [request.targetPageId, request.targetContextId, request.targetRevision, request.targetRenderProof];
+  const expectsTarget = request.action === "retarget_broken_reference";
+  if ((expectsTarget && target.some((value) => value === undefined)) ||
+    (!expectsTarget && target.some((value) => value !== undefined))) {
+    context.addIssue({ code: "custom", path: ["targetPageId"], message: "Retarget proof does not match the repair action." });
+  }
+  if (expectsTarget && request.targetPageId === request.pageId) {
+    context.addIssue({ code: "custom", path: ["targetPageId"], message: "A broken link cannot target its own page." });
+  }
+}
+export const KnowledgeHealthRepairRequestSchema = KnowledgeHealthRepairIdentitySchema
+  .superRefine(validateKnowledgeHealthRepairTarget);
 export const KnowledgeHealthRepairResultSchema = z.discriminatedUnion("status", [
-  KnowledgeHealthRepairResultIdentitySchema.extend({
+  KnowledgeHealthRepairIdentitySchema.extend({
     status: z.literal("committed"),
     revision: NoteEditorRevisionSchema,
     operationId: OperationIdSchema
   }).strict(),
-  KnowledgeHealthRepairResultIdentitySchema.extend({
+  KnowledgeHealthRepairIdentitySchema.extend({
     status: z.literal("stale"),
     revision: NoteEditorRevisionSchema
   }).strict(),
-  KnowledgeHealthRepairResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
-  KnowledgeHealthRepairResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
-  KnowledgeHealthRepairResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
-]);
+  KnowledgeHealthRepairIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  KnowledgeHealthRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => validateKnowledgeHealthRepairTarget(result, context));
 
 export const ProviderKindSchema = z.enum([
   "openai",
@@ -9401,7 +9477,12 @@ export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListR
 export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListResultSchema>;
 export type KnowledgeHealthRequestId = z.infer<typeof KnowledgeHealthRequestIdSchema>;
 export type KnowledgeHealthRepairRequestId = z.infer<typeof KnowledgeHealthRepairRequestIdSchema>;
+export type KnowledgeHealthTargetSearchRequestId = z.infer<typeof KnowledgeHealthTargetSearchRequestIdSchema>;
 export type KnowledgeHealthRepairContextId = z.infer<typeof KnowledgeHealthRepairContextIdSchema>;
+export type KnowledgeHealthTargetContextId = z.infer<typeof KnowledgeHealthTargetContextIdSchema>;
+export type KnowledgeHealthOccurrenceId = z.infer<typeof KnowledgeHealthOccurrenceIdSchema>;
+export type KnowledgeHealthRenderProof = z.infer<typeof KnowledgeHealthRenderProofSchema>;
+export type KnowledgeHealthPageRevision = z.infer<typeof KnowledgeHealthPageRevisionSchema>;
 export type KnowledgeHealthRepairAction = z.infer<typeof KnowledgeHealthRepairActionSchema>;
 export type KnowledgeHealthIndexGeneration = z.infer<typeof KnowledgeHealthIndexGenerationSchema>;
 export type KnowledgeHealthPageRef = z.infer<typeof KnowledgeHealthPageRefSchema>;
@@ -9410,6 +9491,9 @@ export type KnowledgeHealthIssueSummary = z.infer<typeof KnowledgeHealthIssueSum
 export type KnowledgeHealthCounts = z.infer<typeof KnowledgeHealthCountsSchema>;
 export type KnowledgeHealthRunRequest = z.infer<typeof KnowledgeHealthRunRequestSchema>;
 export type KnowledgeHealthRunResult = z.infer<typeof KnowledgeHealthRunResultSchema>;
+export type KnowledgeHealthTargetCandidate = z.infer<typeof KnowledgeHealthTargetCandidateSchema>;
+export type KnowledgeHealthTargetSearchRequest = z.infer<typeof KnowledgeHealthTargetSearchRequestSchema>;
+export type KnowledgeHealthTargetSearchResult = z.infer<typeof KnowledgeHealthTargetSearchResultSchema>;
 export type KnowledgeHealthRepairRequest = z.infer<typeof KnowledgeHealthRepairRequestSchema>;
 export type KnowledgeHealthRepairResult = z.infer<typeof KnowledgeHealthRepairResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;

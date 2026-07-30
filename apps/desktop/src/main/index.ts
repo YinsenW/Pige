@@ -2644,6 +2644,8 @@ registerKnowledgeHealthIpc({
     return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
   },
   runKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().run(vaultPath, request),
+  searchKnowledgeHealthTargets: (vaultPath, request) =>
+    getKnowledgeHealthService().searchTargets(vaultPath, request),
   repairKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().repair(vaultPath, request)
 });
 registerLocalSemanticRetrievalIpc({
