@@ -613,7 +613,8 @@ Undo restores the displaced note. Drift preserves live bytes. Memory commits pri
 `update_memory`/`trash_memory`; Undo/restart uses exact `restore_memory`. Conversation trash/restore
 binds JSONL hash/revision/receipt without Provider replay. Conversation export rechecks the tail
 before external write and creates no Job/Operation. Knowledge Health repair uses reversible
-`update_page` bound to report/index and exact source/target or orphan/parent proofs; restart adopts once.
+`update_page` bound to report/index and exact source/target, orphan/parent, or duplicate-topic
+survivor/absorbed proofs; duplicate-topic restart adopts one receipt and Undo restores both pages.
 
 Rules:
 

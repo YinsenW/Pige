@@ -488,6 +488,10 @@ Settings:
 
 - No default settings page should expose low-level graph tables, edge weights, embedding internals, or relationship schemas.
 - Repair and rebuild controls belong under Index & Maintenance.
+- Duplicate-topic repair is eligible only for one exact two-topic report candidate whose two
+  active topic pages still match their immutable revisions and render identities. The user chooses
+  the survivor; Main merges bounded metadata/content, moves the absorbed page to recoverable private
+  trash, and records one reversible Operation. Stale, ineligible, or broader candidates stay report-only.
 
 ## 15. Tests And Fixtures
 

@@ -3640,6 +3640,31 @@ References:
 
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 
+### D-20260731-Knowledge-Health-Duplicate-Topic-Merge
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Knowledge Health may merge one exact two-topic candidate only after the user chooses the survivor.
+The absorbed topic moves to recoverable private trash and both page states bind one reversible
+`update_page` Operation with restart adoption.
+
+Rationale:
+
+Resolve a common quality defect without turning similarity into silent durable truth.
+
+Consequences:
+
+- Candidates with any count, type, status, revision, render, report, or index ambiguity stay report-only.
+- Undo restores both exact topics; retries adopt the durable receipt instead of repeating effects.
+
+References:
+
+- `docs/PRD.md`; `docs/UI_PROTOTYPE.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
+  `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ### D-20260728-Managed-PaddleOCR-Release-Bundle
 
 Status: Accepted

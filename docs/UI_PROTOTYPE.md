@@ -794,8 +794,9 @@ Main trunk: Local-first
 ## 12. Knowledge Health
 
 Settings > Index & Maintenance owns the report. Eligible broken links offer Remove/Retarget;
-eligible orphans offer explicit selection of one current parent. Commit reruns; other states
-preserve report/focus. No guessed target, model/network repair, body, path or raw error.
+eligible orphans offer explicit selection of one current parent; an exact two-topic duplicate
+offers a bounded choice of which topic survives before Merge. Commit reruns; other states preserve
+report/selection/focus. No guessed target, model/network repair, body, path or raw error.
 
 ## 13. Settings
 
