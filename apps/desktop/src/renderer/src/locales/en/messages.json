@@ -1999,5 +1999,14 @@
   "vaultMigration.domain.ocr_artifacts": "OCR metadata",
   "vaultMigration.domain.conversation_events": "Conversations",
   "vaultMigration.domain.memory": "Memory",
-  "vaultMigration.domain.rebuildable_chunks": "Local indexes"
+  "vaultMigration.domain.rebuildable_chunks": "Local indexes",
+  "topic.rename.action": "Rename topic",
+  "topic.rename.title": "Rename topic",
+  "topic.rename.description": "Change this topic's title. Existing links keep using its stable identity.",
+  "topic.rename.field": "Topic title",
+  "topic.rename.cancel": "Cancel",
+  "topic.rename.confirm": "Rename",
+  "topic.rename.saving": "Renaming…",
+  "topic.rename.stale": "This topic changed. Your title is still here; review and try again.",
+  "topic.rename.failed": "Pige could not rename this topic. Nothing was changed."
 }

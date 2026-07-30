@@ -2001,5 +2001,14 @@
   "vaultMigration.domain.ocr_artifacts": "OCR-Metadaten",
   "vaultMigration.domain.conversation_events": "Unterhaltungen",
   "vaultMigration.domain.memory": "Gedächtnis",
-  "vaultMigration.domain.rebuildable_chunks": "Lokale Indizes"
+  "vaultMigration.domain.rebuildable_chunks": "Lokale Indizes",
+  "topic.rename.action": "Thema umbenennen",
+  "topic.rename.title": "Thema umbenennen",
+  "topic.rename.description": "Ändert den Titel dieses Themas. Bestehende Links behalten seine stabile Identität.",
+  "topic.rename.field": "Thementitel",
+  "topic.rename.cancel": "Abbrechen",
+  "topic.rename.confirm": "Umbenennen",
+  "topic.rename.saving": "Wird umbenannt…",
+  "topic.rename.stale": "Dieses Thema wurde geändert. Ihr Titel bleibt erhalten; prüfen Sie ihn und versuchen Sie es erneut.",
+  "topic.rename.failed": "Pige konnte dieses Thema nicht umbenennen. Es wurde nichts geändert."
 }

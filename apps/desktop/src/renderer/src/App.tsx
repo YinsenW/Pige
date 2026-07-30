@@ -76,7 +76,7 @@ import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions, readerDocumentArchiveLabels, readerDocumentRestoreLabels, submitReaderNoteArchive, submitReaderNoteRestore, type ReaderNoteArchiveSubmit, type ReaderNoteRestoreSubmit } from "./components/ReaderDocumentActions"; import { readerNoteTagLabels, submitReaderNoteTag, submitReaderNoteTagRemoval, type ReaderNoteTagRemoveSubmit, type ReaderNoteTagSubmit } from "./components/ReaderNoteTagDialog";
 import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialog";
 import { readerNoteRenameLabels, submitReaderNoteRename, type ReaderNoteRenameSubmit } from "./components/ReaderNoteRenameDialog";
-import { readerNoteAliasLabels, submitReaderNoteAliasChange, type ReaderNoteAliasSubmit } from "./components/ReaderNoteAliasDialog";
+import { readerNoteAliasLabels, submitReaderNoteAliasChange, type ReaderNoteAliasSubmit } from "./components/ReaderNoteAliasDialog"; import { ReaderTopicRenameDialog } from "./components/ReaderTopicRenameDialog";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
 import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
@@ -119,6 +119,8 @@ import type {
   LibraryListResult,
   LibraryRelatedResult,
   LibraryPageSummary,
+  LibraryRenameTopicRequest,
+  LibraryRenameTopicResult,
   LocalDatabaseStatus,
   ModelProviderSettingsSummary,
   ModelProfileSummary,
@@ -2688,6 +2690,7 @@ export function App(): React.JSX.Element {
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
             onCurrentNoteMerged={adoptMergedNote}
             onRelateCurrentNote={submitNoteRelation}
+            onRenameTopic={(request) => window.pige.library.renameTopic(request)}
             onCurrentNoteRelated={adoptMergedNote}
             searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
@@ -2753,6 +2756,7 @@ export function App(): React.JSX.Element {
               onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
               onCurrentNoteMerged={adoptMergedNote}
               onRelateCurrentNote={submitNoteRelation}
+              onRenameTopic={(request) => window.pige.library.renameTopic(request)}
               onCurrentNoteRelated={adoptMergedNote}
               searchFocusRequest={librarySearchFocusRequest}
               onOpenNote={openNote}
@@ -3322,6 +3326,7 @@ export function LibraryPanel(props: {
   readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onCurrentNoteMerged: (render: NoteRenderResult) => void;
   readonly onRelateCurrentNote?: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
+  readonly onRenameTopic?: (request: LibraryRenameTopicRequest) => Promise<LibraryRenameTopicResult>;
   readonly onCurrentNoteRelated?: (render: NoteRenderResult) => void;
   readonly onCurrentNoteSourceReconnected?: (render: NoteRenderResult) => void;
   readonly searchFocusRequest: number;
@@ -3648,6 +3653,13 @@ export function LibraryPanel(props: {
               activeVaultId={props.activeVaultId}
               t={props.t}
               onCommitted={props.onCurrentNoteMerged}
+            />
+            <ReaderTopicRenameDialog
+              note={props.selectedNote}
+              {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+              {...(props.onRenameTopic ? { onRename: props.onRenameTopic } : {})}
+              onCommitted={props.onCurrentNoteMerged}
+              t={props.t}
             />
             <ReaderDocumentActions
               ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}:${props.selectedNote.archiveEligibility?.revision ?? ""}:${props.selectedNote.restoreEligibility?.revision ?? ""}:${props.selectedNote.renameEligibility?.revision ?? ""}:${props.selectedNote.aliasing?.revision ?? ""}:${props.selectedNote.tagging?.revision ?? ""}`}

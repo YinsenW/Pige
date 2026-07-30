@@ -205,6 +205,9 @@ import type {
   LibraryRenameTagRequest,
   LibraryRenameTagRequestId,
   LibraryRenameTagResult,
+  LibraryRenameTopicRequest,
+  LibraryRenameTopicRequestId,
+  LibraryRenameTopicResult,
   LibraryMergeTagRequest,
   LibraryMergeTagRequestId,
   LibraryMergeTagResult,
@@ -601,6 +604,9 @@ export type {
   LibraryRenameTagRequest,
   LibraryRenameTagRequestId,
   LibraryRenameTagResult,
+  LibraryRenameTopicRequest,
+  LibraryRenameTopicRequestId,
+  LibraryRenameTopicResult,
   LibraryMergeTagRequest,
   LibraryMergeTagRequestId,
   LibraryMergeTagResult,
@@ -2268,6 +2274,7 @@ export interface PigeDesktopApi {
     readonly related: (request: LibraryRelatedRequest) => Promise<LibraryRelatedResult>;
     readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;
     readonly renameTag: (request: LibraryRenameTagRequest) => Promise<LibraryRenameTagResult>;
+    readonly renameTopic: (request: LibraryRenameTopicRequest) => Promise<LibraryRenameTopicResult>;
     readonly mergeTag: (request: LibraryMergeTagRequest) => Promise<LibraryMergeTagResult>;
     readonly removeTag: (request: LibraryRemoveTagRequest) => Promise<LibraryRemoveTagResult>;
     readonly removePageTag: (request: LibraryRemovePageTagRequest) => Promise<LibraryRemovePageTagResult>;

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { BrowserWindow, IpcMain, OpenDialogOptions, WebContents } from "electron";
 import type {
+  LibraryRenameTopicRequest,
+  LibraryRenameTopicResult,
   NoteGetRequest,
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
@@ -54,6 +56,9 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  LIBRARY_RENAME_TOPIC_CHANNEL,
+  LibraryRenameTopicRequestSchema,
+  LibraryRenameTopicResultSchema,
   NoteEditorOpenRequestSchema,
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
@@ -152,6 +157,7 @@ import type { NoteMergeService } from "./services/note-merge-service";
 import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
+import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -176,6 +182,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
   readonly getNoteRevisionHistoryService: () => NoteRevisionHistoryService;
+  readonly getLibraryTopicRenameService: () => LibraryTopicRenameService;
   readonly onNoteTrashCommitted: () => void;
   readonly onNoteArchiveCommitted: () => void;
   readonly onNoteRelated: () => void;
@@ -485,6 +492,21 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result : NoteRemoveTagResultSchema.parse({ ...parsed, status: "failed" });
+  });
+  options.ipcMain.handle(LIBRARY_RENAME_TOPIC_CHANNEL, async (event, request: unknown) => {
+    const parsed = LibraryRenameTopicRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return LibraryRenameTopicResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: LibraryRenameTopicResult;
+    try { rawResult = await options.getLibraryTopicRenameService().rename(ownerId, parsed); }
+    catch { rawResult = { ...parsed, status: "failed" }; }
+    const result = LibraryRenameTopicResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : LibraryRenameTopicResultSchema.parse({ ...parsed, status: "failed" });
   });
   options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
     const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;

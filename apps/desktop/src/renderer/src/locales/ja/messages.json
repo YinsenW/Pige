@@ -2001,5 +2001,14 @@
   "vaultMigration.domain.ocr_artifacts": "OCR メタデータ",
   "vaultMigration.domain.conversation_events": "会話",
   "vaultMigration.domain.memory": "メモリ",
-  "vaultMigration.domain.rebuildable_chunks": "ローカルインデックス"
+  "vaultMigration.domain.rebuildable_chunks": "ローカルインデックス",
+  "topic.rename.action": "トピック名を変更",
+  "topic.rename.title": "トピック名を変更",
+  "topic.rename.description": "このトピックのタイトルを変更します。既存のリンクは安定した ID を引き続き使用します。",
+  "topic.rename.field": "トピックタイトル",
+  "topic.rename.cancel": "キャンセル",
+  "topic.rename.confirm": "名前を変更",
+  "topic.rename.saving": "変更中…",
+  "topic.rename.stale": "このトピックは変更されています。入力したタイトルは保持されました。確認して再試行してください。",
+  "topic.rename.failed": "トピック名を変更できませんでした。変更はありません。"
 }

@@ -40,8 +40,7 @@ import { readReferencedOriginalReconnectCandidate } from "./source-original-reco
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
-const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024;
-const UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 export interface NotesVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
@@ -227,7 +226,8 @@ export class NotesService {
               ...(aliases.length === rawAliases.length && aliases.length <= 64 ? { aliasing: { aliases, canAdd: stable.document.summary.status === "active" && aliases.length < 64, canRemove: stable.document.summary.status === "active" && aliases.length > 0, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
               tagging: { tags: [...(frontmatter?.tags ?? [])], topics: [...(frontmatter?.topics ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }
             }
-          : {})
+          : {}),
+        ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
       } : {})
     };
   }

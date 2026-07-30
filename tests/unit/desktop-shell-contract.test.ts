@@ -142,6 +142,7 @@ describe("desktop shell build contract", () => {
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const readerIpcSource = fs.readFileSync(path.resolve("apps/desktop/src/main/register-reader-ipc.ts"), "utf8");
     const libraryApi = contractsSource.slice(
       contractsSource.indexOf("readonly library: {"),
       contractsSource.indexOf("readonly notes: {")
@@ -152,6 +153,7 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain('LIBRARY_MERGE_TAG_CHANNEL = "library.mergeTag"');
     expect(schemasSource).toContain('LIBRARY_REMOVE_TAG_CHANNEL = "library.removeTag"');
     expect(schemasSource).toContain('LIBRARY_REMOVE_PAGE_TAG_CHANNEL = "library.removePageTag"');
+    expect(schemasSource).toContain('LIBRARY_RENAME_TOPIC_CHANNEL = "library.renameTopic"');
     expect(schemasSource).toContain("LibraryTagsRequestSchema");
     expect(schemasSource).toContain('mode: z.literal("list_tags")');
     expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
@@ -172,6 +174,9 @@ describe("desktop shell build contract", () => {
     expect(libraryApi).toContain(
       "readonly removePageTag: (request: LibraryRemovePageTagRequest) => Promise<LibraryRemovePageTagResult>;"
     );
+    expect(libraryApi).toContain(
+      "readonly renameTopic: (request: LibraryRenameTopicRequest) => Promise<LibraryRenameTopicResult>;"
+    );
     expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
     expect(preloadSource).toContain(
       "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
@@ -185,12 +190,17 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("LibraryRemoveTagResultSchema.parse(");
     expect(preloadSource).toContain("LibraryRemovePageTagRequestSchema.parse(request)");
     expect(preloadSource).toContain("LibraryRemovePageTagResultSchema.parse(");
+    expect(preloadSource).toContain("LibraryRenameTopicRequestSchema.parse(request)");
+    expect(preloadSource).toContain("LibraryRenameTopicResultSchema.parse(");
     const renameHandler = mainSource.slice(
       mainSource.indexOf("ipcMain.handle(LIBRARY_RENAME_TAG_CHANNEL"),
       mainSource.indexOf("registerReaderIpc({")
     );
     expect(renameHandler).toContain("LibraryRenameTagRequestSchema.parse(request)");
     expect(renameHandler).toContain("LibraryRenameTagResultSchema.parse(getLibraryTagRenameService().rename(parsed))");
+    expect(readerIpcSource).toContain("options.ipcMain.handle(LIBRARY_RENAME_TOPIC_CHANNEL");
+    expect(readerIpcSource).toContain("LibraryRenameTopicRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("getLibraryTopicRenameService().rename(ownerId, parsed)");
     expect(renameHandler.indexOf("LibraryRenameTagRequestSchema.parse(request)"))
       .toBeLessThan(renameHandler.indexOf("getLibraryTagRenameService().rename(parsed)"));
     expect(renameHandler).toContain("LibraryMergeTagRequestSchema.parse(request)");
