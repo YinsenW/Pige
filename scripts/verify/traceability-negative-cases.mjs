@@ -283,6 +283,8 @@ try {
     link.status = "verified";
     link.evidence = ["EV-GENERATED-RELEASE-SELFTEST"];
     delete link.plannedTarget;
+    delete link.open;
+    delete model.acceptance.evidenceCatalog["EV-RELEASE-ACCEPTANCE-BUNDLE"];
     model.acceptance.evidenceCatalog["EV-GENERATED-RELEASE-SELFTEST"] = {
       kind: "generated-report",
       path: generatedPath,
@@ -293,6 +295,7 @@ try {
     exit.status = "verified";
     exit.evidence = ["EV-GENERATED-RELEASE-SELFTEST"];
     delete exit.plannedTarget;
+    delete exit.open;
     model.semanticClaims = createSemanticClaimLedgerFromModel(model);
   });
   const errors = result.results.get("TRC-005") ?? [];

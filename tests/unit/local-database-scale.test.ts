@@ -115,6 +115,7 @@ describe("local database scale evidence", () => {
 
       const platform = checkedPlatformLabel();
       const buildId = process.env.PIGE_SCALE_BUILD_ID ?? "local-scale";
+      const release = releaseIdentity(buildId);
       const candidate = readCandidateContentIdentity(root);
       const report = {
         schemaVersion: 1,
@@ -130,6 +131,7 @@ describe("local database scale evidence", () => {
         })),
         platform,
         buildId,
+        ...(release ? { release } : {}),
         baselineRevision: process.env.PIGE_BASELINE_REVISION ?? "0000000000000000000000000000000000000000",
         fixture: {
           fixtureId: "generated-local-scale-v1",
@@ -227,4 +229,19 @@ function checkedPlatformLabel(): "macos-arm64" | "windows-x64" | "linux-x64" {
   if (process.platform === "win32" && process.arch === "x64") return "windows-x64";
   if (process.platform === "linux" && process.arch === "x64") return "linux-x64";
   throw new Error("Local database scale evidence is not defined for this platform architecture.");
+}
+
+function releaseIdentity(buildId: string): {
+  readonly tag: string;
+  readonly commit: string;
+  readonly buildId: string;
+} | undefined {
+  const tag = process.env.PIGE_RELEASE_TAG;
+  const commit = process.env.PIGE_RELEASE_COMMIT;
+  if (tag === undefined && commit === undefined) return undefined;
+  if (!/^v0\.[1-9]\d*\.\d+-alpha\.[1-9]\d*$/u.test(tag ?? "") ||
+      !/^[a-f0-9]{40}$/u.test(commit ?? "") || commit !== buildId) {
+    throw new Error("Local scale release identity is incomplete or does not match the build.");
+  }
+  return { tag, commit, buildId };
 }

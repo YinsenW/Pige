@@ -158,7 +158,10 @@ prompts/model responses, secrets or tokens.
 Generated evidence stays under `artifacts/test-reports/` or
 `artifacts/release-evidence/v0.1/public-alpha-usability/<platform>/<build-id>/`; release
 reports reference fixture/recipe versions, build/tag/commit, artifact IDs, backup/restore
-facts and exact report digests. Source tests freeze these contracts but do not complete them.
+facts and exact report digests. The release lane generates the real 25-source and
+10,000-page/100,000-chunk reports once, rejects failed/stale/mismatched evidence, reverifies
+downloaded copies and publishes both reports with their digests. Source coverage does not
+complete acceptance until a protected release publishes passed assets.
 
 ## 17. v0.1 Release Gates
 

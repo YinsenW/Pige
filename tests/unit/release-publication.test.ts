@@ -156,6 +156,12 @@ describe("release publication", () => {
     expect(workflow).toContain("pige.cdx.json");
     expect(workflow).toContain("third-party-attribution.json");
     expect(workflow).toContain("macos-downloaded-qualification.json");
+    expect(workflow).toContain("npm run release:public-alpha-scenario");
+    expect(workflow).toContain("npm run evidence:local-scale");
+    expect(workflow).toContain("PIGE_SCALE_SKIP_BUILD: \"1\"");
+    expect(workflow.match(/release-evidence-bundle\.mjs/gu)).toHaveLength(3);
+    expect(workflow).toContain("public-alpha-scenario-report.json");
+    expect(workflow).toContain("local-database-scale-report.json");
     expect(workflow).toContain("RELEASE-EVIDENCE-SHA256SUMS.txt");
     expect(workflow).toContain("downloaded-packaged-ui.png");
     expect(packageability).toContain("windows-x64:");

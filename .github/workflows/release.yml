@@ -82,6 +82,9 @@ jobs:
       PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
       PIGE_EXPECTED_APP_VERSION: ${{ needs.validate.outputs.version }}
       PIGE_REPORT_BUILD_ID: ${{ needs.validate.outputs.commit }}
+      PIGE_REPORT_PLATFORM: macos-arm64
+      PIGE_SCALE_BUILD_ID: ${{ needs.validate.outputs.commit }}
+      PIGE_SCALE_SKIP_BUILD: "1"
     steps:
       - name: Checkout validated release commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -115,6 +118,19 @@ jobs:
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
 
+      - name: Generate and bind Public Alpha release acceptance evidence
+        run: |
+          npm run release:public-alpha-scenario
+          npm run evidence:local-scale
+          node scripts/release/release-evidence-bundle.mjs \
+            --action=stage \
+            --directory=artifacts/release-packageability/macos-arm64 \
+            --tag="$PIGE_RELEASE_TAG" \
+            --commit="$PIGE_RELEASE_COMMIT" \
+            --build-id="$PIGE_RELEASE_COMMIT" \
+            --public-alpha-report="artifacts/release-evidence/v0.1/public-alpha-usability/macos-arm64/$PIGE_RELEASE_COMMIT/scenario-report.json" \
+            --local-scale-report="artifacts/test-reports/local-database-scale/macos-arm64/$PIGE_RELEASE_COMMIT/report.json"
+
       - name: Stage bounded build evidence
         run: |
           cp "artifacts/test-reports/packageability/macos-arm64/$PIGE_RELEASE_COMMIT/report.json" \
@@ -138,6 +154,8 @@ jobs:
             artifacts/release-packageability/macos-arm64/SHA256SUMS-macos-arm64.txt
             artifacts/release-packageability/macos-arm64/packageability-report.json
             artifacts/release-packageability/macos-arm64/packaged-ui.png
+            artifacts/release-packageability/macos-arm64/public-alpha-scenario-report.json
+            artifacts/release-packageability/macos-arm64/local-database-scale-report.json
             artifacts/release-packageability/macos-arm64/pige.cdx.json
             artifacts/release-packageability/macos-arm64/third-party-attribution.json
             artifacts/release-packageability/macos-arm64/NOTICE
@@ -180,6 +198,15 @@ jobs:
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
 
+      - name: Verify downloaded release acceptance evidence
+        run: >-
+          node scripts/release/release-evidence-bundle.mjs
+          --action=verify
+          --directory=artifacts/release-packageability/macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --commit="$PIGE_RELEASE_COMMIT"
+          --build-id="$PIGE_RELEASE_COMMIT"
+
       - name: Qualify downloaded app, Gatekeeper class, runtime, UI, and memory
         run: >-
           node scripts/release/macos-downloaded-qualification.mjs
@@ -199,6 +226,7 @@ jobs:
           shasum -a 256 \
             packageability-report.json packaged-ui.png \
             macos-downloaded-qualification.json downloaded-packaged-ui.png \
+            public-alpha-scenario-report.json local-database-scale-report.json \
             pige.cdx.json third-party-attribution.json NOTICE LICENSE \
             > RELEASE-EVIDENCE-SHA256SUMS.txt
 
@@ -214,6 +242,8 @@ jobs:
             artifacts/release-packageability/macos-arm64/packaged-ui.png
             artifacts/release-packageability/macos-arm64/macos-downloaded-qualification.json
             artifacts/release-packageability/macos-arm64/downloaded-packaged-ui.png
+            artifacts/release-packageability/macos-arm64/public-alpha-scenario-report.json
+            artifacts/release-packageability/macos-arm64/local-database-scale-report.json
             artifacts/release-packageability/macos-arm64/RELEASE-EVIDENCE-SHA256SUMS.txt
             artifacts/release-packageability/macos-arm64/pige.cdx.json
             artifacts/release-packageability/macos-arm64/third-party-attribution.json
@@ -263,6 +293,15 @@ jobs:
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
 
+      - name: Reverify exact release acceptance evidence
+        run: >-
+          node scripts/release/release-evidence-bundle.mjs
+          --action=verify
+          --directory=artifacts/release-packageability/macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --commit="$PIGE_RELEASE_COMMIT"
+          --build-id="$PIGE_RELEASE_COMMIT"
+
       - name: Publish immutable ad-hoc prerelease
         run: |
           cat > "$RUNNER_TEMP/pige-release-notes.md" <<'EOF'
@@ -280,6 +319,8 @@ jobs:
             artifacts/release-packageability/macos-arm64/packaged-ui.png \
             artifacts/release-packageability/macos-arm64/macos-downloaded-qualification.json \
             artifacts/release-packageability/macos-arm64/downloaded-packaged-ui.png \
+            artifacts/release-packageability/macos-arm64/public-alpha-scenario-report.json \
+            artifacts/release-packageability/macos-arm64/local-database-scale-report.json \
             artifacts/release-packageability/macos-arm64/RELEASE-EVIDENCE-SHA256SUMS.txt \
             artifacts/release-packageability/macos-arm64/pige.cdx.json \
             artifacts/release-packageability/macos-arm64/third-party-attribution.json \
