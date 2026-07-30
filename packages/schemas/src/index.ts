@@ -1995,9 +1995,9 @@ export const SkillDataBoundarySchema = z.enum([
   "destructive"
 ]);
 
-const SkillCapabilityListSchema = z.array(SkillCapabilitySchema).min(1).max(32)
+export const SkillCapabilityListSchema = z.array(SkillCapabilitySchema).min(1).max(32)
   .refine((values) => new Set(values).size === values.length, "Skill capabilities must be unique.");
-const SkillDataBoundaryListSchema = z.array(SkillDataBoundarySchema).min(1).max(6)
+export const SkillDataBoundaryListSchema = z.array(SkillDataBoundarySchema).min(1).max(6)
   .refine((values) => new Set(values).size === values.length, "Skill data boundaries must be unique.");
 const SKILL_DATA_BOUNDARY_ORDER = [
   "local", "filesystem", "network", "cloud", "brokered_credential", "destructive"
@@ -2263,7 +2263,10 @@ export const SkillSummarySchema = z.object({
   if (skill.canExport && !pureLifecycle) {
     context.addIssue({ code: "custom", path: ["canExport"], message: "Skill export eligibility is invalid." });
   }
-  if (skill.canUpdate && !pureLifecycle) {
+  const externalSourceUpdate = userManaged && skill.kind === "external_web" && skill.source === "https" && skill.sourceUrl !== undefined &&
+    skill.manifestSha256 !== undefined && skill.bundleSha256 !== undefined && skill.files !== undefined &&
+    skill.warnings !== undefined;
+  if (skill.canUpdate && !pureLifecycle && !externalSourceUpdate) {
     context.addIssue({ code: "custom", path: ["canUpdate"], message: "Skill update eligibility is invalid." });
   }
   const requiredDisclosure = [skill.source, skill.manifestSha256, skill.bundleSha256, skill.files, skill.warnings];
@@ -2407,6 +2410,28 @@ export const SkillStagedFileSummarySchema = z.object({
   utf8ByteSize: z.number().int().positive().max(SKILL_ZIP_STAGE_MAX_FILE_BYTES),
   sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
 }).strict();
+export const SkillExternalUpdateReviewSchema = z.object({
+  kind: z.literal("external_web"),
+  previousVersion: z.string().min(1).max(80),
+  previousManifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  previousBundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  addedCapabilities: z.array(SkillCapabilitySchema).max(32)
+    .refine((values) => new Set(values).size === values.length, "Added capabilities must be unique."),
+  removedCapabilities: z.array(SkillCapabilitySchema).max(32)
+    .refine((values) => new Set(values).size === values.length, "Removed capabilities must be unique."),
+  addedDataBoundaries: z.array(SkillDataBoundarySchema).max(6)
+    .refine((values) => new Set(values).size === values.length, "Added data boundaries must be unique."),
+  removedDataBoundaries: z.array(SkillDataBoundarySchema).max(6)
+    .refine((values) => new Set(values).size === values.length, "Removed data boundaries must be unique."),
+  finalEnabled: z.literal(false)
+}).strict().superRefine((review, context) => {
+  if (review.addedCapabilities.some((value) => review.removedCapabilities.includes(value))) {
+    context.addIssue({ code: "custom", path: ["addedCapabilities"], message: "Capability changes must not overlap." });
+  }
+  if (review.addedDataBoundaries.some((value) => review.removedDataBoundaries.includes(value))) {
+    context.addIssue({ code: "custom", path: ["addedDataBoundaries"], message: "Data-boundary changes must not overlap." });
+  }
+});
 export const SkillStagedSummarySchema = z.object({
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
@@ -2427,6 +2452,7 @@ export const SkillStagedSummarySchema = z.object({
   author: z.string().min(1).max(120).optional(),
   license: z.string().min(1).max(120).optional(),
   files: z.array(SkillStagedFileSummarySchema).min(1).max(SKILL_ZIP_STAGE_MAX_FILES),
+  externalUpdateReview: SkillExternalUpdateReviewSchema.optional(),
   warnings: z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill stage warnings must be unique.")
 }).strict().superRefine((staged, context) => {
@@ -2458,6 +2484,10 @@ export const SkillStagedSummarySchema = z.object({
     if (remoteSource !== Boolean(staged.sourceUrl)) {
       context.addIssue({ code: "custom", path: ["source"], message: "External/Web Skill review source is inconsistent." });
     }
+  }
+  if (staged.externalUpdateReview !== undefined &&
+    (staged.kind !== "external_web" || staged.source !== "https" || staged.sourceUrl === undefined)) {
+    context.addIssue({ code: "custom", path: ["externalUpdateReview"], message: "External update review identity is invalid." });
   }
   const canonicalPaths = new Set<string>();
   let totalBytes = 0;
@@ -2659,6 +2689,12 @@ export const SkillStageUpdateResultSchema = z.discriminatedUnion("status", [
 ]).superRefine((result, context) => {
   if (result.status === "ready" && result.staged.id !== result.skillId) {
     context.addIssue({ code: "custom", path: ["staged", "id"], message: "Staged update Skill identity must match." });
+  }
+  if (result.status === "ready" && result.staged.kind === "external_web" && result.staged.externalUpdateReview === undefined) {
+    context.addIssue({ code: "custom", path: ["staged", "externalUpdateReview"], message: "External updates require an exact review diff." });
+  }
+  if (result.status === "ready" && result.staged.kind === "pure" && result.staged.externalUpdateReview !== undefined) {
+    context.addIssue({ code: "custom", path: ["staged", "externalUpdateReview"], message: "Pure updates cannot expose an External/Web diff." });
   }
 });
 

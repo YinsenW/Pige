@@ -76,6 +76,8 @@ import type {
   SkillRegistrySummary,
   SkillRestoreRequest,
   SkillRestoreResult,
+  SkillStageUpdateRequest,
+  SkillStageUpdateResult,
   SkillUninstallRequest,
   SpeechAssetInstallEvent,
   SpeechAvailabilityResult
@@ -1517,6 +1519,87 @@ describe("full UI Settings surface", () => {
     expect(page.querySelector("#skill-url-install")).toBeNull();
     expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Update: Review notes"));
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("shows External/Web capability changes and accepts the reviewed update only as disabled", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260730_externalupdateui";
+    const sourceUrl = "https://example.com/external/SKILL.md" as const;
+    const runtime = { adapter: "pige_readonly_https_v1" as const, origin: "https://api.example.com" as const };
+    const installed: SkillRegistrySummary["skills"][number] = {
+      id: "external-review", name: "External review", version: "1", description: "Reads one reviewed origin.",
+      scope: "machine_local", kind: "external_web", enabled: true, trust: "user_confirmed",
+      capabilities: ["external_network"], dataBoundaries: ["network"], runtime,
+      canEnable: false, canUninstall: false, canExport: false, canUpdate: true,
+      source: "https", sourceUrl,
+      manifestSha256: `sha256:${"a".repeat(64)}`, bundleSha256: `sha256:${"b".repeat(64)}`,
+      files: [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: `sha256:${"a".repeat(64)}` }],
+      warnings: ["untrusted_remote_source"]
+    };
+    const initial = skillRegistry(40, false, 0, [installed]);
+    const staged = {
+      stagingId: `skillstage_${"c".repeat(32)}` as const,
+      manifestSha256: `sha256:${"d".repeat(64)}` as const,
+      bundleSha256: `sha256:${"e".repeat(64)}` as const,
+      registryRevision: 40,
+      expiresAt: "2026-07-31T12:00:00.000Z",
+      sourceUrl,
+      id: installed.id,
+      name: installed.name,
+      version: "2",
+      description: "Reads with a separately reviewed credential.",
+      scope: "machine_local" as const,
+      kind: "external_web" as const,
+      capabilities: ["external_network", "use_brokered_credential"] as const,
+      dataBoundaries: ["network", "brokered_credential"] as const,
+      source: "https" as const,
+      files: [{ relativePath: "SKILL.md" as const, utf8ByteSize: 1200, sha256: `sha256:${"d".repeat(64)}` as const }],
+      warnings: ["untrusted_remote_source" as const],
+      externalUpdateReview: {
+        kind: "external_web" as const,
+        previousVersion: "1",
+        previousManifestSha256: installed.manifestSha256!,
+        previousBundleSha256: installed.bundleSha256!,
+        addedCapabilities: ["use_brokered_credential" as const],
+        removedCapabilities: [],
+        addedDataBoundaries: ["brokered_credential" as const],
+        removedDataBoundaries: [],
+        finalEnabled: false as const
+      }
+    };
+    const committed = skillRegistry(41, false, 0, [{
+      ...installed, version: "2", enabled: false, canEnable: false,
+      capabilities: staged.capabilities, dataBoundaries: staged.dataBoundaries, runtime: undefined,
+      manifestSha256: staged.manifestSha256, bundleSha256: staged.bundleSha256, files: staged.files
+    }]);
+    const stageUpdate = vi.fn(async (request: SkillStageUpdateRequest): Promise<SkillStageUpdateResult> => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      skillId: request.skillId, status: "ready", staged
+    }));
+    const installStaged = vi.fn(async (request: { requestId: `skillreq_${string}` }) => ({
+      status: "committed" as const, requestId: request.requestId, registry: committed
+    }));
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      skills: {
+        summary: async () => ({ status: "ready" as const, registry: initial }),
+        stageUpdate, installStaged, discardStaged: vi.fn(), disable: vi.fn(), onChanged: () => () => undefined
+      },
+      vault: { current: async () => ({ vaultId }) }
+    } });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(SkillsSettingsPanel, { t })); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-skills"));
+    await act(async () => { buttonNamed(page, "Update: External review").click(); await settle(dom); await settle(dom); });
+    const diff = requireElement(page.querySelector<HTMLElement>('[data-external-skill-update-diff="true"]'));
+    expect(diff.textContent).toContain("Previous version · v1");
+    expect(diff.textContent).toContain("+ use_brokered_credential");
+    expect(diff.textContent).toContain("+ Protected credential");
+    expect(diff.textContent).toContain("installed disabled");
+    await act(async () => { buttonNamed(page, "Update Skill").click(); await settle(dom); await settle(dom); });
+    expect(installStaged).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, expectedRegistryRevision: 40 }));
+    expect(page.querySelector('[data-skill-id="external-review"]')?.textContent).toContain("Disabled");
     await act(async () => root.unmount());
     dom.window.close();
   });

@@ -5420,7 +5420,7 @@ describe("schemas", () => {
       canEnable: false,
       canUninstall: false,
       canExport: false,
-      canUpdate: false,
+      canUpdate: true,
       source: "https",
       sourceUrl,
       manifestSha256,
@@ -5433,6 +5433,7 @@ describe("schemas", () => {
       ...installed,
       source: "local_zip",
       sourceUrl: undefined,
+      canUpdate: false,
       warnings: []
     })).toMatchObject({ source: "local_zip", enabled: false, canEnable: false });
     for (const invalid of [
@@ -5544,8 +5545,7 @@ describe("schemas", () => {
       { ...installed, runtime: undefined },
       { ...installed, enabled: true },
       { ...installed, canUninstall: true },
-      { ...installed, canExport: true },
-      { ...installed, canUpdate: true }
+      { ...installed, canExport: true }
     ]) {
       expect(() => SkillSummarySchema.parse(invalid)).toThrow();
     }

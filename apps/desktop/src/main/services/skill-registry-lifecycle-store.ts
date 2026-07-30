@@ -168,7 +168,7 @@ export interface SkillUninstallReceiptV2 extends Omit<SkillUninstallReceiptV1, "
 
 export type SkillUninstallReceipt = SkillUninstallReceiptV1 | SkillUninstallReceiptV2;
 
-export interface SkillUpdateReceipt {
+export interface SkillUpdateReceiptV1 {
   readonly schemaVersion: 1;
   readonly state: "prepared" | "committed";
   readonly requestId: string;
@@ -183,6 +183,16 @@ export interface SkillUpdateReceipt {
   readonly enabled: boolean;
   readonly createdAt: string;
 }
+
+export interface SkillUpdateReceiptV2 extends Omit<SkillUpdateReceiptV1, "schemaVersion"> {
+  readonly schemaVersion: 2;
+  readonly oldBundleSha256: string;
+  readonly oldInstallReceiptSha256: string;
+  readonly newBundleSha256: string;
+  readonly newInstallReceiptSha256: string;
+}
+
+export type SkillUpdateReceipt = SkillUpdateReceiptV1 | SkillUpdateReceiptV2;
 
 export class SkillRegistryLifecycleStore {
   readonly #appDataRoot: string;
@@ -357,6 +367,8 @@ export class SkillRegistryLifecycleStore {
     readonly newVersion: string;
     readonly enabled: boolean;
     readonly bytes: Buffer;
+    readonly files?: readonly SkillBundleFile[];
+    readonly installReceipt?: SkillInstallReceipt;
     readonly createdAt: string;
   }): SkillUpdateReceipt {
     this.prepare();
@@ -365,7 +377,7 @@ export class SkillRegistryLifecycleStore {
     if (`sha256:${createHash("sha256").update(input.bytes).digest("hex")}` !== input.newManifestSha256) {
       throw lifecycleError("skill.update_payload_changed");
     }
-    const expected: SkillUpdateReceipt = {
+    const base = {
       schemaVersion: 1,
       state: "prepared",
       requestId,
@@ -378,9 +390,31 @@ export class SkillRegistryLifecycleStore {
       newVersion: input.newVersion,
       enabled: input.enabled,
       createdAt: input.createdAt
-    };
+    } as const;
+    const externalUpdate = input.files !== undefined || input.installReceipt !== undefined;
+    let expected: SkillUpdateReceipt = base;
+    if (externalUpdate) {
+      if (!input.files || !input.installReceipt || skillBundleSha256(input.files) !== input.installReceipt.bundleSha256 ||
+        input.installReceipt.manifestSha256 !== input.newManifestSha256 || input.installReceipt.enabled ||
+        input.installReceipt.requestId !== requestId || input.installReceipt.stagingId !== input.stagingId) {
+        throw lifecycleError("skill.update_payload_changed");
+      }
+      const oldSnapshot = this.readInstalled(oldRecord.id);
+      const oldInstallReceipt = this.readInstallReceipt(oldRecord.id);
+      if (!oldInstallReceipt || oldSnapshot.sha256 !== oldRecord.manifestSha256) {
+        throw lifecycleError("skill.update_payload_changed");
+      }
+      expected = {
+        ...base,
+        schemaVersion: 2,
+        oldBundleSha256: oldSnapshot.bundleSha256,
+        oldInstallReceiptSha256: digestStableJson(oldInstallReceipt),
+        newBundleSha256: input.installReceipt.bundleSha256,
+        newInstallReceiptSha256: digestStableJson(input.installReceipt)
+      };
+    }
     const existing = this.readUpdateReceipt(requestId);
-    const receipt = existing ?? this.#publishUpdateReceipt(expected, input.bytes);
+    const receipt = existing ?? this.#publishUpdateReceipt(expected, input.bytes, input.files, input.installReceipt);
     if (!sameUpdateIntent(receipt, expected)) throw lifecycleError("skill.update_receipt_conflict");
     this.ensureUpdated(receipt);
     return receipt;
@@ -417,6 +451,7 @@ export class SkillRegistryLifecycleStore {
     const installedPath = path.join(this.#installedRoot, receipt.skillId);
     const installed = fs.existsSync(installedPath) ? this.readInstalled(receipt.skillId) : undefined;
     if (installed?.sha256 === receipt.oldRecord.manifestSha256) {
+      if (receipt.schemaVersion === 2) this.#assertUpdateTree(receipt, installedPath, "old");
       if (fs.existsSync(oldPath)) throw lifecycleError("skill.update_path_conflict");
       fs.renameSync(installedPath, oldPath);
       fsyncDirectory(this.#installedRoot);
@@ -427,15 +462,31 @@ export class SkillRegistryLifecycleStore {
     if (!fs.existsSync(oldPath) || readManifestDirectory(receiptDirectory, oldPath).sha256 !== receipt.oldRecord.manifestSha256) {
       throw lifecycleError("skill.update_payload_missing");
     }
+    if (receipt.schemaVersion === 2) this.#assertUpdateTree(receipt, oldPath, "old");
     if (!fs.existsSync(installedPath)) {
       if (!fs.existsSync(replacementPath) || readManifestDirectory(receiptDirectory, replacementPath).sha256 !== receipt.newManifestSha256) {
         throw lifecycleError("skill.update_payload_missing");
       }
+      if (receipt.schemaVersion === 2) this.#assertUpdateTree(receipt, replacementPath, "new");
       fs.renameSync(replacementPath, installedPath);
       fsyncDirectory(receiptDirectory);
       fsyncDirectory(this.#installedRoot);
     }
     if (this.readInstalled(receipt.skillId).sha256 !== receipt.newManifestSha256) {
+      throw lifecycleError("skill.update_payload_changed");
+    }
+    if (receipt.schemaVersion === 2) this.#assertUpdateTree(receipt, installedPath, "new");
+  }
+
+  #assertUpdateTree(receipt: SkillUpdateReceiptV2, directory: string, side: "old" | "new"): void {
+    const parent = path.dirname(directory);
+    const snapshot = readManifestDirectory(parent, directory);
+    const installReceipt = parseInstallReceipt(
+      readBoundedNoFollow(path.join(directory, INSTALL_RECEIPT_NAME), MAX_INSTALL_RECEIPT_BYTES) ?? ""
+    );
+    const expectedBundle = side === "old" ? receipt.oldBundleSha256 : receipt.newBundleSha256;
+    const expectedInstallReceipt = side === "old" ? receipt.oldInstallReceiptSha256 : receipt.newInstallReceiptSha256;
+    if (snapshot.bundleSha256 !== expectedBundle || digestStableJson(installReceipt) !== expectedInstallReceipt) {
       throw lifecycleError("skill.update_payload_changed");
     }
   }
@@ -476,7 +527,12 @@ export class SkillRegistryLifecycleStore {
     }
   }
 
-  #publishUpdateReceipt(receipt: SkillUpdateReceipt, bytes: Buffer): SkillUpdateReceipt {
+  #publishUpdateReceipt(
+    receipt: SkillUpdateReceipt,
+    bytes: Buffer,
+    files?: readonly SkillBundleFile[],
+    externalInstallReceipt?: SkillInstallReceipt
+  ): SkillUpdateReceipt {
     const destination = this.#updateEntry(receipt.requestId);
     const temporaryPath = path.join(this.#updateRoot, `.update.${receipt.requestId}.${randomUUID()}.tmp`);
     let renamed = false;
@@ -484,18 +540,17 @@ export class SkillRegistryLifecycleStore {
       fs.mkdirSync(temporaryPath, { mode: 0o700 });
       const replacementPath = path.join(temporaryPath, "replacement");
       fs.mkdirSync(replacementPath, { mode: 0o700 });
-      writePrivateFile(path.join(replacementPath, "SKILL.md"), bytes);
-      const installReceipt: SkillInstallReceipt = {
-        schemaVersion: 1,
-        requestId: receipt.requestId,
-        stagingId: receipt.stagingId,
-        manifestSha256: receipt.newManifestSha256,
-        bundleSha256: receipt.newManifestSha256,
-        enabled: receipt.enabled
+      if (receipt.schemaVersion === 2) {
+        if (!files || !externalInstallReceipt) throw lifecycleError("skill.update_payload_changed");
+        writeBundleFiles(replacementPath, files);
+      } else writePrivateFile(path.join(replacementPath, "SKILL.md"), bytes);
+      const installReceipt: SkillInstallReceipt = receipt.schemaVersion === 2 ? externalInstallReceipt! : {
+        schemaVersion: 1, requestId: receipt.requestId, stagingId: receipt.stagingId,
+        manifestSha256: receipt.newManifestSha256, bundleSha256: receipt.newManifestSha256, enabled: receipt.enabled
       };
       writePrivateFile(path.join(replacementPath, INSTALL_RECEIPT_NAME), Buffer.from(`${JSON.stringify(installReceipt)}\n`, "utf8"));
       writePrivateFile(path.join(temporaryPath, UPDATE_RECEIPT_NAME), Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`, "utf8"));
-      fsyncDirectory(replacementPath);
+      fsyncTree(replacementPath);
       fsyncDirectory(temporaryPath);
       fs.renameSync(temporaryPath, destination);
       renamed = true;
@@ -659,10 +714,14 @@ function parseUninstallReceipt(source: string): SkillUninstallReceipt {
 
 function parseUpdateReceipt(source: string): SkillUpdateReceipt {
   const record = parseJsonObject(source, "skill.update_receipt_invalid");
-  const expectedKeys = record.state === "committed"
+  const baseKeys = record.state === "committed"
     ? "activeVaultId,committedRegistryRevision,createdAt,enabled,expectedRegistryRevision,newManifestSha256,newVersion,oldRecord,requestId,schemaVersion,skillId,stagingId,state"
     : "activeVaultId,createdAt,enabled,expectedRegistryRevision,newManifestSha256,newVersion,oldRecord,requestId,schemaVersion,skillId,stagingId,state";
-  if (Object.keys(record).sort().join(",") !== expectedKeys || record.schemaVersion !== 1 ||
+  const v2 = record.schemaVersion === 2;
+  const expectedKeys = v2
+    ? [...baseKeys.split(","), "oldBundleSha256", "oldInstallReceiptSha256", "newBundleSha256", "newInstallReceiptSha256"].sort().join(",")
+    : baseKeys;
+  if (Object.keys(record).sort().join(",") !== expectedKeys || (!v2 && record.schemaVersion !== 1) ||
     (record.state !== "prepared" && record.state !== "committed") ||
     !SkillInstallRequestIdSchema.safeParse(record.requestId).success || !SkillStagingIdSchema.safeParse(record.stagingId).success ||
     !VaultIdSchema.safeParse(record.activeVaultId).success || !SkillIdSchema.safeParse(record.skillId).success ||
@@ -670,12 +729,16 @@ function parseUpdateReceipt(source: string): SkillUpdateReceipt {
     !SkillRegistryRecordSchema.safeParse(record.oldRecord).success || typeof record.newManifestSha256 !== "string" ||
     !/^sha256:[a-f0-9]{64}$/u.test(record.newManifestSha256) || typeof record.newVersion !== "string" ||
     typeof record.enabled !== "boolean" || typeof record.createdAt !== "string" || !Number.isFinite(Date.parse(record.createdAt)) ||
+    (v2 && [record.oldBundleSha256, record.oldInstallReceiptSha256, record.newBundleSha256,
+      record.newInstallReceiptSha256].some((digest) => typeof digest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(digest))) ||
     (record.state === "committed" && (!Number.isSafeInteger(record.committedRegistryRevision) ||
       Number(record.committedRegistryRevision) !== Number(record.expectedRegistryRevision) + 1))) {
     throw lifecycleError("skill.update_receipt_invalid");
   }
   const parsed = record as unknown as SkillUpdateReceipt;
-  if (parsed.skillId !== parsed.oldRecord.id || parsed.enabled !== parsed.oldRecord.enabled ||
+  if (parsed.skillId !== parsed.oldRecord.id ||
+    (parsed.schemaVersion === 1 && parsed.enabled !== parsed.oldRecord.enabled) ||
+    (parsed.schemaVersion === 2 && parsed.enabled !== false) ||
     parsed.newManifestSha256 === parsed.oldRecord.manifestSha256) throw lifecycleError("skill.update_receipt_invalid");
   return parsed;
 }
@@ -693,7 +756,13 @@ function sameUpdateIntent(left: SkillUpdateReceipt, right: SkillUpdateReceipt): 
     left.activeVaultId === right.activeVaultId && left.skillId === right.skillId &&
     left.expectedRegistryRevision === right.expectedRegistryRevision &&
     left.newManifestSha256 === right.newManifestSha256 && left.newVersion === right.newVersion &&
-    left.enabled === right.enabled && stableJson(left.oldRecord) === stableJson(right.oldRecord);
+    left.enabled === right.enabled && left.schemaVersion === right.schemaVersion &&
+    (left.schemaVersion !== 2 || (right.schemaVersion === 2 &&
+      left.oldBundleSha256 === right.oldBundleSha256 &&
+      left.oldInstallReceiptSha256 === right.oldInstallReceiptSha256 &&
+      left.newBundleSha256 === right.newBundleSha256 &&
+      left.newInstallReceiptSha256 === right.newInstallReceiptSha256)) &&
+    stableJson(left.oldRecord) === stableJson(right.oldRecord);
 }
 
 function writePrivateExport(destinationPath: string, bytes: Buffer): void {

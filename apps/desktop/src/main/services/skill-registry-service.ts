@@ -74,7 +74,6 @@ const MANIFEST_FIELDS = new Set([
   "id", "name", "version", "description", "scope", "kind", "capabilities", "triggers", "author", "sourceUrl",
   "license", "updatedAt", "dataBoundary", "runtime", "permissionSummary"
 ]);
-
 interface LoadedSkillManifest {
   readonly manifest: SkillManifest;
   readonly sha256: string;
@@ -501,6 +500,7 @@ export class SkillRegistryService {
     assertRendererSafeDisplayText(loaded.manifest.description);
     if (loaded.manifest.author) assertRendererSafeDisplayText(loaded.manifest.author);
     if (loaded.manifest.license) assertRendererSafeDisplayText(loaded.manifest.license);
+    const externalDisclosure = loaded.manifest.kind === "external_web" ? requireInstalledExternalDisclosure(loaded) : undefined;
     return {
       id: loaded.manifest.id,
       name: loaded.manifest.name,
@@ -519,9 +519,9 @@ export class SkillRegistryService {
       canEnable: !record.enabled && (loaded.manifest.kind === "pure" || isSupportedExternalWebRuntime(loaded.manifest)),
       canUninstall: loaded.manifest.kind === "pure",
       canExport: loaded.manifest.kind === "pure",
-      canUpdate: canUpdateSkill(loaded.manifest),
+      canUpdate: canUpdateSkill(loaded.manifest, externalDisclosure),
       ...(loaded.manifest.kind === "external_web"
-        ? { ...requireInstalledExternalDisclosure(loaded), ...(loaded.manifest.runtime ? { runtime: loaded.manifest.runtime } : {}) }
+        ? { ...externalDisclosure!, ...(loaded.manifest.runtime ? { runtime: loaded.manifest.runtime } : {}) }
         : {})
     };
   }

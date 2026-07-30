@@ -44,12 +44,13 @@ External review and installed summaries expose only kind, exact declared capabil
 boundaries, safe source, checksums, files and warnings. Explicit install persists verified bytes
 disabled; stage/install never runs Skill content. A verified machine-local `external_web` manifest
 with `pige_readonly_https_v1`, `external_network`, `network` and one exact HTTPS origin may expose
-explicit enablement. External update and every other runtime class remain separate work.
+explicit enablement. Its strict HTTPS source may stage a reviewed update; capability/origin drift
+is disclosed, commit disables it, and restart adopts once. Other runtime classes remain separate.
 
 Only verified `user_confirmed` machine-local pure Skills expose lifecycle actions. Enable restores;
 uninstall trashes; export is pathless. HTTPS update binds source/base/revision, preserves state,
-trashes prior bytes and CAS-adopts once. Background, cross-source/file/ZIP update and public
-restore stay out.
+trashes prior bytes and CAS-adopts once. Verified private-trash restore returns disabled.
+Background and cross-source/file/ZIP update stay out.
 
 ## 5. Skill Format
 
