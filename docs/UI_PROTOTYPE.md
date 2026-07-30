@@ -304,9 +304,9 @@ Behavior:
 
 - Activity History is in Settings; Home keeps active attention.
 - Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
-- Applied rows open only an active-vault `{ kind: "page", pageId }` through Reader;
-  Settings closes after success. Missing/stale/failed targets fail closed; labels/paths
-  grant no authority, and Open never invokes Undo.
+- Applied rows open current-vault pages in Reader or memory in Agent & Memory by safe ID.
+  Exact Edit or heading receives focus; drift/failure returns to
+  Activity/Open focus. Labels/paths grant no authority; Open never invokes Undo.
 
 ### 4.4 Sidebar Expanded
 
@@ -986,10 +986,10 @@ Concise source summaries
   Preference · Active · Explicit request · Disable
 ```
 
-Load the strict active-vault summary and show bounded content/status/time/safe provenance only.
-Active atoms disable; disabled atoms re-enable; delete/reset are reversible and appear in Activity
-with Undo. Every mutation uses exact revision CAS, adopts returned state, and handles stale/not-found
-without losing the list. Export opens Main's save dialog; cancel is quiet and every result is
+Active-vault summary shows bounded content/status/time/safe provenance. Active atoms disable;
+disabled atoms re-enable; delete/reset is reversible Activity/Undo. Mutations use exact
+revision CAS and retain the list on stale/not-found. Activity Open binds vault/operation/safe memory
+ID and focuses exact Edit or heading. Export uses Main save dialog; cancel is quiet; results
 pathless. No permanent erase, autonomous/global memory or new permission control ships.
 
 ### Skills Settings
