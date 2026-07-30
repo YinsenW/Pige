@@ -444,8 +444,8 @@ Compaction rules:
 
 Pige should keep complete conversation history without duplicating large source content.
 
-Storage is `.pige/conversations/conversations-manifest.json` plus dated append-only JSONL;
-bounded title metadata lives only in the manifest.
+Storage is `.pige/conversations/conversations-manifest.json` plus dated append-only JSONL.
+Bounded titles stay in the manifest; local search reads only title/`safePreview` projections.
 
 Event types:
 

@@ -543,12 +543,12 @@ kinds reject it. Home snapshots `canFollowUp`; stale/mixed identity fails before
 never falls back. `agent.conversation` returns <=100 bounded messages, exact tail,
 `canFollowUp` and safe latest Job without paths, Provider data or raw errors.
 
-`agent.conversationHistory` returns <=50 safe summaries; open reuses `agent.conversation`, the
-sole follow-up authority. Cursors bind vault/snapshot/boundary. Trash/restore bind revision and
-opaque identity around exact JSONL; restart never replays work. `agent.setConversationTitle`
-binds vault/conversation/tail/title revision and atomically updates only
-`conversations-manifest.json`; stale returns authority. Export rechecks the tail and writes one
-Main-selected JSON; pathless stale/cancel/failure changes no history.
+`agent.conversationHistory` returns <=50 safe summaries; its optional <=120-code-point query
+matches only title/`safePreview`. Open reuses `agent.conversation`, the sole follow-up authority.
+Cursors bind vault/query/snapshot/boundary; drift fails before append. Trash/restore revision-bind
+exact JSONL; restart never replays. `agent.setConversationTitle` tail/title-revision-binds atomic
+manifest-only metadata; stale returns authority. Export rechecks the tail into one Main-selected
+JSON; closed results change no history.
 
 Picker selection/removal remains renderer-local, pathless and side-effect-free. Send
 submits exact text, ordered staged identities, active vault and one client-turn identity;

@@ -483,11 +483,11 @@ shrink or revise; it is not a saved message. Do not announce every replacement t
 live region—keep the turn `aria-busy`, expose a bounded status, and announce the final or
 failure once.
 
-The durable Pi final replaces the draft; failure/cancel clears or marks it. Restart shows durable
-messages only. History opens the exact timeline and gates follow-up. Rename sets/clears one bounded
-title under tail/title-revision CAS; stale retains the draft. Trash confirms and restores by opaque
-identity. Drift retains timeline/focus; `Current` rereads truth; vault change resets browsing.
-Export uses Main save; cancel/failure preserves history.
+The durable Pi final replaces the draft; failure/cancel clears or marks it; restart shows durable
+messages. History locally searches title/preview; selection survives polling/search failure and
+alone gates follow-up. Rename sets/clears one bounded title under tail/title-revision CAS; stale
+retains its draft. Trash confirms/restores by opaque identity. Drift retains timeline/focus;
+`Current` rereads truth; vault change resets browsing. Export failure preserves history.
 
 Prototype:
 
