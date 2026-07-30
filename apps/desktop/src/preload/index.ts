@@ -65,6 +65,8 @@ import type {
   LibraryListResult,
   LibraryRelatedRequest,
   LibraryRelatedResult,
+  LibraryTagsRequest,
+  LibraryTagsResult,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -310,6 +312,9 @@ import {
   CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
+  LIBRARY_TAGS_CHANNEL,
+  LibraryTagsRequestSchema,
+  LibraryTagsResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -610,6 +615,24 @@ async function invokeCollectionList(request: CollectionListRequest): Promise<Col
   );
   if (result.activeVaultId !== parsedRequest.activeVaultId) {
     throw new Error("Invalid Managed Collection list response identity.");
+  }
+  return result;
+}
+
+async function invokeLibraryTags(request: LibraryTagsRequest): Promise<LibraryTagsResult> {
+  const parsedRequest = LibraryTagsRequestSchema.parse(request);
+  const result = LibraryTagsResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)
+  );
+  if (
+    result.apiVersion !== parsedRequest.apiVersion ||
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.mode !== parsedRequest.mode ||
+    (parsedRequest.mode === "list_pages_for_tag" &&
+      (result.mode !== "list_pages_for_tag" || result.tag !== parsedRequest.tag))
+  ) {
+    throw new Error("Invalid Library tags response identity.");
   }
   return result;
 }
@@ -1383,7 +1406,8 @@ const api: PigeDesktopApi = {
     tree: async (): Promise<KnowledgeTreeResult> =>
       ipcRenderer.invoke("library.tree") as Promise<KnowledgeTreeResult>,
     related: async (request: LibraryRelatedRequest): Promise<LibraryRelatedResult> =>
-      ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>
+      ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>,
+    tags: invokeLibraryTags
   },
   notes: {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>

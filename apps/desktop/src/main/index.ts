@@ -26,6 +26,7 @@ import type {
   KnowledgeActivityListRequest,
   KnowledgeActivityUndoRequest,
   LibraryListRequest,
+  LibraryTagsRequest,
   LibraryRelatedRequest,
   OpenRecentVaultRequest,
   ProviderConnectResult,
@@ -114,8 +115,10 @@ import {
   ManagedCopyRootConfigureResultSchema,
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
-  DiagnosticsClearLocalResultSchema
-  ,PERMISSIONS_CHANGED_CHANNEL,
+  DiagnosticsClearLocalResultSchema,
+  LibraryTagsRequestSchema,
+  LibraryTagsResultSchema,
+  PERMISSIONS_CHANGED_CHANNEL,
   PERMISSIONS_REVOKE_GRANT_CHANNEL,
   PERMISSIONS_SET_DEFAULT_MODE_CHANNEL,
   PERMISSIONS_SUMMARY_CHANNEL,
@@ -201,6 +204,7 @@ import {
   type JobClassExecutorRegistry
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
+import { LibraryTagsService } from "./services/library-tags-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
@@ -360,6 +364,7 @@ let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
+let libraryTagsService: LibraryTagsService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
@@ -1531,6 +1536,11 @@ const getLibraryService = (): LibraryService => {
   return libraryService;
 };
 
+const getLibraryTagsService = (): LibraryTagsService => {
+  libraryTagsService ??= new LibraryTagsService(getVaultService());
+  return libraryTagsService;
+};
+
 const getNotesService = (): NotesService => {
   if (!notesService) {
     notesService = new NotesService(
@@ -2610,6 +2620,10 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle("library.tree", () => getLibraryService().tree());
 ipcMain.handle("library.related", (_event, request: LibraryRelatedRequest) => getLibraryService().related(request));
+ipcMain.handle("library.tags", (_event, request: LibraryTagsRequest) => {
+  const parsed = LibraryTagsRequestSchema.parse(request);
+  return LibraryTagsResultSchema.parse(getLibraryTagsService().browse(parsed));
+});
 registerReaderIpc({
   ipcMain,
   getNotesService,

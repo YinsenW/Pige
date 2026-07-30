@@ -55,7 +55,7 @@
     "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation and machine-local startup destination.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "6ea1b198576cd39d2b75004b9e7a811a03eb246f429f5798cb0fcf2cc134ede8"
+    "reviewedSha256": "c9ea86f0995bb065ec2b6dc8d5db4795646dddfc9789244ad35fb91be518b1ef"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",

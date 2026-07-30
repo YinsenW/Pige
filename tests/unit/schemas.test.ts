@@ -80,6 +80,10 @@ import {
   KnowledgeHealthRunResultSchema,
   KnowledgeHealthRepairRequestSchema,
   KnowledgeHealthRepairResultSchema,
+  LIBRARY_TAGS_CHANNEL,
+  LIBRARY_TAGS_PAGE_SIZE_MAX,
+  LibraryTagsRequestSchema,
+  LibraryTagsResultSchema,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
@@ -686,6 +690,142 @@ describe("schemas", () => {
       ...openIdentity,
       status: "stale",
       rows: snapshot.rows
+    })).toThrow();
+  });
+
+  it("keeps Library tag browsing snapshot-bound, ordered, and renderer-safe", () => {
+    expect(LIBRARY_TAGS_CHANNEL).toBe("library.tags");
+    const activeVaultId = "vault_20260730_librarytags01";
+    const requestId = "library_tags_request_abcdefghijklmnop";
+    const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
+    const cursor = `library_tags_cursor_${"b".repeat(64)}`;
+    const listRequest = {
+      apiVersion: 1,
+      requestId,
+      activeVaultId,
+      mode: "list_tags",
+      limit: LIBRARY_TAGS_PAGE_SIZE_MAX
+    } as const;
+    expect(LibraryTagsRequestSchema.parse(listRequest)).toEqual(listRequest);
+    expect(LibraryTagsRequestSchema.parse({ ...listRequest, snapshotId, cursor }))
+      .toEqual({ ...listRequest, snapshotId, cursor });
+    expect(() => LibraryTagsRequestSchema.parse({ ...listRequest, snapshotId })).toThrow(
+      "requires both"
+    );
+    expect(() => LibraryTagsRequestSchema.parse({ ...listRequest, cursor })).toThrow(
+      "requires both"
+    );
+    expect(() => LibraryTagsRequestSchema.parse({
+      ...listRequest,
+      limit: LIBRARY_TAGS_PAGE_SIZE_MAX + 1
+    })).toThrow();
+    expect(() => LibraryTagsRequestSchema.parse({
+      ...listRequest,
+      cursor: "library_tags_cursor_tampered",
+      snapshotId
+    })).toThrow();
+
+    const pagesRequest = {
+      ...listRequest,
+      mode: "list_pages_for_tag",
+      tag: "Research Notes"
+    } as const;
+    expect(LibraryTagsRequestSchema.parse(pagesRequest)).toEqual(pagesRequest);
+    expect(() => LibraryTagsRequestSchema.parse({ ...pagesRequest, tag: " Research  Notes " }))
+      .toThrow("canonical Markdown tag");
+    expect(() => LibraryTagsRequestSchema.parse({
+      ...listRequest,
+      mode: "list_pages_for_tag"
+    })).toThrow();
+
+    const listReady = {
+      apiVersion: 1,
+      requestId,
+      activeVaultId,
+      mode: "list_tags",
+      status: "ready",
+      snapshotId,
+      tags: [
+        { tag: "alpha", pageCount: 3 },
+        { tag: "Research Notes", pageCount: 2 }
+      ],
+      total: 3,
+      nextCursor: cursor
+    } as const;
+    expect(LibraryTagsResultSchema.parse(listReady)).toEqual(listReady);
+    expect(() => LibraryTagsResultSchema.parse({
+      ...listReady,
+      tags: [...listReady.tags].reverse()
+    })).toThrow("canonical tag-key order");
+    expect(() => LibraryTagsResultSchema.parse({
+      ...listReady,
+      tags: [{ tag: "Research", pageCount: 2 }, { tag: "research", pageCount: 2 }]
+    })).toThrow("unique canonical keys");
+    expect(() => LibraryTagsResultSchema.parse({ ...listReady, total: 1 })).toThrow(
+      "include every projected item"
+    );
+
+    const pagesReady = {
+      apiVersion: 1,
+      requestId,
+      activeVaultId,
+      mode: "list_pages_for_tag",
+      tag: pagesRequest.tag,
+      status: "ready",
+      snapshotId,
+      pages: [
+        {
+          pageId: "page_20260730_tagbrowse02",
+          title: "Recent note",
+          pageType: "note",
+          status: "active",
+          updatedAt: "2026-07-30T12:00:00.000Z"
+        },
+        {
+          pageId: "page_20260730_tagbrowse01",
+          title: "Earlier source",
+          pageType: "source",
+          status: "needs_review",
+          updatedAt: "2026-07-29T12:00:00.000Z"
+        }
+      ],
+      total: 2
+    } as const;
+    expect(LibraryTagsResultSchema.parse(pagesReady)).toEqual(pagesReady);
+    expect(() => LibraryTagsResultSchema.parse({
+      ...pagesReady,
+      pages: [...pagesReady.pages].reverse()
+    })).toThrow("updatedAt-descending");
+    for (const privateField of ["pagePath", "body", "sourceIds", "checksum", "indexRowId"] as const) {
+      expect(() => LibraryTagsResultSchema.parse({
+        ...pagesReady,
+        pages: [{ ...pagesReady.pages[0], [privateField]: "private" }]
+      })).toThrow();
+    }
+    for (const status of ["stale", "failed"] as const) {
+      expect(LibraryTagsResultSchema.parse({
+        apiVersion: 1,
+        requestId,
+        activeVaultId,
+        mode: "list_pages_for_tag",
+        tag: pagesRequest.tag,
+        status
+      })).toEqual({
+        apiVersion: 1,
+        requestId,
+        activeVaultId,
+        mode: "list_pages_for_tag",
+        tag: pagesRequest.tag,
+        status
+      });
+    }
+    expect(() => LibraryTagsResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      activeVaultId,
+      mode: "list_tags",
+      status: "failed",
+      tags: []
     })).toThrow();
   });
 

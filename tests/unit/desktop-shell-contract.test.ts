@@ -17,6 +17,41 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one strict pathless Library tag browsing channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const libraryApi = contractsSource.slice(
+      contractsSource.indexOf("readonly library: {"),
+      contractsSource.indexOf("readonly notes: {")
+    );
+
+    expect(schemasSource).toContain('LIBRARY_TAGS_CHANNEL = "library.tags"');
+    expect(schemasSource).toContain("LibraryTagsRequestSchema");
+    expect(schemasSource).toContain('mode: z.literal("list_tags")');
+    expect(schemasSource).toContain('mode: z.literal("list_pages_for_tag")');
+    expect(schemasSource).toContain("LibraryTagsSnapshotIdSchema");
+    expect(schemasSource).toContain("LibraryTagsCursorSchema");
+    expect(libraryApi).toContain(
+      "readonly tags: (request: LibraryTagsRequest) => Promise<LibraryTagsResult>;"
+    );
+    expect(preloadSource).toContain("LibraryTagsRequestSchema.parse(request)");
+    expect(preloadSource).toContain(
+      "await ipcRenderer.invoke(LIBRARY_TAGS_CHANNEL, parsedRequest)"
+    );
+    expect(preloadSource).toContain("LibraryTagsResultSchema.parse(");
+    expect(preloadSource).toContain("Invalid Library tags response identity.");
+    for (const privateField of [
+      "pagePath",
+      "sourceIds",
+      "checksum",
+      "indexRowId",
+      "sourceBody"
+    ]) {
+      expect(libraryApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
