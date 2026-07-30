@@ -165,6 +165,8 @@ import type {
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
+  PiPackageRestoreRequest,
+  PiPackageRestoreResult,
   PiPackageRollbackRequest,
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
@@ -395,6 +397,8 @@ import {
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
+  PiPackageRestoreRequestSchema,
+  PiPackageRestoreResultSchema,
   PiPackageRollbackRequestSchema,
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
@@ -1367,6 +1371,11 @@ const api: PigeDesktopApi = {
       PiPackageUninstallResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.uninstall",
         PiPackageUninstallRequestSchema.parse(request)
+      )),
+    restore: async (request: PiPackageRestoreRequest): Promise<PiPackageRestoreResult> =>
+      PiPackageRestoreResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.restore",
+        PiPackageRestoreRequestSchema.parse(request)
       )),
     update: async (request: PiPackageUpdateRequest): Promise<PiPackageUpdateResult> =>
       PiPackageUpdateResultSchema.parse(await ipcRenderer.invoke(

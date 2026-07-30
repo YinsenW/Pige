@@ -5,12 +5,15 @@ import { PigeDomainError } from "@pige/domain";
 
 const OWNER_MARKER = ".pige-package-owner.json";
 const RECEIPT_NAME = ".pige-package-uninstall.json";
+const RESTORE_RECEIPT_NAME = ".pige-package-restore.json";
 const UPDATE_RECEIPT_NAME = ".pige-package-update.json";
 const MAX_RECEIPT_BYTES = 1024 * 1024;
 const REQUEST_PATTERN = /^pi_package_uninstall_request_[a-z0-9]{16,64}$/u;
 const UPDATE_REQUEST_PATTERN = /^pi_package_update_request_[a-z0-9]{16,64}$/u;
 const ROLLBACK_REQUEST_PATTERN = /^pi_package_rollback_request_[a-z0-9]{16,64}$/u;
 const ROLLBACK_ID_PATTERN = /^pi_package_rollback_[a-z0-9]{16,64}$/u;
+const RESTORE_REQUEST_PATTERN = /^pi_package_restore_request_[a-z0-9]{16,64}$/u;
+const RESTORE_CONTEXT_PATTERN = /^pi_package_restore_context_v1_[a-f0-9]{32,64}$/u;
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
 export interface PiPackageLifecycleRecord {
@@ -46,6 +49,20 @@ export interface PiPackageUpdateReceipt<T extends PiPackageLifecycleRecord> {
   readonly rollbackRequestId?: string;
   readonly rollbackExpectedRegistryRevision?: number;
   readonly rolledBackRegistryRevision?: number;
+}
+
+export interface PiPackageRestoreReceipt<T extends PiPackageLifecycleRecord> {
+  readonly schemaVersion: 1;
+  readonly state: "prepared" | "committed";
+  readonly requestId: string;
+  readonly restoreContextId: string;
+  readonly packageId: string;
+  readonly expectedRegistryRevision: number;
+  readonly uninstallRequestId: string;
+  readonly uninstallReceiptHash: string;
+  readonly record: T;
+  readonly createdAt: string;
+  readonly committedRegistryRevision?: number;
 }
 
 export interface PiPackageLifecycleStoreOptions<T extends PiPackageLifecycleRecord> {
@@ -166,6 +183,117 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
     return receipts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
   }
 
+  listUninstallReceipts(): readonly PiPackageUninstallReceipt<T>[] {
+    this.prepare();
+    const receipts: PiPackageUninstallReceipt<T>[] = [];
+    for (const entry of fs.readdirSync(this.#trashRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !REQUEST_PATTERN.test(entry.name)) continue;
+      const receipt = this.readUninstallReceipt(entry.name);
+      if (receipt) receipts.push(receipt);
+    }
+    return receipts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  assertRestorable(receipt: PiPackageUninstallReceipt<T>): string {
+    const current = this.#readMatchingReceipt(receipt);
+    if (current.state !== "committed") throw lifecycleError("package.restore_ineligible");
+    const directory = this.#receiptDirectory(current.requestId);
+    const trashedPath = path.join(directory, "package");
+    const installedPath = this.#installedPath(current.record);
+    if (!fs.existsSync(trashedPath) || fs.existsSync(installedPath)) throw lifecycleError("package.restore_payload_missing");
+    assertDirectory(directory, trashedPath);
+    assertTreeHash(trashedPath, current.record.treeHash);
+    return trashedPath;
+  }
+
+  prepareRestore(input: {
+    readonly requestId: string;
+    readonly restoreContextId: string;
+    readonly expectedRegistryRevision: number;
+    readonly uninstallReceipt: PiPackageUninstallReceipt<T>;
+    readonly createdAt: string;
+  }): PiPackageRestoreReceipt<T> {
+    assertRestoreRequestId(input.requestId);
+    if (!RESTORE_CONTEXT_PATTERN.test(input.restoreContextId) || !Number.isSafeInteger(input.expectedRegistryRevision) || input.expectedRegistryRevision < 0) {
+      throw lifecycleError("package.restore_receipt_invalid");
+    }
+    const uninstall = this.#readMatchingReceipt(input.uninstallReceipt);
+    this.assertRestorable(uninstall);
+    const expected: PiPackageRestoreReceipt<T> = {
+      schemaVersion: 1,
+      state: "prepared",
+      requestId: input.requestId,
+      restoreContextId: input.restoreContextId,
+      packageId: uninstall.packageId,
+      expectedRegistryRevision: input.expectedRegistryRevision,
+      uninstallRequestId: uninstall.requestId,
+      uninstallReceiptHash: hashPiPackageUninstallReceipt(uninstall),
+      record: uninstall.record,
+      createdAt: input.createdAt
+    };
+    const existing = this.readRestoreReceipt(uninstall.requestId);
+    if (existing) {
+      if (!sameRestoreIntent(existing, expected)) throw lifecycleError("package.restore_receipt_conflict");
+      return existing;
+    }
+    writeJsonAtomic(path.join(this.#receiptDirectory(uninstall.requestId), RESTORE_RECEIPT_NAME), expected);
+    return expected;
+  }
+
+  readRestoreReceipt(uninstallRequestId: string): PiPackageRestoreReceipt<T> | undefined {
+    assertRequestId(uninstallRequestId);
+    const source = readBoundedNoFollow(path.join(this.#receiptDirectory(uninstallRequestId), RESTORE_RECEIPT_NAME), MAX_RECEIPT_BYTES);
+    if (source === undefined) return undefined;
+    let value: unknown;
+    try { value = JSON.parse(source); } catch { throw lifecycleError("package.restore_receipt_invalid"); }
+    return this.#parseRestoreReceipt(value, uninstallRequestId);
+  }
+
+  listRestoreReceipts(): readonly PiPackageRestoreReceipt<T>[] {
+    const receipts: PiPackageRestoreReceipt<T>[] = [];
+    for (const uninstall of this.listUninstallReceipts()) {
+      const receipt = this.readRestoreReceipt(uninstall.requestId);
+      if (receipt) receipts.push(receipt);
+    }
+    return receipts.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
+  ensureRestored(receipt: PiPackageRestoreReceipt<T>): void {
+    const current = this.#readMatchingRestoreReceipt(receipt);
+    const uninstall = this.readUninstallReceipt(current.uninstallRequestId);
+    if (!uninstall || uninstall.state !== "committed" || hashPiPackageUninstallReceipt(uninstall) !== current.uninstallReceiptHash ||
+      !sameLifecycleRecord(uninstall.record, current.record)) throw lifecycleError("package.restore_receipt_conflict");
+    const directory = this.#receiptDirectory(current.uninstallRequestId);
+    const trashedPath = path.join(directory, "package");
+    const installedPath = this.#installedPath(current.record);
+    const trashedExists = fs.existsSync(trashedPath);
+    const installedExists = fs.existsSync(installedPath);
+    if (trashedExists === installedExists) throw lifecycleError("package.restore_path_conflict");
+    if (trashedExists) {
+      this.assertRestorable(uninstall);
+      fs.mkdirSync(path.dirname(installedPath), { recursive: true, mode: 0o700 });
+      fs.renameSync(trashedPath, installedPath);
+      fsyncDirectory(directory);
+      fsyncDirectory(path.dirname(installedPath));
+    }
+    this.assertInstalled(current.record);
+  }
+
+  markRestoreCommitted(receipt: PiPackageRestoreReceipt<T>, revision: number): PiPackageRestoreReceipt<T> {
+    const current = this.#readMatchingRestoreReceipt(receipt);
+    if (!Number.isSafeInteger(revision) || revision !== current.expectedRegistryRevision + 1) {
+      throw lifecycleError("package.restore_receipt_invalid");
+    }
+    this.ensureRestored(current);
+    if (current.state === "committed") {
+      if (current.committedRegistryRevision !== revision) throw lifecycleError("package.restore_receipt_conflict");
+      return current;
+    }
+    const committed: PiPackageRestoreReceipt<T> = { ...current, state: "committed", committedRegistryRevision: revision };
+    writeJsonAtomic(path.join(this.#receiptDirectory(current.uninstallRequestId), RESTORE_RECEIPT_NAME), committed);
+    return committed;
+  }
+
   ensureTrashed(receipt: PiPackageUninstallReceipt<T>): void {
     const current = this.#readMatchingReceipt(receipt);
     const directory = this.#receiptDirectory(current.requestId);
@@ -264,6 +392,14 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
     const receipt = this.#listUpdates().find((candidate) =>
       candidate.state === "committed" && candidate.packageId === record.packageId &&
       sameLifecycleRecord(candidate.nextRecord, record)
+    );
+    return receipt ? { rollbackId: receipt.rollbackId, targetVersion: receipt.previousRecord.version } : undefined;
+  }
+
+  rollbackTargetForRestore(record: T): { readonly rollbackId: string; readonly targetVersion: string } | undefined {
+    const receipt = this.#listUpdates().find((candidate) =>
+      candidate.state === "committed" && candidate.packageId === record.packageId &&
+      sameLifecycleRecordIgnoringPin(candidate.nextRecord, record)
     );
     return receipt ? { rollbackId: receipt.rollbackId, targetVersion: receipt.previousRecord.version } : undefined;
   }
@@ -438,6 +574,12 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
     return current;
   }
 
+  #readMatchingRestoreReceipt(receipt: PiPackageRestoreReceipt<T>): PiPackageRestoreReceipt<T> {
+    const current = this.readRestoreReceipt(receipt.uninstallRequestId);
+    if (!current || !sameRestoreIntent(current, receipt)) throw lifecycleError("package.restore_receipt_conflict");
+    return current;
+  }
+
   #parseReceipt(value: unknown, requestId: string): PiPackageUninstallReceipt<T> {
     if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError("package.uninstall_receipt_invalid");
     const receipt = value as Partial<PiPackageUninstallReceipt<T>>;
@@ -491,6 +633,28 @@ export class PiPackageLifecycleStore<T extends PiPackageLifecycleRecord> {
       }
     } else if (receipt.rolledBackRegistryRevision !== undefined) throw lifecycleError("package.update_receipt_invalid");
     return { ...receipt, previousRecord, nextRecord } as PiPackageUpdateReceipt<T>;
+  }
+
+  #parseRestoreReceipt(value: unknown, uninstallRequestId: string): PiPackageRestoreReceipt<T> {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError("package.restore_receipt_invalid");
+    const receipt = value as Partial<PiPackageRestoreReceipt<T>>;
+    const record = this.#parseRecord(receipt.record);
+    const expectedKeys = receipt.state === "committed"
+      ? "committedRegistryRevision,createdAt,expectedRegistryRevision,packageId,record,requestId,restoreContextId,schemaVersion,state,uninstallReceiptHash,uninstallRequestId"
+      : "createdAt,expectedRegistryRevision,packageId,record,requestId,restoreContextId,schemaVersion,state,uninstallReceiptHash,uninstallRequestId";
+    if (Object.keys(value).sort().join(",") !== expectedKeys || receipt.schemaVersion !== 1 ||
+      (receipt.state !== "prepared" && receipt.state !== "committed") ||
+      typeof receipt.requestId !== "string" || !RESTORE_REQUEST_PATTERN.test(receipt.requestId) ||
+      typeof receipt.restoreContextId !== "string" || !RESTORE_CONTEXT_PATTERN.test(receipt.restoreContextId) ||
+      receipt.uninstallRequestId !== uninstallRequestId || receipt.packageId !== record.packageId ||
+      !Number.isSafeInteger(receipt.expectedRegistryRevision) || receipt.expectedRegistryRevision! < 0 ||
+      typeof receipt.uninstallReceiptHash !== "string" || !SHA256_PATTERN.test(receipt.uninstallReceiptHash) ||
+      typeof receipt.createdAt !== "string" || Number.isNaN(Date.parse(receipt.createdAt)) ||
+      (receipt.state === "prepared" && receipt.committedRegistryRevision !== undefined) ||
+      (receipt.state === "committed" && receipt.committedRegistryRevision !== receipt.expectedRegistryRevision! + 1)) {
+      throw lifecycleError("package.restore_receipt_invalid");
+    }
+    return { ...receipt, record } as PiPackageRestoreReceipt<T>;
   }
 }
 
@@ -606,8 +770,37 @@ function sameUpdateIntent<T extends PiPackageLifecycleRecord>(
     sameLifecycleRecord(left.nextRecord, right.nextRecord);
 }
 
+function sameRestoreIntent<T extends PiPackageLifecycleRecord>(
+  left: PiPackageRestoreReceipt<T>,
+  right: PiPackageRestoreReceipt<T>
+): boolean {
+  return left.requestId === right.requestId && left.restoreContextId === right.restoreContextId &&
+    left.packageId === right.packageId && left.expectedRegistryRevision === right.expectedRegistryRevision &&
+    left.uninstallRequestId === right.uninstallRequestId && left.uninstallReceiptHash === right.uninstallReceiptHash &&
+    sameLifecycleRecord(left.record, right.record);
+}
+
+export function hashPiPackageUninstallReceipt<T extends PiPackageLifecycleRecord>(receipt: PiPackageUninstallReceipt<T>): string {
+  return `sha256:${createHash("sha256").update(stableJson(receipt), "utf8").digest("hex")}`;
+}
+
+function stableJson(value: unknown): string {
+  if (value === null || typeof value === "boolean" || typeof value === "string" || typeof value === "number") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (typeof value === "object") return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right, "en"))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
+  throw lifecycleError("package.restore_receipt_invalid");
+}
+
 function sameLifecycleRecord(left: PiPackageLifecycleRecord, right: PiPackageLifecycleRecord): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function sameLifecycleRecordIgnoringPin(left: PiPackageLifecycleRecord, right: PiPackageLifecycleRecord): boolean {
+  const { pinned: _leftPinned, ...leftUnpinned } = left as PiPackageLifecycleRecord & { readonly pinned?: true };
+  const { pinned: _rightPinned, ...rightUnpinned } = right as PiPackageLifecycleRecord & { readonly pinned?: true };
+  return JSON.stringify(leftUnpinned) === JSON.stringify(rightUnpinned);
 }
 
 function assertRequestId(value: string): void {
@@ -624,6 +817,10 @@ function assertRollbackRequestId(value: string): void {
 
 function assertRollbackId(value: string): void {
   if (!ROLLBACK_ID_PATTERN.test(value)) throw lifecycleError("package.update_receipt_invalid");
+}
+
+function assertRestoreRequestId(value: string): void {
+  if (!RESTORE_REQUEST_PATTERN.test(value)) throw lifecycleError("package.restore_receipt_invalid");
 }
 
 function isErrno(value: unknown, code: string): boolean {
