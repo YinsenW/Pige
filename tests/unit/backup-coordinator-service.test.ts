@@ -25,6 +25,7 @@ import {
 import { JobRecordStore } from "../../apps/desktop/src/main/services/job-record-store";
 import { prepareIncompleteBackupJob } from "../../apps/desktop/src/main/services/backup-reconnect-coordinator";
 import { writeBackupCreatedOperation } from "../../apps/desktop/src/main/services/restore-job-store";
+import { AgentMemoryService } from "../../apps/desktop/src/main/services/agent-memory-service";
 import {
   createVaultOnDisk,
   loadVaultSummary
@@ -52,6 +53,15 @@ describe("BackupCoordinatorService", () => {
     const vaultPath = path.join(root, "Composed Backup Vault");
     const vault = loadVaultSummary(vaultPath);
     fs.writeFileSync(path.join(vaultPath, "wiki", "composed.md"), "# Composed\n", "utf8");
+    new AgentMemoryService({ now: () => new Date(FIXED_NOW) }).rememberPreference({
+      vaultPath,
+      activeVaultId: vault.vaultId,
+      title: "Composed backup preference",
+      body: "Include this vault-scoped memory in the Backup Job.",
+      sourceConversationId: "conv_20260714_composedbackup01",
+      sourceEventId: "evt_20260714_composedbackup01",
+      parentJobId: "job_20260714_composedparent01"
+    });
     const vaultPort = new TestVaultPort(vaultPath, vault.vaultId);
     const service = new BackupRestoreService();
     const coordinator = new BackupCoordinatorService({
@@ -83,7 +93,8 @@ describe("BackupCoordinatorService", () => {
     expect(inspected).toMatchObject({
       backupId: backupIdentity(job),
       sourceVaultId: vault.vaultId,
-      invalidFileCount: 0
+      invalidFileCount: 0,
+      manifest: { memoryCount: 1, includes: { vaultMemory: true } }
     });
     const operationId = job.operationIds![0]!;
     const operationPath = path.join(

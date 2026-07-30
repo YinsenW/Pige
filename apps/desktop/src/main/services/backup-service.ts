@@ -42,6 +42,7 @@ import {
   type BackupManagedCopyDependencyIdentity,
   type BackupManagedCopyRepairProof
 } from "./backup-managed-copy-binding";
+import { inspectAgentMemoryBackup, type AgentMemoryBackupIntegrity } from "./agent-memory-backup";
 import { ManagedCopyRootService } from "./managed-copy-root-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
@@ -342,6 +343,7 @@ interface BackupPreflightResult {
   readonly archiveSources: ReadonlyMap<string, BackupArchiveSource>;
   readonly sourceRecordChecksums: ReadonlyMap<string, string>;
   readonly domainSchemaVersions: BackupDomainSchemaVersions;
+  readonly memoryIntegrity: AgentMemoryBackupIntegrity;
   readonly externalDependencies: BackupManifest["externalDependencies"];
   readonly externalManagedCopies: NonNullable<BackupManifest["externalManagedCopies"]>;
 }
@@ -1078,6 +1080,14 @@ function createBackupManifest(
   });
   const files = preparedFiles.map(({ absolutePath: _absolutePath, identity: _identity, source: _source, ...file }) => file);
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const memoryIntegrity = inspectAgentMemoryBackup(
+    vaultPath,
+    vaultManifest.vault_id,
+    preflight.relativePaths
+  );
+  if (stableManifestValue(memoryIntegrity) !== stableManifestValue(preflight.memoryIntegrity)) {
+    throw new PigeDomainError("backup.source_changed", "Agent memory changed after backup preflight.");
+  }
 
   const manifest = BackupManifestSchema.parse({
     format: BACKUP_FORMAT,
@@ -1093,7 +1103,8 @@ function createBackupManifest(
     noteCount: countFiles(path.join(vaultPath, "wiki"), (filePath) => filePath.endsWith(".md")),
     sourceCount: countFiles(path.join(vaultPath, "sources"), (filePath) => filePath.endsWith(".md")),
     conversationCount: countFiles(path.join(vaultPath, ".pige/conversations")),
-    memoryCount: countFiles(path.join(vaultPath, ".pige/memory")),
+    memoryCount: memoryIntegrity.recordCount,
+    memoryIntegrity,
     includesSecrets: false,
     includes: DEFAULT_INCLUDES,
     domainSchemaVersions: preflight.domainSchemaVersions,
@@ -1134,6 +1145,9 @@ function inspectBackupPreflight(
   userDataPath: string | undefined
 ): BackupPreflightResult {
   const relativePaths = collectBackupFiles(vaultPath, options);
+  const domainSchemaVersions = deriveBackupDomainSchemaVersions(vaultPath, relativePaths);
+  const sourceVaultId = readVaultManifest(vaultPath).vault_id;
+  const memoryIntegrity = inspectAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths);
   const includedPaths = new Set(relativePaths);
   const archiveSources = new Map<string, BackupArchiveSource>(relativePaths.map((relativePath) => [
     relativePath,
@@ -1166,7 +1180,7 @@ function inspectBackupPreflight(
     if (rootId && rootId !== "root_vault_managed") requestedRootIds.add(rootId);
   }
 
-  const roots = readExternalManagedCopyRoots(userDataPath, readVaultManifest(vaultPath).vault_id,
+  const roots = readExternalManagedCopyRoots(userDataPath, sourceVaultId,
     new Set([...requestedRootIds].filter((rootId) => !omittedRootIds.has(rootId))));
   const externalLocators = new Set<string>();
   const includedRootIds = new Set<string>();
@@ -1268,7 +1282,8 @@ function inspectBackupPreflight(
     relativePaths,
     archiveSources,
     sourceRecordChecksums,
-    domainSchemaVersions: deriveBackupDomainSchemaVersions(vaultPath, relativePaths),
+    domainSchemaVersions,
+    memoryIntegrity,
     externalDependencies,
     externalManagedCopies: externalManagedCopies.sort((left, right) => left.sourceId.localeCompare(right.sourceId))
   };
@@ -3113,6 +3128,34 @@ function validateExtractedRestore(
   ) {
     throw new PigeDomainError("restore.result_invalid", "Restored vault identity does not match its publication manifest.");
   }
+  if (manifest.memoryIntegrity) {
+    try {
+      const actual = inspectAgentMemoryBackup(
+        directoryPath,
+        manifest.memoryIntegrity.sourceVaultId,
+        manifest.files.map((file) => file.path)
+      );
+      if (
+        stableManifestValue(actual) !== stableManifestValue(manifest.memoryIntegrity) ||
+        actual.recordCount !== manifest.memoryCount
+      ) throw new Error("memory integrity mismatch");
+    } catch {
+      throw new PigeDomainError(
+        "restore.result_invalid",
+        "Restored Agent memory failed lifecycle and provenance validation."
+      );
+    }
+  }
+}
+
+function stableManifestValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableManifestValue).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableManifestValue(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function reserveRestorePublication(

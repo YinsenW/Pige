@@ -8610,6 +8610,18 @@ export const BackupExternalManagedCopyMappingSchema = z.object({
   restoredSourceRecordSize: z.number().int().nonnegative()
 }).strict();
 
+export const BackupMemoryIntegritySchema = z.object({
+  schemaVersion: z.literal(1),
+  sourceVaultId: VaultIdSchema,
+  registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  registryChecksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  eventCount: z.number().int().nonnegative().max(1_000),
+  recordCount: z.number().int().nonnegative().max(1_000),
+  lifecycleReceiptCount: z.number().int().nonnegative(),
+  restoreIntentCount: z.number().int().nonnegative(),
+  operationCount: z.number().int().nonnegative()
+}).strict();
+
 export const BackupManifestSchema = z.object({
   format: z.literal("pige-backup"),
   formatVersion: z.literal(1),
@@ -8625,6 +8637,7 @@ export const BackupManifestSchema = z.object({
   sourceCount: z.number().int().nonnegative(),
   conversationCount: z.number().int().nonnegative(),
   memoryCount: z.number().int().nonnegative(),
+  memoryIntegrity: BackupMemoryIntegritySchema.optional(),
   includesSecrets: z.literal(false),
   includes: z.object({
     markdownKnowledge: z.boolean(),
