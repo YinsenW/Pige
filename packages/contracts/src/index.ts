@@ -227,6 +227,13 @@ import type {
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
   NoteTrashSummary,
+  NoteRevisionHistoryListRequest,
+  NoteRevisionHistoryListResult,
+  NoteRevisionHistoryOpenRequest,
+  NoteRevisionHistoryOpenResult,
+  NoteRevisionHistoryRestoreRequest,
+  NoteRevisionHistoryRestoreResult,
+  NoteRevisionHistorySummary,
   NoteRenderContextId,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
@@ -584,6 +591,13 @@ export type {
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
   NoteTrashSummary,
+  NoteRevisionHistoryListRequest,
+  NoteRevisionHistoryListResult,
+  NoteRevisionHistoryOpenRequest,
+  NoteRevisionHistoryOpenResult,
+  NoteRevisionHistoryRestoreRequest,
+  NoteRevisionHistoryRestoreResult,
+  NoteRevisionHistorySummary,
   NoteRenderResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
@@ -2158,6 +2172,15 @@ export interface PigeDesktopApi {
     ) => Promise<NoteTrashCurrentResult>;
     readonly listTrash: (request: NoteTrashListRequest) => Promise<NoteTrashListResult>;
     readonly restoreTrash: (request: NoteTrashRestoreRequest) => Promise<NoteTrashRestoreResult>;
+    readonly listRevisionHistory: (
+      request: NoteRevisionHistoryListRequest
+    ) => Promise<NoteRevisionHistoryListResult>;
+    readonly openRevisionHistory: (
+      request: NoteRevisionHistoryOpenRequest
+    ) => Promise<NoteRevisionHistoryOpenResult>;
+    readonly restoreRevisionHistory: (
+      request: NoteRevisionHistoryRestoreRequest
+    ) => Promise<NoteRevisionHistoryRestoreResult>;
     readonly resolveInlineReference: (
       request: NoteResolveInlineReferenceRequest
     ) => Promise<NoteResolveInlineReferenceResult>;
