@@ -30,6 +30,8 @@ import type {
   NoteRenameResult,
   NoteAliasChangeRequest,
   NoteAliasChangeResult,
+  NoteRemoveTagRequest,
+  NoteRemoveTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -96,6 +98,9 @@ import {
   NOTE_CHANGE_ALIAS_CHANNEL,
   NoteAliasChangeRequestSchema,
   NoteAliasChangeResultSchema,
+  NOTE_REMOVE_TAG_CHANNEL,
+  NoteRemoveTagRequestSchema,
+  NoteRemoveTagResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   NoteTrashCurrentRequestSchema,
@@ -468,6 +473,18 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result : NoteAliasChangeResultSchema.parse({ ...parsed, status: "failed" });
+  });
+  options.ipcMain.handle(NOTE_REMOVE_TAG_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteRemoveTagRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteRemoveTagResultSchema.parse({ ...parsed, status: "failed" });
+    let rawResult: NoteRemoveTagResult;
+    try { rawResult = await options.getNoteTagService().remove(ownerId, parsed); }
+    catch { rawResult = { ...parsed, status: "failed" }; }
+    const result = NoteRemoveTagResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result : NoteRemoveTagResultSchema.parse({ ...parsed, status: "failed" });
   });
   options.ipcMain.handle(NOTE_IMPORT_MARKDOWN_CHANNEL, async (event, request: unknown): Promise<NoteImportMarkdownResult> => {
     const parsed = NoteImportMarkdownRequestSchema.parse(request) as NoteImportMarkdownRequest;

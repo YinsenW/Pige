@@ -138,6 +138,7 @@ describe("registerReaderIpc", () => {
       "notes.editTaxonomy",
       "notes.rename",
       "notes.changeAlias",
+      "notes.removeTag",
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
@@ -209,6 +210,30 @@ describe("registerReaderIpc", () => {
     expect(edit).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     expect(refreshed).toHaveBeenCalledTimes(1);
     await expect(handlers.get("notes.editTaxonomy")!({ sender: makeSender(47) } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "failed" });
+  });
+
+  it("binds exact tag removal to the tracked Reader owner and refreshes indexes only after commit", async () => {
+    const request = { apiVersion: 1 as const, requestId: "noteremovetagreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_abcdefgh", currentPageId: "page_20260731_tagnote1",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`, tag: "Research" };
+    const render = { summary: { pageId: request.currentPageId, title: "Classified", pageType: "note", status: "active",
+      pagePath: "wiki/classified.md", createdAt: "2026-07-31T10:00:00.000Z", updatedAt: "2026-07-31T11:00:00.000Z", sourceIds: [] },
+      html: "<h1>Classified</h1>", byteSize: 64, renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      tagging: { tags: [], topics: ["PKM"], canAdd: true, canEdit: true, revision: `noteeditrev_${"b".repeat(32)}` } } as const;
+    const remove = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260731_removetag123456", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, { remove });
+    const sender = makeSender(47);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.removeTag")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", operationId: "op_20260731_removetag123456" });
+    expect(remove).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+    await expect(handlers.get("notes.removeTag")!({ sender: makeSender(48) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "failed" });
   });
 

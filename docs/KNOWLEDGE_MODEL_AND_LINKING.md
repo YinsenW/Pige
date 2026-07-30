@@ -99,6 +99,9 @@ Rules:
 - Reader and Library may explicitly replace the complete tags and topic references of one exact
   active note. Main binds vault/page/render/revision, accepts at most 12 tags and 8 topics, preserves
   body/unrelated fields, and records reversible `update_page`; stale/failure retains both drafts.
+- The same dialog lists existing tags and offers a confirmed single-tag Remove action. Main removes
+  only the named canonical tag through the same exact binding and reversible editor lifecycle;
+  closed outcomes retain the Reader and tag.
 - This correction does not expose topic-page creation, hierarchy, relation types, or broader manual
   taxonomy management. Synonym management remains open.
 

@@ -176,6 +176,9 @@ import {
   NOTE_CHANGE_ALIAS_CHANNEL,
   NoteAliasChangeRequestSchema,
   NoteAliasChangeResultSchema,
+  NOTE_REMOVE_TAG_CHANNEL,
+  NoteRemoveTagRequestSchema,
+  NoteRemoveTagResultSchema,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
   NoteTrashListRequestSchema,
@@ -4572,6 +4575,23 @@ describe("schemas", () => {
     expect(() => NoteEditTaxonomyRequestSchema.parse({ ...identity, topics: Array.from({ length: 9 }, (_, index) => `Topic ${index}`) })).toThrow();
     for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
       expect(() => NoteEditTaxonomyRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps exact Reader tag removal revision-bound and path/body-free", () => {
+    expect(NOTE_REMOVE_TAG_CHANNEL).toBe("notes.removeTag");
+    const identity = { apiVersion: 1, requestId: "noteremovetagreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260731_abcdefgh", currentPageId: "page_20260731_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef", expectedRevision: `noteeditrev_${"a".repeat(32)}`,
+      tag: "Research note" } as const;
+    expect(NoteRemoveTagRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteRemoveTagResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    expect(() => NoteRemoveTagRequestSchema.parse({ ...identity, tag: " Research note " })).toThrow();
+    for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteRemoveTagRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteRemoveTagResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 

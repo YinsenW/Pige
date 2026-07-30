@@ -157,6 +157,8 @@ import type {
   NoteRenameResult,
   NoteAliasChangeRequest,
   NoteAliasChangeResult,
+  NoteRemoveTagRequest,
+  NoteRemoveTagResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -580,6 +582,9 @@ import {
   NOTE_CHANGE_ALIAS_CHANNEL,
   NoteAliasChangeRequestSchema,
   NoteAliasChangeResultSchema,
+  NOTE_REMOVE_TAG_CHANNEL,
+  NoteRemoveTagRequestSchema,
+  NoteRemoveTagResultSchema,
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -1923,6 +1928,10 @@ const api: PigeDesktopApi = {
     changeAlias: async (request: NoteAliasChangeRequest): Promise<NoteAliasChangeResult> =>
       NoteAliasChangeResultSchema.parse(
         await ipcRenderer.invoke(NOTE_CHANGE_ALIAS_CHANNEL, NoteAliasChangeRequestSchema.parse(request))
+      ),
+    removeTag: async (request: NoteRemoveTagRequest): Promise<NoteRemoveTagResult> =>
+      NoteRemoveTagResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_REMOVE_TAG_CHANNEL, NoteRemoveTagRequestSchema.parse(request))
       ),
     trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
       NoteTrashCurrentResultSchema.parse(

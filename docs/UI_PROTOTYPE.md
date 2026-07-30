@@ -786,6 +786,9 @@ An active note in Reader or Library detail offers one Edit tags and topics actio
 confirmation dialog starts with the current comma-separated values, traps focus, supports Escape/
 Cancel, and commits only a changed bounded pair; stale/failure preserves both drafts and returns
 focus to the first field, while success adopts the authoritative render and remains undoable.
+Existing tags also appear as calm rows with Remove actions. Remove opens a focused confirmation
+that names one tag and explains Activity Undo; double-submit is blocked. Cancel/Escape or any closed
+result keeps the Reader and tag, while success adopts only Main's authoritative tag-free render.
 Compact Settings owns focus/inert state; Escape closes its navigator before the dialog
 and restores trigger focus.
 Appearance, local capabilities, reusable permission policy, Skills, Pi

@@ -20,6 +20,7 @@ const editRequest = {
   tags: ["Research", "Reading"],
   topics: ["Knowledge management"]
 };
+const removeRequest = { ...request, requestId: "noteremovetagreq_abcdefghijklmnop" };
 
 describe("NoteTagService", () => {
   it("atomically replaces the exact note tags and topics through one revision-bound editor operation", async () => {
@@ -128,6 +129,32 @@ describe("NoteTagService", () => {
       }))
     } as never);
     await expect(service.add("reader_owner", request)).resolves.toEqual({ ...request, status: "failed" });
+  });
+
+  it("removes one exact current tag and fails closed when the tag or Reader revision drifts", async () => {
+    const assertCurrent = vi.fn(() => true);
+    const save = vi.fn(() => ({
+      status: "committed" as const, requestId: "noteeditreq_internal", activeVaultId: request.activeVaultId,
+      pageId: request.currentPageId, revisionId: `sha256:${"b".repeat(64)}`,
+      renderIdentity: `sha256:${"c".repeat(64)}`, operationId: "op_20260731_removetag123456"
+    }));
+    const service = new NoteTagService({ resolveTrashTarget: vi.fn(() => readyTarget(assertCurrent)),
+      render: vi.fn(async () => ({ ...taggedRender(), tagging: { ...taggedRender().tagging, tags: [] } }))
+    } as never, { open: vi.fn(() => ({ ...openedNote(), markdown: openedNote().markdown.replace("source_ids: []", 'tags: ["Research note"]\nsource_ids: []') })), save } as never,
+    () => new Date("2026-07-31T12:00:00.000Z"));
+    await expect(service.remove("reader_owner", removeRequest)).resolves.toMatchObject({
+      ...removeRequest, status: "committed", operationId: "op_20260731_removetag123456", render: { tagging: { tags: [] } }
+    });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      requestId: expect.stringMatching(/^noteeditreq_[a-f0-9]{32}$/u),
+      markdown: expect.stringContaining("tags: []")
+    }));
+    const absent = new NoteTagService({ resolveTrashTarget: vi.fn(() => readyTarget(() => true)), render: vi.fn() } as never,
+      { open: vi.fn(() => openedNote()), save: vi.fn() } as never);
+    await expect(absent.remove("reader_owner", removeRequest)).resolves.toEqual({ ...removeRequest, status: "ineligible" });
+    const stale = new NoteTagService({ resolveTrashTarget: vi.fn(() => readyTarget(() => false)), render: vi.fn() } as never,
+      { open: vi.fn(() => openedNote()), save: vi.fn() } as never);
+    await expect(stale.remove("reader_owner", removeRequest)).resolves.toEqual({ ...removeRequest, status: "stale" });
   });
 });
 

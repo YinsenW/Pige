@@ -4182,6 +4182,31 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
   `docs/API_AND_IPC_DESIGN.md`; `docs/UI_PROTOTYPE.md`
 
+### D-20260731-Exact-Reader-Tag-Removal
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Reader and Library expose a confirmed Remove action for one existing tag on one exact active note.
+The pathless `notes.removeTag` request binds active Vault, page, render context, immutable revision,
+and canonical tag; Main alone proves and commits the frontmatter mutation.
+
+Consequences:
+
+- The ordinary complete tags/topics editor remains available; Remove is a calm narrow shortcut, not
+  a second taxonomy system.
+- Main changes only `tags` and `updated_at`, publishes the existing reversible `update_page`, and
+  accepts success only after the authoritative render proves the exact remaining classification.
+- Cancel, Escape, stale, missing, ineligible, failed, or identity-drifted outcomes retain the Reader
+  and tag; the renderer never receives Markdown, paths, hashes, or private recovery state.
+
+References:
+
+- `docs/PRD.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`; `docs/API_AND_IPC_DESIGN.md`;
+  `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`
+
 ### D-20260731-Recent-Vault-Forget-And-Reconnect
 
 Status: Accepted
