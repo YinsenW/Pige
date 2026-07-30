@@ -14,6 +14,8 @@ import type {
   NoteRenderResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteRelateRequest,
+  NoteRelateResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -1235,6 +1237,73 @@ describe("full UI Library", () => {
       buttonNamed(container, "Merge notes").click();
       await settle(dom);
     });
+    expect(requests).toHaveLength(2);
+    expect(adopted).toEqual([committedRender]);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("relates one selected note to the current Reader and retains the exact target on stale", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteRelateRequest[] = [];
+    const adopted: NoteRenderResult[] = [];
+    let mode: "stale" | "committed" = "stale";
+    const note: NoteRenderResult = {
+      ...readerNote(),
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` },
+    };
+    const target = libraryList().pages.find((page) => page.pageId !== note.summary.pageId && page.pageType === "note")!;
+    const committedRender: NoteRenderResult = {
+      ...note,
+      html: "<p>Authoritative body with related note.</p>",
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"b".repeat(32)}` },
+    };
+    const onRelateCurrentNote = async (request: NoteRelateRequest): Promise<NoteRelateResult> => {
+      requests.push(request);
+      return mode === "committed"
+        ? { ...request, status: "committed", render: committedRender }
+        : { ...request, status: "stale" };
+    };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: note, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async () => undefined, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+        activeVaultId: "vault_20260715_fullui01",
+        onLoadNoteMergeTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
+        onRelateCurrentNote,
+        onCurrentNoteRelated: (render) => adopted.push(render),
+        onDevelopment: () => undefined, t,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const trigger = buttonWithLabel(container, "More note actions");
+    trigger.focus();
+    await clickButton(dom, trigger);
+    await clickButton(dom, buttonNamed(container, "Relate note"));
+    expect(container.querySelector("select")?.value).toBe(target.pageId);
+    await clickButton(dom, buttonNamed(container, "Add relation"));
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      expectedRevision: note.trashEligibility?.revision,
+      targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt,
+    });
+    expect(requests[0]?.requestId).toMatch(/^noterelatereq_[a-z0-9]{16,64}$/u);
+    expect(adopted).toHaveLength(0);
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.querySelector("select")?.value).toBe(target.pageId);
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector("select"));
+
+    mode = "committed";
+    await clickButton(dom, buttonNamed(container, "Add relation"));
     expect(requests).toHaveLength(2);
     expect(adopted).toEqual([committedRender]);
     await act(async () => root.unmount());

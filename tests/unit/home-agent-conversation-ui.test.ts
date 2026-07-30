@@ -46,6 +46,8 @@ import type {
   NoteRenderResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteRelateRequest,
+  NoteRelateResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteResolveInlineReferenceRequest,
@@ -4644,6 +4646,49 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("relates a selected note from the Home-opened Reader and adopts the authoritative related surface", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedGroundedTimeline());
+    const revision = `noteeditrev_${"d".repeat(32)}`;
+    harness.renderNote = async (pageId) => ({
+      ...testRenderedNote(pageId),
+      trashEligibility: { canTrash: true, revision },
+    });
+    harness.relateCurrent = async (request) => ({
+      ...request,
+      status: "committed",
+      render: {
+        ...testRenderedNote(request.currentPageId),
+        html: "<p>Authoritative related Home note.</p>",
+        trashEligibility: { canTrash: true, revision: `noteeditrev_${"e".repeat(32)}` },
+      },
+    });
+    const mount = await mountHome(dom, makePigeApi(harness));
+    await clickElement(dom, requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+
+    await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]);
+    await clickButton(dom, mount.container, enMessages["note.relate.title"]);
+    await waitFor(dom, () => mount.container.querySelector("select")?.value === "page_20260715_note0002");
+    await clickButton(dom, mount.container, enMessages["note.relate.confirm"]);
+    await waitFor(dom, () => harness.noteRelateRequests.length === 1);
+    expect(harness.noteRelateRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      expectedRevision: revision,
+      targetPageId: "page_20260715_note0002",
+      expectedTargetUpdatedAt: "2026-07-15T08:01:00.000Z",
+    });
+    expect(harness.noteRelateRequests[0]?.requestId).toMatch(/^noterelatereq_[a-z0-9]{16,64}$/u);
+    expect(JSON.stringify(harness.noteRelateRequests[0])).not.toContain("wiki/note");
+    await waitFor(dom, () => mount.container.querySelector(".markdown-body")?.textContent?.includes("Authoritative related Home note.") === true);
+    await waitFor(dom, () => dom.window.document.activeElement === mount.container.querySelector(".note-reader"));
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("edits a Home-opened Reader through the shared canonical editor and adopts the committed render without refetch", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());
@@ -5661,12 +5706,14 @@ interface ConversationHarness {
   readonly noteTrashRequests: NoteTrashCurrentRequest[];
   readonly noteArchiveRequests: NoteArchiveCurrentRequest[];
   readonly noteMergeRequests: NoteMergeRequest[];
+  readonly noteRelateRequests: NoteRelateRequest[];
   renderNote: (pageId: string) => Promise<NoteRenderResult>;
   openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   trashCurrent: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   archiveCurrent: (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
   mergeCurrent: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
+  relateCurrent: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
   openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
   revealSource: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   reconnectReaderOriginalSource: (
@@ -5782,6 +5829,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     noteTrashRequests: [],
     noteArchiveRequests: [],
     noteMergeRequests: [],
+    noteRelateRequests: [],
     renderNote: async (pageId) => testRenderedNote(pageId),
     openEditor: async (request) => ({
       apiVersion: 1,
@@ -5803,6 +5851,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     trashCurrent: async (request) => ({ ...request, status: "failed" }),
     archiveCurrent: async (request) => ({ ...request, status: "failed" }),
     mergeCurrent: async (request) => ({ ...request, status: "failed" }),
+    relateCurrent: async (request) => ({ ...request, status: "failed" }),
     reconnectOriginalSource: async (request) => ({ ...request, status: "cancelled" }),
     openSourceReference: async (request) => ({
       apiVersion: 1,
@@ -6454,6 +6503,10 @@ function makePigeApi(harness: ConversationHarness): object {
       merge: async (request: NoteMergeRequest) => {
         harness.noteMergeRequests.push(request);
         return harness.mergeCurrent(request);
+      },
+      relate: async (request: NoteRelateRequest) => {
+        harness.noteRelateRequests.push(request);
+        return harness.relateCurrent(request);
       }
     }
   };

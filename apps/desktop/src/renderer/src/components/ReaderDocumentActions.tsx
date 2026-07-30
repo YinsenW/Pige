@@ -7,6 +7,11 @@ import {
   type ReaderNoteMergeOutcome,
   type ReaderNoteMergeTarget
 } from "./ReaderNoteMergeDialog";
+import {
+  ReaderNoteRelateDialog,
+  type ReaderNoteRelateLabels,
+  type ReaderNoteRelateOutcome,
+} from "./ReaderNoteRelateDialog";
 
 export type ReaderDocumentTrashOutcome = "committed" | "retained";
 export type ReaderDocumentArchiveOutcome =
@@ -94,25 +99,32 @@ export interface ReaderDocumentActionsProps {
   readonly ownerIdentity: string;
   readonly canMoveToTrash: boolean;
   readonly canMerge: boolean;
+  readonly canRelate?: boolean;
   readonly canArchive?: boolean;
   readonly currentTitle: string;
   readonly labels: ReaderDocumentActionLabels;
   readonly mergeLabels: ReaderNoteMergeLabels;
+  readonly relateLabels?: ReaderNoteRelateLabels;
   readonly archiveLabels?: ReaderDocumentArchiveLabels;
   readonly onMoveToTrash: () => Promise<ReaderDocumentTrashOutcome>;
   readonly onLoadMergeTargets: () => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMerge: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteMergeOutcome>;
+  readonly onLoadRelateTargets?: () => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onRelate?: (target: ReaderNoteMergeTarget) => Promise<ReaderNoteRelateOutcome>;
   readonly onArchive?: () => Promise<ReaderDocumentArchiveOutcome>;
   readonly onCommitted: () => void;
   readonly onMergeCommitted: (render: import("@pige/contracts").NoteRenderResult) => void;
+  readonly onRelateCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
   readonly onArchiveCommitted?: (render: import("@pige/contracts").NoteRenderResult) => void;
 }
 
 export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.JSX.Element | null {
   const canArchive = props.canArchive === true && Boolean(props.archiveLabels && props.onArchive);
+  const canRelate = props.canRelate === true && Boolean(props.relateLabels && props.onLoadRelateTargets && props.onRelate);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<"trash" | "archive" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [relateOpen, setRelateOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   const requestSequenceRef = useRef(0);
@@ -122,6 +134,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   const actionRef = useRef<HTMLButtonElement>(null);
   const archiveActionRef = useRef<HTMLButtonElement>(null);
   const mergeActionRef = useRef<HTMLButtonElement>(null);
+  const relateActionRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   ownerIdentityRef.current = props.ownerIdentity;
@@ -132,14 +145,17 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setMenuOpen(false);
     setConfirmAction(null);
     setMergeOpen(false);
+    setRelateOpen(false);
     setPending(false);
     setFailed(false);
-  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive]);
+  }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRelate]);
 
   useEffect(() => {
     if (menuOpen) {
       (props.canMerge
         ? mergeActionRef.current
+        : canRelate
+          ? relateActionRef.current
         : canArchive
           ? archiveActionRef.current
           : actionRef.current)?.focus({ preventScroll: true });
@@ -150,7 +166,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     if (confirmAction) cancelRef.current?.focus({ preventScroll: true });
   }, [confirmAction]);
 
-  if (!props.canMoveToTrash && !props.canMerge && !canArchive) return null;
+  if (!props.canMoveToTrash && !props.canMerge && !canArchive && !canRelate) return null;
 
   const restoreTriggerFocus = (): void => {
     window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
@@ -241,6 +257,19 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
             {props.mergeLabels.title}
           </button>
         ) : null}
+        {canRelate && props.relateLabels ? (
+          <button
+            ref={relateActionRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              setRelateOpen(true);
+            }}
+          >
+            {props.relateLabels.title}
+          </button>
+        ) : null}
         {canArchive && props.archiveLabels ? (
           <button
             ref={archiveActionRef}
@@ -283,6 +312,20 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         onCommitted={(render) => {
           setMergeOpen(false);
           props.onMergeCommitted(render);
+        }}
+      />
+    ) : null}
+    {relateOpen && props.relateLabels && props.onLoadRelateTargets && props.onRelate ? (
+      <ReaderNoteRelateDialog
+        ownerIdentity={props.ownerIdentity}
+        returnFocusRef={triggerRef}
+        labels={props.relateLabels}
+        onLoadTargets={props.onLoadRelateTargets}
+        onRelate={props.onRelate}
+        onCancel={() => setRelateOpen(false)}
+        onCommitted={(render) => {
+          setRelateOpen(false);
+          props.onRelateCommitted?.(render);
         }}
       />
     ) : null}
