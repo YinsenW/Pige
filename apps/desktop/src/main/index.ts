@@ -149,6 +149,7 @@ import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
+import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -223,6 +224,7 @@ import {
 } from "./services/home-agent-service";
 import { HomeAgentUrlService } from "./services/home-agent-url-service";
 import { CurrentNoteAppendService } from "./services/current-note-append-service";
+import { CurrentNoteReplaceService } from "./services/current-note-replace-service";
 import { HighRiskConfirmationService } from "./services/high-risk-confirmation-service";
 import { LocalDatabaseRebuildWorkerService } from "./services/local-database-rebuild-worker-service";
 import { LocalDatabaseService } from "./services/local-database-service";
@@ -353,6 +355,7 @@ let agentIngestService: AgentIngestService | undefined;
 let homeAgentService: HomeAgentService | undefined;
 let homeAgentUrlService: HomeAgentUrlService | undefined;
 let currentNoteAppendService: CurrentNoteAppendService | undefined;
+let currentNoteReplaceService: CurrentNoteReplaceService | undefined;
 let appearanceService: AppearanceService | undefined;
 let startupDestinationService: StartupDestinationService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
@@ -1492,7 +1495,16 @@ const getHomeAgentService = (): HomeAgentService => {
         })]
       },
       getAgentMemoryService(),
-      getCurrentNoteAppendService(),
+      {
+        publish: (input) => ({ ...getCurrentNoteAppendService().publish(input), kind: "append" as const }),
+        publishReplace: (input) => ({ ...getCurrentNoteReplaceService().publish(input), kind: "replace" as const }),
+        readPublication: (input) => {
+          const append = getCurrentNoteAppendService().readPublication(input);
+          const replace = getCurrentNoteReplaceService().readPublication(input);
+          if (append && replace) throw new Error("One Agent turn has conflicting current-note mutation publications.");
+          return replace ? { ...replace, kind: "replace" as const } : append ? { ...append, kind: "append" as const } : undefined;
+        }
+      },
       new HomeSkillStagingToolService(getSkillUrlInstallService()),
       getExternalWebSkillRuntimeService(),
       undefined,
@@ -1505,6 +1517,11 @@ const getHomeAgentService = (): HomeAgentService => {
 const getCurrentNoteAppendService = (): CurrentNoteAppendService => {
   currentNoteAppendService ??= new CurrentNoteAppendService();
   return currentNoteAppendService;
+};
+
+const getCurrentNoteReplaceService = (): CurrentNoteReplaceService => {
+  currentNoteReplaceService ??= new CurrentNoteReplaceService();
+  return currentNoteReplaceService;
 };
 
 const getHomeAgentUrlService = (): HomeAgentUrlService => {
@@ -2658,6 +2675,13 @@ registerCurrentNoteAppendIpc({
   currentVault: () => getVaultService().current(),
   activeVaultPath: () => getVaultService().activeVaultPath(),
   getService: getCurrentNoteAppendService,
+  getJobsService
+});
+registerCurrentNoteReplaceIpc({
+  ipcMain,
+  currentVault: () => getVaultService().current(),
+  activeVaultPath: () => getVaultService().activeVaultPath(),
+  getService: getCurrentNoteReplaceService,
   getJobsService
 });
 registerBackupRestoreIpc({

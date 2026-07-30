@@ -28,6 +28,7 @@ import {
   type HomeAgentReviewedTaskPlanPort,
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
+import { hasExplicitCurrentNoteReplaceIntent } from "../../apps/desktop/src/main/services/home-current-note-replace";
 import type {
   DatasetQueryCatalog,
   DatasetQueryEvidenceRevalidation,
@@ -924,6 +925,81 @@ describe("Home Pi Agent service", () => {
     expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })).toMatchObject({
       latestTurn: { proposalId, state: "awaiting_review" }
     });
+  });
+
+  it("registers whole-note replacement only for explicit authored intent and stages one bounded review", async () => {
+    const fixture = makeFixture();
+    const jobs = new JobsService(fixture.vaults);
+    const proposalId = "proposal_20260728_homereplace001";
+    const publishReplace = vi.fn(() => ({ status: "review_required" as const, proposalId, kind: "replace" as const }));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          expect(request.tools.map(({ name }) => name)).toContain("pige_replace_current_note");
+          expect(request.tools.map(({ name }) => name)).not.toContain("pige_append_current_note");
+          const read = request.tools.find(({ name }) => name === "pige_read_current_note");
+          const replace = request.tools.find(({ name }) => name === "pige_replace_current_note");
+          if (!read || !replace) throw new Error("Missing exact current-note replacement tools.");
+          const signal = new AbortController().signal;
+          await read.execute({}, signal, { toolCallId: "pi_tool_home_replace_read", signal });
+          await request.beforeModelTurn?.();
+          await replace.execute({ markdown: "# Rewritten note\n\nA reviewed replacement." }, signal, {
+            toolCallId: "pi_tool_home_replace_write",
+            signal
+          });
+          return makeRuntimeResult(request, ["pige_read_current_note", "pige_replace_current_note"], {
+            answer: "The replacement is ready for review. [citation_1]",
+            citationRefs: ["citation_1"],
+            grounding: "local_knowledge"
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: vi.fn(),
+        publishReplace,
+        readPublication: () => ({ status: "review_required", proposalId, kind: "replace" })
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Rewrite the current note as a concise plan.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260728_homereplace01"
+    });
+    expect(outcome).toMatchObject({ state: "waiting", proposalId });
+    expect(publishReplace).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: fixture.vault.vaultId,
+      markdown: "# Rewritten note\n\nA reviewed replacement.",
+      inspection: expect.objectContaining({ pageId: HOME_PAGE_ID, evidenceRefs: ["citation_1"] })
+    }));
+    expect(jobs.readAgentTurnJob(outcome.jobId!)).toMatchObject({ state: "awaiting_review", proposalIds: [proposalId] });
+  });
+
+  it("recognizes bounded six-locale replacement intent and rejects neutral or quoted text", () => {
+    expect([
+      ["Rewrite the current note as a plan.", "en"],
+      ["Bitte ersetze die aktuelle Notiz durch einen Plan.", "de"],
+      ["Remplace la note actuelle par un plan.", "fr"],
+      ["現在のノートを書き換えてください。", "ja"],
+      ["현재 노트를 다시 작성해 주세요.", "ko"],
+      ["请重写当前笔记。", "zh-Hans"]
+    ].every(([text, locale]) => hasExplicitCurrentNoteReplaceIntent(text!, locale as Locale))).toBe(true);
+    expect(hasExplicitCurrentNoteReplaceIntent("Summarize the current note without editing it.", "en")).toBe(false);
+    expect(hasExplicitCurrentNoteReplaceIntent('"Rewrite the current note" appears in the source.', "en")).toBe(false);
   });
 
   it("rejects an invented append tool when no exact current-note append owner is registered", async () => {
