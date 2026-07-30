@@ -88,6 +88,7 @@ import {
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
+  LIBRARY_REMOVE_TAG_CHANNEL,
   LIBRARY_TAGS_PAGE_SIZE_MAX,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
@@ -95,6 +96,8 @@ import {
   LibraryRenameTagResultSchema,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
+  LibraryRemoveTagRequestSchema,
+  LibraryRemoveTagResultSchema,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
@@ -967,6 +970,27 @@ describe("schemas", () => {
     })).toMatchObject({ status: "committed", mergedPageCount: 3 });
     expect(() => LibraryMergeTagResultSchema.parse({ ...request, status: "committed", mergedPageCount: 3 })).toThrow();
     expect(LibraryMergeTagResultSchema.parse({ ...request, status: "ineligible" })).toMatchObject({ status: "ineligible" });
+  });
+
+  it("keeps Library tag removal identity-bound with a closed result", () => {
+    expect(LIBRARY_REMOVE_TAG_CHANNEL).toBe("library.removeTag");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "library_tag_remove_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_remove01",
+      tag: "Deprecated",
+      expectedSnapshotId: `library_tags_snapshot_${"c".repeat(64)}`,
+      expectedPageCount: 3
+    };
+    expect(LibraryRemoveTagRequestSchema.parse(request)).toEqual(request);
+    expect(LibraryRemoveTagResultSchema.parse({
+      ...request,
+      status: "committed",
+      operationId: "op_20260730_tagremove01",
+      removedPageCount: 3
+    })).toMatchObject({ status: "committed", removedPageCount: 3 });
+    expect(() => LibraryRemoveTagResultSchema.parse({ ...request, status: "committed", removedPageCount: 3 })).toThrow();
+    expect(LibraryRemoveTagResultSchema.parse({ ...request, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("opens one durable Dataset citation as an exact read-only preview with typed highlights", () => {

@@ -76,6 +76,8 @@ import type {
   LibraryRenameTagResult,
   LibraryMergeTagRequest,
   LibraryMergeTagResult,
+  LibraryRemoveTagRequest,
+  LibraryRemoveTagResult,
   LocalSemanticRetrievalDisableRequest,
   LocalSemanticRetrievalDisableResult,
   LocalSemanticRetrievalEnableRequest,
@@ -342,12 +344,15 @@ import {
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
   LIBRARY_MERGE_TAG_CHANNEL,
+  LIBRARY_REMOVE_TAG_CHANNEL,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
   LibraryMergeTagRequestSchema,
   LibraryMergeTagResultSchema,
+  LibraryRemoveTagRequestSchema,
+  LibraryRemoveTagResultSchema,
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeHealthRunRequestSchema,
@@ -714,6 +719,19 @@ async function invokeLibraryMergeTag(request: LibraryMergeTagRequest): Promise<L
     result.expectedSourcePageCount !== parsedRequest.expectedSourcePageCount ||
     result.expectedTargetPageCount !== parsedRequest.expectedTargetPageCount) {
     throw new Error("Invalid Library tag merge response identity.");
+  }
+  return result;
+}
+
+async function invokeLibraryRemoveTag(request: LibraryRemoveTagRequest): Promise<LibraryRemoveTagResult> {
+  const parsedRequest = LibraryRemoveTagRequestSchema.parse(request);
+  const result = LibraryRemoveTagResultSchema.parse(
+    await ipcRenderer.invoke(LIBRARY_REMOVE_TAG_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.tag !== parsedRequest.tag || result.expectedSnapshotId !== parsedRequest.expectedSnapshotId ||
+    result.expectedPageCount !== parsedRequest.expectedPageCount) {
+    throw new Error("Invalid Library tag remove response identity.");
   }
   return result;
 }
@@ -1504,7 +1522,8 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("library.related", request) as Promise<LibraryRelatedResult>,
     tags: invokeLibraryTags,
     renameTag: invokeLibraryRenameTag,
-    mergeTag: invokeLibraryMergeTag
+    mergeTag: invokeLibraryMergeTag,
+    removeTag: invokeLibraryRemoveTag
   },
   notes: {
     get: async (request: NoteGetRequest): Promise<NoteDocument> =>
