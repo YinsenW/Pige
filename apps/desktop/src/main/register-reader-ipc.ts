@@ -183,10 +183,10 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       rawResult = { ...parsed, status: "failed" };
     }
     const result = NoteTrashCurrentResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteTrashCommitted();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
-    if (result.status === "committed") options.onNoteTrashCommitted();
     return result;
   });
   options.ipcMain.handle("notes.resolveInlineReference", (

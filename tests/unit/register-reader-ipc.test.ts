@@ -125,10 +125,17 @@ describe("registerReaderIpc", () => {
     expect(trash).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), identity);
     expect(refreshed).toHaveBeenCalledTimes(1);
 
+    const detachedSender = makeSender(33);
+    await handlers.get("notes.render")!({ sender: detachedSender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+    vi.mocked(detachedSender.isDestroyed).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    expect(handlers.get("notes.trashCurrent")!({ sender: detachedSender } as IpcMainInvokeEvent, identity))
+      .toEqual({ ...identity, status: "failed" });
+    expect(refreshed).toHaveBeenCalledTimes(2);
+
     const unowned = makeHarness({}, undefined, { trash }, refreshed);
     expect(unowned.get("notes.trashCurrent")!({ sender: makeSender(32) } as IpcMainInvokeEvent, identity))
       .toEqual({ ...identity, status: "failed" });
-    expect(trash).toHaveBeenCalledTimes(1);
+    expect(trash).toHaveBeenCalledTimes(2);
   });
 
   it("fails a Reader link closed before Agent submission without a tracked render owner", async () => {
