@@ -27,9 +27,8 @@ import {
   selectConversationTimelineMessages
 } from "./agent-conversation-pagination";
 import { conversationLanguageContinuity } from "./durable-language";
+import { selectCompactedConversationContext } from "./conversation-context-compaction-service";
 const MAX_TURN_TEXT_BYTES = 64 * 1024, MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
-const MAX_CONTEXT_MESSAGES = 16;
-const MAX_CONTEXT_TEXT_BYTES = 64 * 1024;
 const DEFAULT_TIMELINE_MESSAGES = 50, MAX_TIMELINE_MESSAGES = 100;
 const MAX_TIMELINE_TEXT_BYTES = 256 * 1024;
 const MAX_DISCOVERY_CANDIDATE_FILES = 256;
@@ -265,11 +264,7 @@ export class AgentTurnConversationStore {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent context boundary was not found.");
     }
     const contextEvents = events.slice(0, matchingIndex);
-    return selectRecentContextMessages(
-      contextEvents,
-      MAX_CONTEXT_MESSAGES,
-      MAX_CONTEXT_TEXT_BYTES
-    );
+    return selectCompactedConversationContext(contextEvents);
   }
 
   readConversationTimeline(
@@ -819,34 +814,6 @@ function assertConversationScope(events: readonly ConversationEvent[], scope: Ag
 
 function scopesEqual(left: AgentTurnScope | undefined, right: AgentTurnScope | undefined): boolean {
   return left?.kind === right?.kind && left?.pageId === right?.pageId;
-}
-
-function selectRecentContextMessages(
-  events: readonly ConversationEvent[],
-  limit: number,
-  maxTextBytes: number
-): AgentTurnConversationContextMessage[] {
-  const selected: AgentTurnConversationContextMessage[] = [];
-  let textBytes = 0;
-  for (let index = events.length - 1; index >= 0 && selected.length < limit; index -= 1) {
-    const event = events[index];
-    if (
-      !event ||
-      (event.type !== "user_message" && event.type !== "assistant_message") ||
-      typeof event.text !== "string"
-    ) {
-      continue;
-    }
-    const bytes = Buffer.byteLength(event.text, "utf8");
-    if (textBytes + bytes > maxTextBytes) break;
-    selected.push({
-      role: event.type === "user_message" ? "user" : "assistant",
-      createdAt: event.createdAt,
-      text: event.text
-    });
-    textBytes += bytes;
-  }
-  return selected.reverse();
 }
 
 function validateTimelineLimit(limit: number): number {
