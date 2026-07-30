@@ -597,27 +597,55 @@ References:
 
 ### D-20260709-Encrypted-Default-Secrets
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
+Superseded by: D-20260730-Machine-Local-App-Data-Secrets
 
 Decision:
 
-API keys are encrypted by default through OS keychain or encrypted local storage. Plaintext portable/developer mode is explicit and warned.
+API keys used OS-keychain/encrypted local storage; plaintext portable mode required warning.
 
 Rationale:
 
-BYOK is required, and secrets must not leak into user-owned Markdown, logs, prompts, diagnostics, or backups.
+BYOK secrets must not leak into user content or operational artifacts.
 
 Consequences:
 
-- Secrets are machine-local by default.
-- Backup excludes secrets by default.
-- Plaintext mode requires a visible warning.
+- Secrets were machine-local and backup-excluded; plaintext required warning.
 
 References:
 
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/DATA_ARCHITECTURE.md`
+
+### D-20260730-Machine-Local-App-Data-Secrets
+
+Status: Accepted
+Date: 2026-07-30
+Supersedes: D-20260709-Encrypted-Default-Secrets
+
+Decision:
+
+Provider API keys use schema-v2 machine-local app data, not Electron `safeStorage` or an
+OS keychain. Startup reads new credentials directly; legacy ciphertext remains inert and
+requires one Provider reconnect.
+
+Rationale:
+
+One cross-platform store avoids platform-specific startup prompts.
+
+Consequences:
+
+- Exclude the file from Vaults, logs, diagnostics and backups; use owner-only POSIX mode
+  and Windows user-data ACLs.
+- Disclose same-OS-user readability; add no recurring warning or mode selector.
+- Production never calls `safeStorage` or unlocks a keychain.
+
+References:
+
+- `PRIVACY.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `apps/desktop/src/main/services/secret-store.ts`
 
 ### D-20260709-Permissioned-External-Skills
 

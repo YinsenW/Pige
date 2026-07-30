@@ -1107,42 +1107,32 @@ React renderer responsibilities:
 
 ### 5.7 Settings And Secrets Service
 
-Detailed setting scopes, storage locations, registry rules, backup/export behavior, and Agent/Skill boundaries are defined in `docs/SETTINGS_AND_PREFERENCES.md`. Agent-affecting setting effects are defined in `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`. This section summarizes service ownership only.
+`docs/SETTINGS_AND_PREFERENCES.md` owns scopes, registry, storage, backup/export and
+Agent/Skill boundaries; `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` owns runtime effects.
 
 Responsibilities:
 
-- Store non-secret preferences in local settings.
-- Store API keys in OS keychain or encrypted machine-local secret storage by default.
-- Never write API keys into vault Markdown.
-- Allow export of settings without secrets.
-- Allow explicit plaintext portable/developer secret storage only with strong warning.
+- Store preferences in their declared scope and export them without secrets.
+- Load API keys from non-portable machine-local app data without OS-keychain access;
+  restrict the file to the local OS user where supported and exclude it from Vaults,
+  Markdown, logs, diagnostics and default backups.
 
 Settings categories:
 
-- Basic settings: app language, theme, window preferences, always-on-top, compact/expanded/full-screen preferences, and startup behavior.
-- Knowledge Base > Vault & Note Storage settings: current vault name, active vault path, knowledge root path, source asset root path, default source storage strategy, reveal in file manager, open existing vault, create new vault, recent vaults, vault schema version, backup/restore entry points, trash policy, and backup include/exclude defaults.
-- Knowledge Base > Index & Maintenance settings: rebuild index, reset local database, chunk/index status, knowledge health repair actions, and parser/index repair jobs.
-- AI > Models: Global Default first, compact Provider summaries, separate preset credential
-  and Custom technical connection pages, then Provider-local inventory/Refresh/enable/
-  alias/manual-model management. Existing typed registry/secret owners remain authoritative.
-- No AI > Model Routing settings entry appears in v0.1. Model routing is only a deferred extension point unless Pi Agent upstream exposes stable model slots or Pige implements a tested Model Routing Service. Do not show Advanced/Fast model assignment as a user setting before it changes runtime behavior.
-- Internal model provider capability metadata is app-owned in v0.1, not a user-facing routing surface.
-- AI > Local Capabilities settings: local RAG engine status, embedding/reranking model downloads, OCR engines, speech input, parser/toolchain health, and local runtime repair state.
-- AI > Agent & Memory settings: `PIGE.md`, behavior, memory, autonomous Activity/history,
-  export/delete/reset, and vault-memory backup inclusion.
-- Security: keys/send disclosure and Ask/scoped-grant/YOLO policy; confirmation gates effects.
-- Extensions settings: installed Skill records, staged Skill install proposals, Pi package install records, scopes, versions, capabilities, enablement state, update state, and rollback metadata.
-- System settings: auto-update channel/status, diagnostics, app version, bundled dependency versions, and support export without secrets.
+- Basic: appearance, window and startup. Knowledge Base: Vault/storage, backup and index
+  maintenance. AI: Models, Local Capabilities, Agent & Memory. Security: credential/send
+  disclosure and permission policy. Extensions: Skills/Pi Packages. System: updates,
+  diagnostics and support export.
+- Models exposes one Global Default plus Provider-local inventory and Custom-only protocol/
+  Base URL. Model Routing, Advanced/Fast roles and capability internals stay hidden until
+  a tested runtime owner exists.
 
 Settings storage rules:
 
-- API keys and tokens live in OS keychain or encrypted machine-local secret storage.
-- Plaintext credential mode is not default and must be explicitly enabled by the user.
-- Provider profiles, model profiles, and default model selection are machine-local by default, because they depend on local credentials.
-- Vault-level preferences that should travel with the vault live under `.pige/config.json`.
-- Machine-local preferences should not be written into the vault unless the user explicitly exports them.
-- New user-visible settings must be added to the registry in `docs/SETTINGS_AND_PREFERENCES.md` before implementation.
-- New Agent-affecting settings must declare their runtime policy effect before implementation.
+- Credentials use schema-v2 app data; Provider/model/default bindings stay machine-local.
+- Portable Vault preferences use `.pige/config.json`; machine-local state stays outside it.
+- Register every visible setting before implementation and every Agent-affecting effect
+  in the runtime policy context.
 
 ### 5.7.1 Permission Broker Service
 
@@ -1794,7 +1784,6 @@ Waiver rules:
 | Apple ImageIO/CoreGraphics/UniformTypeIdentifiers (`ocr.apple-media-frameworks`) | required | Validate and bounded-decode raster image inputs before Vision recognition. | https://developer.apple.com/documentation/imageio | Pin through the macOS 26 SDK used for the helper build; rerun invalid-format, frame, dimension, and decode fixtures on update. | Runtime-provided platform APIs in the isolated native helper. |
 | Windows AI APIs Text Recognition | required | Native Windows OCR path when runtime checks confirm API, model, and hardware support. | https://learn.microsoft.com/en-us/windows/ai/apis/text-recognition | Runtime capability detection; do not assume every Windows 11 machine supports it. | Local platform OCR; currently hardware/API availability constrained. |
 | Windows.Media.Ocr | not-default | Legacy OCR reference only. | https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr.ocrengine | Do not implement as default v0.1 path. | Use PaddleOCR fallback when Windows AI OCR is unavailable. |
-| Electron `safeStorage` encrypted secret store | required | v0.1 default storage for API keys and tokens as encrypted blobs in machine-local app data. | https://www.electronjs.org/docs/latest/api/safe-storage | Pin through Electron version; require runtime `isEncryptionAvailable()` check and plaintext portable/developer mode only behind explicit warning. | Secrets never go into Markdown, SQLite, logs, prompts, diagnostics, or backups by default. |
 
 ### 16.6 Document Parsing, OCR, And Web Capture
 
@@ -1950,7 +1939,8 @@ Pin before implementing:
 - Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
 - PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.10.1`; JSZip remains Mammoth-transitive only.
 - Backup/restore archive engine: yazl/yauzl.
-- Secret storage: Electron `safeStorage` encrypted local store, including unavailable-encryption behavior.
+- Secret storage: schema-v2 machine-local app-data file, owner-only POSIX mode where
+  supported, inert schema-v1 ciphertext, and reconnect without keychain access.
 - Vector index backend: sqlite-vec behind `VectorIndexDriver`, or a documented fallback if packaging validation fails.
 - Packaging/update stack: electron-builder `26.15.3` plus electron-updater `6.8.9` with the immutable GitHub Releases alpha feed.
 - Security scanning: Dependabot, CodeQL, and npm audit in CI.

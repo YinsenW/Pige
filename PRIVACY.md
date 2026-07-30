@@ -26,12 +26,14 @@ Pige may store these on your machine:
 
 ## Secrets
 
-- API keys and tokens are secrets. Store them in the local OS keychain or encrypted
-  store and present them only to the configured provider for authentication.
+- API keys and tokens are secrets. Pige stores them in its machine-local app-data
+  credential file and presents them only to the configured provider for authentication.
+  It does not use the OS keychain, so startup never asks for a keychain password.
 - Never inject Pige-owned stored credentials into user content, prompts, Markdown,
   SQLite, logs, operations, conversations, diagnostics, or default backups. This is
   credential isolation and storage hygiene, not rewriting the user's submitted text.
-- Plaintext portable/developer mode is allowed only as an explicit advanced choice with a warning.
+- The app-data credential file is restricted to the local OS user where the platform
+  supports file modes; it is not portable and is never included in default backups.
 - Default backups exclude secrets.
 
 ## Data That May Leave The Device

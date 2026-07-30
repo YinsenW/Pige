@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, safeStorage, screen, shell, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen, shell, type WebContents } from "electron";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -1873,7 +1873,7 @@ const getModelProviderRegistry = (): ModelProviderRegistry => {
   if (!modelProviderRegistry) {
     modelProviderRegistry = new ModelProviderRegistry(
       app.getPath("userData"),
-      new JsonSecretStore(app.getPath("userData"), safeStorage),
+      new JsonSecretStore(app.getPath("userData")),
       undefined,
       undefined,
       {
@@ -3148,7 +3148,7 @@ app.whenReady().then(async () => {
   });
   modelProviderRegistry = new ModelProviderRegistry(
     app.getPath("userData"),
-    new JsonSecretStore(app.getPath("userData"), safeStorage)
+    new JsonSecretStore(app.getPath("userData"))
   );
   vaultService = new VaultService(
     getLocalSettingsStore(),

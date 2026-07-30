@@ -746,7 +746,8 @@ Models:
 - No required user-facing embedding or reranker provider setup. Local RAG uses Pige-managed local models.
 - After BYOK setup, explicit Send transmits bounded selected context to the configured
   Provider with visible destination status and no second content-policy confirmation.
-- API keys are stored encrypted by default through OS keychain or encrypted local storage; plaintext portable/developer mode is explicit and warned.
+- API keys are stored in machine-local Pige app data, excluded from Vaults and default
+  backups, and loaded without OS-keychain prompts.
 
 Local RAG:
 
@@ -1512,8 +1513,8 @@ Privacy promises:
 - User chooses model provider.
 - API keys are stored only on the local machine, presented only to the configured
   provider for authentication, and never written into Markdown pages.
-- API keys are encrypted by default through OS keychain or encrypted local storage.
-- Plaintext secret storage is allowed only as an explicit portable/developer mode with warning.
+- API keys use Pige's fixed machine-local app-data credential store. The store is not
+  portable, is excluded from default backups, and never invokes the OS keychain.
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
   calls use non-blocking status instead of repeated prompts. Explicit Send transmits the

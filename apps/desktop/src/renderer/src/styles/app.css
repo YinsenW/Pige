@@ -5686,6 +5686,194 @@ dd {
   border-bottom: 0;
 }
 
+.permission-mode-fieldset {
+  min-width: 0;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-bottom: .5px solid var(--border-default);
+  padding: 14px;
+  color: var(--text-primary);
+}
+
+.permission-mode-fieldset legend {
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.permission-mode-fieldset > p {
+  margin: 3px 0 11px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.permission-mode-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.permission-mode-option {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  border: .5px solid var(--border-default);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--surface-elevated);
+  cursor: pointer;
+}
+
+.permission-mode-option:has(input:checked) {
+  border-color: color-mix(in oklab, var(--accent) 58%, var(--border-default));
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface-elevated));
+}
+
+.permission-mode-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.permission-mode-option:has(input:disabled) {
+  cursor: default;
+  opacity: .55;
+}
+
+.permission-mode-option > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.permission-mode-indicator {
+  position: relative;
+  width: 15px;
+  height: 15px;
+  display: block;
+  margin-top: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-elevated);
+}
+
+.permission-mode-option:has(input:checked) .permission-mode-indicator {
+  border-color: var(--accent);
+}
+
+.permission-mode-option:has(input:checked) .permission-mode-indicator::after {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  content: "";
+}
+
+.permission-mode-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.permission-mode-copy strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.permission-mode-copy small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.permission-full-access-acknowledgement {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.permission-full-access-acknowledgement > input {
+  width: 15px;
+  height: 15px;
+  min-height: 15px;
+  margin: 0;
+  padding: 0;
+}
+
+.permission-full-access-actions,
+.permission-grants-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.permission-hard-boundaries {
+  margin-top: 9px;
+}
+
+.permission-hard-boundaries ul {
+  display: grid;
+  gap: 3px;
+  margin: 5px 0 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.permission-grants-row {
+  align-items: flex-start;
+}
+
+.permission-grants-control {
+  min-width: min(100%, 290px);
+}
+
+.permission-grant-list {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.permission-grant-list li {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.permission-grant-list li > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -6770,6 +6958,12 @@ dd {
   .memory-settings-page .settings-status { align-self: flex-start; }
   .model-settings-page .settings-status { align-self: flex-start; }
   .privacy-settings-page .settings-status { align-self: flex-start; }
+  .permission-mode-options { grid-template-columns: 1fr; }
+  .permission-full-access-actions,
+  .permission-grants-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
   .model-settings-page .model-row-controls {
     flex-direction: row;
     align-items: center;

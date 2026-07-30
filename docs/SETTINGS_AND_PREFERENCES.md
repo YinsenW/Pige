@@ -44,7 +44,7 @@ Every setting belongs to exactly one primary scope.
 | `vault_identity` | Stable vault identity and compatibility metadata. | `.pige/manifest.json` | Included |
 | `machine_local` | Belongs to this app installation or device. | OS app data | Excluded |
 | `machine_vault_binding` | Machine-local preference keyed to a specific `vault_id`. | OS app data | Excluded, listed when relevant |
-| `secret` | API keys, tokens, future sync credentials. | OS keychain or encrypted secret store | Excluded |
+| `secret` | API keys, tokens, future sync credentials. | Machine-local app-data credential store | Excluded |
 | `derived_status` | Computed health, index, model, package, or tool status. | SQLite/cache/app data | Excluded or rebuildable |
 | `runtime_transient` | Temporary UI/runtime state. | Memory or temp files | Excluded |
 
@@ -66,13 +66,10 @@ OS app data/
   settings.json                  machine-local non-secret settings
   provider-profiles.json          provider metadata without secrets
   model-profiles.json             model IDs and selected default model
+  secrets.json                    machine-local API keys and tokens; local-user access only
   local-capabilities.json         local tool/model/package status
   vault-bindings.json             vault_id -> machine-specific paths
   jobs/                           machine-local job records
-
-OS keychain or encrypted store/
-  provider_secret_*               API keys and tokens
-
 Pige Vault/
   PIGE.md                         vault-level Agent policy
   .pige/
@@ -93,49 +90,21 @@ Storage rules:
 
 ## 5. Settings Information Architecture
 
-v0.1 settings groups:
-
-```txt
-Basic
-  General
-  Appearance & Language
-
-Knowledge Base
-  Vault & Note Storage
-  Index & Maintenance
-
-AI
-  Models
-  Local Capabilities
-  Agent & Memory
-
-Security
-  Permissions & Privacy
-
-Extensions
-  Skills
-  Pi Packages
-
-System
-  Updates & Diagnostics
-```
+Groups are Basic (General, Appearance & Language), Knowledge Base (Vault & Note Storage,
+Index & Maintenance), AI (Models, Local Capabilities, Agent & Memory), Security
+(Permissions & Privacy), Extensions (Skills, Pi Packages), and System (Updates & Diagnostics).
 
 Rules:
 
-- Each page owns one conceptual domain.
-- Cross-links can guide the user to related pages, but a page should not embed another domain's controls.
+- Each page owns one domain; cross-links never embed another domain's controls.
 - Models connects preset/custom Providers, manages one inventory per Provider, and picks
-  Global Default; only Custom exposes protocol/Base URL.
-- Model/provider behavior must follow `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`; do not add Advanced/Fast model settings unless runtime routing support is real and tested.
+  Global Default; only Custom exposes protocol/Base URL. Advanced/Fast stays hidden until
+  `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md` has a real tested routing owner.
 - Local embeddings, OCR, speech, parsers, and bundled tool health belong to Local Capabilities.
-- Provider-send disclosure, API key storage mode, and high-risk boundaries belong to
-  Permissions & Privacy; ordinary submitted-turn authority has no policy toggle or user
-  mode.
-- The Provider-send row is informational only: no button, toggle, modal, confirmation,
-  content class, or action affordance. Its exact visible copy is owned by
-  `docs/UI_PROTOTYPE.md`. Provider payload redaction is not a setting. Diagnostics/support
-  export redaction remains fixed behavior of its separate artifact owner.
-- Vault & Note Storage separately shows note and source locations; each available root has one platform-neutral reveal action, while an unavailable external source binding is shown as not connected and cannot fall back to the vault root.
+- Permissions & Privacy owns credential/send disclosure and risk policy. Provider-send is
+  informational; payload and diagnostics redaction are fixed owner behavior, not settings.
+- Vault & Note Storage shows note/source roots separately; unavailable external sources
+  never fall back to the Vault root.
 - Trash/archive policy follows `docs/DATA_ARCHITECTURE.md`; no setting lets any actor permanently delete durable knowledge/source evidence automatically.
 
 ## 6. Setting Registry
@@ -168,7 +137,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
 | Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect/reconnect; startup rollback |
-| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS keychain/encrypted store | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement |
+| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS app data `secrets.json` | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement |
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
@@ -182,7 +151,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Memory enabled state | Agent & Memory | `vault_portable` for vault memory | Agent Memory Service | `.pige/config.json` | Yes | `none` | New memory reads/writes |
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
-| Secret storage mode | Permissions & Privacy | `machine_local` plus `secret` | Settings and Secrets Service | OS app data + secret store | No | `explicit_warning` | Requires explicit warning |
+| Credential storage disclosure | Permissions & Privacy | `derived_status` | Settings and Secrets Service | None | No | `none` | Shows the fixed machine-local app-data policy |
 | Permission mode/grants | Permissions & Privacy | `machine_vault_binding` | Permission Policy | OS app data | No | YOLO confirms | New effects |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
@@ -284,7 +253,7 @@ Allowed paths:
 
 Sensitive settings that always require explicit confirmation:
 
-- API key storage mode.
+- Provider credential replacement.
 - Provider credential storage mode or Provider/endpoint identity changes. The disclosed
   Send behavior is not a content-policy setting.
 - YOLO enablement reuses confirmation; other mode/revoke actions are revision-fenced.

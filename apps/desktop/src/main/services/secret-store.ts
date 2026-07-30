@@ -2,87 +2,82 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import { z } from "zod";
 
+/** Retained only for source compatibility with older tests and callers; new storage never invokes it. */
 export interface SecretCryptoAdapter {
   readonly isEncryptionAvailable: () => boolean;
   readonly encryptString: (value: string) => Buffer;
   readonly decryptString: (encrypted: Buffer) => string;
 }
 
-interface SecretRecord {
-  readonly ref: string;
-  readonly encryptedValue: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+const SecretRefSchema = z.string().regex(/^provider_secret_[a-z0-9_]+$/u);
+const SecretRecordIdentitySchema = z.object({
+  ref: SecretRefSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+const LocalSecretRecordSchema = SecretRecordIdentitySchema.extend({
+  value: z.string().min(1)
+}).strict();
+const LegacySecretRecordSchema = SecretRecordIdentitySchema.extend({
+  legacyEncryptedValue: z.string().min(1)
+}).strict();
+const SecretStoreFileSchema = z.object({
+  schemaVersion: z.literal(2),
+  secrets: z.array(z.union([LocalSecretRecordSchema, LegacySecretRecordSchema])).max(256)
+}).strict();
+const LegacySecretStoreFileSchema = z.object({
+  schemaVersion: z.literal(1),
+  secrets: z.array(SecretRecordIdentitySchema.extend({
+    encryptedValue: z.string().min(1)
+  }).strict()).max(256)
+}).strict();
 
-interface SecretStoreFile {
-  readonly schemaVersion: 1;
-  readonly secrets: readonly SecretRecord[];
-}
+type SecretRecord = z.infer<typeof LocalSecretRecordSchema> | z.infer<typeof LegacySecretRecordSchema>;
+type SecretStoreFile = z.infer<typeof SecretStoreFileSchema>;
 
 export class JsonSecretStore {
   readonly #secretsPath: string;
-  readonly #crypto: SecretCryptoAdapter;
 
-  constructor(userDataPath: string, crypto: SecretCryptoAdapter) {
+  constructor(userDataPath: string, _retiredCrypto?: SecretCryptoAdapter) {
     this.#secretsPath = path.join(userDataPath, "secrets.json");
-    this.#crypto = crypto;
   }
 
   saveProviderSecret(secretValue: string, requestedRef?: string): string {
-    const trimmed = this.#validateSecretValue(secretValue);
-
+    const value = this.#validateSecretValue(secretValue);
     const now = new Date().toISOString();
-    const ref = requestedRef ?? `provider_secret_${randomUUID().replaceAll("-", "_")}`;
-    if (!/^provider_secret_[a-z0-9_]+$/u.test(ref)) {
-      throw new PigeDomainError("secret_ref_invalid", "Provider secret reference is invalid.");
-    }
+    const ref = parseSecretRef(requestedRef ?? `provider_secret_${randomUUID().replaceAll("-", "_")}`);
     const file = this.#read();
     if (file.secrets.some((secret) => secret.ref === ref)) {
       throw new PigeDomainError("secret_ref_conflict", "Provider secret reference already exists.");
     }
-    const record: SecretRecord = {
-      ref,
-      encryptedValue: this.#crypto.encryptString(trimmed).toString("base64"),
-      createdAt: now,
-      updatedAt: now
-    };
     this.#write({
-      schemaVersion: 1,
-      secrets: [record, ...file.secrets.filter((secret) => secret.ref !== ref)]
+      schemaVersion: 2,
+      secrets: [{ ref, value, createdAt: now, updatedAt: now }, ...file.secrets]
     });
     return ref;
   }
 
-  replaceProviderSecret(ref: string, secretValue: string): void {
-    if (!/^provider_secret_[a-z0-9_]+$/u.test(ref)) {
-      throw new PigeDomainError("secret_ref_invalid", "Provider secret reference is invalid.");
-    }
-    const trimmed = this.#validateSecretValue(secretValue);
+  replaceProviderSecret(refInput: string, secretValue: string): void {
+    const ref = parseSecretRef(refInput);
+    const value = this.#validateSecretValue(secretValue);
     const previous = this.#read();
     const existing = previous.secrets.find((secret) => secret.ref === ref);
     if (!existing) throw new PigeDomainError("secret_missing", "Provider secret is missing.");
-    const now = new Date().toISOString();
     const next: SecretStoreFile = {
-      schemaVersion: 1,
-      secrets: previous.secrets.map((secret) => secret.ref === ref
-        ? {
-            ...secret,
-            encryptedValue: this.#crypto.encryptString(trimmed).toString("base64"),
-            updatedAt: now
-          }
+      schemaVersion: 2,
+      secrets: previous.secrets.map((secret): SecretRecord => secret.ref === ref
+        ? { ref, value, createdAt: secret.createdAt, updatedAt: new Date().toISOString() }
         : secret)
     };
     try {
       this.#write(next);
-      if (this.readProviderSecret(ref) !== trimmed) throw secretUpdateVerificationError();
+      if (this.readProviderSecret(ref) !== value) throw secretUpdateVerificationError();
     } catch (caught) {
       try {
         this.#write(previous);
-        if (this.readProviderSecret(ref) !== this.#decryptRecord(existing)) {
-          throw secretUpdateRepairRequiredError();
-        }
+        if (canonicalJson(this.#read()) !== canonicalJson(previous)) throw secretUpdateRepairRequiredError();
       } catch {
         throw secretUpdateRepairRequiredError();
       }
@@ -105,58 +100,64 @@ export class JsonSecretStore {
     return `sha256:${createHash("sha256").update(contents).digest("hex")}`;
   }
 
-  hasProviderSecret(ref: string): boolean {
-    return this.#crypto.isEncryptionAvailable() && this.#read().secrets.some((secret) => secret.ref === ref);
-  }
-
-  readProviderSecret(ref: string): string {
+  hasProviderSecret(refInput: string): boolean {
+    const ref = parseSecretRef(refInput);
     const record = this.#read().secrets.find((secret) => secret.ref === ref);
-    if (!record) {
-      throw new PigeDomainError("secret_missing", "Provider secret is missing.");
-    }
-    if (!this.#crypto.isEncryptionAvailable()) {
-      throw new PigeDomainError("secret_encryption_unavailable", "Encrypted secret storage is unavailable.");
-    }
-    return this.#decryptRecord(record);
+    return record !== undefined && "value" in record;
   }
 
-  deleteProviderSecret(ref: string): void {
+  readProviderSecret(refInput: string): string {
+    const ref = parseSecretRef(refInput);
+    const record = this.#read().secrets.find((secret) => secret.ref === ref);
+    if (!record) throw new PigeDomainError("secret_missing", "Provider secret is missing.");
+    if (!("value" in record)) {
+      throw new PigeDomainError(
+        "secret_reconnect_required",
+        "This provider credential uses the retired keychain format and must be reconnected."
+      );
+    }
+    return record.value;
+  }
+
+  deleteProviderSecret(refInput: string): void {
+    const ref = parseSecretRef(refInput);
     const file = this.#read();
     if (!file.secrets.some((secret) => secret.ref === ref)) return;
-    this.#write({
-      schemaVersion: 1,
-      secrets: file.secrets.filter((secret) => secret.ref !== ref)
-    });
+    this.#write({ schemaVersion: 2, secrets: file.secrets.filter((secret) => secret.ref !== ref) });
   }
 
   #validateSecretValue(secretValue: string): string {
-    const trimmed = secretValue.trim();
-    if (!trimmed) throw new PigeDomainError("secret_empty", "Provider API key cannot be empty.");
-    if (!this.#crypto.isEncryptionAvailable()) {
-      throw new PigeDomainError("secret_encryption_unavailable", "Encrypted secret storage is unavailable.");
-    }
-    return trimmed;
-  }
-
-  #decryptRecord(record: SecretRecord): string {
-    if (!this.#crypto.isEncryptionAvailable()) {
-      throw new PigeDomainError("secret_encryption_unavailable", "Encrypted secret storage is unavailable.");
-    }
-    return this.#crypto.decryptString(Buffer.from(record.encryptedValue, "base64"));
+    const value = secretValue.trim();
+    if (!value) throw new PigeDomainError("secret_empty", "Provider API key cannot be empty.");
+    return value;
   }
 
   #read(): SecretStoreFile {
-    if (!fs.existsSync(this.#secretsPath)) {
-      return { schemaVersion: 1, secrets: [] };
-    }
-    const parsed = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8")) as SecretStoreFile;
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.secrets)) {
+    if (!fs.existsSync(this.#secretsPath)) return { schemaVersion: 2, secrets: [] };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8"));
+    } catch {
       throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
     }
-    return parsed;
+    if (typeof parsed === "object" && parsed !== null && "schemaVersion" in parsed && parsed.schemaVersion === 1) {
+      const legacy = LegacySecretStoreFileSchema.safeParse(parsed);
+      if (!legacy.success) throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+      return SecretStoreFileSchema.parse({
+        schemaVersion: 2,
+        secrets: legacy.data.secrets.map(({ encryptedValue, ...identity }) => ({
+          ...identity,
+          legacyEncryptedValue: encryptedValue
+        }))
+      });
+    }
+    const current = SecretStoreFileSchema.safeParse(parsed);
+    if (!current.success) throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+    return current.data;
   }
 
-  #write(file: SecretStoreFile): void {
+  #write(fileInput: SecretStoreFile): void {
+    const file = SecretStoreFileSchema.parse(fileInput);
     fs.mkdirSync(path.dirname(this.#secretsPath), { recursive: true });
     const temporaryPath = `${this.#secretsPath}.${process.pid}.tmp`;
     let descriptor: number | undefined;
@@ -167,6 +168,9 @@ export class JsonSecretStore {
       fs.closeSync(descriptor);
       descriptor = undefined;
       fs.renameSync(temporaryPath, this.#secretsPath);
+      if (process.platform !== "win32") {
+        fs.chmodSync(this.#secretsPath, 0o600);
+      }
       fsyncDirectoryIfSupported(path.dirname(this.#secretsPath));
     } finally {
       if (descriptor !== undefined) fs.closeSync(descriptor);
@@ -179,6 +183,16 @@ export class JsonSecretStore {
   }
 }
 
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value);
+}
+
+function parseSecretRef(value: string): string {
+  const parsed = SecretRefSchema.safeParse(value);
+  if (!parsed.success) throw new PigeDomainError("secret_ref_invalid", "Provider secret reference is invalid.");
+  return parsed.data;
+}
+
 function secretUpdateVerificationError(): PigeDomainError {
   return new PigeDomainError(
     "secret_update_verification_failed",
@@ -189,7 +203,7 @@ function secretUpdateVerificationError(): PigeDomainError {
 function secretUpdateRepairRequiredError(): PigeDomainError {
   return new PigeDomainError(
     "secret_update_repair_required",
-    "Provider credential replacement could not restore the previous protected value safely."
+    "Provider credential replacement could not restore the previous local value safely."
   );
 }
 

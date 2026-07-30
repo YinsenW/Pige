@@ -116,8 +116,10 @@ Threat:
 
 Mitigations:
 
-- Store secrets in OS keychain or encrypted local secret store by default.
-- Plaintext portable mode is explicit, warned, and not default.
+- Store secrets only in the machine-local Pige app-data credential file with local-user
+  file permissions where supported; never use the OS keychain.
+- Treat the credential file as non-portable machine state, exclude it from backup/export,
+  and disclose that another process running as the same OS user may read it.
 - Secret scanning before memory persistence, diagnostics export, and support bundles.
 - Keep Pige-owned stored credentials out of prompt content and construct authentication
   only in the reviewed Provider adapter. Do not rewrite user-authored submitted content.
@@ -376,21 +378,12 @@ renderer/main, filesystem and prompt-injection controls remain independent.
 
 ## 8. Secret Storage Policy
 
-Default:
-
-- Use OS keychain or encrypted local storage.
-
-Optional:
-
-- Plaintext local storage only in explicit portable/developer mode.
-- Requires warning at enable time.
-- Excluded from backups unless explicitly exported.
-- UI must show that plaintext mode weakens local security.
-
-Rationale:
-
-- A serious desktop app should default to encrypted secrets.
-- Some users may still prefer portability or local-only simplicity, so plaintext can exist as an explicit advanced choice.
+- Provider credentials use Pige's non-portable machine-local app-data store; Pige never
+  invokes an OS keychain.
+- The file is restricted to the local OS user where supported and excluded from Vaults,
+  logs, diagnostics, settings export, and default backups.
+- Settings discloses that another process running as the same OS user may read it.
+- Legacy keychain ciphertext remains inert and requires Provider reconnect.
 
 ## 9. BYOK Security Policy
 
@@ -452,7 +445,9 @@ Before v0.1 public alpha:
 
 These v0.1 design choices are accepted. Implementation still must pin concrete versions, add tests, and record platform-specific behavior.
 
-- Secret storage: Electron `safeStorage` encrypts API keys/tokens into machine-local app data. If encryption is unavailable, normal mode refuses to save secrets and offers explicit plaintext portable/developer mode with warning.
+- Secret storage: Pige writes API keys/tokens to schema-v2 machine-local app data with
+  owner-only POSIX file mode where supported. Legacy schema-v1 keychain ciphertext stays
+  inert and requires Provider reconnect; Pige never decrypts it or prompts for keychain access.
 - Skill/package boundary: pure Skills are Markdown; executable packages use reviewed
   scoped adapters and inherit no first-party authority. Shell defaults denied; fixed bundled
   commands or declared exact high-risk effects retain preview, limits, cancellation and log.

@@ -17,6 +17,21 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("loads Provider credentials from app data without invoking the OS keychain", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const storeSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/secret-store.ts"),
+      "utf8"
+    );
+
+    expect(mainSource).not.toMatch(/\bsafeStorage\b/u);
+    expect(mainSource).toContain('new JsonSecretStore(app.getPath("userData"))');
+    expect(storeSource).toContain('path.join(userDataPath, "secrets.json")');
+    expect(storeSource).toContain("schemaVersion: z.literal(2)");
+    expect(storeSource).not.toContain(".encryptString(");
+    expect(storeSource).not.toContain(".decryptString(");
+  });
+
   it("freezes one pathless current-note replacement proposal surface", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

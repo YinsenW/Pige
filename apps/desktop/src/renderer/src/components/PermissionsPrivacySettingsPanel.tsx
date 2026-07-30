@@ -258,7 +258,7 @@ export function PermissionsPrivacySettingsPanel(props: {
   };
 
   const busy = operation !== null;
-  const showRemembered = current?.defaultMode === "remember_scoped_grants" || (current?.grants.length ?? 0) > 0;
+  const showRemembered = (current?.grants.length ?? 0) > 0;
   const fullAccessEnabled = current?.fullAccess.enabled === true;
   const fullAccessCanEnable = current?.fullAccess.enabled === false && current.fullAccess.canEnable;
   const fullAccessCanDisable = current?.fullAccess.enabled === true && current.fullAccess.canDisable;
@@ -317,41 +317,47 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.highRiskEffectsTitle")}</strong>
               <span>{props.t("privacy.highRiskEffectsDescription")}</span>
             </div>
-            <span className="settings-status">
-              {props.t(current?.defaultMode === "yolo_full_access"
-                ? "privacy.fullAccessTitle"
-                : current?.defaultMode === "remember_scoped_grants"
-                  ? "privacy.rememberScopedStatus"
-                  : "privacy.confirmEachEffect")}
-            </span>
+            {!props.activeVaultId || !props.api ? (
+              <span className="settings-status">{props.t("privacy.confirmEachEffect")}</span>
+            ) : null}
           </div>
           {current ? (
             <>
-              <fieldset className="settings-row" disabled={busy} aria-describedby="privacy-mode-description">
-                <div className="settings-row-copy">
-                  <legend><strong>{props.t("privacy.permissionMode")}</strong></legend>
-                  <span id="privacy-mode-description">{props.t("privacy.permissionModeDescription")}</span>
-                </div>
-                <div>
-                  <label>
+              <fieldset
+                className="permission-mode-fieldset"
+                disabled={busy}
+                aria-describedby="privacy-mode-description"
+              >
+                <legend>{props.t("privacy.permissionMode")}</legend>
+                <p id="privacy-mode-description">{props.t("privacy.permissionModeDescription")}</p>
+                <div className="permission-mode-options">
+                  <label className="permission-mode-option">
                     <input
                       type="radio"
                       name="privacy-permission-mode"
                       checked={current.defaultMode === "ask_every_time"}
                       onChange={(event) => void setMode("ask_every_time", event.currentTarget)}
                     />
-                    {props.t("privacy.askEveryTime")}
+                    <span className="permission-mode-indicator" aria-hidden="true" />
+                    <span className="permission-mode-copy">
+                      <strong>{props.t("privacy.askEveryTime")}</strong>
+                      <small>{props.t("privacy.askEveryTimeDescription")}</small>
+                    </span>
                   </label>
-                  <label>
+                  <label className="permission-mode-option">
                     <input
                       type="radio"
                       name="privacy-permission-mode"
                       checked={current.defaultMode === "remember_scoped_grants"}
                       onChange={(event) => void setMode("remember_scoped_grants", event.currentTarget)}
                     />
-                    {props.t("privacy.rememberScoped")}
+                    <span className="permission-mode-indicator" aria-hidden="true" />
+                    <span className="permission-mode-copy">
+                      <strong>{props.t("privacy.rememberScoped")}</strong>
+                      <small>{props.t("privacy.rememberScopedDescription")}</small>
+                    </span>
                   </label>
-                  <label>
+                  <label className="permission-mode-option">
                     <input
                       type="radio"
                       name="privacy-permission-mode"
@@ -365,7 +371,11 @@ export function PermissionsPrivacySettingsPanel(props: {
                         setFullAccessConfirming(true);
                       }}
                     />
-                    {props.t("privacy.fullAccessTitle")}
+                    <span className="permission-mode-indicator" aria-hidden="true" />
+                    <span className="permission-mode-copy">
+                      <strong>{props.t("privacy.fullAccessTitle")}</strong>
+                      <small>{props.t("privacy.fullAccessModeDescription")}</small>
+                    </span>
                   </label>
                 </div>
               </fieldset>
@@ -413,7 +423,7 @@ export function PermissionsPrivacySettingsPanel(props: {
                       boundaries={current.fullAccess.hardBoundaries}
                       t={props.t}
                     />
-                    <label>
+                    <label className="permission-full-access-acknowledgement">
                       <input
                         ref={fullAccessAcknowledgeRef}
                         type="checkbox"
@@ -424,7 +434,7 @@ export function PermissionsPrivacySettingsPanel(props: {
                       {props.t("privacy.fullAccessAcknowledge")}
                     </label>
                   </div>
-                  <div>
+                  <div className="permission-full-access-actions">
                     <button type="button" className="ghost" disabled={busy} onClick={cancelFullAccess}>
                       {props.t("privacy.fullAccessCancel")}
                     </button>
@@ -440,42 +450,36 @@ export function PermissionsPrivacySettingsPanel(props: {
                 </section>
               ) : null}
               {showRemembered ? (
-                <div className="settings-row">
+                <div className="settings-row permission-grants-row">
                   <div className="settings-row-copy">
                     <strong>{props.t("privacy.savedGrants")}</strong>
                     <span>{props.t("privacy.savedGrantsDescription")}</span>
                   </div>
-                  <div>
-                    {current.grants.length === 0 ? (
-                      <span className="settings-status">{props.t("privacy.noSavedGrants")}</span>
-                    ) : (
-                      <ul aria-label={props.t("privacy.savedGrants")}>
-                        {current.grants.map((grant) => (
-                          <li key={grant.grantId}>
-                            <span>{grant.actorLabel} · v{grant.actorVersion} · {grant.resourceLabel}</span>
-                            <button
-                              type="button"
-                              className="ghost"
-                              aria-label={`${props.t("privacy.revokeGrant")}: ${grant.actorLabel} · ${grant.resourceLabel}`}
-                              disabled={busy || !grant.canRevoke}
-                              onClick={(event) => void revokeGrant(grant, event.currentTarget)}
-                            >
-                              {props.t("privacy.revokeGrant")}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {current.grants.length > 0 ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        disabled={busy}
-                        onClick={(event) => void revokeAll(event.currentTarget)}
-                      >
-                        {props.t("privacy.revokeAllGrants")}
-                      </button>
-                    ) : null}
+                  <div className="permission-grants-control">
+                    <ul className="permission-grant-list" aria-label={props.t("privacy.savedGrants")}>
+                      {current.grants.map((grant) => (
+                        <li key={grant.grantId}>
+                          <span>{grant.actorLabel} · v{grant.actorVersion} · {grant.resourceLabel}</span>
+                          <button
+                            type="button"
+                            className="ghost"
+                            aria-label={`${props.t("privacy.revokeGrant")}: ${grant.actorLabel} · ${grant.resourceLabel}`}
+                            disabled={busy || !grant.canRevoke}
+                            onClick={(event) => void revokeGrant(grant, event.currentTarget)}
+                          >
+                            {props.t("privacy.revokeGrant")}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={busy}
+                      onClick={(event) => void revokeAll(event.currentTarget)}
+                    >
+                      {props.t("privacy.revokeAllGrants")}
+                    </button>
                   </div>
                 </div>
               ) : null}
@@ -512,7 +516,7 @@ export function PermissionsPrivacySettingsPanel(props: {
               <strong>{props.t("privacy.apiKeyStorageTitle")}</strong>
               <span>{props.t("privacy.apiKeyStorageDescription")}</span>
             </div>
-            <span className="settings-status">{props.t("privacy.protected")}</span>
+            <span className="settings-status neutral">{props.t("privacy.localOnly")}</span>
           </div>
         </div>
       </section>
@@ -529,7 +533,7 @@ function PermissionHardBoundaries(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   return (
-    <div>
+    <div className="permission-hard-boundaries">
       <span>{props.t("privacy.fullAccessHardBoundaries")}</span>
       <ul>
         {props.boundaries.map((boundary) => (

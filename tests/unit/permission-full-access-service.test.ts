@@ -79,6 +79,46 @@ describe("PermissionFullAccessService", () => {
     expect(fixture.service.request(request({ expectedRevision: 1 }))).toEqual({ status: "stale" });
     expect(fixture.store.read().revision).toBe(0);
   });
+
+  it("replaces an orphaned activation instead of permanently locking permission modes", () => {
+    const fixture = createFixture();
+    expect(fixture.store.prepareFullAccessActivation({
+      expectedRevision: 0,
+      requestId: "permissionpolicyreq_20260729orphaned",
+      activeVaultId: VAULT_ID,
+      confirmationId: "confirm_20260729_orphanedactivation"
+    })).toBe("registered");
+    expect(fixture.store.summary(VAULT_ID)).toMatchObject({
+      revision: 1,
+      defaultMode: "ask_every_time",
+      fullAccess: { enabled: false, canEnable: false }
+    });
+
+    expect(fixture.service.request(request({ expectedRevision: 1 }))).toMatchObject({
+      status: "confirmation_required"
+    });
+    const pending = fixture.confirmations.pending();
+    if (pending.status !== "pending") throw new Error("Expected replacement Full Access confirmation.");
+    expect(pending.confirmation.owner).toEqual({
+      kind: "permission_policy",
+      policyRequestId: request().requestId
+    });
+  });
+
+  it("reports an active confirmation as authoritative stale state instead of a generic failure", () => {
+    const fixture = createFixture();
+    expect(fixture.service.request(request())).toMatchObject({ status: "confirmation_required" });
+    const revision = fixture.store.read().revision;
+
+    expect(fixture.service.request({
+      ...request({ expectedRevision: revision }),
+      requestId: "permissionpolicyreq_20260729secondtry"
+    })).toEqual({ status: "stale" });
+    expect(fixture.confirmations.pending()).toMatchObject({
+      status: "pending",
+      confirmation: { owner: { kind: "permission_policy", policyRequestId: request().requestId } }
+    });
+  });
 });
 
 function request(overrides: { expectedRevision?: number } = {}) {

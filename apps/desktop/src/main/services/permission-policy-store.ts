@@ -239,7 +239,14 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
     });
     const current = this.#readRecord();
     if (current.fullAccessActivation) {
-      return canonicalJson(current.fullAccessActivation) === canonicalJson(activation) ? "restored" : "busy";
+      if (canonicalJson(current.fullAccessActivation) === canonicalJson(activation)) return "restored";
+      if (current.pending || current.revision !== input.expectedRevision) return "busy";
+      this.#write(PermissionPolicyRecordSchema.parse({
+        ...current,
+        revision: nextRevision(current.revision),
+        fullAccessActivation: activation
+      }));
+      return "registered";
     }
     if (current.revision !== input.expectedRevision || current.pending || current.defaultMode === "yolo_full_access") {
       return "stale";

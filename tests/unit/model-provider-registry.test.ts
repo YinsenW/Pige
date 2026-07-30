@@ -488,25 +488,24 @@ describe("model provider registry", () => {
     expect(fs.existsSync(path.join(root, "provider-connect-transaction.json"))).toBe(false);
   });
 
-  it("keeps provider persistence verification write-only until the runtime boundary", async () => {
-    let decryptCalls = 0;
+  it("never invokes the retired OS encryption adapter for new or runtime credential access", async () => {
     const crypto: SecretCryptoAdapter = {
       ...fakeCrypto,
-      decryptString: (encrypted) => {
-        decryptCalls += 1;
-        return fakeCrypto.decryptString(encrypted);
-      }
+      encryptString: vi.fn(fakeCrypto.encryptString),
+      decryptString: vi.fn(fakeCrypto.decryptString)
     };
     const { root, registry } = makeRegistry(okModelListFetch(["gpt-5-mini"]), crypto);
     await registry.addPresetProvider({ presetId: "openai", apiKey: "first-secret" });
     await registry.addPresetProvider({ presetId: "openai", apiKey: "second-secret" });
 
-    expect(decryptCalls).toBe(0);
+    expect(crypto.encryptString).not.toHaveBeenCalled();
+    expect(crypto.decryptString).not.toHaveBeenCalled();
     expect(registry.summary().defaultBinding.state).toBe("ready");
     expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).not.toContain("second-secret");
     expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8")).not.toContain("second-secret");
     expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("second-secret");
-    expect(decryptCalls).toBe(1);
+    expect(crypto.encryptString).not.toHaveBeenCalled();
+    expect(crypto.decryptString).not.toHaveBeenCalled();
   });
 
   it("stores provider metadata and discovered model profiles without writing raw API keys to profile files", async () => {
@@ -532,8 +531,11 @@ describe("model provider registry", () => {
     expect(summary.models[0]?.isDefault).toBe(true);
     expect(providerProfiles).not.toContain("sk-test-secret");
     expect(modelProfiles).not.toContain("sk-test-secret");
-    expect(secrets).not.toContain("sk-test-secret-123456789");
-    expect(secrets).toContain(Buffer.from("encrypted:sk-test-secret-123456789", "utf8").toString("base64"));
+    expect(secrets).toContain('"schemaVersion": 2');
+    expect(secrets).toContain('"value": "sk-test-secret-123456789"');
+    if (process.platform !== "win32") {
+      expect(fs.statSync(path.join(root, "secrets.json")).mode & 0o777).toBe(0o600);
+    }
   });
 
   it("reopens a fresh registry with the persisted explicit protocol and ready global default", async () => {
@@ -625,13 +627,10 @@ describe("model provider registry", () => {
   });
 
   it("checks the selected runtime binding by secret reference without decrypting credentials", async () => {
-    let decryptCalls = 0;
     const crypto: SecretCryptoAdapter = {
       ...fakeCrypto,
-      decryptString: (encrypted) => {
-        decryptCalls += 1;
-        return fakeCrypto.decryptString(encrypted);
-      }
+      encryptString: vi.fn(fakeCrypto.encryptString),
+      decryptString: vi.fn(fakeCrypto.decryptString)
     };
     const { root, registry } = makeRegistry(okModelListFetch(["gpt-4.1"]), crypto);
 
@@ -645,13 +644,49 @@ describe("model provider registry", () => {
     });
 
     expect(registry.hasDefaultRuntimeBinding()).toBe(true);
-    expect(decryptCalls).toBe(0);
     expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("sk-runtime-secret");
-    expect(decryptCalls).toBe(1);
+    expect(crypto.encryptString).not.toHaveBeenCalled();
+    expect(crypto.decryptString).not.toHaveBeenCalled();
 
     fs.writeFileSync(path.join(root, "secrets.json"), '{"schemaVersion":1,"secrets":[]}\n', "utf8");
     expect(registry.hasDefaultRuntimeBinding()).toBe(false);
-    expect(decryptCalls).toBe(1);
+    expect(crypto.decryptString).not.toHaveBeenCalled();
+  });
+
+  it("keeps retired keychain records inert until the user reconnects that Provider", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-legacy-secret-test-"));
+    tempRoots.push(root);
+    const ref = "provider_secret_legacy_keychain_record";
+    fs.writeFileSync(path.join(root, "secrets.json"), `${JSON.stringify({
+      schemaVersion: 1,
+      secrets: [{
+        ref,
+        encryptedValue: "retired-keychain-ciphertext",
+        createdAt: "2026-07-30T00:00:00.000Z",
+        updatedAt: "2026-07-30T00:00:00.000Z"
+      }]
+    })}\n`, { encoding: "utf8", mode: 0o600 });
+    const crypto: SecretCryptoAdapter = {
+      ...fakeCrypto,
+      encryptString: vi.fn(fakeCrypto.encryptString),
+      decryptString: vi.fn(fakeCrypto.decryptString)
+    };
+    const secrets = new JsonSecretStore(root, crypto);
+
+    expect(secrets.listSecretRefs()).toEqual([ref]);
+    expect(secrets.hasProviderSecret(ref)).toBe(false);
+    let caught: unknown;
+    try { secrets.readProviderSecret(ref); } catch (error) { caught = error; }
+    expect(caught).toMatchObject({ code: "secret_reconnect_required" });
+    expect(crypto.encryptString).not.toHaveBeenCalled();
+    expect(crypto.decryptString).not.toHaveBeenCalled();
+
+    secrets.replaceProviderSecret(ref, "reconnected-local-value");
+    expect(secrets.readProviderSecret(ref)).toBe("reconnected-local-value");
+    const stored = fs.readFileSync(path.join(root, "secrets.json"), "utf8");
+    expect(stored).toContain('"schemaVersion": 2');
+    expect(stored).toContain('"value": "reconnected-local-value"');
+    expect(stored).not.toContain("retired-keychain-ciphertext");
   });
 
   it("reports configured-but-unusable state with only safe IDs and a typed redacted repair error", async () => {
@@ -731,15 +766,15 @@ describe("model provider registry", () => {
   it("returns a fixed provider persistence error without exposing a private local path", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-model-registry-private-path-"));
     tempRoots.push(root);
-    const crypto: SecretCryptoAdapter = {
-      ...fakeCrypto,
-      encryptString: () => {
-        throw new Error(`EACCES while writing ${path.join(root, "secrets.json")}`);
-      }
-    };
+    const secretsPath = path.join(root, "secrets.json");
+    const originalRename = fs.renameSync;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(to) === secretsPath) throw new Error(`EACCES while writing ${secretsPath}`);
+      return originalRename(from, to);
+    });
     const registry = new ModelProviderRegistry(
       root,
-      new JsonSecretStore(root, crypto),
+      new JsonSecretStore(root),
       new ModelProviderConnectionTester(okModelListFetch(["gpt-5-mini"])),
       passingProbe
     );
@@ -753,7 +788,7 @@ describe("model provider registry", () => {
 
     expect(caught).toMatchObject({
       code: "model_provider.persistence_failed",
-      message: "Provider setup could not be saved to protected local storage."
+      message: "Provider setup could not be saved to machine-local app data."
     });
     expect(String(caught)).not.toContain(root);
     expect(String(caught)).not.toContain("secrets.json");
