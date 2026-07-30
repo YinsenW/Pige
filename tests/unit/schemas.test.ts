@@ -74,6 +74,7 @@ import {
   HighRiskConfirmationSummarySchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
+  KnowledgeActivitySummarySchema,
   KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES,
   KnowledgeHealthRunRequestSchema,
   KnowledgeHealthRunResultSchema,
@@ -108,6 +109,9 @@ import {
   NoteEditorPortableMarkdownSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NoteRenderResultSchema,
+  NoteTrashCurrentRequestSchema,
+  NoteTrashCurrentResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteRevealSourceRequestSchema,
@@ -3454,6 +3458,113 @@ describe("schemas", () => {
       requestId: "noteref_abcdefghijklmnop",
       status: "revealed"
     })).toThrow();
+  });
+
+  it("keeps current-note trash revision-bound, pathless, and Activity-restorable", () => {
+    const identity = {
+      apiVersion: 1,
+      requestId: "notetrashreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh",
+      currentPageId: "page_20260730_current1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(32)}`
+    } as const;
+    expect(NoteTrashCurrentRequestSchema.parse(identity)).toEqual(identity);
+    for (const privateField of ["pagePath", "trashPath", "markdown", "contentHash", "sourceId"] as const) {
+      expect(() => NoteTrashCurrentRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+    }
+
+    const committed = {
+      ...identity,
+      status: "committed",
+      operationId: "op_20260730_notetrash1",
+      authority: {
+        pageId: identity.currentPageId,
+        pageState: "trashed",
+        readerState: "closed",
+        libraryPresence: "absent",
+        canTrash: false
+      }
+    } as const;
+    expect(NoteTrashCurrentResultSchema.parse(committed)).toEqual(committed);
+    expect(NoteTrashCurrentResultSchema.parse({
+      ...identity,
+      status: "stale",
+      authority: {
+        pageId: identity.currentPageId,
+        pageState: "present",
+        readerState: "refresh_required",
+        libraryPresence: "present",
+        canTrash: false
+      }
+    })).toMatchObject({ status: "stale", authority: { readerState: "refresh_required" } });
+    expect(NoteTrashCurrentResultSchema.parse({
+      ...identity,
+      status: "not_found",
+      authority: {
+        pageId: identity.currentPageId,
+        pageState: "missing",
+        readerState: "closed",
+        libraryPresence: "absent",
+        canTrash: false
+      }
+    })).toMatchObject({ status: "not_found", authority: { pageState: "missing" } });
+    expect(NoteTrashCurrentResultSchema.parse({
+      ...identity,
+      status: "ineligible",
+      authority: {
+        pageId: identity.currentPageId,
+        pageState: "present",
+        readerState: "preserved",
+        libraryPresence: "present",
+        canTrash: false
+      }
+    })).toMatchObject({ status: "ineligible", authority: { readerState: "preserved" } });
+    expect(NoteTrashCurrentResultSchema.parse({ ...identity, status: "failed" }))
+      .toEqual({ ...identity, status: "failed" });
+    expect(() => NoteTrashCurrentResultSchema.parse({
+      ...committed,
+      authority: { ...committed.authority, pageId: "page_20260730_other12345" }
+    })).toThrow();
+    expect(() => NoteTrashCurrentResultSchema.parse({
+      ...identity,
+      status: "failed",
+      path: "/private/trash/page.md",
+      body: "private",
+      rawError: "private"
+    })).toThrow();
+
+    const render = {
+      summary: {
+        pageId: identity.currentPageId,
+        title: "Current note",
+        pageType: "note",
+        status: "active",
+        pagePath: "notes/current-note.md",
+        createdAt: "2026-07-30T10:00:00.000Z",
+        updatedAt: "2026-07-30T10:01:00.000Z",
+        sourceIds: []
+      },
+      html: "<p>Current note</p>",
+      byteSize: 12,
+      renderContextId: identity.renderContextId,
+      trashEligibility: { canTrash: true, revision: identity.expectedRevision }
+    } as const;
+    expect(NoteRenderResultSchema.parse(render).trashEligibility)
+      .toEqual({ canTrash: true, revision: identity.expectedRevision });
+    expect(() => NoteRenderResultSchema.parse({
+      ...render,
+      trashEligibility: { ...render.trashEligibility, path: "/private/note.md" }
+    })).toThrow();
+    expect(KnowledgeActivitySummarySchema.parse({
+      operationId: committed.operationId,
+      kind: "trash_page",
+      createdAt: "2026-07-30T10:02:00.000Z",
+      targetLabel: "Current note",
+      target: { kind: "page", pageId: identity.currentPageId },
+      status: "applied",
+      canUndo: true
+    })).toMatchObject({ kind: "trash_page", canUndo: true });
   });
 
   it("keeps Markdown editor identity revision-fenced and drafts exact", () => {
