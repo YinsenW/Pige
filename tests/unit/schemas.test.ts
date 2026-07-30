@@ -4590,8 +4590,6 @@ describe("schemas", () => {
       expect(() => NoteRenameResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
-    }
-  });
 
   it("keeps current-note trash revision-bound, pathless, and Activity-restorable", () => {
     const identity = {

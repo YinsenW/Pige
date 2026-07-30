@@ -68,6 +68,8 @@ export function ActivityHistorySettingsPanel(props: {
                 : activity.kind === "archive_page" ? "activity.archivedPage" : activity.kind === "restore_page" ? "activity.restoredPage"
                 : activity.kind === "update_page"
                   ? "activity.updatedPage"
+                : activity.kind === "rename_page"
+                  ? "activity.renamedPage"
                 : activity.kind === "update_memory"
                   ? "activity.updatedMemory"
                 : activity.kind === "trash_memory"

@@ -229,8 +229,6 @@ describe("registerReaderIpc", () => {
     await expect(handlers.get("notes.rename")!({ sender: makeSender(49) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "failed" });
   });
-      .resolves.toEqual({ ...request, status: "failed" });
-  });
 
   it("binds note relation mutation to the tracked Reader owner and refreshes Activity after commit", async () => {
     const request = {
