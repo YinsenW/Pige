@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const rendererRoot = path.resolve("apps/desktop/src/renderer/src");
 const appSource = fs.readFileSync(path.join(rendererRoot, "App.tsx"), "utf8");
 const noteReaderSource = fs.readFileSync(path.join(rendererRoot, "components/NoteReader.tsx"), "utf8");
+const noteReaderSourcesSource = fs.readFileSync(path.join(rendererRoot, "components/NoteReaderSources.tsx"), "utf8");
 const cssSource = fs.readFileSync(path.join(rendererRoot, "styles/app.css"), "utf8");
 const iconSource = fs.readFileSync(path.join(rendererRoot, "components/PigeIcon.tsx"), "utf8");
 const windowModeToggleSource = fs.readFileSync(path.join(rendererRoot, "components/WindowModeToggle.tsx"), "utf8");
@@ -180,7 +181,8 @@ describe("full production UI renderer contract", () => {
     expect(appSource).toContain('data-reader-action="more"');
     expect(noteReaderSource).toContain('props.onDevelopment("selection_actions")');
     expect(noteReaderSource).toContain("props.onOpenSourceReference");
-    expect(noteReaderSource).toContain('data-reader-source-action="open"');
+    expect(noteReaderSourcesSource).toContain('data-reader-source-action="open"');
+    expect(noteReaderSourcesSource).toContain("data-reader-source-disclosure");
     expect(noteReaderSource).not.toContain('props.onDevelopment("source_reference")');
     expect(noteReaderSource).toContain('event.key === "ArrowRight"');
     expect(noteReaderSource).toContain('event.key === "ArrowLeft"');
@@ -244,6 +246,8 @@ describe("full production UI renderer contract", () => {
       "note.edit",
       "note.moreActions",
       "note.moreSources",
+      "note.showFewerSources",
+      "note.showMoreSources",
       "note.path",
       "note.preview",
       "note.savedSource",

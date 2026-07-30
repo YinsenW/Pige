@@ -115,10 +115,11 @@ export function ReaderSourceRefreshAction(props: {
 
   return (
     <div aria-label={props.t("note.refreshSource.region")}>
-      {props.sourceIds.slice(0, 5).map((sourceId, index) => (
+      {props.sourceIds.map((sourceId, index) => (
         <div key={sourceId}>
           <button type="button" className="reader-source-action" disabled={pendingSourceId !== null}
             ref={(element) => { if (element) triggerRefs.current.set(sourceId, element); else triggerRefs.current.delete(sourceId); }}
+            data-reader-source-refresh={sourceId}
             aria-busy={pendingSourceId === sourceId} onClick={() => void check(sourceId)}>
             {props.t(pendingSourceId === sourceId ? "note.refreshSource.checking" : "note.refreshSource.action")}
             {` · ${props.sourceLabel(index + 1)}`}

@@ -967,6 +967,8 @@
   "note.metadata": "Notizmetadaten",
   "note.moreActions": "Weitere Notizaktionen",
   "note.moreSources": "{count} weitere gespeicherte Quellen",
+  "note.showFewerSources": "Weniger gespeicherte Quellen anzeigen",
+  "note.showMoreSources": "Weitere {count} gespeicherte Quellen anzeigen",
   "note.open": "Öffnen",
   "note.opening": "Wird geöffnet",
   "note.outgoingLinks": "Verlinkt auf",

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   NoteOpenSourceReferenceRequest, NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest, NoteReconnectOriginalSourceResult,
+  NoteRevealSourceRequest, NoteRevealSourceResult,
   NoteRenderResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
@@ -18,7 +19,7 @@ import type {
 } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
 import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./ReaderInlineReferenceSurface";
-import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions"; import { ReaderSourceMetadata } from "./ReaderSourceMetadata";
+import { NoteReaderSources } from "./NoteReaderSources";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
@@ -83,7 +84,7 @@ export function NoteReader(props: {
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
   readonly onOpenSourcePage?: (pageId: string) => Promise<void>;
-  readonly onRevealSource?: Parameters<typeof ReaderSourceRevealAction>[0]["onRevealSource"];
+  readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly onReconnectOriginalSource?: (
     request: NoteReconnectOriginalSourceRequest
   ) => Promise<NoteReconnectOriginalSourceResult>;
@@ -851,60 +852,15 @@ export function NoteReader(props: {
         {...(props.onActivateInlineReference ? { onActivate: props.onActivateInlineReference } : {})}
       />
       {summary.sourceIds.length > 0 ? (
-        <section className="reader-sources" aria-label={props.t("note.sources")}>
-          <h2>{props.t("note.sources")}</h2>
-          <div className="reader-source-list">
-            {summary.sourceIds.slice(0, 5).map((sourceId, index) => {
-              const sourceLabel = props.t("note.savedSource").replace("{number}", String(index + 1)); const projectedMetadata = props.note.sourceMetadata?.items[index]; const sourceMetadata = projectedMetadata?.sourceId === sourceId ? projectedMetadata : undefined;
-              return (
-                <div key={`${sourceId}:${index}`}>
-                  <button
-                    className="reader-source"
-                    type="button"
-                    data-reader-source-action="open"
-                    data-reader-source-open={sourceId}
-                    disabled={sourceReferenceState?.status === "resolving"}
-                    aria-busy={sourceReferenceState?.sourceId === sourceId && sourceReferenceState.status === "resolving"}
-                    onClick={() => void openSourceReference(sourceId)}
-                  >
-                    <span className="reader-source-icon" aria-hidden="true">SRC</span>
-                    <span className="reader-source-copy">
-                      <ReaderSourceMetadata fallbackLabel={sourceLabel} metadata={sourceMetadata} t={props.t} />
-                      <span
-                        role={sourceReferenceState?.sourceId === sourceId ? "status" : undefined}
-                        aria-live={sourceReferenceState?.sourceId === sourceId ? "polite" : undefined}
-                        aria-atomic={sourceReferenceState?.sourceId === sourceId ? "true" : undefined}
-                      >
-                        {props.t(sourceReferenceState?.sourceId === sourceId
-                          ? `note.readerLink.${sourceReferenceState.status}`
-                          : "note.readerLinkReady")}
-                      </span>
-                    </span>
-                    <small>{props.t("note.open")}</small>
-                  </button>
-                </div>
-              );
-            })}
-            <NoteReaderSourceActions
-              currentPageId={summary.pageId}
-              sourceIds={summary.sourceIds}
-              labels={readerSourceActionLabels(props.t)}
-              sourceLabel={(number) => props.t("note.savedSource").replace("{number}", String(number))} t={props.t}
-              getFocusRoot={() => readerRef.current}
-              {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
-              {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
-              {...(props.note.reconnectOriginalSourceIds ? { reconnectOriginalSourceIds: props.note.reconnectOriginalSourceIds } : {})} {...(props.note.reconnectOriginalSources ? { reconnectOriginalSources: props.note.reconnectOriginalSources } : {})}
-              {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
-              {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
-              {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}
-            />
-          </div>
-          {summary.sourceIds.length > 5 ? (
-            <p className="reader-source-overflow">
-              {props.t("note.moreSources").replace("{count}", String(summary.sourceIds.length - 5))}
-            </p>
-          ) : null}
-        </section>
+        <NoteReaderSources key={`${props.activeVaultId ?? "unavailable"}:${summary.pageId}:${props.note.renderContextId ?? "unavailable"}`}
+          note={props.note} sourceReferenceState={sourceReferenceState}
+          onOpenSourceReference={(sourceId) => void openSourceReference(sourceId)}
+          getFocusRoot={() => readerRef.current} t={props.t}
+          {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
+          {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
+          {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
+          {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}
+        />
       ) : null}
       <ReaderNoteRelatedPanel
         note={props.note}

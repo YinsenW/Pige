@@ -967,6 +967,8 @@
   "note.metadata": "ノートメタデータ",
   "note.moreActions": "その他のノート操作",
   "note.moreSources": "保存済みソースがあと {count} 件あります",
+  "note.showFewerSources": "保存済みソースの表示を減らす",
+  "note.showMoreSources": "残りの保存済みソース {count} 件を表示",
   "note.open": "開く",
   "note.opening": "開いています",
   "note.outgoingLinks": "リンク先",

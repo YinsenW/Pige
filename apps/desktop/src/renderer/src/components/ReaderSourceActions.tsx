@@ -291,6 +291,7 @@ export function NoteReaderSourceActions(props: {
   readonly currentPageId: string;
   readonly renderContextId?: string;
   readonly sourceIds: readonly string[];
+  readonly visibleSourceIds?: readonly string[];
   readonly reconnectOriginalSourceIds?: readonly string[];
   readonly reconnectOriginalSources?: readonly ReferencedOriginalReconnectCandidate[];
   readonly labels: ReaderSourceActionLabels;
@@ -301,7 +302,7 @@ export function NoteReaderSourceActions(props: {
   readonly onReconnectOriginalSource?: (request: NoteReconnectOriginalSourceRequest) => Promise<NoteReconnectOriginalSourceResult>;
   readonly onSourceReconnected?: (render: NoteRenderResult) => void;
 }): React.JSX.Element | null {
-  const visibleSourceIds = props.sourceIds.slice(0, 5);
+  const visibleSourceIds = props.visibleSourceIds ?? props.sourceIds.slice(0, 5);
   const reconnectSourceIds = props.reconnectOriginalSourceIds ?? [];
   const reconnectProofs = new Map((props.reconnectOriginalSources ?? []).map((source) => [source.sourceId, source]));
   return <><ReaderSourceActionSurface
@@ -326,8 +327,8 @@ export function NoteReaderSourceActions(props: {
       });
     } } : {})}
   />
-    <ReaderSourceRefreshAction currentPageId={props.currentPageId} sourceIds={props.sourceIds}
-      sourceLabel={props.sourceLabel} t={props.t}
+    <ReaderSourceRefreshAction currentPageId={props.currentPageId} sourceIds={visibleSourceIds}
+      sourceLabel={(number) => props.sourceLabel(props.sourceIds.indexOf(visibleSourceIds[number - 1]!) + 1)} t={props.t}
       {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
       {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
       onPreview={(request) => window.pige.sourceRefresh.preview(request)}

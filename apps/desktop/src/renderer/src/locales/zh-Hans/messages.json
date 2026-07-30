@@ -967,6 +967,8 @@
   "note.metadata": "笔记元数据",
   "note.moreActions": "更多笔记操作",
   "note.moreSources": "还有 {count} 个已保存来源",
+  "note.showFewerSources": "收起已保存来源",
+  "note.showMoreSources": "显示另外 {count} 个已保存来源",
   "note.open": "打开",
   "note.opening": "正在打开",
   "note.outgoingLinks": "链接到",

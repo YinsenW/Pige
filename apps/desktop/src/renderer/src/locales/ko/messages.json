@@ -967,6 +967,8 @@
   "note.metadata": "노트 메타데이터",
   "note.moreActions": "노트 작업 더 보기",
   "note.moreSources": "저장된 출처 {count}개 더 있음",
+  "note.showFewerSources": "저장된 출처 접기",
+  "note.showMoreSources": "저장된 출처 {count}개 더 보기",
   "note.open": "열기",
   "note.opening": "여는 중",
   "note.outgoingLinks": "연결된 노트",

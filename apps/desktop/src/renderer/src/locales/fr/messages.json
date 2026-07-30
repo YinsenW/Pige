@@ -967,6 +967,8 @@
   "note.metadata": "Métadonnées de note",
   "note.moreActions": "Plus d’actions sur la note",
   "note.moreSources": "{count} autres sources enregistrées",
+  "note.showFewerSources": "Afficher moins de sources enregistrées",
+  "note.showMoreSources": "Afficher {count} autres sources enregistrées",
   "note.open": "Ouvrir",
   "note.opening": "Ouverture",
   "note.outgoingLinks": "Liens vers",

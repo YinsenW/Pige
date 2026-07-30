@@ -2230,6 +2230,147 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("makes every saved source reachable through one focus-stable Reader disclosure", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const baseNote = readerNote();
+    const sourceIds = Array.from({ length: 7 }, (_, index) => `source_private_${String(index + 1).padStart(4, "0")}`);
+    const note: NoteRenderResult = {
+      ...baseNote,
+      summary: { ...baseNote.summary, sourceIds }
+    };
+    const openRequests: NoteOpenSourceReferenceRequest[] = [];
+    const revealRequests: NoteRevealSourceRequest[] = [];
+    const sourceRefreshPreview = vi.fn(async (request: {
+      readonly apiVersion: 1;
+      readonly requestId: string;
+      readonly activeVaultId: string;
+      readonly currentPageId: string;
+      readonly renderContextId: string;
+      readonly sourceId: string;
+    }) => ({ ...request, status: "unchanged" as const }));
+    const opened: string[] = [];
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        sourceRefresh: {
+          preview: sourceRefreshPreview,
+          confirm: vi.fn()
+        }
+      }
+    });
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note,
+        activeVaultId: "vault_20260715_fullui01",
+        onOpenSourceReference: async (request): Promise<NoteOpenSourceReferenceResult> => {
+          openRequests.push(request);
+          return { apiVersion: 1, requestId: request.requestId, status: "unresolved" };
+        },
+        onOpenSourcePage: async (pageId) => { opened.push(pageId); },
+        onRevealSource: async (request) => {
+          revealRequests.push(request);
+          return { ...request, status: "failed" };
+        },
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const disclosure = requireElement(container.querySelector<HTMLButtonElement>("[data-reader-source-disclosure]"));
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(5);
+    expect(container.querySelector(`[data-reader-source-open="${sourceIds[5]}"]`)).toBeNull();
+    expect(disclosure.textContent).toBe("Show 2 more saved sources");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(dom.window.document.getElementById(disclosure.getAttribute("aria-controls") ?? "")).not.toBeNull();
+
+    disclosure.focus();
+    await act(async () => {
+      disclosure.click();
+      await settle(dom);
+    });
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(7);
+    expect(disclosure.textContent).toBe("Show fewer saved sources");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(dom.window.document.activeElement).toBe(disclosure);
+
+    const sixthOpen = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-open="${sourceIds[5]}"]`
+    ));
+    sixthOpen.focus();
+    await act(async () => {
+      sixthOpen.click();
+      await settle(dom);
+    });
+    expect(openRequests).toHaveLength(1);
+    expect(openRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: sourceIds[5]
+    });
+    expect(opened).toEqual([]);
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(7);
+    expect(container.textContent).toContain("This reference could not be opened. Try again.");
+    expect(dom.window.document.activeElement).toBe(sixthOpen);
+
+    const sixthReveal = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-reveal="${sourceIds[5]}"]`
+    ));
+    sixthReveal.focus();
+    await act(async () => {
+      sixthReveal.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(revealRequests).toHaveLength(1);
+    expect(revealRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: sourceIds[5]
+    });
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(7);
+    expect(dom.window.document.activeElement).toBe(sixthReveal);
+
+    const sixthRefresh = requireElement(container.querySelector<HTMLButtonElement>(
+      `[data-reader-source-refresh="${sourceIds[5]}"]`
+    ));
+    sixthRefresh.focus();
+    await act(async () => {
+      sixthRefresh.click();
+      await settle(dom);
+    });
+    expect(sourceRefreshPreview).toHaveBeenCalledTimes(1);
+    expect(sourceRefreshPreview.mock.calls[0]?.[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_20260715_fullui01",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      sourceId: sourceIds[5]
+    });
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(7);
+    expect(container.textContent).toContain("This source is current.");
+
+    disclosure.focus();
+    await act(async () => {
+      disclosure.click();
+      await settle(dom);
+    });
+    expect(container.querySelectorAll(".reader-source")).toHaveLength(5);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(dom.window.document.activeElement).toBe(disclosure);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("restores saved-source actions when resolved navigation leaves the current Reader", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
