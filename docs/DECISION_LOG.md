@@ -4156,6 +4156,32 @@ References:
 - `docs/SETTINGS_AND_PREFERENCES.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260731-Exact-Note-Taxonomy-Correction
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Reader and Library may replace the complete tag/topic classification of one exact active note
+through the existing atomic Markdown editor and reversible `update_page` lifecycle.
+
+Rationale:
+
+Let people correct Agent-maintained classification without exposing a taxonomy console or allowing
+renderer-owned Markdown writes.
+
+Consequences:
+
+- Main binds vault, page, render and revision; canonical bounds are 12 tags and 8 topics.
+- Body and unrelated frontmatter stay unchanged; stale/failure retains both UI drafts.
+- The action does not create topic pages, edit hierarchy, or broaden manual taxonomy management.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`; `docs/KNOWLEDGE_MODEL_AND_LINKING.md`;
+  `docs/API_AND_IPC_DESIGN.md`; `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

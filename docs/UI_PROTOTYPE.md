@@ -827,10 +827,14 @@ progress/Cancel/Retry and trash-first clear. Real surfaces include Home,
 Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance, current-note
 Agent, Reader copy/Link, composer processing, compact Activity/Undo, locale/window pin and
 current-action prompts. Settings framing and Reader related context remain partial.
+An active note in Reader or Library detail offers one Edit tags and topics action. Its existing
+confirmation dialog starts with the current comma-separated values, traps focus, supports Escape/
+Cancel, and commits only a changed bounded pair; stale/failure preserves both drafts and returns
+focus to the first field, while success adopts the authoritative render and remains undoable.
 Compact Settings owns focus/inert state; Escape closes its navigator before the dialog
 and restores trigger focus.
 Appearance, local capabilities, reusable permission policy, Skills, Pi
-Packages, updates/voice, Reader mutations beyond bounded Link and unbound Knowledge
+Packages, updates/voice, Reader mutations beyond bounded Link/classification and unbound Knowledge
 evidence/backlink/relationship actions remain localized unavailable without IPC, Job,
 persistence, fake result/progress/status credit. Until a
 separate `BrowserWindow` owner exists, Settings remains an in-app focus-trapped dialog

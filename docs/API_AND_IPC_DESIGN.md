@@ -483,7 +483,7 @@ Undo and the body/path/hash ban remain.
 Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.listRevisionHistory`,
 `notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
 `notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash`,
-`notes.restoreRevisionHistory`.
+`notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`.
 
 Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
 only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
@@ -494,6 +494,13 @@ and returns authoritative render without duplicate `restore_page`. Merge binds b
 current. History binds render/revision, lists <=100 safe summaries and opens sanitized read-only
 previews; restore CAS-writes one `restore_page`. Source/rich-text stays read-only and closed results
 expose no body/path.
+
+`notes.editTaxonomy` replaces the complete tags/topics projection only for one active `note`. Its
+strict request binds active Vault, page, render context and immutable revision, with at most 12
+canonical tags and 8 canonical topic references. Main re-proves the same note, preserves body and
+unrelated frontmatter through the existing atomic Markdown editor, returns the authoritative render
+only after commit, and refreshes derived indexes afterward. Stale/ineligible/failure is body-free and
+preserves both renderer drafts; Activity/restart/Undo remain the editor-owned `update_page` lifecycle.
 
 Reader reference query contract:
 

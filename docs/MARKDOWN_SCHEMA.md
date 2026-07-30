@@ -87,11 +87,15 @@ Field rules:
 - `tags`: optional inline array of at most 12 unique NFKC/space-normalized 1–48-character,
   control-free strings; case-insensitive dedupe. Missing is compatible; scalar/numeric/
   block/over-limit forms are invalid, never coerced or truncated.
+- `topics`: optional inline array of at most 8 unique NFKC/space-normalized 1–80-character,
+  control-free topic references; case-insensitive dedupe. Missing is compatible; scalar/
+  numeric/block/over-limit forms are invalid, never coerced or truncated.
 - `source_ids`: source record IDs used by the page.
 - `related_page_ids`: stable IDs, not file paths.
 - `provenance`: Pige-managed, never a place for secrets or full prompts.
 
-Tag updates change `tags` plus metadata, preserve other bytes, and Undo exact before bytes.
+Explicit note-classification correction replaces the complete `tags` and `topics` arrays plus
+metadata, preserves the note body and all unrelated fields, and Undo restores exact before bytes.
 
 ## 5. Page-Type Fields
 

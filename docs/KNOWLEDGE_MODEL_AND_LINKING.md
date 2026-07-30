@@ -96,7 +96,11 @@ Rules:
 - Current: after inspect/retrieval, Pi supplies one `related_NN`, 1–6 tags, cited reason,
   and high confidence. Host updates one clean active generated note, normalizes/dedupes,
   reuses catalog spelling, allows new tags, and caps 12/page.
-- `update_page` recovery/Activity/Undo preserves body; removal/replacement/synonyms remain open.
+- Reader and Library may explicitly replace the complete tags and topic references of one exact
+  active note. Main binds vault/page/render/revision, accepts at most 12 tags and 8 topics, preserves
+  body/unrelated fields, and records reversible `update_page`; stale/failure retains both drafts.
+- This correction does not expose topic-page creation, hierarchy, relation types, or broader manual
+  taxonomy management. Synonym management remains open.
 
 ### 5.2 Topics
 
