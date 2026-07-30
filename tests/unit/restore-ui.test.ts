@@ -6,6 +6,8 @@ import type {
   AppearanceSettingsSummary,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupReconnectDestinationRequest,
+  BackupReconnectDestinationResult,
   JobSummary,
   JobsListRequest,
   LocalDatabaseStatus,
@@ -766,6 +768,83 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("reconnects only an eligible backup destination with exact Job currentness and resumes the same Job", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const waitingJob = {
+      ...backupJob("waiting_dependency"),
+      canReconnectDependency: false,
+      canReconnectBackupDestination: true
+    };
+    harness.jobs = [waitingJob];
+    let outcome: "failed" | "reconnected" = "failed";
+    harness.reconnectDestination = async (request) => {
+      harness.reconnectDestinationRequests.push(request);
+      if (outcome === "reconnected") {
+        harness.jobs = [{
+          ...waitingJob,
+          state: "running",
+          canReconnectBackupDestination: false,
+          updatedAt: "2026-07-30T10:00:01.000Z"
+        }];
+      }
+      return { ...request, status: outcome };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+
+    const reconnect = button(container, "Choose new backup location");
+    expect(container.textContent).toContain("The backup location is unavailable.");
+    expect(container.textContent).not.toContain("A managed source location needs to be reconnected");
+    await act(async () => {
+      reconnect.click();
+      reconnect.click();
+      await settle(dom);
+    });
+    await waitFor(dom, () => harness.reconnectDestinationRequests.length === 1);
+    expect(harness.reconnectDestinationRequests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_restore_ui",
+      waitingJobId: waitingJob.id,
+      expectedJobUpdatedAt: waitingJob.updatedAt
+    });
+    expect(harness.reconnectDestinationRequests[0]?.requestId).toMatch(/^backupdestinationreconnectreq_[a-z0-9]{8,64}$/u);
+    expect(JSON.stringify(harness.reconnectDestinationRequests[0])).not.toMatch(/path|root|source/iu);
+    expect(container.textContent).toContain("Pige could not reconnect this backup location.");
+    expect(buttons(container, "Choose new backup location")).toHaveLength(1);
+    await waitFor(dom, () => dom.window.document.activeElement === reconnect);
+    expect(harness.retryJobIds).toHaveLength(0);
+
+    outcome = "reconnected";
+    await click(dom, reconnect);
+    await waitFor(dom, () => harness.reconnectDestinationRequests.length === 2);
+    await waitFor(dom, () => buttons(container, "Choose new backup location").length === 0);
+    expect(harness.jobs).toHaveLength(1);
+    expect(harness.jobs[0]?.id).toBe(waitingJob.id);
+    expect(container.textContent).toContain("Creating and validating the backup");
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector('[aria-labelledby="vault-backup-title"]'));
+    expect(harness.retryJobIds).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("does not infer backup-destination reconnect eligibility from a waiting Backup", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    harness.jobs = [{
+      ...backupJob("waiting_dependency"),
+      canReconnectDependency: false,
+      canReconnectBackupDestination: false
+    }];
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+    expect(buttons(container, "Choose new backup location")).toHaveLength(0);
+    expect(harness.reconnectDestinationRequests).toHaveLength(0);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("continues only an eligible incomplete Backup after explicit confirmation and refreshes the same Job", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
@@ -1085,6 +1164,8 @@ interface RestoreHarness {
     readonly waitingJobId: string;
     readonly status: "resolved" | "cancelled" | "stale" | "not_found" | "failed";
   }>;
+  readonly reconnectDestinationRequests: BackupReconnectDestinationRequest[];
+  reconnectDestination: (request: BackupReconnectDestinationRequest) => Promise<BackupReconnectDestinationResult>;
   readonly continueIncompleteRequests: BackupContinueIncompleteRequest[];
   continueIncomplete: (request: BackupContinueIncompleteRequest) => Promise<BackupContinueIncompleteResult>;
   readonly configureManagedCopyRootRequests: ManagedCopyRootConfigureRequest[];
@@ -1117,6 +1198,11 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     reconnectDependency: async (request) => {
       harness.reconnectRequests.push({ activeVaultId: request.activeVaultId, waitingJobId: request.waitingJobId });
       return { apiVersion: 1, ...request, status: "resolved" };
+    },
+    reconnectDestinationRequests: [],
+    reconnectDestination: async (request) => {
+      harness.reconnectDestinationRequests.push(request);
+      return { ...request, status: "cancelled" };
     },
     continueIncompleteRequests: [],
     continueIncomplete: async (request) => {
@@ -1265,6 +1351,7 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       create: async () => ({ status: "canceled" }),
       reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
         harness.reconnectDependency(request),
+      reconnectDestination: (request: BackupReconnectDestinationRequest) => harness.reconnectDestination(request),
       continueIncomplete: (request: BackupContinueIncompleteRequest) => harness.continueIncomplete(request)
     },
     confirmations: {
@@ -1452,6 +1539,7 @@ function backupJob(
     stage: "backing_up",
     backupKind: "user_backup",
     canReconnectDependency: state === "waiting_dependency" && !canContinueIncomplete,
+    canReconnectBackupDestination: false,
     canContinueIncomplete,
     ...(state === "waiting_dependency" ? {
       waitingDependency: {
