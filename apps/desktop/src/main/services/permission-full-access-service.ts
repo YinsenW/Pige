@@ -39,7 +39,7 @@ export class PermissionFullAccessService {
       confirmationId
     });
     if (prepared === "stale") return { status: "stale" };
-    if (prepared === "busy") return { status: "failed" };
+    if (prepared === "busy") return { status: "stale" };
     return this.#bind(this.#store.read());
   }
 
@@ -91,7 +91,7 @@ export class PermissionFullAccessService {
           : "stale"
       };
     }
-    if (result.status === "busy") return { status: "failed" };
+    if (result.status === "busy") return { status: "stale" };
     return {
       status: "confirmation_required",
       confirmationId,

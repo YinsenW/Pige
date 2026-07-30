@@ -3888,7 +3888,10 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Remember scoped grants");
     expect(container.textContent).toContain("Calendar · v1.0.0 · Read events");
     expect(container.textContent).toContain("Mail · v1.0.0 · Draft messages");
-    expect(container.textContent).toContain("YOLO Full Access");
+    expect(container.textContent).toContain("Full Access");
+    expect(container.querySelectorAll(".permission-mode-option")).toHaveLength(3);
+    expect(container.textContent).toContain("Ordinary bounded work continues directly.");
+    expect(container.textContent).toContain("matching actions continue without asking again");
 
     const revokeButtons = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
       .filter((button) => button.textContent === "Revoke");
@@ -3941,6 +3944,19 @@ describe("full UI Settings surface", () => {
       changedListener?.({
         ...initial,
         revision: 4,
+        defaultMode: "remember_scoped_grants",
+        grants: []
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Remember scoped grants");
+    expect(container.textContent).not.toContain("No saved grants");
+    expect(container.textContent).not.toContain("Saved scoped grants");
+
+    await act(async () => {
+      changedListener?.({
+        ...initial,
+        revision: 5,
         grants: [initial.grants[1]!]
       });
       await settle(dom);
@@ -4010,14 +4026,14 @@ describe("full UI Settings surface", () => {
     });
     const container = dom.window.document.querySelector("#root")!;
     const fullAccessRadio = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
-      .find((input) => input.parentElement?.textContent?.includes("YOLO Full Access"))!;
+      .find((input) => input.parentElement?.textContent?.includes("Full Access"))!;
     fullAccessRadio.focus();
     await act(async () => {
       fullAccessRadio.click();
       await settle(dom);
     });
     let dialog = requireElement(container.querySelector<HTMLElement>('[role="alertdialog"]'));
-    expect(dialog.textContent).toContain("Turn on YOLO Full Access?");
+    expect(dialog.textContent).toContain("Turn on Full Access?");
     expect(dialog.textContent).toContain("Permanent deletion");
     expect(dialog.textContent).toContain("Operating system permissions");
     expect(dialog.textContent).toContain("Filesystem confinement and symlink safety");
@@ -4078,7 +4094,7 @@ describe("full UI Settings surface", () => {
       });
       await settle(dom);
     });
-    expect(container.textContent).toContain("YOLO Full Access is on");
+    expect(container.textContent).toContain("Full Access is on");
     expect(container.textContent).toContain("Still always protected");
     const returnToAsk = buttonNamed(container, "Return to Ask Every Time");
     await act(async () => {
