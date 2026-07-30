@@ -211,6 +211,7 @@ import {
 } from "./services/job-class-executor-registry";
 import { LibraryService } from "./services/library-service";
 import { LibraryTagsService } from "./services/library-tags-service";
+import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
@@ -382,6 +383,7 @@ let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let noteMergeService: NoteMergeService | undefined;
+let noteMarkdownImportService: NoteMarkdownImportService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
@@ -1605,6 +1607,10 @@ const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
   return noteMergeService;
 };
+const getNoteMarkdownImportService = (): NoteMarkdownImportService => {
+  noteMarkdownImportService ??= new NoteMarkdownImportService(getVaultService(), getNotesService());
+  return noteMarkdownImportService;
+};
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
   const trash = getNoteTrashService();
   const merge = getNoteMergeService();
@@ -2131,6 +2137,21 @@ const resumeBackgroundJobs = (): void => {
     getJobsService().requeueWaitingParses();
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
+    try {
+      const noteImportRecovery = getNoteMarkdownImportService().recoverIncompleteImports();
+      if (noteImportRecovery.recovered > 0) scheduleActivityIndexRebuild();
+      if (noteImportRecovery.failed > 0) {
+        recordBackgroundFailure(
+          "note.import_recovery_incomplete",
+          "Some interrupted Markdown note imports still require repair."
+        );
+      }
+    } catch {
+      recordBackgroundFailure(
+        "note.import_recovery_failed",
+        "Interrupted Markdown note imports could not be inspected safely."
+      );
+    }
     try {
       const activityRecovery = getKnowledgeActivityService().recoverIncompleteUndos();
       if (activityRecovery.recovered > 0) scheduleActivityIndexRebuild();
@@ -2706,8 +2727,10 @@ registerReaderIpc({
   getNoteTrashService,
   getNoteArchiveService,
   getNoteMergeService,
+  getNoteMarkdownImportService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
-  onNoteArchiveCommitted: scheduleActivityIndexRebuild
+  onNoteArchiveCommitted: scheduleActivityIndexRebuild,
+  onNoteImported: scheduleActivityIndexRebuild
 });
 registerCurrentNoteAppendIpc({
   ipcMain,
@@ -3203,6 +3226,7 @@ app.whenReady().then(async () => {
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
+  noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     createManagedCollectionActivityPort(),

@@ -8,6 +8,7 @@ import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/s
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
+import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/services/note-markdown-import-service";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -29,7 +30,9 @@ function makeHarness(
   noteMergeService?: Partial<NoteMergeService>,
   reconnectService?: Partial<ReaderSourceReconnectService>,
   noteArchiveService?: Partial<NoteArchiveService>,
-  onNoteArchiveCommitted = vi.fn()
+  onNoteArchiveCommitted = vi.fn(),
+  noteMarkdownImportService?: Partial<NoteMarkdownImportService>,
+  onNoteImported = vi.fn()
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -70,8 +73,13 @@ function makeHarness(
       if (noteMergeService) return noteMergeService as NoteMergeService;
       throw new Error("Note merge service was not expected.");
     },
+    getNoteMarkdownImportService: () => {
+      if (noteMarkdownImportService) return noteMarkdownImportService as NoteMarkdownImportService;
+      throw new Error("Note Markdown import service was not expected.");
+    },
     onNoteTrashCommitted,
-    onNoteArchiveCommitted
+    onNoteArchiveCommitted,
+    onNoteImported
   });
   return handlers;
 }
@@ -86,6 +94,7 @@ describe("registerReaderIpc", () => {
       "notes.saveEditor",
       "notes.trashCurrent",
       "notes.archiveCurrent",
+      "notes.importMarkdown",
       "notes.merge",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
@@ -567,5 +576,46 @@ describe("registerReaderIpc", () => {
       reconnectRequest,
       expect.objectContaining({ pick: expect.any(Function) })
     );
+  });
+
+  it("imports one Markdown note through the Main picker and refreshes only after an authoritative commit", async () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "noteimport_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_abcdefgh"
+    };
+    const render = {
+      summary: {
+        pageId: "page_20260730_imported1234",
+        title: "Imported",
+        pageType: "note" as const,
+        status: "active" as const,
+        pagePath: "wiki/generated/2026/page_20260730_imported1234.md",
+        createdAt: "2026-07-30T12:00:00.000Z",
+        updatedAt: "2026-07-30T12:00:00.000Z",
+        sourceIds: []
+      },
+      html: "<h1>Imported</h1>",
+      byteSize: 64,
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    };
+    const importMarkdown = vi.fn(async (_ownerId: string, request: typeof identity, picker: { pick(): Promise<string | undefined> }) => {
+      expect(await picker.pick()).toBe("/private/replacement.txt");
+      return { ...request, status: "imported" as const, operationId: "op_20260730_imported1234", render };
+    });
+    const refreshed = vi.fn();
+    const handlers = makeHarness(
+      {}, undefined, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(),
+      { importMarkdown }, refreshed
+    );
+    const sender = makeSender(44);
+    await expect(handlers.get("notes.importMarkdown")!({ sender } as IpcMainInvokeEvent, identity))
+      .resolves.toMatchObject({ status: "imported", operationId: "op_20260730_imported1234" });
+    expect(importMarkdown).toHaveBeenCalledWith(
+      expect.stringMatching(/^notes_owner_/u),
+      identity,
+      expect.objectContaining({ pick: expect.any(Function) })
+    );
+    expect(refreshed).toHaveBeenCalledTimes(1);
   });
 });

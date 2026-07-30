@@ -109,6 +109,8 @@ import type {
   NoteEditorSaveResult,
   NoteMergeRequest,
   NoteMergeResult,
+  NoteImportMarkdownRequest,
+  NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
   NoteTrashCurrentRequest,
@@ -409,6 +411,9 @@ import {
   NOTE_MERGE_CHANNEL,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
+  NOTE_IMPORT_MARKDOWN_CHANNEL,
+  NoteImportMarkdownRequestSchema,
+  NoteImportMarkdownResultSchema,
   NOTE_ARCHIVE_CURRENT_CHANNEL,
   NoteArchiveCurrentRequestSchema,
   NoteArchiveCurrentResultSchema,
@@ -1477,6 +1482,13 @@ const api: PigeDesktopApi = {
     merge: async (request: NoteMergeRequest): Promise<NoteMergeResult> =>
       NoteMergeResultSchema.parse(
         await ipcRenderer.invoke(NOTE_MERGE_CHANNEL, NoteMergeRequestSchema.parse(request))
+      ),
+    importMarkdown: async (request: NoteImportMarkdownRequest): Promise<NoteImportMarkdownResult> =>
+      NoteImportMarkdownResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_IMPORT_MARKDOWN_CHANNEL,
+          NoteImportMarkdownRequestSchema.parse(request)
+        )
       ),
     archiveCurrent: async (request: NoteArchiveCurrentRequest): Promise<NoteArchiveCurrentResult> =>
       NoteArchiveCurrentResultSchema.parse(
