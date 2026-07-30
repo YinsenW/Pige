@@ -69,6 +69,21 @@ const orphanRepairRequest = {
   sourceRevision: `noteeditrev_${"1".repeat(64)}`,
   sourceRenderProof: `knowledge_health_render_${"2".repeat(64)}`
 } as const;
+const duplicateTopicRepairRequest = {
+  apiVersion: 1,
+  requestId: "knowledge_health_duplicate_topic_repair_request_abcdefghijklmnop",
+  activeVaultId: request.activeVaultId,
+  reportRequestId: request.requestId,
+  indexGeneration: repairRequest.indexGeneration,
+  issueKind: "duplicate_topic",
+  repairContextId: `knowledge_health_repair_context_${"7".repeat(32)}`,
+  survivorPageId: "page_20260731_duplicatetopica",
+  survivorRevision: `noteeditrev_${"8".repeat(64)}`,
+  survivorRenderProof: `knowledge_health_render_${"9".repeat(64)}`,
+  absorbedPageId: "page_20260731_duplicatetopicb",
+  absorbedRevision: `noteeditrev_${"a".repeat(64)}`,
+  absorbedRenderProof: `knowledge_health_render_${"b".repeat(64)}`
+} as const;
 
 function readyResult() {
   return {
@@ -98,6 +113,7 @@ function makeHarness(options: {
   readonly repairKnowledgeHealth?: (...args: unknown[]) => unknown;
   readonly searchKnowledgeHealthOrphanParents?: (...args: unknown[]) => unknown;
   readonly repairKnowledgeHealthOrphan?: (...args: unknown[]) => unknown;
+  readonly repairKnowledgeHealthDuplicateTopic?: (...args: unknown[]) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const runKnowledgeHealth = vi.fn(options.runKnowledgeHealth ?? (() => readyResult()));
@@ -125,6 +141,11 @@ function makeHarness(options: {
     revision: `noteeditrev_${"3".repeat(64)}`,
     operationId: "op_20260731_orphanrepair123"
   })));
+  const repairKnowledgeHealthDuplicateTopic = vi.fn(options.repairKnowledgeHealthDuplicateTopic ?? (() => ({
+    ...duplicateTopicRepairRequest,
+    status: "committed" as const,
+    operationId: "op_20260731_duplicatetopic123"
+  })));
   registerKnowledgeHealthIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -134,6 +155,7 @@ function makeHarness(options: {
     searchKnowledgeHealthTargets,
     searchKnowledgeHealthOrphanParents,
     repairKnowledgeHealthOrphan,
+    repairKnowledgeHealthDuplicateTopic,
     repairKnowledgeHealth
   });
   return {
@@ -142,19 +164,22 @@ function makeHarness(options: {
     repairKnowledgeHealth,
     searchKnowledgeHealthTargets,
     searchKnowledgeHealthOrphanParents,
-    repairKnowledgeHealthOrphan
+    repairKnowledgeHealthOrphan,
+    repairKnowledgeHealthDuplicateTopic
   };
 }
 
 describe("registerKnowledgeHealthIpc", () => {
   it("registers and strictly delegates the maintenance channel", async () => {
     const { handlers, runKnowledgeHealth, searchKnowledgeHealthTargets, repairKnowledgeHealth,
-      searchKnowledgeHealthOrphanParents, repairKnowledgeHealthOrphan } = makeHarness();
+      searchKnowledgeHealthOrphanParents, repairKnowledgeHealthOrphan,
+      repairKnowledgeHealthDuplicateTopic } = makeHarness();
 
     expect([...handlers.keys()]).toEqual([
       "maintenance.runKnowledgeHealth",
       "maintenance.searchKnowledgeHealthTargets",
       "maintenance.repairKnowledgeHealth",
+      "maintenance.repairKnowledgeHealthDuplicateTopic",
       "maintenance.searchKnowledgeHealthOrphanParents",
       "maintenance.repairKnowledgeHealthOrphan"
     ]);
@@ -183,6 +208,11 @@ describe("registerKnowledgeHealthIpc", () => {
       orphanRepairRequest
     )).resolves.toMatchObject({ status: "committed", operationId: "op_20260731_orphanrepair123" });
     expect(repairKnowledgeHealthOrphan).toHaveBeenCalledWith(binding.vaultPath, orphanRepairRequest);
+    await expect(handlers.get("maintenance.repairKnowledgeHealthDuplicateTopic")!(
+      {} as IpcMainInvokeEvent,
+      duplicateTopicRepairRequest
+    )).resolves.toMatchObject({ status: "committed", operationId: "op_20260731_duplicatetopic123" });
+    expect(repairKnowledgeHealthDuplicateTopic).toHaveBeenCalledWith(binding.vaultPath, duplicateTopicRepairRequest);
   });
 
   it("fails closed before service access for malformed or inactive-vault requests", async () => {

@@ -1521,6 +1521,7 @@ describe("schemas", () => {
       activeVaultId: request.activeVaultId,
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_viewabcd1",
         kind: "create_collection_view",
@@ -2094,6 +2095,7 @@ describe("schemas", () => {
       activeVaultId: request.activeVaultId,
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260729_formulaupdate",
         kind: "update_collection_formula",
@@ -2525,6 +2527,7 @@ describe("schemas", () => {
       activeVaultId: addRequest.activeVaultId,
       total: 2,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: ["add_collection_relation", "update_collection_relation_cell"].map((kind, index) => ({
         operationId: index === 0 ? "op_20260729_relationadd01" : "op_20260729_relationedit1",
         kind,
@@ -5310,6 +5313,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260718_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260718_activitysafe",
         kind: "create_page",
@@ -5329,6 +5333,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260728_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_rowappend",
         kind: "add_collection_row",
@@ -5348,6 +5353,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260728_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_columnadd",
         kind: "add_collection_column",
@@ -5367,6 +5373,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260728_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_columnrename",
         kind: "rename_collection_column",
@@ -5386,6 +5393,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260728_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_columntrash",
         kind: "trash_collection_column",
@@ -5405,6 +5413,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260728_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260728_rowtrash",
         kind: "trash_collection_row",
@@ -5446,6 +5455,7 @@ describe("schemas", () => {
         activeVaultId: "vault_20260727_activitysafe",
         total: 1,
         invalidOperationCount: 0,
+        hasMore: false,
         activities: [{
           ...activity,
           createdAt: "2026-07-27T00:00:00.000Z",
@@ -5459,6 +5469,7 @@ describe("schemas", () => {
       activeVaultId: "vault_20260727_activitysafe",
       total: 1,
       invalidOperationCount: 0,
+      hasMore: false,
       activities: [{
         operationId: "op_20260727_memorytrash",
         kind: "trash_memory",

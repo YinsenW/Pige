@@ -7,7 +7,7 @@ import type { Locale } from "@pige/schemas";
 
 export type KnowledgeHealthRepairState =
   | { readonly kind: "repairing"; readonly issueKey: string }
-  | { readonly kind: "committed"; readonly issueKind: "broken_link" | "orphan_page" }
+  | { readonly kind: "committed"; readonly issueKind: "broken_link" | "orphan_page" | "duplicate_topic" }
   | { readonly kind: "stale" | "failed" }
   | null;
 
@@ -24,6 +24,14 @@ export type RepairableBrokenLink = Extract<KnowledgeHealthIssueSummary, { readon
   readonly occurrenceId: string;
 };
 
+export type RepairableDuplicateTopic = Extract<KnowledgeHealthIssueSummary, { readonly kind: "duplicate_topic" }> & {
+  readonly repairContextId: string;
+  readonly pageProofs: readonly [
+    { readonly pageId: string; readonly revision: string; readonly renderProof: string },
+    { readonly pageId: string; readonly revision: string; readonly renderProof: string }
+  ];
+};
+
 export function KnowledgeHealthReadyResult(props: {
   readonly result: Extract<KnowledgeHealthRunResult, { readonly status: "ready" }>;
   readonly groupedIssues: readonly {
@@ -35,6 +43,7 @@ export function KnowledgeHealthReadyResult(props: {
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
+  readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -91,6 +100,7 @@ export function KnowledgeHealthReadyResult(props: {
                 onRepairIssue={props.onRepairIssue}
                 onRetargetIssue={props.onRetargetIssue}
                 onChooseOrphanParent={props.onChooseOrphanParent}
+                onMergeDuplicateTopic={props.onMergeDuplicateTopic}
                 repairState={props.repairState}
                 t={props.t}
               />
@@ -108,10 +118,15 @@ function KnowledgeHealthIssueRow(props: {
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
+  readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   if (props.issue.kind === "duplicate_topic") {
+    const repairable = props.issue.repairContextId && props.issue.pageProofs?.length === 2 &&
+      props.issue.candidatePageCount === 2 && props.issue.pages.length === 2
+      ? props.issue as RepairableDuplicateTopic
+      : null;
     return (
       <span>
         {props.issue.pages.map((page, index) => (
@@ -125,6 +140,16 @@ function KnowledgeHealthIssueRow(props: {
         {props.issue.candidatePageCount > props.issue.pages.length
           ? ` · +${props.issue.candidatePageCount - props.issue.pages.length}`
           : ""}
+        {repairable ? (
+          <>
+            {" · "}
+            <button className="settings-button" type="button"
+              disabled={props.repairState?.kind === "repairing"}
+              onClick={(event) => props.onMergeDuplicateTopic(repairable, event.currentTarget)}>
+              {props.t("maintenance.knowledgeHealth.mergeDuplicateTopic")}
+            </button>
+          </>
+        ) : null}
       </span>
     );
   }

@@ -129,6 +129,8 @@ import type {
   KnowledgeHealthRunResult,
   KnowledgeHealthRepairRequest,
   KnowledgeHealthRepairResult,
+  KnowledgeHealthDuplicateTopicRepairRequest,
+  KnowledgeHealthDuplicateTopicRepairResult,
   KnowledgeHealthTargetCandidate,
   KnowledgeHealthTargetSearchRequest,
   KnowledgeHealthTargetSearchResult,
@@ -541,6 +543,8 @@ export type {
   PiPackageUpdateRequestId,
   PiPackageUpdateResult,
   KnowledgeHealthCounts,
+  KnowledgeHealthDuplicateTopicRepairRequest,
+  KnowledgeHealthDuplicateTopicRepairResult,
   KnowledgeHealthIndexGeneration,
   KnowledgeHealthIssueKind,
   KnowledgeHealthIssueSummary,
@@ -2342,6 +2346,9 @@ export interface PigeDesktopApi {
     readonly repairKnowledgeHealth: (
       request: KnowledgeHealthRepairRequest
     ) => Promise<KnowledgeHealthRepairResult>;
+    readonly repairKnowledgeHealthDuplicateTopic: (
+      request: KnowledgeHealthDuplicateTopicRepairRequest
+    ) => Promise<KnowledgeHealthDuplicateTopicRepairResult>;
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;

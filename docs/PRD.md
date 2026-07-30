@@ -372,6 +372,10 @@ Knowledge health is the quality of the wiki as a maintained system:
 - Are tags coherent?
 - Are orphan pages intentional?
 
+An exact duplicate-topic candidate may offer a user-chosen two-topic merge. Pige keeps the
+selected survivor, moves the absorbed topic to recoverable private trash, and records one
+reversible Operation. Ambiguous or stale candidates remain report-only and never rewrite pages.
+
 ### 6.6 Processing Status
 
 Processing status covers queued, active, failed, partial, and exceptional intervention jobs.

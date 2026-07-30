@@ -13,6 +13,7 @@ import {
   knowledgeHealthIssueKey,
   type KnowledgeHealthRepairState,
   type RepairableBrokenLink,
+  type RepairableDuplicateTopic,
   type RepairableOrphan
 } from "./KnowledgeHealthReadyResult";
 
@@ -32,6 +33,11 @@ type KnowledgeHealthRetargetState =
   | { readonly kind: "ready"; readonly issue: RepairableBrokenLink; readonly query: string;
     readonly targets: readonly KnowledgeHealthTargetCandidate[]; readonly truncated: boolean }
   | null;
+
+type DuplicateTopicMergeState = {
+  readonly issue: RepairableDuplicateTopic;
+  readonly survivorPageId: string;
+} | null;
 
 const KNOWLEDGE_HEALTH_KINDS: readonly KnowledgeHealthIssueKind[] = [
   "broken_link",
@@ -60,8 +66,11 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const [knowledgeHealthRepairState, setKnowledgeHealthRepairState] = useState<KnowledgeHealthRepairState>(null);
   const [knowledgeHealthRetargetState, setKnowledgeHealthRetargetState] = useState<KnowledgeHealthRetargetState>(null);
   const [orphanParentPickerState, setOrphanParentPickerState] = useState<OrphanParentPickerState>(null);
+  const [duplicateTopicMergeState, setDuplicateTopicMergeState] = useState<DuplicateTopicMergeState>(null);
   const [knowledgeHealthOpenFailed, setKnowledgeHealthOpenFailed] = useState(false);
   const resetDatabaseButtonRef = useRef<HTMLButtonElement>(null);
+  const knowledgeHealthRunButtonRef = useRef<HTMLButtonElement>(null);
+  const duplicateTopicTriggerRef = useRef<HTMLButtonElement | null>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -96,8 +105,16 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     setKnowledgeHealthRepairState(null);
     setKnowledgeHealthRetargetState(null);
     setOrphanParentPickerState(null);
+    setDuplicateTopicMergeState(null);
     setKnowledgeHealthOpenFailed(false);
   }, [props.activeVaultId]);
+
+  useEffect(() => {
+    if (knowledgeHealthRepairState?.kind !== "committed" ||
+      knowledgeHealthRepairState.issueKind !== "duplicate_topic" || knowledgeHealthState.kind !== "ready") return;
+    const timer = window.setTimeout(() => knowledgeHealthRunButtonRef.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [knowledgeHealthRepairState, knowledgeHealthState]);
 
   useEffect(() => {
     let active = true;
@@ -500,6 +517,60 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     }
   };
 
+  const repairDuplicateTopic = async (): Promise<void> => {
+    const picker = duplicateTopicMergeState;
+    const reportState = knowledgeHealthStateRef.current;
+    if (!picker || reportState.kind !== "ready" || knowledgeHealthRepairBusyRef.current) return;
+    const survivorIndex = picker.issue.pages.findIndex(({ pageId }) => pageId === picker.survivorPageId);
+    const absorbedIndex = survivorIndex === 0 ? 1 : 0;
+    const survivor = picker.issue.pageProofs[survivorIndex];
+    const absorbed = picker.issue.pageProofs[absorbedIndex];
+    if (!survivor || !absorbed) return;
+    knowledgeHealthRepairBusyRef.current = true;
+    const report = reportState.result;
+    const sequence = ++knowledgeHealthRepairSequenceRef.current;
+    const activeVaultId = props.activeVaultId;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `knowledge_health_duplicate_topic_repair_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId,
+      reportRequestId: report.requestId,
+      indexGeneration: report.indexGeneration,
+      issueKind: "duplicate_topic" as const,
+      repairContextId: picker.issue.repairContextId,
+      survivorPageId: survivor.pageId,
+      survivorRevision: survivor.revision,
+      survivorRenderProof: survivor.renderProof,
+      absorbedPageId: absorbed.pageId,
+      absorbedRevision: absorbed.revision,
+      absorbedRenderProof: absorbed.renderProof
+    };
+    setKnowledgeHealthRepairState({ kind: "repairing", issueKey: knowledgeHealthIssueKey(picker.issue) });
+    try {
+      const result = await window.pige.maintenance.repairKnowledgeHealthDuplicateTopic(request);
+      if (!mountedRef.current || sequence !== knowledgeHealthRepairSequenceRef.current ||
+        activeVaultIdRef.current !== activeVaultId || result.requestId !== request.requestId ||
+        result.activeVaultId !== request.activeVaultId || result.reportRequestId !== request.reportRequestId ||
+        result.indexGeneration !== request.indexGeneration || result.repairContextId !== request.repairContextId ||
+        result.survivorPageId !== request.survivorPageId || result.survivorRevision !== request.survivorRevision ||
+        result.survivorRenderProof !== request.survivorRenderProof || result.absorbedPageId !== request.absorbedPageId ||
+        result.absorbedRevision !== request.absorbedRevision || result.absorbedRenderProof !== request.absorbedRenderProof) return;
+      if (result.status === "committed") {
+        setDuplicateTopicMergeState(null);
+        setKnowledgeHealthRepairState({ kind: "committed", issueKind: "duplicate_topic" });
+        await runKnowledgeHealth(true);
+      } else {
+        setKnowledgeHealthRepairState({ kind: result.status === "failed" ? "failed" : "stale" });
+      }
+    } catch {
+      if (mountedRef.current && sequence === knowledgeHealthRepairSequenceRef.current) {
+        setKnowledgeHealthRepairState({ kind: "failed" });
+      }
+    } finally {
+      if (sequence === knowledgeHealthRepairSequenceRef.current) knowledgeHealthRepairBusyRef.current = false;
+    }
+  };
+
   const databaseStatus = props.localDatabaseStatus?.status ?? "checking";
   const databaseStatusClass = databaseStatus === "error"
     ? " error"
@@ -593,6 +664,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
               <span>{props.t("maintenance.knowledgeHealth.description")}</span>
             </div>
             <button
+              ref={knowledgeHealthRunButtonRef}
               className="settings-button settings-action"
               type="button"
               disabled={knowledgeHealthState.kind === "checking" || knowledgeHealthRepairState?.kind === "repairing"}
@@ -612,9 +684,47 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
               onRepairIssue={repairKnowledgeHealthIssue}
               onRetargetIssue={openKnowledgeHealthRetarget}
               onChooseOrphanParent={openOrphanParentPicker}
+              onMergeDuplicateTopic={(issue, trigger) => {
+                duplicateTopicTriggerRef.current = trigger;
+                setDuplicateTopicMergeState({ issue, survivorPageId: issue.pages[0]!.pageId });
+              }}
               repairState={knowledgeHealthRepairState}
               t={props.t}
             />
+          ) : null}
+          {duplicateTopicMergeState ? (
+            <div className="settings-row tall" role="group" aria-labelledby="knowledge-health-duplicate-topic-title">
+              <div className="settings-row-copy">
+                <strong id="knowledge-health-duplicate-topic-title">
+                  {props.t("maintenance.knowledgeHealth.mergeDuplicateTopicTitle")}
+                </strong>
+                <span>{props.t("maintenance.knowledgeHealth.mergeDuplicateTopicDescription")}</span>
+                {duplicateTopicMergeState.issue.pages.map((page) => (
+                  <label key={page.pageId}>
+                    <input type="radio" name="knowledge-health-topic-survivor" value={page.pageId}
+                      checked={duplicateTopicMergeState.survivorPageId === page.pageId}
+                      disabled={knowledgeHealthRepairState?.kind === "repairing"}
+                      onChange={() => setDuplicateTopicMergeState({ ...duplicateTopicMergeState, survivorPageId: page.pageId })} />
+                    {page.title}
+                  </label>
+                ))}
+              </div>
+              <div className="settings-row-control">
+                <button className="settings-button" type="button" onClick={() => {
+                  setDuplicateTopicMergeState(null);
+                  window.setTimeout(() => duplicateTopicTriggerRef.current?.focus(), 0);
+                }}>
+                  {props.t("backup.restoreCancel")}
+                </button>
+                <button className="settings-button primary" type="button"
+                  disabled={knowledgeHealthRepairState?.kind === "repairing"}
+                  onClick={() => void repairDuplicateTopic()}>
+                  {props.t(knowledgeHealthRepairState?.kind === "repairing"
+                    ? "maintenance.knowledgeHealth.repairing"
+                    : "maintenance.knowledgeHealth.mergeDuplicateTopicConfirm")}
+                </button>
+              </div>
+            </div>
           ) : null}
           {knowledgeHealthRetargetState ? (
             <div className="settings-row tall" role="group" aria-labelledby="knowledge-health-retarget-title">
@@ -763,6 +873,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
             {props.t(knowledgeHealthRepairState.kind === "committed"
               ? knowledgeHealthRepairState.issueKind === "orphan_page"
                 ? "maintenance.knowledgeHealth.orphanRepairCommitted"
+                : knowledgeHealthRepairState.issueKind === "duplicate_topic"
+                  ? "maintenance.knowledgeHealth.duplicateTopicRepairCommitted"
                 : "maintenance.knowledgeHealth.repairCommitted"
               : knowledgeHealthRepairState.kind === "stale"
                 ? "maintenance.knowledgeHealth.repairStale"

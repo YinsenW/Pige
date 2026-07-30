@@ -1397,7 +1397,13 @@ const KnowledgeHealthDuplicateTopicIssueSchema = z.object({
   candidatePageCount: z.number().int().min(2).max(10_000_000),
   pages: z.array(KnowledgeHealthPageRefSchema)
     .min(2)
-    .max(KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES)
+    .max(KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES),
+  repairContextId: KnowledgeHealthRepairContextIdSchema.optional(),
+  pageProofs: z.array(z.object({
+    pageId: PageIdSchema,
+    revision: KnowledgeHealthPageRevisionSchema,
+    renderProof: KnowledgeHealthRenderProofSchema
+  }).strict()).length(2).optional()
 }).strict();
 const KnowledgeHealthUnsourcedClaimIssueSchema = z.object({
   kind: z.literal("unsourced_claim"),
@@ -1441,6 +1447,16 @@ export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
         path: ["candidatePageCount"],
         message: "Duplicate-topic candidate totals must include every projected page."
       });
+    }
+    if ((issue.repairContextId === undefined) !== (issue.pageProofs === undefined)) {
+      context.addIssue({ code: "custom", path: ["repairContextId"], message: "Duplicate-topic repair proof must be complete." });
+    }
+    if (issue.pageProofs) {
+      const proofIds = issue.pageProofs.map(({ pageId }) => pageId);
+      if (issue.candidatePageCount !== 2 || issue.pages.length !== 2 ||
+        proofIds.some((pageId, index) => pageId !== issue.pages[index]?.pageId)) {
+        context.addIssue({ code: "custom", path: ["pageProofs"], message: "Duplicate-topic repair requires two ordered current page proofs." });
+      }
     }
   }
 });
@@ -2167,6 +2183,36 @@ export const KnowledgeHealthRepairResultSchema = z.discriminatedUnion("status", 
   KnowledgeHealthRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
   KnowledgeHealthRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]).superRefine((result, context) => validateKnowledgeHealthRepairTarget(result, context));
+
+export const KnowledgeHealthDuplicateTopicRepairRequestIdSchema = z.string()
+  .regex(/^knowledge_health_duplicate_topic_repair_request_[a-z0-9]{16,64}$/u);
+const KnowledgeHealthDuplicateTopicRepairIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: KnowledgeHealthDuplicateTopicRepairRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  reportRequestId: KnowledgeHealthRequestIdSchema,
+  indexGeneration: KnowledgeHealthIndexGenerationSchema,
+  issueKind: z.literal("duplicate_topic"),
+  repairContextId: KnowledgeHealthRepairContextIdSchema,
+  survivorPageId: PageIdSchema,
+  survivorRevision: KnowledgeHealthPageRevisionSchema,
+  survivorRenderProof: KnowledgeHealthRenderProofSchema,
+  absorbedPageId: PageIdSchema,
+  absorbedRevision: KnowledgeHealthPageRevisionSchema,
+  absorbedRenderProof: KnowledgeHealthRenderProofSchema
+}).strict().refine((request) => request.survivorPageId !== request.absorbedPageId, {
+  path: ["absorbedPageId"], message: "Duplicate-topic repair pages must be distinct."
+});
+export const KnowledgeHealthDuplicateTopicRepairRequestSchema = KnowledgeHealthDuplicateTopicRepairIdentitySchema;
+export const KnowledgeHealthDuplicateTopicRepairResultSchema = z.discriminatedUnion("status", [
+  KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema
+  }).strict(),
+  KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  KnowledgeHealthDuplicateTopicRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 
 export const ProviderKindSchema = z.enum([
   "openai",
@@ -10073,6 +10119,7 @@ export type KnowledgeActivityListRequest = z.infer<typeof KnowledgeActivityListR
 export type KnowledgeActivityListResult = z.infer<typeof KnowledgeActivityListResultSchema>;
 export type KnowledgeHealthRequestId = z.infer<typeof KnowledgeHealthRequestIdSchema>;
 export type KnowledgeHealthRepairRequestId = z.infer<typeof KnowledgeHealthRepairRequestIdSchema>;
+export type KnowledgeHealthDuplicateTopicRepairRequestId = z.infer<typeof KnowledgeHealthDuplicateTopicRepairRequestIdSchema>;
 export type KnowledgeHealthTargetSearchRequestId = z.infer<typeof KnowledgeHealthTargetSearchRequestIdSchema>;
 export type KnowledgeHealthOrphanParentSearchRequestId = z.infer<typeof KnowledgeHealthOrphanParentSearchRequestIdSchema>;
 export type KnowledgeHealthOrphanRepairRequestId = z.infer<typeof KnowledgeHealthOrphanRepairRequestIdSchema>;
@@ -10100,6 +10147,8 @@ export type KnowledgeHealthOrphanRepairRequest = z.infer<typeof KnowledgeHealthO
 export type KnowledgeHealthOrphanRepairResult = z.infer<typeof KnowledgeHealthOrphanRepairResultSchema>;
 export type KnowledgeHealthRepairRequest = z.infer<typeof KnowledgeHealthRepairRequestSchema>;
 export type KnowledgeHealthRepairResult = z.infer<typeof KnowledgeHealthRepairResultSchema>;
+export type KnowledgeHealthDuplicateTopicRepairRequest = z.infer<typeof KnowledgeHealthDuplicateTopicRepairRequestSchema>;
+export type KnowledgeHealthDuplicateTopicRepairResult = z.infer<typeof KnowledgeHealthDuplicateTopicRepairResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;

@@ -33,9 +33,8 @@ import {
   scanMarkdownPages
 } from "./markdown-page-index";
 import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
-
+import type { KnowledgeHealthDuplicateTopicService } from "./knowledge-health-duplicate-topic-service";
 const MAX_KNOWLEDGE_HEALTH_PAGE_BYTES = 4 * 1024 * 1024;
-
 const MAX_REPAIR_CONTEXTS = 64;
 
 interface KnowledgeHealthDatabasePort {
@@ -123,7 +122,7 @@ export class KnowledgeHealthService {
     database: KnowledgeHealthDatabasePort,
     now: () => string = () => new Date().toISOString(),
     editor?: Pick<NoteMarkdownEditorService, "open" | "save">,
-    randomId: () => string = randomUUID
+    randomId: () => string = randomUUID, private readonly duplicateTopics?: KnowledgeHealthDuplicateTopicService
   ) {
     this.#database = database;
     this.#now = now;
@@ -135,7 +134,7 @@ export class KnowledgeHealthService {
     this.#repairContexts.clear();
     this.#targetContexts.clear();
     this.#orphanRepairContexts.clear();
-    this.#orphanParentContexts.clear();
+    this.#orphanParentContexts.clear(); this.duplicateTopics?.resetContexts();
     this.#reportEpoch += 1;
     try {
       const snapshot = this.#database.knowledgeHealth(vaultPath);
@@ -468,6 +467,7 @@ export class KnowledgeHealthService {
         projected.push(issue);
         continue;
       }
+      if (issue.kind === "duplicate_topic" && this.duplicateTopics) { projected.push(this.duplicateTopics.project(vaultPath, request, snapshot, issue)); continue; }
       if (issue.kind === "orphan_page") {
         const target = readCurrentKnowledgePage(vaultPath, issue.page.pageId);
         if (!target || target.title !== issue.page.title) {

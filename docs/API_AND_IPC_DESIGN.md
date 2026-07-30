@@ -196,8 +196,10 @@ Current renderer/preload commands include `onboarding.dismissFirstHome`,
 `vault.storageRelocationStatus`, and `vault.relocateStorage`.
 
 Commands: `vault.create`, `vault.open`, `vault.applyMigration`, `onboarding.complete`,
-`vault.renameDisplayName`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`,
-`maintenance.resetLocalDatabase`, and `maintenance.runKnowledgeHealth`.
+`vault.renameDisplayName`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`,
+`maintenance.rebuildLocalDatabase`,
+`maintenance.resetLocalDatabase`, `maintenance.runKnowledgeHealth`, and
+`maintenance.repairKnowledgeHealthDuplicateTopic`.
 
 Queries: `vault.current`, `vault.recent`, `vault.health`, `onboarding.status`, and `maintenance.localDatabaseStatus`.
 
@@ -283,9 +285,12 @@ type LocalDatabaseStatus = {
 
 `maintenance.runKnowledgeHealth` returns a body-free report. Complete coverage may bind one
 broken link for unlink/retarget, or one orphan plus an explicitly selected current parent for
-`connect_orphan_to_parent`. Repair/search requests bind vault, report/index and opaque page
-proofs; Main re-proves both pages immediately before reversible `update_page`. Only committed
-results add safe revision/Operation IDs; other states stay body-free.
+`connect_orphan_to_parent`, or one exact two-topic candidate plus the explicitly selected survivor
+for `maintenance.repairKnowledgeHealthDuplicateTopic`. Repair/search requests bind vault,
+report/index and opaque page proofs; Main re-proves every affected page immediately before reversible
+`update_page`. A duplicate-topic commit preserves the survivor identity, moves the absorbed topic to
+recoverable private trash, and binds both exact pages to one Operation. Only committed results add
+safe revision/Operation IDs; other states stay body-free.
 
 Rules:
 

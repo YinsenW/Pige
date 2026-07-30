@@ -237,6 +237,7 @@ import { LibraryTagsService } from "./services/library-tags-service";
 import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
+import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
@@ -407,6 +408,7 @@ let jobCompactionService: JobCompactionService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
+let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
@@ -1692,6 +1694,13 @@ const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
   return noteMergeService;
 };
+const getKnowledgeHealthDuplicateTopicService = (): KnowledgeHealthDuplicateTopicService => {
+  knowledgeHealthDuplicateTopicService ??= new KnowledgeHealthDuplicateTopicService(
+    getVaultService(),
+    getLocalDatabaseService()
+  );
+  return knowledgeHealthDuplicateTopicService;
+};
 const getNoteRelateService = (): NoteRelateService => {
   noteRelateService ??= new NoteRelateService(
     getNotesService(),
@@ -1707,18 +1716,20 @@ const getNoteMarkdownImportService = (): NoteMarkdownImportService => {
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
   const trash = getNoteTrashService();
   const merge = getNoteMergeService();
+  const duplicateTopics = getKnowledgeHealthDuplicateTopicService();
   const tagRename = getLibraryTagRenameService();
   return {
-    activitySummary: (operation, undo) => tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
-    findUndoOperation: (operation, operations) => tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
-    undo: (operation) => tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    activitySummary: (operation, undo) => duplicateTopics.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo),
+    findUndoOperation: (operation, operations) => duplicateTopics.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
       const tagRenameResult = tagRename.recoverIncompleteOperations();
       const mergeResult = merge.recoverIncompleteOperations();
       const trashResult = trash.recoverIncompleteOperations();
+      const duplicateTopicResult = duplicateTopics.recoverIncompleteOperations();
       return {
-        recovered: tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
-        failed: tagRenameResult.failed + mergeResult.failed + trashResult.failed
+        recovered: tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered + duplicateTopicResult.recovered,
+        failed: tagRenameResult.failed + mergeResult.failed + trashResult.failed + duplicateTopicResult.failed
       };
     }
   };
@@ -1971,7 +1982,9 @@ const getKnowledgeHealthService = (): KnowledgeHealthService => {
     knowledgeHealthService = new KnowledgeHealthService(
       getLocalDatabaseService(),
       undefined,
-      getNoteMarkdownEditorService()
+      getNoteMarkdownEditorService(),
+      undefined,
+      getKnowledgeHealthDuplicateTopicService()
     );
   }
   return knowledgeHealthService;
@@ -2720,6 +2733,11 @@ registerKnowledgeHealthIpc({
     getKnowledgeHealthService().searchOrphanParents(vaultPath, request),
   repairKnowledgeHealthOrphan: (vaultPath, request) => {
     const result = getKnowledgeHealthService().repairOrphan(vaultPath, request);
+    if (result.status === "committed") scheduleActivityIndexRebuild();
+    return result;
+  },
+  repairKnowledgeHealthDuplicateTopic: (vaultPath, request) => {
+    const result = getKnowledgeHealthDuplicateTopicService().repair(vaultPath, request);
     if (result.status === "committed") scheduleActivityIndexRebuild();
     return result;
   },
