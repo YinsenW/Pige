@@ -1676,6 +1676,8 @@ describe("full UI Library", () => {
           pageId: readOnlyPage.summary.pageId,
           renderContextId: readOnlyPage.renderContextId
         });
+        expect(container.querySelector(".note-reader h1")?.textContent).toBe(readOnlyPage.summary.title);
+        expect(buttonWithLabel(container, "Edit Markdown").disabled).toBe(false);
       } else {
         expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
         expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit Markdown"]')).toHaveLength(0);

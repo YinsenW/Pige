@@ -151,13 +151,17 @@ describe("NoteMarkdownEditorService", () => {
     expect(fixture.records).toHaveLength(1);
 
     const reopened = requireOpened(fixture.service);
-    for (const changedOwner of [
+    for (const [index, changedOwner] of [
       reopened.markdown.replace(`source_ids: ["${SOURCE_ID}"]`, "source_ids: []"),
       reopened.markdown.replace('type: "source"', 'type: "note"'),
       reopened.markdown.replace('status: "active"', 'status: "missing_source"'),
-      reopened.markdown.replace('created_at: "2026-07-27T10:00:00.000Z"', 'created_at: "2026-07-28T10:00:00.000Z"')
-    ]) expect(fixture.service.save({
-      requestId: "request_source_owner_change",
+      reopened.markdown.replace('created_at: "2026-07-27T10:00:00.000Z"', 'created_at: "2026-07-28T10:00:00.000Z"'),
+      reopened.markdown.replace('title: "Markdown editor fixture"', 'title: "Changed source title"'),
+      reopened.markdown.replace('last_job_id: "job_20260727_markdowneditor"', 'last_job_id: "job_20260727_changedsource"'),
+      reopened.markdown.replace(`id: "${SOURCE_ID}"`, 'id: "src_20260727_changedsource"'),
+      reopened.markdown.replace('source_record_path: ".pige/source-records/2026/07/source.json"', 'source_record_path: ".pige/source-records/2026/07/changed.json"')
+    ].entries()) expect(fixture.service.save({
+      requestId: `request_source_owner_change_${index}`,
       activeVaultId: VAULT_ID,
       pageId: PAGE_ID,
       expectedRevisionId: reopened.revisionId,
@@ -372,6 +376,15 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fixture.adapter.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
     expect(fixture.adapter.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    const redoService = new NoteMarkdownEditorRedoService(fixture.vaults);
+    const redone = redoService.redo({
+      operationId: operation.id,
+      expectedRevisionId: operation.before?.id
+    });
+    expect(redone).toMatchObject({ status: "redone", revisionId: committed.revisionId });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(committed.markdown);
+    fs.unlinkSync(operationPath(fixture.vaultPath, requireValue(redone.redoOperationId)));
+    expect(redoService.recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
     expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
   });
 
@@ -603,6 +616,19 @@ function requireOpened(service: NoteMarkdownEditorService) {
 }
 
 function createMarkdown(pageType: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question" = "note"): string {
+  const sourceOwnership = pageType === "source" ? `provenance:
+  generated_by: "pige"
+  last_job_id: "job_20260727_markdowneditor"
+source:
+  id: "${SOURCE_ID}"
+  kind: "text_file"
+  storage_strategy: "copy_to_source_library"
+  source_record_path: ".pige/source-records/2026/07/source.json"
+  source_record_schema_version: 1
+  source_record_updated_at: "2026-07-27T10:00:00.000Z"
+  captured_at: "2026-07-27T10:00:00.000Z"
+  availability: "available"
+` : "";
   return `---
 id: "${PAGE_ID}"
 schema_version: 1
@@ -616,7 +642,7 @@ aliases: []
 tags: ["editing"]
 topics: []
 source_ids: ["${SOURCE_ID}"]
----
+${sourceOwnership}---
 
 # Markdown editor fixture
 

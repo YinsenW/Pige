@@ -583,9 +583,7 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
   if (!hasExactlyOneRequiredFrontmatterField(parsed.raw)) return false;
   if (!validFrontmatterArrays(parsed.raw, frontmatter)) return false;
   if (!validWikiLinks(markdown) || !validSourceCitations(markdown)) return false;
-  return extractPigeMarkdownLinkRefs(markdown).every(
-    (reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target)
-  );
+  return extractPigeMarkdownLinkRefs(markdown).every((reference) => reference.target.length <= MAX_REFERENCE_LENGTH && !UNSAFE_TEXT_PATTERN.test(reference.target));
 }
 export function validateEditableMarkdown(markdown: string, expectedPageId: string): boolean {
   return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPage(markdown);
