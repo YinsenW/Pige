@@ -3773,11 +3773,12 @@ export function LibraryPanel(props: {
             retry: props.t("library.tagsRetry"), notesLoading: props.t("library.tagNotesLoading"),
             notesEmpty: props.t("library.tagNotesEmpty"), notesFailed: props.t("library.tagNotesFailed"),
             loadMore: props.t("library.tagsLoadMore"), loadingMore: props.t("library.tagsLoadingMore"),
-            open: props.t("library.tagsOpen"), rename: props.t("library.tagRename"),
-            renameTitle: props.t("library.tagRenameTitle"), renameDescription: props.t("library.tagRenameDescription"),
-            renameCurrent: props.t("library.tagRenameCurrent"), renameReplacement: props.t("library.tagRenameReplacement"),
-            renameCancel: props.t("library.tagRenameCancel"), renameConfirm: props.t("library.tagRenameConfirm"),
-            renamePending: props.t("library.tagRenamePending"), renameFailed: props.t("library.tagRenameFailed"),
+            open: props.t("library.tagsOpen"), rename: props.t("library.tagRename"), renameTitle: props.t("library.tagRenameTitle"),
+            renameDescription: props.t("library.tagRenameDescription"), renameCurrent: props.t("library.tagRenameCurrent"), renameReplacement: props.t("library.tagRenameReplacement"),
+            renameCancel: props.t("library.tagRenameCancel"), renameConfirm: props.t("library.tagRenameConfirm"), renamePending: props.t("library.tagRenamePending"), renameFailed: props.t("library.tagRenameFailed"),
+            merge: props.t("library.tagMerge"), mergeTitle: props.t("library.tagMergeTitle"), mergeDescription: props.t("library.tagMergeDescription"),
+            mergeSource: props.t("library.tagMergeSource"), mergeTarget: props.t("library.tagMergeTarget"), mergeCancel: props.t("library.tagMergeCancel"),
+            mergeConfirm: props.t("library.tagMergeConfirm"), mergePending: props.t("library.tagMergePending"), mergeFailed: props.t("library.tagMergeFailed"),
             noteCount: (count) => `${count} ${props.t("library.tagsPages")}`,
           }}
           onOpenNote={props.onOpenNote}

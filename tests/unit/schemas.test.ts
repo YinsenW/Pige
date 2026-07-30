@@ -87,11 +87,14 @@ import {
   KnowledgeHealthRepairResultSchema,
   LIBRARY_TAGS_CHANNEL,
   LIBRARY_RENAME_TAG_CHANNEL,
+  LIBRARY_MERGE_TAG_CHANNEL,
   LIBRARY_TAGS_PAGE_SIZE_MAX,
   LibraryTagsRequestSchema,
   LibraryTagsResultSchema,
   LibraryRenameTagRequestSchema,
   LibraryRenameTagResultSchema,
+  LibraryMergeTagRequestSchema,
+  LibraryMergeTagResultSchema,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
@@ -940,6 +943,30 @@ describe("schemas", () => {
     })).toMatchObject({ status: "committed", renamedPageCount: 3 });
     expect(() => LibraryRenameTagResultSchema.parse({ ...request, status: "committed", renamedPageCount: 3 })).toThrow();
     expect(LibraryRenameTagResultSchema.parse({ ...request, status: "stale" })).toMatchObject({ status: "stale" });
+  });
+
+  it("keeps Library tag merge identity-bound with exact source and target counts", () => {
+    expect(LIBRARY_MERGE_TAG_CHANNEL).toBe("library.mergeTag");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "library_tag_merge_request_abcdefghijklmnop",
+      activeVaultId: "vault_20260730_merge01",
+      sourceTag: "Research",
+      targetTag: "Reading",
+      expectedSnapshotId: `library_tags_snapshot_${"b".repeat(64)}`,
+      expectedSourcePageCount: 3,
+      expectedTargetPageCount: 2
+    };
+    expect(LibraryMergeTagRequestSchema.parse(request)).toEqual(request);
+    expect(() => LibraryMergeTagRequestSchema.parse({ ...request, targetTag: "research" })).toThrow();
+    expect(LibraryMergeTagResultSchema.parse({
+      ...request,
+      status: "committed",
+      operationId: "op_20260730_tagmerge01",
+      mergedPageCount: 3
+    })).toMatchObject({ status: "committed", mergedPageCount: 3 });
+    expect(() => LibraryMergeTagResultSchema.parse({ ...request, status: "committed", mergedPageCount: 3 })).toThrow();
+    expect(LibraryMergeTagResultSchema.parse({ ...request, status: "ineligible" })).toMatchObject({ status: "ineligible" });
   });
 
   it("opens one durable Dataset citation as an exact read-only preview with typed highlights", () => {

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { LibraryRenameTagRequest, VaultSummary } from "@pige/contracts";
+import type { LibraryMergeTagRequest, LibraryRenameTagRequest, VaultSummary } from "@pige/contracts";
 import { LibraryTagRenameService } from "../../apps/desktop/src/main/services/library-tag-rename-service";
 import { LibraryTagsService } from "../../apps/desktop/src/main/services/library-tags-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -64,9 +64,45 @@ describe("LibraryTagRenameService", () => {
     expect(findOperations(fixture.vaultPath).filter((operation) => operation.id === committed.operationId)).toHaveLength(1);
     expect(restarted.rename(renameRequest(fixture))).toEqual(committed);
   });
+
+  it("merges into an existing tag, deduplicates overlap, adopts replay, and restores exact tags", () => {
+    const fixture = makeFixture(["original", "Existing"]);
+    const before = fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"));
+    const request = mergeRequest(fixture);
+    const committed = fixture.service.merge(request);
+    expect(committed).toMatchObject({ status: "committed", mergedPageCount: 2 });
+    if (committed.status !== "committed") throw new Error("tag merge did not commit");
+    const merged = fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"));
+    expect(merged[0]).toContain('tags: ["Existing"]');
+    expect(merged[1]).toContain('tags: ["Existing"]');
+    expect(merged[1]?.match(/"Existing"/gu)).toHaveLength(1);
+    expect(merged.join("\n")).not.toMatch(/"[Oo]riginal"/u);
+    const operationFile = findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${committed.operationId}.json`))!;
+    fs.unlinkSync(operationFile);
+    const restarted = new LibraryTagRenameService(fixture.vaults);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(restarted.merge(request)).toEqual(committed);
+
+    const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(restarted.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
+    expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+  });
+
+  it("fails a merge closed when either tag count or exact snapshot drifts", () => {
+    const fixture = makeFixture(["original", "Existing"]);
+    const before = fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"));
+    expect(fixture.service.merge({ ...mergeRequest(fixture), expectedTargetPageCount: 1 })).toMatchObject({ status: "stale" });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+
+    writePage(fixture.vaultPath, "late-target", "page_20260730_latemerg", "Late target", ["Existing"]);
+    expect(fixture.service.merge(mergeRequest(fixture))).toMatchObject({ status: "stale" });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+    expect(findOperations(fixture.vaultPath)).toHaveLength(0);
+  });
 });
 
-function makeFixture() {
+function makeFixture(secondTags: readonly string[] = ["original", "Other"]) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-library-tag-rename-"));
   roots.push(root);
   createVaultOnDisk({
@@ -79,7 +115,7 @@ function makeFixture() {
   const vaultPath = path.join(root, "Primary");
   const vault = loadVaultSummary(vaultPath);
   const firstPath = writePage(vaultPath, "first", "page_20260730_first001", "First", ["Original"]);
-  const secondPath = writePage(vaultPath, "second", "page_20260730_second01", "Second", ["original", "Other"]);
+  const secondPath = writePage(vaultPath, "second", "page_20260730_second01", "Second", secondTags);
   const unrelatedPath = writePage(vaultPath, "other", "page_20260730_other001", "Other", ["Existing"]);
   const unrelatedMarkdown = fs.readFileSync(unrelatedPath, "utf8");
   const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
@@ -103,6 +139,19 @@ function makeFixture() {
       now: () => new Date("2026-07-30T09:00:00.000Z"),
       randomId: () => "fixedtagrename"
     })
+  };
+}
+
+function mergeRequest(fixture: ReturnType<typeof makeFixture>): LibraryMergeTagRequest {
+  return {
+    apiVersion: 1,
+    requestId: "library_tag_merge_request_0123456789abcdef",
+    activeVaultId: fixture.vault.vaultId,
+    sourceTag: "Original",
+    targetTag: "Existing",
+    expectedSnapshotId: fixture.snapshotId,
+    expectedSourcePageCount: 2,
+    expectedTargetPageCount: 2
   };
 }
 
