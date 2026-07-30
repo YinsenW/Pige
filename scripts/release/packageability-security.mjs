@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const SIGNING_ENVIRONMENT_PREFIXES = ["APPLE_", "CSC_", "WIN_CSC_"];
+const SIGNING_ENVIRONMENT_PREFIXES = [
+  "APPLE_",
+  "CSC_",
+  "WIN_CSC_",
+  "PIGE_MACOS_",
+  "PIGE_WINDOWS_"
+];
 
 export function sanitizeElectronBuilderEnvironment(environment) {
   const sanitized = {};
@@ -80,7 +86,7 @@ export function parseMacCodeSignatureDescription(description) {
 
 export function classifyMacGatekeeperAssessment(assessment, output) {
   const normalized = String(output).toLowerCase();
-  const invalidDiagnostic = /(?:code has no resources|damaged|invalid signature|modified|resource envelope|sealed resource)/u
+  const invalidDiagnostic = /(?:code has no resources|damaged|invalid signature|modified|resource envelope|sealed resource|malformed bundle|bundle format)/u
     .test(normalized);
   const completed = assessment?.error === undefined &&
     assessment?.signal === null &&

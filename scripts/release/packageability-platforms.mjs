@@ -11,8 +11,8 @@ const definitions = {
     appRelativePath: "mac-arm64/Pige.app",
     executableRelativePath: "Contents/MacOS/Pige",
     resourcesRelativePath: "Contents/Resources",
-    distributablePattern: /^Pige-0\.0\.0-arm64\.zip$/u,
-    packageKind: "unsigned_zip_preflight",
+    distributablePattern: (version) => new RegExp(`^Pige-${escapeRegex(version)}-arm64\\.zip$`, "u"),
+    packageKind: "ad_hoc_zip",
     builderPlatformFlag: "--mac",
     packagedRuntimeSmokeTimeoutMs: 60_000,
     requiredResourceFiles: [
@@ -38,7 +38,7 @@ const definitions = {
     appRelativePath: "win-unpacked",
     executableRelativePath: "Pige.exe",
     resourcesRelativePath: "resources",
-    distributablePattern: /^Pige-0\.0\.0-x64-setup\.exe$/u,
+    distributablePattern: (version) => new RegExp(`^Pige-${escapeRegex(version)}-x64-setup\\.exe$`, "u"),
     packageKind: "unsigned_nsis_preflight",
     builderPlatformFlag: "--win",
     packagedRuntimeSmokeTimeoutMs: 120_000,
@@ -97,8 +97,8 @@ export function packageabilityPaths(root, definition, buildId) {
   };
 }
 
-export function findDistributableNames(fileNames, definition) {
-  return fileNames.filter((fileName) => definition.distributablePattern.test(fileName));
+export function findDistributableNames(fileNames, definition, version = "0.0.0") {
+  return fileNames.filter((fileName) => definition.distributablePattern(version).test(fileName));
 }
 
 export function canonicalizeAsarEntryPath(entry) {
@@ -116,4 +116,8 @@ export function readLastParserWorkerSmokeStage(output) {
     if (parserWorkerSmokeStages.has(match[1])) lastStage = match[1];
   }
   return lastStage;
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

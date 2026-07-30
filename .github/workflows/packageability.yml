@@ -33,7 +33,7 @@ jobs:
       - name: Audit packaged runtime dependencies
         run: npm audit --omit=dev
 
-      - name: Build unsigned macOS arm64 artifact
+      - name: Build ad-hoc sealed macOS arm64 artifact
         run: npm run package:dir:mac:arm64
 
       - name: Smoke packaged application
@@ -49,6 +49,7 @@ jobs:
             artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip
             artifacts/release-packageability/macos-arm64/Pige-0.0.0-arm64.zip.blockmap
             artifacts/test-reports/packageability/macos-arm64/${{ github.sha }}/report.json
+            artifacts/test-reports/packageability/macos-arm64/${{ github.sha }}/packaged-ui.png
           if-no-files-found: error
           retention-days: 14
 

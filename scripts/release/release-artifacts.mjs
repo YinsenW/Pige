@@ -7,14 +7,9 @@ import { parseReleaseTag } from "./release-tag.mjs";
 const platformDefinitions = Object.freeze({
   "macos-arm64": {
     required: (version) => [
-      `Pige-${version}-arm64.dmg`,
-      `Pige-${version}-arm64.zip`,
-      `Pige-${version}-arm64.zip.blockmap`,
-      "alpha-mac.yml"
+      `Pige-${version}-arm64.zip`
     ],
-    artifactPattern: (version) => new RegExp(`^Pige-${escapeRegex(version)}-arm64\\.(?:dmg|zip(?:\\.blockmap)?)$`, "u"),
-    metadataPattern: /^(?:alpha|latest)-mac\.yml$/u,
-    updateArtifactPattern: (version) => new RegExp(`^Pige-${escapeRegex(version)}-arm64\\.zip$`, "u")
+    artifactPattern: (version) => new RegExp(`^Pige-${escapeRegex(version)}-arm64\\.zip$`, "u")
   },
   "windows-x64": {
     required: (version) => [
@@ -34,7 +29,7 @@ export function createReleaseManifest({ directory, platform, tag, commit }) {
   assertCommit(commit);
   const names = collectPublishableNames(directory, definition, release.version);
   assertRequiredNames(names, definition.required(release.version));
-  verifyUpdateMetadata(directory, names, definition, release.version);
+  if (definition.metadataPattern) verifyUpdateMetadata(directory, names, definition, release.version);
   const files = names.map((name) => describeFile(directory, name));
   const manifest = Object.freeze({
     schemaVersion: 1,
@@ -83,7 +78,7 @@ export function verifyReleaseManifest({ directory, platform, tag, commit }) {
   if (fs.readFileSync(path.join(directory, checksumsName), "utf8") !== expectedChecksums) {
     throw new Error("Release SHA256SUMS file does not match the immutable manifest.");
   }
-  verifyUpdateMetadata(directory, names, definition, release.version);
+  if (definition.metadataPattern) verifyUpdateMetadata(directory, names, definition, release.version);
   return manifest;
 }
 
@@ -157,7 +152,9 @@ function verifyUpdateMetadata(directory, names, definition, version) {
 function collectPublishableNames(directory, definition, version) {
   const entries = fs.readdirSync(directory, { withFileTypes: true });
   const names = entries
-    .filter((entry) => entry.isFile() && (definition.artifactPattern(version).test(entry.name) || definition.metadataPattern.test(entry.name)))
+    .filter((entry) => entry.isFile() && (
+      definition.artifactPattern(version).test(entry.name) || definition.metadataPattern?.test(entry.name)
+    ))
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
   for (const name of names) {
