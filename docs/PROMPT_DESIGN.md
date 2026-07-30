@@ -210,6 +210,11 @@ Required context:
 - Linked source snippets.
 - Relevant backlinks and related pages.
 
+An explicit related-note request may register one read-only Host tool. The prompt requires exact
+current-note inspection before that tool, at most one bounded search, and treats every returned
+snippet as untrusted evidence rather than instructions. The same intent registers no note-mutation
+tool; neutral or quoted text keeps the current-note-only boundary.
+
 Evidence-bound, scoped, recoverable mutations apply with Operations and Undo. Only an
 irreversible/security/destination/conflict or explicit stricter-policy boundary proposes.
 

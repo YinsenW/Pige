@@ -618,6 +618,9 @@ chat, related facts and actions without internals.
 Current production boundary:
 
 - Current note owns timeline/citations/wait/egress; stale ownership/drafts fail closed.
+- An ordinary explicit request can find related notes without a chip, mode, or new panel control.
+  The answer stays in the existing scoped timeline with citations; current-note/evidence drift uses
+  the existing failed-turn state and never publishes a partially grounded answer.
 - Replace needs same-turn review; apply refreshes Library/Home Reader, closed results retain state,
   Activity owns Undo and renderer no target.
 - Selection binds identity/action; writes gain Operation/Undo or bounded review. Other mutations stay

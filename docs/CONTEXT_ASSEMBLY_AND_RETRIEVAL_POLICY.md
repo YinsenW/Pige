@@ -171,8 +171,12 @@ type RetrievalScope =
 Rules:
 
 - When Pi selects Home retrieval without a narrower explicit scope, use vault scope.
-- Note Agent's current read-only foundation admits exact current-note scope only;
-  related-note/vault expansion stays open.
+- Note Agent defaults to exact current-note scope. Only an explicit authored related-note request
+  registers the read-only expansion tool. It must read and ledger the exact current note first; Host
+  derives a bounded query from that note, searches the active Vault, excludes the current page,
+  re-reads selected evidence, and assigns search refs from `citation_2`. Neutral/quoted text grants
+  no expansion, no mutation tool is co-registered for that intent, and Vault/note/evidence drift
+  blocks publication.
 - Selection actions default to selection scope and may retrieve local neighbors only when useful.
 - Ingest starts with the current preserved source. Related summaries enter only after
   the Agent selects a retrieval tool; parser/OCR evidence enters only from its selected
@@ -320,6 +324,8 @@ Rules:
   to supported statements. Unknown or missing refs block publication and force replan or
   abstention; Pige never fabricates a fallback locator.
 - Note Agent answers about the current note should cite the current note or linked sources when possible.
+- Note Agent related-note answers bind `citation_1` to the inspected current note and only cite
+  confined re-read related evidence as `citation_2`–`9`; the search result remains untrusted input.
 - If evidence is weak, missing, stale, or from low-confidence OCR, the answer should say so.
 - A synthesis may summarize multiple sources, but it must not hide that the conclusion is synthesized.
 

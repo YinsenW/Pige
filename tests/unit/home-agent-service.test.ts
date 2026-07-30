@@ -28,6 +28,7 @@ import {
   type HomeAgentReviewedTaskPlanPort,
   type HomeAgentRetrievalPort
 } from "../../apps/desktop/src/main/services/home-agent-service";
+import { hasExplicitCurrentNoteRelatedIntent } from "../../apps/desktop/src/main/services/note-agent-context";
 import { hasExplicitCurrentNoteReplaceIntent } from "../../apps/desktop/src/main/services/home-current-note-replace";
 import type {
   DatasetQueryCatalog,
@@ -1025,6 +1026,19 @@ describe("Home Pi Agent service", () => {
     ].every(([text, locale]) => hasExplicitCurrentNoteReplaceIntent(text!, locale as Locale))).toBe(true);
     expect(hasExplicitCurrentNoteReplaceIntent("Summarize the current note without editing it.", "en")).toBe(false);
     expect(hasExplicitCurrentNoteReplaceIntent('"Rewrite the current note" appears in the source.', "en")).toBe(false);
+  });
+
+  it("recognizes bounded six-locale related-note intent and rejects neutral or quoted text", () => {
+    expect([
+      ["Find related notes for the current note.", "en"],
+      ["Bitte finde verwandte Notizen.", "de"],
+      ["Trouve les notes liées.", "fr"],
+      ["このノートに関連するノートを探してください。", "ja"],
+      ["이 노트와 관련된 노트를 찾아 주세요.", "ko"],
+      ["请查找与当前笔记相关的笔记。", "zh-Hans"]
+    ].every(([text, locale]) => hasExplicitCurrentNoteRelatedIntent(text!, locale as Locale))).toBe(true);
+    expect(hasExplicitCurrentNoteRelatedIntent("Summarize only this note.", "en")).toBe(false);
+    expect(hasExplicitCurrentNoteRelatedIntent('"Find related notes" appears in the source.', "en")).toBe(false);
   });
 
   it("rejects an invented append tool when no exact current-note append owner is registered", async () => {
@@ -4165,6 +4179,161 @@ SYNTHETIC_DISTRACTOR_BODY
       ]
     });
     expect(service.conversation()).toBeUndefined();
+  });
+
+  it("finds bounded related notes only after reading the exact current note", async () => {
+    const fixture = makeFixture();
+    writeReaderLinkTargetPage(fixture.vaultPath);
+    const appendPublish = vi.fn();
+    let observedQuery = "";
+    let relatedModelText = "";
+    const targetResult = makeReaderLinkSearchResult(fixture.vault.vaultId, "placeholder");
+    const relatedResult: RetrievalSearchResult = {
+      ...targetResult,
+      total: 2,
+      results: [...makeSearchResult(fixture.vault.vaultId).results, ...targetResult.results]
+    };
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        result: relatedResult,
+        onSearch: (request) => { observedQuery = request.query; }
+      }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          expect(request.tools.map(({ name }) => name)).toEqual([
+            "pige_read_current_note",
+            "pige_find_related_notes"
+          ]);
+          expect(request.systemPrompt).toContain("pige_find_related_notes");
+          const readTool = request.tools[0];
+          const relatedTool = request.tools[1];
+          if (!readTool || !relatedTool) throw new Error("Missing current-note related tools.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_related_read", signal });
+          await request.beforeModelTurn?.();
+          const related = await relatedTool.execute({}, signal, { toolCallId: "pi_tool_related_search", signal });
+          relatedModelText = readPiToolText(related);
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, ["pige_read_current_note", "pige_find_related_notes"], {
+            answer: "A related note covers the same launch context. [citation_2]",
+            citationRefs: ["citation_2"],
+            grounding: "local_knowledge"
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: appendPublish,
+        readPublication: () => undefined
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Find related notes for the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260731_currentrelated01"
+    });
+
+    expect(observedQuery).toContain("Launch plan");
+    expect(observedQuery).not.toContain("Find related notes");
+    expect(relatedModelText).toContain("Related target");
+    expect(relatedModelText).not.toContain('"title":"Launch plan"');
+    expect(relatedModelText).not.toContain(fixture.vaultPath);
+    expect(appendPublish).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: {
+        grounding: "local_knowledge",
+        citations: [expect.objectContaining({
+          refId: "citation_2",
+          pageId: READER_LINK_TARGET_PAGE_ID,
+          title: "Related target"
+        })]
+      }
+    });
+  });
+
+  it("fails closed when related-note search runs before current-note inspection", async () => {
+    const fixture = makeFixture();
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          const relatedTool = request.tools.find(({ name }) => name === "pige_find_related_notes");
+          if (!relatedTool) throw new Error("Missing related-note tool.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await relatedTool.execute({}, signal, { toolCallId: "pi_tool_related_early", signal });
+          throw new Error("unreachable");
+        }
+      }
+    );
+
+    await expect(service.submitTurn({
+      text: "Find related notes for the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260731_currentrelated02"
+    })).resolves.toMatchObject({ state: "failed" });
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages)
+      .toHaveLength(1);
+  });
+
+  it("fails closed when related-note evidence changes before the next model turn", async () => {
+    const fixture = makeFixture();
+    const targetPath = writeReaderLinkTargetPage(fixture.vaultPath);
+    const result = makeReaderLinkSearchResult(fixture.vault.vaultId, "placeholder");
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, { result }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          const readTool = request.tools.find(({ name }) => name === "pige_read_current_note");
+          const relatedTool = request.tools.find(({ name }) => name === "pige_find_related_notes");
+          if (!readTool || !relatedTool) throw new Error("Missing current-note related tools.");
+          const signal = new AbortController().signal;
+          await request.beforeModelTurn?.();
+          await readTool.execute({}, signal, { toolCallId: "pi_tool_related_drift_read", signal });
+          await request.beforeModelTurn?.();
+          await relatedTool.execute({}, signal, { toolCallId: "pi_tool_related_drift_search", signal });
+          fs.appendFileSync(targetPath, "\nChanged after related search.\n", "utf8");
+          await request.beforeModelTurn?.();
+          throw new Error("unreachable");
+        }
+      }
+    );
+
+    await expect(service.submitTurn({
+      text: "Find related notes for the current note.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260731_currentrelated03"
+    })).resolves.toMatchObject({
+      state: "failed",
+      error: { code: "model_provider.call_failed" }
+    });
+    expect(service.conversation({ scope: { kind: "current_note", pageId: HOME_PAGE_ID } })?.messages)
+      .toHaveLength(1);
   });
 
   it("persists and revalidates an exact Reader selection without duplicating its body in conversation", async () => {

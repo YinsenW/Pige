@@ -1149,6 +1149,9 @@ Required behavior:
 
 - Current note context is always visible to the Agent.
 - User can ask about the note, selected text, backlinks, sources, or related pages.
+- On an explicit related-note request, the Agent reads the exact current note first, searches only
+  bounded active-vault evidence derived from that note, excludes the current page, and cites returned
+  related notes; neutral or quoted text does not expand scope.
 - Read-only answers stay in the side panel.
 - Validated reversible note edits apply with activity history and Undo.
 - The Agent should cite current-note sections and linked sources where possible.
