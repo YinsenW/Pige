@@ -21,6 +21,7 @@ import {
 } from "@pige/schemas";
 import type { DocumentParserPort } from "./document-parser-service";
 import type { KnowledgeActivityRecoveryResult } from "./knowledge-activity-service";
+import type { OcrPort } from "./ocr-service";
 import { acquireSourceRefreshLocator, readCurrentSourceRecordSnapshot } from "./source-file-access";
 import { SourcePageService } from "./source-page-service";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
@@ -66,23 +67,26 @@ const MAX_PREVIEWS = 8;
 const MAX_REFRESH_INPUT_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_SOURCE_RECORD_BYTES = 2 * 1024 * 1024;
 const SUPPORTED_SOURCE_KINDS = new Set([
-  "markdown_file", "plain_text_file", "pdf_file", "docx_file", "pptx_file"
+  "markdown_file", "plain_text_file", "pdf_file", "docx_file", "pptx_file", "image_file"
 ]);
 
 export class SourceRefreshService {
   readonly #vaults: SourceRefreshVaultPort;
   readonly #parser: DocumentParserPort;
+  readonly #ocr: OcrPort | undefined;
   readonly #sourcePages: SourcePageService;
   readonly #previews = new Map<string, PendingPreview>();
 
   constructor(
     vaults: SourceRefreshVaultPort,
     parser: DocumentParserPort,
-    sourcePages = new SourcePageService()
+    sourcePages = new SourcePageService(),
+    ocr?: OcrPort
   ) {
     this.#vaults = vaults;
     this.#parser = parser;
     this.#sourcePages = sourcePages;
+    this.#ocr = ocr;
   }
 
   async preview(
@@ -95,7 +99,7 @@ export class SourceRefreshService {
     if (!scope || !renderContextCurrent()) return { ...identity, status: "stale" };
     const current = readCurrentSourceRecordSnapshot(scope.vaultPath, request.sourceId);
     if (!current) return { ...identity, status: "not_found" };
-    if (!isEligible(current.record, this.#parser)) return { ...identity, status: "ineligible" };
+    if (!isEligible(current.record, this.#parser, this.#ocr)) return { ...identity, status: "ineligible" };
     let locator: ReturnType<typeof acquireSourceRefreshLocator> | undefined;
     let snapshot: VerifiedFileSnapshot | undefined;
     try {
@@ -171,7 +175,7 @@ export class SourceRefreshService {
       const current = readCurrentSourceRecordSnapshot(scope.vaultPath, request.sourceId);
       if (!current) return { ...identity, status: "not_found" };
       if (sourceRevision(current.record) !== pending.sourceRevision) return { ...identity, status: "stale" };
-      if (!isEligible(current.record, this.#parser)) return { ...identity, status: "ineligible" };
+      if (!isEligible(current.record, this.#parser, this.#ocr)) return { ...identity, status: "ineligible" };
 
       const stillCurrent = await observeCurrent(scope.vaultPath, current.record);
       try {
@@ -311,7 +315,7 @@ export class SourceRefreshService {
     fs.copyFileSync(pending.snapshot.absolutePath, inputPath, fs.constants.COPYFILE_EXCL);
     if (process.platform !== "win32") fs.chmodSync(inputPath, 0o400);
     const relativeInputPath = toVaultRelative(scope.vaultPath, inputPath);
-    const files = snapshotBeforeFiles(scope.vaultPath, operationId, beforeRecord);
+    const files = snapshotBeforeFiles(scope.vaultPath, operationId, jobId, beforeRecord);
     let receipt: SourceRefreshReceipt = {
       schemaVersion: 1,
       operationId,
@@ -356,7 +360,16 @@ export class SourceRefreshService {
     try {
       writeSourceRecord(scope.vaultPath, beforeRecord.id, intermediate, recordFileChecksum(scope.vaultPath, beforeRecord.id));
       let sourcePageConflict = false;
-      if (isDocumentKind(intermediate.kind)) {
+      if (intermediate.kind === "image_file") {
+        const result = await this.#ocr!.ocrSource(
+          scope.vaultPath,
+          intermediate,
+          sourceRecordPath(scope.vaultPath, intermediate.id),
+          readJob(scope.vaultPath, jobId)!
+        );
+        consumeImageRefreshOcrOperation(scope.vaultPath, jobId, intermediate.id, result.durableEffect.operationIds);
+        sourcePageConflict = result.sourcePageConflict;
+      } else if (isDocumentKind(intermediate.kind)) {
         const result = await this.#parser.parseSource(
           scope.vaultPath,
           intermediate,
@@ -452,17 +465,18 @@ export class SourceRefreshService {
   }
 }
 
-function isEligible(record: SourceRecord, parser: DocumentParserPort): boolean {
+function isEligible(record: SourceRecord, parser: DocumentParserPort, ocr: OcrPort | undefined): boolean {
   return SUPPORTED_SOURCE_KINDS.has(record.kind) &&
     (record.storageStrategy === "reference_original" || record.storageStrategy === "copy_to_source_library") &&
-    (!isDocumentKind(record.kind) || parser.canParse(record.kind));
+    (!isDocumentKind(record.kind) || parser.canParse(record.kind)) &&
+    (record.kind !== "image_file" || ocr?.canOcr(record.kind) === true);
 }
 
 function supportedSourceKind(
   kind: SourceRecord["kind"]
-): "markdown_file" | "plain_text_file" | "pdf_file" | "docx_file" | "pptx_file" {
+): "markdown_file" | "plain_text_file" | "pdf_file" | "docx_file" | "pptx_file" | "image_file" {
   if (kind === "markdown_file" || kind === "plain_text_file" || kind === "pdf_file" ||
-    kind === "docx_file" || kind === "pptx_file") return kind;
+    kind === "docx_file" || kind === "pptx_file" || kind === "image_file") return kind;
   throw new PigeDomainError("source.refresh_ineligible", "This source format cannot be refreshed.");
 }
 
@@ -552,7 +566,12 @@ function writeSourceRecord(vaultPath: string, sourceId: string, record: SourceRe
   fs.renameSync(temporary, target);
 }
 
-function snapshotBeforeFiles(vaultPath: string, operationId: string, record: SourceRecord): readonly ReceiptFile[] {
+function snapshotBeforeFiles(
+  vaultPath: string,
+  operationId: string,
+  jobId: string,
+  record: SourceRecord
+): readonly ReceiptFile[] {
   const paths = new Set(record.artifacts.map((artifact) => artifact.path));
   if (record.knowledgePagePath) paths.add(record.knowledgePagePath);
   if (isDocumentKind(record.kind)) {
@@ -561,6 +580,15 @@ function snapshotBeforeFiles(vaultPath: string, operationId: string, record: Sou
     if (date) {
       paths.add(`artifacts/extracted-text/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.txt`);
       paths.add(`artifacts/metadata/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.${format}.json`);
+    }
+  } else if (record.kind === "image_file") {
+    const date = /^src_(\d{8})_/u.exec(record.id)?.[1];
+    if (date) {
+      paths.add(`artifacts/ocr/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.txt`);
+      paths.add(`artifacts/metadata/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.ocr.json`);
+      const childOperationId = imageRefreshOcrOperationId(jobId, record.id);
+      const operationDate = /^op_(\d{8})_/u.exec(childOperationId)![1]!;
+      paths.add(`.pige/operations/${operationDate.slice(0, 4)}/${operationDate.slice(4, 6)}/${childOperationId}.json`);
     }
   }
   return [...paths].map((relativePath) => {
@@ -572,6 +600,39 @@ function snapshotBeforeFiles(vaultPath: string, operationId: string, record: Sou
     fs.copyFileSync(absolute, backup, fs.constants.COPYFILE_EXCL);
     return { path: relativePath, beforeBackup: toVaultRelative(vaultPath, backup), beforeChecksum: checksum };
   });
+}
+
+function consumeImageRefreshOcrOperation(
+  vaultPath: string,
+  jobId: string,
+  sourceId: string,
+  operationIds: readonly string[]
+): void {
+  const operationId = imageRefreshOcrOperationId(jobId, sourceId);
+  if (operationIds.length !== 1 || operationIds[0] !== operationId) {
+    throw new PigeDomainError("source.refresh_invalid", "Image refresh produced an unexpected child Operation.");
+  }
+  const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!date) throw new PigeDomainError("source.refresh_invalid", "Image refresh produced an invalid child Operation.");
+  const operationPath = resolveVaultFile(
+    vaultPath,
+    `.pige/operations/${date.slice(0, 4)}/${date.slice(4, 6)}/${operationId}.json`
+  );
+  const operation = OperationRecordSchema.parse(JSON.parse(fs.readFileSync(operationPath, "utf8")));
+  if (
+    operation.jobId !== jobId || operation.kind !== "create_artifact" ||
+    !operation.sourceRefs.some((ref) => ref.kind === "source" && ref.id === sourceId)
+  ) {
+    throw new PigeDomainError("source.refresh_invalid", "Image refresh child Operation identity changed.");
+  }
+  fs.rmSync(operationPath);
+}
+
+function imageRefreshOcrOperationId(jobId: string, sourceId: string): string {
+  const date = /^job_(\d{8})_/u.exec(jobId)?.[1];
+  if (!date) throw new PigeDomainError("source.refresh_invalid", "Image refresh Job identity is invalid.");
+  const suffix = createHash("sha256").update(`${jobId}:${sourceId}:ocr-artifacts`).digest("hex").slice(0, 12);
+  return `op_${date}_${suffix}`;
 }
 
 function snapshotAfterFiles(vaultPath: string, operationId: string, files: readonly ReceiptFile[]): readonly ReceiptFile[] {
@@ -613,9 +674,9 @@ function createRunningJob(vaultId: string, jobId: string, record: SourceRecord, 
   return JobRecordSchema.parse({
     schemaVersion: 1,
     id: jobId,
-    class: "parse",
+    class: record.kind === "image_file" ? "ocr" : "parse",
     state: "running",
-    stage: "parsing",
+    stage: record.kind === "image_file" ? "ocr" : "parsing",
     priority: "interactive",
     scope: "vault",
     createdAt: now,

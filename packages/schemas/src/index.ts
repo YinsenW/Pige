@@ -216,7 +216,7 @@ export const SourceRefreshPreviewResultSchema = z.discriminatedUnion("status", [
       previewId: SourceRefreshPreviewIdSchema,
       expectedSourceRevision: SourceRefreshRevisionSchema,
       displayName: z.string().min(1).max(160),
-      sourceKind: z.enum(["markdown_file", "plain_text_file", "pdf_file", "docx_file", "pptx_file"]),
+      sourceKind: z.enum(["markdown_file", "plain_text_file", "pdf_file", "docx_file", "pptx_file", "image_file"]),
       previousSize: z.number().int().nonnegative(),
       currentSize: z.number().int().nonnegative(),
       sizeDelta: z.number().int(),

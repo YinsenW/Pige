@@ -332,6 +332,10 @@ describe("schemas", () => {
       }
     };
     expect(SourceRefreshPreviewResultSchema.parse(preview)).toEqual(preview);
+    expect(SourceRefreshPreviewResultSchema.parse({
+      ...preview,
+      preview: { ...preview.preview, displayName: "source.png", sourceKind: "image_file" }
+    })).toMatchObject({ status: "changed", preview: { sourceKind: "image_file" } });
     expect(() => SourceRefreshPreviewResultSchema.parse({ ...preview, path: "/private/source.txt" })).toThrow();
     expect(() => SourceRefreshPreviewResultSchema.parse({
       ...preview,
