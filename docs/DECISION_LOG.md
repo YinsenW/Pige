@@ -4102,6 +4102,35 @@ References:
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260731-Path-Independent-Vault-Display-Name
+
+Status: Accepted
+Date: 2026-07-31
+
+Decision:
+
+Vault & Note Storage may rename a bounded portable `display_name` in the Vault manifest.
+The strict pathless request binds the active Vault and current metadata revision; commit
+preserves the stable Vault ID, filesystem path, unknown manifest fields, and durable roots.
+
+Rationale:
+
+People need a calm human label without conflating display identity with folder movement or
+granting renderer filesystem authority.
+
+Consequences:
+
+- Cancel or Escape discards an inline draft; stale/failure retains it and action focus.
+- Rename and whole-Vault relocation are mutually exclusive while either action is pending.
+- Backup/restore carries the display label as portable identity metadata.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -842,8 +842,11 @@ backup/restore protect the vault without displacing storage ownership.
 
 Required controls:
 
-- Show vault name/path, then separate note/source roots; offer copy/reference for new
-  sources, safe root reveals, open/create, and non-deleting recent-vault removal.
+- Show vault name/path, then separate note/source roots; offer an explicit display-name
+  Rename action, copy/reference for new sources, safe root reveals, open/create, and
+  non-deleting recent-vault removal. Rename opens one inline editor; Cancel or Escape
+  discards the draft and restores the Rename trigger. Stale/failure keeps the draft and
+  exact action focus. Rename and Move Vault disable each other while either is pending.
 - Unavailable external storage says “not connected” without fallback reveal. One busy,
   pathless localized surface fences storage actions and restores invoking focus.
 - This page alone owns restarted user Backup, valid actions and latest completion; never

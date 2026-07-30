@@ -67,6 +67,8 @@ Required ID rules:
 
 - IDs are opaque.
 - IDs are stable across rename, move, backup, restore, and future sync.
+- Renaming the Vault display label changes portable manifest metadata only; `vault_id` and
+  the machine-local path binding remain unchanged, and metadata-revision drift fails stale.
 - IDs appear in frontmatter or sidecar JSON for durable objects.
 - Slugs and filenames are display/location hints, not identity.
 - Duplicate detection must compare IDs first, then checksums, canonical URLs, aliases, and semantic similarity.

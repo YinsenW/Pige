@@ -111,13 +111,33 @@ describe("Vault storage relocation Settings action", () => {
     ), "utf8");
     expect(panel).toContain("<VaultStorageRelocationAction");
     expect(panel).toContain('props.t("vaultSettings.relocateDescription")');
+    expect(panel).toContain("onPendingChange={setRenameBusy}");
+    expect(panel).toContain("props.busy || backupBusy || renameBusy || Boolean(revealTarget)");
+    expect(panel).toContain("props.busy || relocationBusy || Boolean(revealTarget)");
     expect(action).toContain("triggerRef.current?.focus()");
+  });
+
+  it("does not start relocation while its parent lock is active", async () => {
+    const relocateStorage = vi.fn(async (request: VaultStorageRelocationRequest) => ({
+      ...request,
+      status: "cancelled" as const,
+      currentRevision: revision
+    }));
+    const { dom, container, root } = await mount(relocateStorage, async () => undefined, true);
+
+    expect(button(container, labels.action).disabled).toBe(true);
+    await click(dom, button(container, labels.action));
+    expect(relocateStorage).not.toHaveBeenCalled();
+
+    await act(async () => root.unmount());
+    dom.window.close();
   });
 });
 
 async function mount(
   relocateStorage: (request: VaultStorageRelocationRequest) => Promise<VaultStorageRelocationResult>,
-  onRelocated: () => Promise<void>
+  onRelocated: () => Promise<void>,
+  disabled = false
 ) {
   const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
     pretendToBeVisual: true,
@@ -147,7 +167,7 @@ async function mount(
   await act(async () => {
     root.render(createElement(VaultStorageRelocationAction, {
       activeVaultId,
-      disabled: false,
+      disabled,
       labels,
       onRelocated
     }));

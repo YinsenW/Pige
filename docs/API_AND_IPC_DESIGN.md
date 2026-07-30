@@ -196,7 +196,7 @@ Current renderer/preload commands include `onboarding.dismissFirstHome`,
 `vault.storageRelocationStatus`, and `vault.relocateStorage`.
 
 Commands: `vault.create`, `vault.open`, `vault.applyMigration`, `onboarding.complete`,
-`vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`,
+`vault.renameDisplayName`, `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`,
 `maintenance.resetLocalDatabase`, and `maintenance.runKnowledgeHealth`.
 
 Queries: `vault.current`, `vault.recent`, `vault.health`, `onboarding.status`, and `maintenance.localDatabaseStatus`.
@@ -206,6 +206,7 @@ Vault DTOs:
 ```ts
 type VaultSummary = {
   vaultId: string; name: string;
+  metadataRevision?: string;
   activeVaultPathDisplay: string; knowledgeRootDisplay: string; sourceAssetRootDisplay: string;
   sourceAssetRootKind: "inside_vault" | "external_binding";
   defaultSourceStorageStrategy: "copy_to_source_library" | "reference_original";
@@ -219,6 +220,12 @@ type VaultRevealResult =
 ```
 
 `sourceAssetRootDisplay`/`sourceAssetRootKind` are schema-v1 compatibility names for the managed-copy root, not the `<knowledgeRoot>/artifacts` root. Renaming must be versioned; renderer code cannot infer path relationships from display text.
+
+Vault display-name rename is Main-owned and pathless. The strict request binds request ID,
+active Vault ID, expected manifest metadata revision, and a bounded label; results echo that
+identity and return only `renamed`, `stale`, `not_found`, or `failed` plus bounded current
+metadata where applicable. Main atomically changes manifest `display_name`/`updated_at`,
+preserves unknown fields, and never changes or returns the Vault path or stable Vault ID.
 
 Storage reveal is main-owned and pathless: main resolves the root from the active-vault lease and bounded no-follow config; preload admits exact target/result keys. Unavailable external bindings never fall back to the vault. Identity checks fail to `vault.reveal_failed`; final check-to-shell TOCTOU remains.
 
