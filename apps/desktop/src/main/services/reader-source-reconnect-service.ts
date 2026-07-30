@@ -3,10 +3,21 @@ import type {
   NoteReconnectOriginalSourceResult
 } from "@pige/contracts";
 import type { NotesService } from "./notes-service";
+import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 import {
   canReconnectOriginalSource,
   type SourceOriginalReconnectService
 } from "./source-original-reconnect-service";
+
+export function reconnectableOriginalSourceIds(
+  vaultPath: string,
+  sourceIds: readonly string[]
+): string[] {
+  return sourceIds.slice(0, 5).filter((sourceId) => {
+    const source = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
+    return source ? canReconnectOriginalSource(source.record) : false;
+  });
+}
 
 export interface ReaderSourceReconnectPicker {
   pick(): Promise<string | undefined>;
