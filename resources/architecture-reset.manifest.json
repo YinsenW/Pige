@@ -277,6 +277,7 @@
     ["apps/desktop/src/main/services/source-page-service.ts", 1055, "KEEP", "Durable source-page projection and checksum owner.", "AR3"],
     ["apps/desktop/src/main/services/backup-coordinator-service.ts", 1031, "KEEP", "Deterministic non-Agent backup coordination and recovery.", "AR3"],
     ["apps/desktop/src/main/services/restore-coordinator-service.ts", 1015, "KEEP", "Deterministic non-Agent restore coordination and rollback.", "AR3"],
+    ["apps/desktop/src/main/services/note-markdown-editor-service.ts", 1003, "KEEP", "Source-preserving Markdown edit validation, Operation binding, and exact forward Undo/Redo recovery remain one deterministic reliability owner.", "AR3"],
     ["apps/desktop/src/main/services/restore-job-store.ts", 1002, "KEEP", "Restore-specific durable recovery storage.", "AR3"],
     ["apps/desktop/src/renderer/src/App.tsx", 9954, "REWRITE", "Split by page and state owner; UI behavior and visual contract remain unchanged.", "AR4"]
   ],

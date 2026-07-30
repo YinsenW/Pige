@@ -611,35 +611,17 @@ Lifecycle coverage:
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
-Reader save writes reversible `update_page`; merge binds one two-page receipt. Revision restore uses
-an integrity-checked private image and deterministic `restore_page`; retry/restart adopts once and
-Undo restores the displaced note. Drift preserves live bytes. Memory commits private receipts before
-`update_memory`/`trash_memory`; Undo/restart uses exact `restore_memory`. Conversation trash/restore
-binds JSONL hash/revision/receipt without Provider replay. Conversation export rechecks the tail
-before external write and creates no Job/Operation. Knowledge Health repair uses reversible
-`update_page` bound to report/index and exact source/target, orphan/parent, or duplicate-topic
-survivor/absorbed proofs; duplicate-topic restart adopts one receipt and Undo restores both pages.
-Memory backup inclusion changes only outside active Backup work, commits the revision-fenced
-vault config before one pathless `change_setting` Operation, and rolls config back if that
-Operation cannot be published. The preference affects new Backup Jobs only.
+Reader save writes reversible `update_page`; merge binds one two-page receipt. Revision restore uses an integrity-checked private image and deterministic `restore_page`; retry/restart adopts once and Undo restores the displaced note. Exact note-edit Redo requires the matching Undo and unchanged before image, writes one deterministic forward `update_page`, and restart adopts an interrupted commit; drift preserves live bytes. Memory commits private receipts before `update_memory`/`trash_memory`; Undo/restart uses exact `restore_memory`. Conversation trash/restore binds JSONL hash/revision/receipt without Provider replay. Conversation export rechecks the tail before external write and creates no Job/Operation. Knowledge Health repair uses reversible `update_page` bound to report/index and exact source/target, orphan/parent, or duplicate-topic survivor/absorbed proofs; duplicate-topic restart adopts one receipt and Undo restores both pages. Memory backup inclusion changes only outside active Backup work, commits the revision-fenced vault config before one pathless `change_setting` Operation, and rolls config back if that Operation cannot be published. The preference affects new Backup Jobs only.
 
 Rules:
 
 - Store patches, hashes, paths, and summaries rather than full duplicated page/source bodies.
-- Records remain database-independent/backup-included and exclude keys, prompts, provider responses
-  and large source bodies.
-- `create_external_file` uses one opaque checksummed `external_resource`; paths stay in
-  a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect;
-  other effects are `failed_uncertain`; completion prevents replay.
-- Policy-affected Operations retain context/hash/enforcer and permission-decision IDs, never full
-  settings, grants, paths, prompts or secrets. Provider sends create no content/approval Operation;
-  recovery may retain Provider/model/evidence identity, never credentials or payload bodies.
-- Relink/root, settings, trash/restore, backup/migration, Skill/package and memory lifecycle never
-  fall through to generic page updates.
-- `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before`
-  and private-trash `after`; later edits are never signed retroactively.
-- Public note restore binds the exact trash receipt/revision, restores original bytes/path only
-  when free/current, and restart adopts one forward `restore_page` Operation.
+- Records remain database-independent/backup-included and exclude keys, prompts, provider responses and large source bodies.
+- `create_external_file` uses one opaque checksummed `external_resource`; paths stay in a machine-local journal binding parent/leaf and rejecting v1. Receipts prove no effect; other effects are `failed_uncertain`; completion prevents replay.
+- Policy-affected Operations retain context/hash/enforcer and permission-decision IDs, never full settings, grants, paths, prompts or secrets. Provider sends create no content/approval Operation; recovery may retain Provider/model/evidence identity, never credentials or payload bodies.
+- Relink/root, settings, trash/restore, backup/migration, Skill/package and memory lifecycle never fall through to generic page updates.
+- `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before` and private-trash `after`; later edits are never signed retroactively.
+- Public note restore binds the exact trash receipt/revision, restores original bytes/path only when free/current, and restart adopts one forward `restore_page` Operation.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery
@@ -647,24 +629,12 @@ Rules:
 Startup recovery flow:
 
 1. Load active vault manifest and app-local active vault path.
-2. Acquire the fenced per-vault writer lease under `.pige/runtime/` or fail closed when
-   another owner is active; stale recovery must revalidate canonical vault/root and lock
-   directory identity, current mtime/freshness, and the sentinel generation, bounded
-   content hash and named-path metadata twice around the cleanup commit boundary before
-   mutable services start. Same-name inode reuse is not accepted as identity.
-3. Scan durable Jobs/proposals/Operations/source records/private ingress snapshots/
-   conversations/log, rebuilding dirty SQLite projections and reconciling checkpoint
-   refs/hashes.
-4. Reclassify running/cancel/waiting/partial or legacy states as proven resumable,
-   retryable, warning-complete, or body-free `failed_retryable`/repair; unpublished approval
-   states may be cleared rather than migrated.
+2. Acquire the fenced per-vault writer lease under `.pige/runtime/` or fail closed when another owner is active; stale recovery must revalidate canonical vault/root and lock directory identity, current mtime/freshness, and the sentinel generation, bounded content hash and named-path metadata twice around the cleanup commit boundary before mutable services start. Same-name inode reuse is not accepted as identity.
+3. Scan durable Jobs/proposals/Operations/source records/private ingress snapshots/conversations/log, rebuilding dirty SQLite projections and reconciling checkpoint refs/hashes.
+4. Reclassify running/cancel/waiting/partial or legacy states as proven resumable, retryable, warning-complete, or body-free `failed_retryable`/repair; unpublished approval states may be cleared rather than migrated.
 5. Resume queued priority work only after Home is usable.
 
-The lease and Job claims are temporary coordination state, not recovery evidence. They
-are excluded from backup/restore/sync and recreated empty; durable Job bytes,
-checkpoints, output refs, Operations, and domain hashes remain the recovery authority.
-The final `lstat`-to-`unlink`/`rmdir` syscall interval remains a platform primitive
-TOCTOU boundary; Windows and installed-package multi-process proof remain open.
+The lease and Job claims are temporary coordination state, not recovery evidence. They are excluded from backup/restore/sync and recreated empty; durable Job bytes, checkpoints, output refs, Operations, and domain hashes remain the recovery authority. The final `lstat`-to-`unlink`/`rmdir` syscall interval remains a platform primitive TOCTOU boundary; Windows and installed-package multi-process proof remain open.
 
 Recovery decisions:
 
@@ -746,7 +716,7 @@ Settings:
 
 - Activity History pages the authoritative Operation projection with process-local,
   Vault/snapshot/boundary-bound cursors; stale paging preserves current rows and does not
-  change existing forward-writing Undo recovery.
+  change existing forward-writing Undo/Redo recovery.
 - Index & Maintenance shows rebuild/repair jobs.
 - Vault & Note Storage alone owns restarted user Backup state, valid Cancel/Retry and
   typed redacted failure; rollback children stay hidden.
@@ -758,8 +728,7 @@ Rules:
 
 - Completed jobs should say what changed in the vault.
 - Failed jobs should say what was preserved and what can be retried.
-- Durable Jobs survive restart. A high-risk confirmation is withdrawn with its exact live
-  owner; an allowed task plan resumes only through its private ordinal checkpoint/probe.
+- Durable Jobs survive restart. A high-risk confirmation is withdrawn with its exact live owner; an allowed task plan resumes only through its private ordinal checkpoint/probe.
 
 ## 16. Backup, Restore, And Migration
 
