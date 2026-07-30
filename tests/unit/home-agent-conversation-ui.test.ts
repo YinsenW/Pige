@@ -253,7 +253,13 @@ describe("Home durable Agent conversation UI", () => {
       const reconnectedJob = { ...waitingJob, state: "queued" as const, canReconnectDependency: false as const,
         updatedAt: "2026-07-29T09:00:02.000Z" };
       harness.jobs = [reconnectedJob];
-      return { ...request, status: "reconnected", job: reconnectedJob };
+      return {
+        ...request,
+        status: "reconnected",
+        job: reconnectedJob,
+        operationId: "op_20260729_sourcereconnect",
+        contentState: "current"
+      };
     };
     const { container, root } = await mountHome(dom, makePigeApi(harness));
 
@@ -288,6 +294,43 @@ describe("Home durable Agent conversation UI", () => {
     expect(container.textContent).toContain("Original file reconnected. Processing is continuing.");
     expect(harness.retryJobIds).toHaveLength(0);
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps a changed waiting-Job source paused until the user confirms refresh", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const waitingJob = referencedOriginalWaitingJob();
+    harness.jobs = [waitingJob];
+    const preview = {
+      previewId: `sourcerelinkpreview_${"d".repeat(32)}`,
+      expectedSourceRevision: `sourcerev_${"a".repeat(64)}`,
+      displayName: "research.txt",
+      sourceKind: "plain_text_file" as const,
+      previousSize: 10,
+      currentSize: 20,
+      affectedArtifactCount: 1,
+      refreshesSourcePage: true
+    };
+    harness.reconnectOriginalSource = async (request) => {
+      harness.reconnectOriginalSourceRequests.push(request);
+      if (!request.previewId) return { ...request, status: "changed", preview };
+      const reconnectedJob = { ...waitingJob, state: "queued" as const, canReconnectDependency: false as const,
+        updatedAt: "2026-07-29T09:00:02.000Z" };
+      harness.jobs = [reconnectedJob];
+      return { ...request, status: "reconnected", job: reconnectedJob,
+        operationId: "op_20260729_changedrelink", contentState: "changed" };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => buttons(container, "Reconnect original file").length === 1);
+    await clickButton(dom, container, "Reconnect original file");
+    await waitFor(dom, () => container.querySelector('[role="dialog"]') !== null);
+    expect(harness.jobs[0]?.state).toBe("waiting_dependency");
+    await clickButton(dom, container, "Use and refresh");
+    await waitFor(dom, () => harness.reconnectOriginalSourceRequests.length === 2);
+    expect(harness.reconnectOriginalSourceRequests[1]).toMatchObject({ previewId: preview.previewId });
+    await waitFor(dom, () => buttons(container, "Reconnect original file").length === 0);
     await act(async () => root.unmount());
     dom.window.close();
   });

@@ -37,12 +37,12 @@ export interface ReaderSourceReconnectPicker {
 
 export class ReaderSourceReconnectService {
   readonly #notes: Pick<NotesService, "resolveSourceReveal" | "render">;
-  readonly #reconnect: Pick<SourceOriginalReconnectService, "reconnect">;
+  readonly #reconnect: Pick<SourceOriginalReconnectService, "reconnect" | "confirmChanged" | "acknowledge">;
   readonly #onReconnected: (sourceId: string) => number;
 
   constructor(
     notes: Pick<NotesService, "resolveSourceReveal" | "render">,
-    reconnect: Pick<SourceOriginalReconnectService, "reconnect">,
+    reconnect: Pick<SourceOriginalReconnectService, "reconnect" | "confirmChanged" | "acknowledge">,
     onReconnected: (sourceId: string) => number = () => 0
   ) {
     this.#notes = notes;
@@ -64,17 +64,7 @@ export class ReaderSourceReconnectService {
     const candidate = resolved.reconnectCandidate;
     if (!candidate || !sameProof(candidate, request)) return { ...identity, status: "stale" };
 
-    let selectedPath: string | undefined;
-    try {
-      selectedPath = await picker.pick();
-    } catch {
-      return { ...identity, status: "failed" };
-    }
-    if (!selectedPath) return { ...identity, status: "cancelled" };
-    if (!resolved.assertCurrent()) return { ...identity, status: "stale" };
-
-    const status = await this.#reconnect.reconnect(
-      {
+    const binding = {
         activeVaultId: request.activeVaultId,
         requestId: request.requestId,
         sourceId: request.sourceId,
@@ -84,16 +74,30 @@ export class ReaderSourceReconnectService {
         expectedChecksum: request.expectedChecksum,
         expectedSize: request.expectedSize,
         formatIdentity: request.formatIdentity
-      },
-      selectedPath,
-      resolved.assertCurrent
-    );
+      } as const;
+    let status;
+    if (request.previewId) {
+      status = await this.#reconnect.confirmChanged({ ...binding, previewId: request.previewId }, resolved.assertCurrent);
+    } else {
+      let selectedPath: string | undefined;
+      try {
+        selectedPath = await picker.pick();
+      } catch {
+        return { ...identity, status: "failed" };
+      }
+      if (!selectedPath) return { ...identity, status: "cancelled" };
+      if (!resolved.assertCurrent()) return { ...identity, status: "stale" };
+      status = await this.#reconnect.reconnect(binding, selectedPath, resolved.assertCurrent);
+    }
+    if (status.status === "changed") return { ...identity, status: "changed", preview: status.preview };
     if (status.status !== "reconnected") return { ...identity, status: status.status };
     try {
       const resumedJobCount = this.#onReconnected(request.sourceId);
+      this.#reconnect.acknowledge(status.operationId);
       const render = await this.#notes.render({ pageId: request.currentPageId }, ownerId);
       return render.renderContextId
-        ? { ...identity, status: "reconnected", render, operationId: status.operationId, resumedJobCount }
+        ? { ...identity, status: "reconnected", render, operationId: status.operationId,
+            contentState: status.contentState, resumedJobCount }
         : { ...identity, status: "failed" };
     } catch {
       return { ...identity, status: "failed" };

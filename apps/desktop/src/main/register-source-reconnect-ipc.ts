@@ -82,27 +82,34 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
     }
     const proof = options.getReconnectService().candidate(parsed.activeVaultId, initial.sourceId);
     if (!proof) return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
-    const window = options.getWindow(event.sender);
-    if (!window) return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "failed" });
-    const selection = await options.showOpenDialog(window, {
-      title: "Reconnect referenced source",
-      properties: ["openFile"]
-    });
-    if (selection.canceled || selection.filePaths.length === 0) {
-      return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "cancelled" });
+    const reconnect = options.getReconnectService();
+    const assertCurrent = () => candidateMatches(jobs.readOriginalSourceReconnectCandidate(parsed.waitingJobId), parsed) &&
+      proofMatches(reconnect.candidate(parsed.activeVaultId, initial.sourceId), proof);
+    let repair;
+    if (parsed.previewId) {
+      repair = await reconnect.confirmChanged(
+        { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(proof), previewId: parsed.previewId },
+        assertCurrent
+      );
+    } else {
+      const window = options.getWindow(event.sender);
+      if (!window) return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "failed" });
+      const selection = await options.showOpenDialog(window, { title: "Reconnect referenced source", properties: ["openFile"] });
+      if (selection.canceled || selection.filePaths.length === 0) {
+        return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "cancelled" });
+      }
+      if (selection.filePaths.length !== 1 || !assertCurrent()) {
+        return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
+      }
+      repair = await reconnect.reconnect(
+        { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(proof) },
+        selection.filePaths[0]!,
+        assertCurrent
+      );
     }
-    if (selection.filePaths.length !== 1 || !candidateMatches(
-      jobs.readOriginalSourceReconnectCandidate(parsed.waitingJobId),
-      parsed
-    )) {
-      return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
+    if (repair.status === "changed") {
+      return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "changed", preview: repair.preview });
     }
-    const repair = await options.getReconnectService().reconnect(
-      { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(proof) },
-      selection.filePaths[0]!,
-      () => candidateMatches(jobs.readOriginalSourceReconnectCandidate(parsed.waitingJobId), parsed) &&
-        proofMatches(options.getReconnectService().candidate(parsed.activeVaultId, initial.sourceId), proof)
-    );
     if (repair.status !== "reconnected") {
       return ReferencedOriginalReconnectResultSchema.parse({
         ...identity(parsed),
@@ -113,13 +120,15 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
     if (resumed.status !== "requeued" || !resumed.job) {
       return ReferencedOriginalReconnectResultSchema.parse({ ...identity(parsed), status: "stale" });
     }
+    reconnect.acknowledge(repair.operationId);
     options.resumeBackgroundJobs();
     options.onSourceReconnected();
     return ReferencedOriginalReconnectResultSchema.parse({
       ...identity(parsed),
       status: "reconnected",
       job: projectJob(resumed.job),
-      operationId: repair.operationId
+      operationId: repair.operationId,
+      contentState: repair.contentState
     });
   });
   options.ipcMain.handle(SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL, (
@@ -143,31 +152,40 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
     const initial = reconnect.candidate(parsed.activeVaultId, parsed.sourceId);
     if (!initial) return SourceReconnectResultSchema.parse({ ...parsed, status: "not_found" });
     if (!proofMatches(initial, parsed)) return SourceReconnectResultSchema.parse({ ...parsed, status: "stale" });
-    const window = options.getWindow(event.sender);
-    if (!window) return SourceReconnectResultSchema.parse({ ...parsed, status: "failed" });
-    const selection = await options.showOpenDialog(window, {
-      title: "Reconnect referenced source",
-      properties: ["openFile"]
-    });
-    if (selection.canceled || selection.filePaths.length === 0) {
-      return SourceReconnectResultSchema.parse({ ...parsed, status: "cancelled" });
+    const assertCurrent = () => proofMatches(reconnect.candidate(parsed.activeVaultId, parsed.sourceId), parsed);
+    let result;
+    if (parsed.previewId) {
+      result = await reconnect.confirmChanged(
+        { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(parsed), previewId: parsed.previewId },
+        assertCurrent
+      );
+    } else {
+      const window = options.getWindow(event.sender);
+      if (!window) return SourceReconnectResultSchema.parse({ ...parsed, status: "failed" });
+      const selection = await options.showOpenDialog(window, { title: "Reconnect referenced source", properties: ["openFile"] });
+      if (selection.canceled || selection.filePaths.length === 0) {
+        return SourceReconnectResultSchema.parse({ ...parsed, status: "cancelled" });
+      }
+      if (selection.filePaths.length !== 1 || !assertCurrent()) {
+        return SourceReconnectResultSchema.parse({ ...parsed, status: "stale" });
+      }
+      result = await reconnect.reconnect(
+        { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(parsed) },
+        selection.filePaths[0]!,
+        assertCurrent
+      );
     }
-    if (selection.filePaths.length !== 1 || !proofMatches(reconnect.candidate(parsed.activeVaultId, parsed.sourceId), parsed)) {
-      return SourceReconnectResultSchema.parse({ ...parsed, status: "stale" });
-    }
-    const result = await reconnect.reconnect(
-      { activeVaultId: parsed.activeVaultId, requestId: parsed.requestId, ...reconnectProof(parsed) },
-      selection.filePaths[0]!,
-      () => proofMatches(reconnect.candidate(parsed.activeVaultId, parsed.sourceId), parsed)
-    );
+    if (result.status === "changed") return SourceReconnectResultSchema.parse({ ...parsed, status: "changed", preview: result.preview });
     if (result.status !== "reconnected") return SourceReconnectResultSchema.parse({ ...parsed, status: result.status });
     const resumedJobCount = options.getJobs().resumeOriginalSourceReconnectsForSource(parsed.sourceId);
+    reconnect.acknowledge(result.operationId);
     if (resumedJobCount > 0) options.resumeBackgroundJobs();
     options.onSourceReconnected();
     return SourceReconnectResultSchema.parse({
       ...parsed,
       status: "reconnected",
       operationId: result.operationId,
+      contentState: result.contentState,
       resumedJobCount
     });
   });

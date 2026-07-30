@@ -77,11 +77,14 @@ describe("reader source reconnect service", () => {
     }));
     const render = vi.fn(async () => refreshedRender);
     const reconnect = vi.fn(async (_binding, _selectedPath, current: () => boolean) =>
-      current() ? { status: "reconnected" as const, operationId: "op_20260730_readerreconnect" } : { status: "stale" as const });
+      current() ? { status: "reconnected" as const, operationId: "op_20260730_readerreconnect", contentState: "current" as const }
+        : { status: "stale" as const });
+    const confirmChanged = vi.fn();
+    const acknowledge = vi.fn();
     const pick = vi.fn(async () => path.join(path.sep, "private", "replacement.txt"));
     const service = new ReaderSourceReconnectService(
       { resolveSourceReveal, render } as never,
-      { reconnect },
+      { reconnect, confirmChanged, acknowledge },
       () => 2
     );
 
@@ -90,6 +93,7 @@ describe("reader source reconnect service", () => {
       status: "reconnected",
       render: refreshedRender,
       operationId: "op_20260730_readerreconnect",
+      contentState: "current",
       resumedJobCount: 2
     });
     expect(resolveSourceReveal).toHaveBeenCalledWith("notes_owner_exact", request);
@@ -109,6 +113,7 @@ describe("reader source reconnect service", () => {
       assertCurrent
     );
     expect(render).toHaveBeenCalledWith({ pageId: request.currentPageId }, "notes_owner_exact");
+    expect(acknowledge).toHaveBeenCalledWith("op_20260730_readerreconnect");
   });
 
   it("fails closed before mutation for cancellation, ineligible sources, or render drift", async () => {
@@ -123,7 +128,7 @@ describe("reader source reconnect service", () => {
     };
     const service = new ReaderSourceReconnectService(
       { resolveSourceReveal: vi.fn(() => ready), render } as never,
-      { reconnect }
+      { reconnect, confirmChanged: vi.fn(), acknowledge: vi.fn() }
     );
 
     await expect(service.reconnect("notes_owner_exact", request, { pick: async () => undefined }))
@@ -151,7 +156,7 @@ describe("reader source reconnect service", () => {
         })
       })),
       render
-    } as never, { reconnect });
+    } as never, { reconnect, confirmChanged: vi.fn(), acknowledge: vi.fn() });
     const pick = vi.fn();
     await expect(ineligible.reconnect("notes_owner_exact", request, { pick }))
       .resolves.toEqual({ ...request, status: "ineligible" });

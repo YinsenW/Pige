@@ -1805,7 +1805,11 @@ const getReaderSourceRevealService = (): ReaderSourceRevealService =>
   });
 
 const getSourceOriginalReconnectService = (): SourceOriginalReconnectService => {
-  sourceOriginalReconnectService ??= new SourceOriginalReconnectService(getVaultService());
+  sourceOriginalReconnectService ??= new SourceOriginalReconnectService(
+    getVaultService(),
+    undefined,
+    getSourceRefreshService()
+  );
   return sourceOriginalReconnectService;
 };
 
@@ -2347,7 +2351,24 @@ const resumeBackgroundJobs = (): void => {
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
     try {
+      const sourceRefreshRecovery = getSourceRefreshService().recoverIncompleteOperations();
+      for (const sourceId of sourceRefreshRecovery.relinkedSourceIds ?? []) resumeSourceWaiters(sourceId);
+      if (sourceRefreshRecovery.recovered > 0) scheduleActivityIndexRebuild();
+      if (sourceRefreshRecovery.failed > 0) {
+        recordBackgroundFailure(
+          "source.refresh_recovery_incomplete",
+          "Some interrupted source refresh Operations still require repair."
+        );
+      }
+    } catch {
+      recordBackgroundFailure(
+        "source.refresh_recovery_failed",
+        "Interrupted source refresh Operations could not be inspected safely."
+      );
+    }
+    try {
       const sourceReconnectRecovery = getSourceOriginalReconnectService().recoverIncompleteOperations();
+      for (const sourceId of sourceReconnectRecovery.relinkedSourceIds ?? []) resumeSourceWaiters(sourceId);
       if (sourceReconnectRecovery.recovered > 0) scheduleActivityIndexRebuild();
       if (sourceReconnectRecovery.failed > 0) {
         recordBackgroundFailure(

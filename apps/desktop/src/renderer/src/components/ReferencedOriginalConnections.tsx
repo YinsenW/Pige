@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { ReferencedOriginalReconnectCandidate, SourceReconnectListResult } from "@pige/contracts";
+import type { ReferencedOriginalReconnectCandidate, SourceReconnectListResult, SourceReconnectRequest, SourceReconnectResult } from "@pige/contracts";
+import { SourceRelinkChangedDialog } from "./SourceRelinkChangedDialog";
 
 type ListState =
   | { readonly kind: "loading" }
@@ -24,6 +25,11 @@ export function ReferencedOriginalConnections(props: {
   const [pendingSourceId, setPendingSourceId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reconnected, setReconnected] = useState(false);
+  const [changedPreview, setChangedPreview] = useState<{
+    readonly source: ReferencedOriginalReconnectCandidate;
+    readonly request: SourceReconnectRequest;
+    readonly preview: Extract<SourceReconnectResult, { readonly status: "changed" }>["preview"];
+  } | null>(null);
 
   const load = async (): Promise<void> => {
     const sequence = sequenceRef.current + 1;
@@ -50,6 +56,7 @@ export function ReferencedOriginalConnections(props: {
     setPendingSourceId(null);
     setNotice(null);
     setReconnected(false);
+    setChangedPreview(null);
     void load();
     return () => { sequenceRef.current += 1; pendingRef.current = null; };
   }, [props.activeVaultId]);
@@ -74,11 +81,17 @@ export function ReferencedOriginalConnections(props: {
       expectedSize: source.expectedSize,
       formatIdentity: source.formatIdentity
     };
+    let keepDialogOpen = false;
     try {
       const result = await window.pige.sources.reconnectOriginal(request);
       if (sequence !== sequenceRef.current || activeVaultId !== props.activeVaultId ||
         !sameIdentity(request, result)) return;
       if (result.status === "cancelled") return;
+      if (result.status === "changed") {
+        keepDialogOpen = true;
+        setChangedPreview({ source, request, preview: result.preview });
+        return;
+      }
       if (result.status === "reconnected") {
         setReconnected(true);
         try { await props.onRefresh(); } catch { /* durable repair remains successful */ }
@@ -100,8 +113,40 @@ export function ReferencedOriginalConnections(props: {
       if (pendingRef.current === source.sourceId) {
         pendingRef.current = null;
         setPendingSourceId(null);
-        window.requestAnimationFrame(() => triggerRefs.current.get(source.sourceId)?.focus());
+        if (!keepDialogOpen) window.requestAnimationFrame(() => triggerRefs.current.get(source.sourceId)?.focus());
       }
+    }
+  };
+
+  const confirmChanged = async (): Promise<void> => {
+    if (!changedPreview || pendingRef.current || props.disabled) return;
+    const value = changedPreview;
+    pendingRef.current = value.source.sourceId;
+    setPendingSourceId(value.source.sourceId);
+    const request: SourceReconnectRequest = {
+      ...value.request,
+      requestId: `sourcereconnectdirect_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      previewId: value.preview.previewId
+    };
+    try {
+      const result = await window.pige.sources.reconnectOriginal(request);
+      if (!sameIdentity(request, result)) return;
+      setChangedPreview(null);
+      if (result.status === "reconnected") {
+        setReconnected(true);
+        try { await props.onRefresh(); } catch { /* durable repair remains successful */ }
+        await load();
+      } else {
+        setNotice({ sourceId: value.source.sourceId,
+          kind: result.status === "stale" || result.status === "not_found" || result.status === "ineligible" ? "stale" : "failed" });
+      }
+    } catch {
+      setChangedPreview(null);
+      setNotice({ sourceId: value.source.sourceId, kind: "failed" });
+    } finally {
+      pendingRef.current = null;
+      setPendingSourceId(null);
+      window.requestAnimationFrame(() => triggerRefs.current.get(value.source.sourceId)?.focus());
     }
   };
 
@@ -141,6 +186,13 @@ export function ReferencedOriginalConnections(props: {
       </div>
       <button className="settings-button" type="button" disabled={props.disabled || pendingSourceId !== null}
         onClick={() => void load()}>{props.t("sourceReconnect.refresh")}</button>
+      {changedPreview ? <SourceRelinkChangedDialog preview={changedPreview.preview}
+        pending={pendingSourceId !== null} t={props.t}
+        onCancel={() => {
+          const sourceId = changedPreview.source.sourceId;
+          setChangedPreview(null);
+          window.requestAnimationFrame(() => triggerRefs.current.get(sourceId)?.focus());
+        }} onConfirm={() => void confirmChanged()} /> : null}
     </div>
   );
 }

@@ -4295,8 +4295,9 @@ describe("schemas", () => {
       updatedAt: "2026-07-29T01:03:00.000Z"
     } as const;
     const operationId = "op_20260729_sourcereconnect";
-    expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status: "reconnected", job, operationId }))
-      .toEqual({ ...request, status: "reconnected", job, operationId });
+    expect(ReferencedOriginalReconnectResultSchema.parse({
+      ...request, status: "reconnected", job, operationId, contentState: "current"
+    })).toEqual({ ...request, status: "reconnected", job, operationId, contentState: "current" });
     for (const status of ["cancelled", "stale", "not_found", "mismatch", "failed"] as const) {
       expect(ReferencedOriginalReconnectResultSchema.parse({ ...request, status }))
         .toEqual({ ...request, status });
@@ -4437,8 +4438,9 @@ describe("schemas", () => {
       status: "reconnected",
       render,
       operationId: "op_20260730_readerreconnect",
+      contentState: "current",
       resumedJobCount: 1
-    })).toMatchObject({ status: "reconnected", render: { reconnectOriginalSourceIds: [] } });
+    })).toMatchObject({ status: "reconnected", contentState: "current", render: { reconnectOriginalSourceIds: [] } });
     expect(() => NoteReconnectOriginalSourceResultSchema.parse({
       ...request,
       status: "failed",
@@ -4478,8 +4480,9 @@ describe("schemas", () => {
     } as const;
     expect(SourceReconnectRequestSchema.parse(direct)).toEqual(direct);
     expect(SourceReconnectResultSchema.parse({
-      ...direct, status: "reconnected", operationId: "op_20260730_directreconnect", resumedJobCount: 2
-    })).toMatchObject({ status: "reconnected", resumedJobCount: 2 });
+      ...direct, status: "reconnected", operationId: "op_20260730_directreconnect",
+      contentState: "current", resumedJobCount: 2
+    })).toMatchObject({ status: "reconnected", contentState: "current", resumedJobCount: 2 });
     for (const privateField of ["path", "body", "rawError"] as const) {
       expect(() => SourceReconnectRequestSchema.parse({ ...direct, [privateField]: "private" })).toThrow();
       expect(() => SourceReconnectResultSchema.parse({ ...direct, status: "failed", [privateField]: "private" })).toThrow();

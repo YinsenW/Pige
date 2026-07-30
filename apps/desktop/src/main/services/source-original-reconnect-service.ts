@@ -11,11 +11,15 @@ import {
   type OperationRecord,
   type SourceRecord
 } from "@pige/schemas";
-import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
+import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
 import { verifyRevealableSourceFile } from "./source-file-access";
+import type { ReferencedOriginalReplacementInput } from "./source-refresh-service";
 
 const MAX_SOURCE_RECORD_BYTES = 2 * 1024 * 1024;
 const MAX_RECONNECTABLE_SOURCES = 20;
+const MAX_RECONNECT_INPUT_BYTES = 2 * 1024 * 1024 * 1024;
+const CHANGED_PREVIEW_TTL_MS = 10 * 60 * 1000;
+const MAX_CHANGED_PREVIEWS = 8;
 
 export interface SourceOriginalReconnectVaultPort {
   current(): VaultSummary | undefined;
@@ -27,8 +31,34 @@ export interface SourceOriginalReconnectBinding extends ReferencedOriginalReconn
   readonly requestId: string;
 }
 
+export interface SourceOriginalReplacementPort {
+  canReplaceReferencedOriginal(record: SourceRecord): boolean;
+  replaceReferencedOriginal(
+    input: ReferencedOriginalReplacementInput,
+    assertCurrent: () => boolean
+  ): Promise<{
+    readonly operationId: string;
+    readonly refreshOperationId: string;
+    readonly jobId: string;
+    readonly sourceRevision: string;
+    readonly sourcePageConflict: boolean;
+  }>;
+}
+
+export interface SourceOriginalChangedPreview {
+  readonly previewId: string;
+  readonly expectedSourceRevision: string;
+  readonly displayName: string;
+  readonly sourceKind: SourceRecord["kind"];
+  readonly previousSize: number;
+  readonly currentSize: number;
+  readonly affectedArtifactCount: number;
+  readonly refreshesSourcePage: boolean;
+}
+
 export type SourceOriginalReconnectResult =
-  | { readonly status: "reconnected"; readonly operationId: string }
+  | { readonly status: "reconnected"; readonly operationId: string; readonly contentState: "current" | "changed" }
+  | { readonly status: "changed"; readonly preview: SourceOriginalChangedPreview }
   | { readonly status: "stale" | "not_found" | "ineligible" | "mismatch" | "failed" };
 
 interface SourceRecordSnapshot {
@@ -47,13 +77,41 @@ interface SourceReconnectReceipt {
   readonly operation: OperationRecord;
 }
 
+interface SelectedFileIdentity {
+  readonly path: string;
+  readonly parentRealPath: string;
+  readonly parentDev: number;
+  readonly parentIno: number;
+  readonly fileDev: number;
+  readonly fileIno: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+}
+
+interface PendingChangedReconnect {
+  readonly binding: SourceOriginalReconnectBinding;
+  readonly recordChecksum: string;
+  readonly record: SourceRecord;
+  readonly selected: SelectedFileIdentity;
+  readonly snapshot: VerifiedFileSnapshot;
+  readonly createdAtMs: number;
+}
+
 export class SourceOriginalReconnectService {
   readonly #vaults: SourceOriginalReconnectVaultPort;
   readonly #now: () => Date;
+  readonly #replacement: SourceOriginalReplacementPort | undefined;
+  readonly #changedPreviews = new Map<string, PendingChangedReconnect>();
 
-  constructor(vaults: SourceOriginalReconnectVaultPort, now: () => Date = () => new Date()) {
+  constructor(
+    vaults: SourceOriginalReconnectVaultPort,
+    now: () => Date = () => new Date(),
+    replacement?: SourceOriginalReplacementPort
+  ) {
     this.#vaults = vaults;
     this.#now = now;
+    this.#replacement = replacement;
   }
 
   listUnavailable(activeVaultId: string): { readonly sources: ReferencedOriginalReconnectCandidate[]; readonly truncated: boolean } {
@@ -86,6 +144,7 @@ export class SourceOriginalReconnectService {
     selectedPath: string,
     assertCurrent: () => boolean = () => true
   ): Promise<SourceOriginalReconnectResult> {
+    this.#expireChangedPreviews();
     const active = this.#activeBinding(binding.activeVaultId);
     if (!active) return { status: "stale" };
     this.recoverIncompleteOperations();
@@ -95,39 +154,77 @@ export class SourceOriginalReconnectService {
     if (!candidate) return { status: "ineligible" };
     if (!sameReconnectProof(candidate, binding)) return { status: "stale" };
 
-    let canonicalPath: string;
+    let selected: SelectedFileIdentity;
+    let observed: VerifiedFileSnapshot | undefined;
     try {
-      canonicalPath = canonicalRegularFile(selectedPath);
-      if (!sameFormatIdentity(snapshot.record, canonicalPath, binding.formatIdentity)) {
+      selected = selectedFileIdentity(selectedPath);
+      if (!sameFormatIdentity(snapshot.record, selected.path, binding.formatIdentity)) {
         return { status: "mismatch" };
       }
-      const verified = await createVerifiedFileSnapshot({
-        sourcePath: canonicalPath,
-        expectedSize: binding.expectedSize,
-        expectedChecksum: binding.expectedChecksum,
+      observed = await createObservedFileSnapshot({
+        sourcePath: selected.path,
         unavailableCode: "source.external_unavailable",
-        integrityCode: "source.checksum_mismatch"
+        integrityCode: "source.checksum_mismatch",
+        maximumSize: MAX_RECONNECT_INPUT_BYTES
       });
-      await verified.dispose();
     } catch (caught) {
+      await observed?.dispose().catch(() => undefined);
       return {
-        status: caught instanceof PigeDomainError && caught.code === "source.checksum_mismatch"
-          ? "mismatch"
-          : "failed"
+        status: caught instanceof PigeDomainError && caught.code === "source.checksum_mismatch" ? "mismatch" : "failed"
       };
     }
+
+    if (observed.checksum !== binding.expectedChecksum || observed.size !== binding.expectedSize) {
+      if (!this.#replacement) {
+        await observed.dispose();
+        return { status: "mismatch" };
+      }
+      if (!this.#replacement.canReplaceReferencedOriginal(snapshot.record)) {
+        await observed.dispose();
+        return { status: "ineligible" };
+      }
+      if (!assertCurrent()) {
+        await observed.dispose();
+        return { status: "stale" };
+      }
+      if (this.#changedPreviews.size >= MAX_CHANGED_PREVIEWS) this.#disposeOldestChangedPreview();
+      const previewId = `sourcerelinkpreview_${randomUUID().replaceAll("-", "")}`;
+      this.#changedPreviews.set(previewId, {
+        binding,
+        recordChecksum: snapshot.checksum,
+        record: snapshot.record,
+        selected,
+        snapshot: observed,
+        createdAtMs: Date.now()
+      });
+      return {
+        status: "changed",
+        preview: {
+          previewId,
+          expectedSourceRevision: candidate.sourceRevision,
+          displayName: candidate.displayName,
+          sourceKind: snapshot.record.kind,
+          previousSize: binding.expectedSize,
+          currentSize: observed.size,
+          affectedArtifactCount: snapshot.record.artifacts.length,
+          refreshesSourcePage: Boolean(snapshot.record.knowledgePageId)
+        }
+      };
+    }
+    await observed.dispose();
 
     if (!assertCurrent()) return { status: "stale" };
     const current = readSourceRecordSnapshot(active.vaultPath, binding.sourceId);
     if (!current || current.checksum !== snapshot.checksum ||
       reconnectCandidate(active.vaultPath, current) === undefined) return { status: "stale" };
-    const selectedStat = fs.statSync(canonicalPath);
+    if (!sameSelectedFileIdentity(selected, selectedFileIdentity(selected.path))) return { status: "stale" };
+    const selectedStat = fs.statSync(selected.path);
     const updated = SourceRecordSchema.parse({
       ...snapshot.record,
       original: {
         ...snapshot.record.original!,
-        uri: pathToFileURL(canonicalPath).href,
-        path: canonicalPath,
+        uri: pathToFileURL(selected.path).href,
+        path: selected.path,
         lastKnownMtime: selectedStat.mtime.toISOString(),
         lastKnownSize: selectedStat.size
       },
@@ -153,13 +250,12 @@ export class SourceOriginalReconnectService {
       }
       replaceSourceRecord(active.vaultPath, snapshot, updated);
       const committed = readSourceRecordSnapshot(active.vaultPath, binding.sourceId);
-      if (!committed || committed.checksum !== afterChecksum || committed.record.original?.path !== canonicalPath ||
+      if (!committed || committed.checksum !== afterChecksum || committed.record.original?.path !== selected.path ||
           !verifyExactReferencedOriginal(active.vaultPath, committed.record)) {
         throw new PigeDomainError("source.reconnect_failed", "The reconnected source could not be verified after commit.");
       }
       writeOperation(active.vaultPath, operation);
-      removeReceipt(active.vaultPath, operation.id);
-      return { status: "reconnected", operationId: operation.id };
+      return { status: "reconnected", operationId: operation.id, contentState: "current" };
     } catch (caught) {
       if (caught instanceof PigeDomainError && caught.code === "source.reconnect_stale") {
         try { removeReceipt(active.vaultPath, operation.id); } catch { return { status: "failed" }; }
@@ -171,12 +267,77 @@ export class SourceOriginalReconnectService {
     }
   }
 
-  recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number } {
+  acknowledge(operationId: string): void {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return;
+    try {
+      const receipt = readReceipt(receiptPath(vaultPath, operationId));
+      const current = readSourceRecordSnapshot(vaultPath, receipt.sourceId);
+      if (current?.checksum !== receipt.afterChecksum) return;
+      writeOperation(vaultPath, receipt.operation);
+      removeReceipt(vaultPath, operationId);
+    } catch (caught) {
+      if ((caught as NodeJS.ErrnoException).code !== "ENOENT") throw caught;
+    }
+  }
+
+  async confirmChanged(
+    binding: SourceOriginalReconnectBinding & { readonly previewId: string },
+    assertCurrent: () => boolean = () => true
+  ): Promise<SourceOriginalReconnectResult> {
+    this.#expireChangedPreviews();
+    const pending = this.#changedPreviews.get(binding.previewId);
+    this.#changedPreviews.delete(binding.previewId);
+    if (!pending) return { status: "stale" };
+    try {
+      const active = this.#activeBinding(binding.activeVaultId);
+      if (!active || !sameReconnectProof(pending.binding, binding) || !assertCurrent()) return { status: "stale" };
+      const current = readSourceRecordSnapshot(active.vaultPath, binding.sourceId);
+      const candidate = current ? reconnectCandidate(active.vaultPath, current) : undefined;
+      if (!current) return { status: "not_found" };
+      if (!candidate || current.checksum !== pending.recordChecksum || !sameReconnectProof(candidate, binding)) {
+        return { status: "stale" };
+      }
+      if (!this.#replacement?.canReplaceReferencedOriginal(current.record)) return { status: "ineligible" };
+      const selected = selectedFileIdentity(pending.selected.path);
+      if (!sameSelectedFileIdentity(pending.selected, selected)) return { status: "stale" };
+      const observed = await createObservedFileSnapshot({
+        sourcePath: selected.path,
+        unavailableCode: "source.external_unavailable",
+        integrityCode: "source.checksum_mismatch",
+        maximumSize: MAX_RECONNECT_INPUT_BYTES
+      });
+      try {
+        if (observed.checksum !== pending.snapshot.checksum || observed.size !== pending.snapshot.size) {
+          return { status: "stale" };
+        }
+      } finally {
+        await observed.dispose();
+      }
+      if (!assertCurrent()) return { status: "stale" };
+      const result = await this.#replacement.replaceReferencedOriginal({
+        activeVaultId: binding.activeVaultId,
+        requestId: binding.requestId,
+        beforeRecord: pending.record,
+        selectedPath: selected.path,
+        selectedMtime: new Date(selected.mtimeMs).toISOString(),
+        snapshot: pending.snapshot
+      }, assertCurrent);
+      return { status: "reconnected", operationId: result.operationId, contentState: "changed" };
+    } catch (caught) {
+      return { status: caught instanceof PigeDomainError && caught.code === "source.reconnect_stale" ? "stale" : "failed" };
+    } finally {
+      await pending.snapshot.dispose().catch(() => undefined);
+    }
+  }
+
+  recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number; readonly relinkedSourceIds?: readonly string[] } {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vault || !vaultPath) return { recovered: 0, failed: 0 };
     let recovered = 0;
     let failed = 0;
+    const relinkedSourceIds = new Set<string>();
     for (const receiptPath of listReceiptPaths(vaultPath)) {
       try {
         const receipt = readReceipt(receiptPath);
@@ -184,6 +345,7 @@ export class SourceOriginalReconnectService {
         if (current?.checksum === receipt.afterChecksum) {
           writeOperation(vaultPath, receipt.operation);
           removeReceipt(vaultPath, receipt.operation.id);
+          relinkedSourceIds.add(receipt.sourceId);
           recovered += 1;
         } else if (current?.checksum === receipt.beforeChecksum) {
           removeReceipt(vaultPath, receipt.operation.id);
@@ -194,13 +356,32 @@ export class SourceOriginalReconnectService {
         failed += 1;
       }
     }
-    return { recovered, failed };
+    return {
+      recovered,
+      failed,
+      ...(relinkedSourceIds.size > 0 ? { relinkedSourceIds: [...relinkedSourceIds].sort() } : {})
+    };
   }
 
   #activeBinding(activeVaultId: string): { readonly vaultPath: string } | undefined {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     return vault && vaultPath && vault.vaultId === activeVaultId ? { vaultPath } : undefined;
+  }
+
+  #expireChangedPreviews(): void {
+    for (const [id, preview] of this.#changedPreviews) {
+      if (Date.now() - preview.createdAtMs <= CHANGED_PREVIEW_TTL_MS) continue;
+      this.#changedPreviews.delete(id);
+      void preview.snapshot.dispose();
+    }
+  }
+
+  #disposeOldestChangedPreview(): void {
+    const oldest = [...this.#changedPreviews.entries()].sort((left, right) => left[1].createdAtMs - right[1].createdAtMs)[0];
+    if (!oldest) return;
+    this.#changedPreviews.delete(oldest[0]);
+    void oldest[1].snapshot.dispose();
   }
 }
 
@@ -282,7 +463,7 @@ function boundedDisplayName(value: string | undefined, kind: SourceRecord["kind"
   return displayName || kind.replaceAll("_", " ");
 }
 
-function canonicalRegularFile(selectedPath: string): string {
+function selectedFileIdentity(selectedPath: string): SelectedFileIdentity {
   if (!path.isAbsolute(selectedPath) || selectedPath.includes("\0")) {
     throw new PigeDomainError("source.reconnect_invalid", "The selected source path is invalid.");
   }
@@ -291,12 +472,35 @@ function canonicalRegularFile(selectedPath: string): string {
   if (!selectedStat.isFile() || selectedStat.isSymbolicLink() || selectedStat.nlink !== 1) {
     throw new PigeDomainError("source.reconnect_invalid", "The selected source is not a private regular file.");
   }
+  const parent = path.dirname(resolved);
+  const parentRealPath = fs.realpathSync.native(parent);
+  const parentStat = fs.lstatSync(parentRealPath);
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+    throw new PigeDomainError("source.reconnect_invalid", "The selected source parent is unsafe.");
+  }
   const real = fs.realpathSync.native(resolved);
   const stat = fs.lstatSync(real);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) {
     throw new PigeDomainError("source.reconnect_invalid", "The selected source is not a private regular file.");
   }
-  return resolved;
+  return {
+    path: real,
+    parentRealPath,
+    parentDev: parentStat.dev,
+    parentIno: parentStat.ino,
+    fileDev: stat.dev,
+    fileIno: stat.ino,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    ctimeMs: stat.ctimeMs
+  };
+}
+
+function sameSelectedFileIdentity(left: SelectedFileIdentity, right: SelectedFileIdentity): boolean {
+  return left.path === right.path && left.parentRealPath === right.parentRealPath &&
+    left.parentDev === right.parentDev && left.parentIno === right.parentIno &&
+    left.fileDev === right.fileDev && left.fileIno === right.fileIno && left.size === right.size &&
+    left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
 }
 
 function readSourceRecordSnapshot(vaultPath: string, sourceId: string): SourceRecordSnapshot | undefined {

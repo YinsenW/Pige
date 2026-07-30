@@ -35,6 +35,7 @@ describe("referenced original Connections settings", () => {
       ...request,
       status: "reconnected" as const,
       operationId: "op_20260731_reconnectsettings1",
+      contentState: "current" as const,
       resumedJobCount: 1
     }));
     const reconnectableOriginals = vi.fn(async (request: Record<string, unknown>) => ({
@@ -102,6 +103,39 @@ describe("referenced original Connections settings", () => {
     expect(onRefresh).not.toHaveBeenCalled();
     await harness.unmount();
   });
+
+  it("requires explicit confirmation before using changed content and keeps the preview pathless", async () => {
+    let connected = false;
+    const preview = {
+      previewId: `sourcerelinkpreview_${"d".repeat(32)}`,
+      expectedSourceRevision: candidate.sourceRevision,
+      displayName: candidate.displayName,
+      sourceKind: candidate.sourceKind,
+      previousSize: candidate.expectedSize,
+      currentSize: 42,
+      affectedArtifactCount: 1,
+      refreshesSourcePage: true
+    };
+    const reconnectOriginal = vi.fn(async (request: Record<string, unknown>) => request.previewId
+      ? { ...request, status: "reconnected" as const, operationId: "op_20260731_changedrelink",
+          contentState: "changed" as const, resumedJobCount: 1 }
+      : { ...request, status: "changed" as const, preview });
+    const reconnectableOriginals = vi.fn(async (request: Record<string, unknown>) => ({
+      ...request, status: "ready" as const, sources: connected ? [] : [candidate], truncated: false
+    }));
+    const harness = await mount({ reconnectableOriginals, reconnectOriginal, onRefresh: async () => { connected = true; } });
+    await waitFor(harness.dom, () => harness.container.textContent?.includes(candidate.displayName) === true);
+    await act(async () => { button(harness.container, "Reconnect").click(); await settle(harness.dom); });
+    await waitFor(harness.dom, () => harness.container.querySelector('[role="dialog"]') !== null);
+    expect(harness.container.textContent).toContain("Use this changed file?");
+    expect(reconnectOriginal).toHaveBeenCalledOnce();
+    await act(async () => { button(harness.container, "Use and refresh").click(); await settle(harness.dom); });
+    await waitFor(harness.dom, () => reconnectOriginal.mock.calls.length === 2);
+    expect(reconnectOriginal.mock.calls[1]?.[0]).toMatchObject({ previewId: preview.previewId });
+    expect(JSON.stringify(reconnectOriginal.mock.calls)).not.toContain("/private/");
+    await waitFor(harness.dom, () => harness.container.textContent?.includes("All originals are connected.") === true);
+    await harness.unmount();
+  });
 });
 
 async function mount(input: {
@@ -154,7 +188,13 @@ function t(key: string): string {
     "sourceReconnect.mismatch": "Choose the original with the same content and format.",
     "sourceReconnect.stale": "This source changed.",
     "sourceReconnect.truncated": "More originals are unavailable.",
-    "sourceReconnect.refresh": "Refresh"
+    "sourceReconnect.refresh": "Refresh",
+    "sourceRelinkChanged.title": "Use this changed file?",
+    "sourceRelinkChanged.changeSummary": "The saved source was {before}; this file is {after}.",
+    "sourceRelinkChanged.effectSummary": "Rebuild {count} items and refresh the page.",
+    "sourceRelinkChanged.effectSummaryNoPage": "Rebuild {count} items.",
+    "sourceRelinkChanged.cancel": "Keep saved source",
+    "sourceRelinkChanged.confirm": "Use and refresh"
   } as Record<string, string>)[key] ?? key;
 }
 

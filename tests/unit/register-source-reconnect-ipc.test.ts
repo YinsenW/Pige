@@ -74,8 +74,12 @@ function harness(input: { readonly canceled?: boolean; readonly candidate?: Orig
     _filePath: string,
     assertCurrent: () => boolean
   ) => assertCurrent()
-    ? { status: "reconnected" as const, operationId: "op_20260729_sourcereconnect" }
+    ? { status: "reconnected" as const, operationId: "op_20260729_sourcereconnect", contentState: "current" as const }
     : { status: "stale" as const });
+  const confirmChanged = vi.fn(async (_binding: unknown, assertCurrent: () => boolean) => assertCurrent()
+    ? { status: "reconnected" as const, operationId: "op_20260729_changedrelink", contentState: "changed" as const }
+    : { status: "stale" as const });
+  const acknowledge = vi.fn();
   const showOpenDialog = vi.fn(async () => input.canceled
     ? { canceled: true, filePaths: [] }
     : { canceled: false, filePaths: ["/private/selected.txt"] });
@@ -88,11 +92,11 @@ function harness(input: { readonly canceled?: boolean; readonly candidate?: Orig
     getWindow: () => ({}) as never,
     showOpenDialog,
     getJobs: () => jobs as unknown as JobsService,
-    getReconnectService: () => ({ reconnect, candidate: sourceCandidate, listUnavailable }) as unknown as SourceOriginalReconnectService,
+    getReconnectService: () => ({ reconnect, confirmChanged, acknowledge, candidate: sourceCandidate, listUnavailable }) as unknown as SourceOriginalReconnectService,
     resumeBackgroundJobs,
     onSourceReconnected
   });
-  return { handlers, jobs, reconnect, sourceCandidate, listUnavailable, showOpenDialog,
+  return { handlers, jobs, reconnect, confirmChanged, acknowledge, sourceCandidate, listUnavailable, showOpenDialog,
     resumeBackgroundJobs, onSourceReconnected };
 }
 
@@ -123,10 +127,12 @@ describe("source reconnect IPC", () => {
       ...request,
       status: "reconnected",
       job: { id: request.waitingJobId, sourceId: candidate.sourceId, canReconnectDependency: false },
-      operationId: "op_20260729_sourcereconnect"
+      operationId: "op_20260729_sourcereconnect",
+      contentState: "current"
     });
     expect(value.reconnect).toHaveBeenCalledOnce();
     expect(value.jobs.resumeOriginalSourceReconnect).toHaveBeenCalledWith(candidate);
+    expect(value.acknowledge).toHaveBeenCalledWith("op_20260729_sourcereconnect");
     expect(value.resumeBackgroundJobs).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("/private/selected.txt");
   });
@@ -143,12 +149,33 @@ describe("source reconnect IPC", () => {
       ...directRequest,
       status: "reconnected",
       operationId: "op_20260729_sourcereconnect",
+      contentState: "current",
       resumedJobCount: 2
     });
     expect(value.jobs.resumeOriginalSourceReconnectsForSource).toHaveBeenCalledWith(proof.sourceId);
+    expect(value.acknowledge).toHaveBeenCalledWith("op_20260729_sourcereconnect");
     expect(value.resumeBackgroundJobs).toHaveBeenCalledOnce();
     expect(value.onSourceReconnected).toHaveBeenCalledOnce();
     expect(JSON.stringify(result)).not.toContain("/private/selected.txt");
     expect(JSON.stringify(result)).not.toContain("body");
+  });
+
+  it("confirms a changed selection without reopening the picker and resumes only after refresh publication", async () => {
+    const value = harness();
+    const previewId = `sourcerelinkpreview_${"d".repeat(32)}`;
+    const result = await value.handlers.get(JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL)!({ sender: { id: 1 } }, {
+      ...request,
+      requestId: "sourcereconnectreq_changedconfirm",
+      previewId
+    });
+    expect(result).toMatchObject({
+      status: "reconnected",
+      contentState: "changed",
+      operationId: "op_20260729_changedrelink"
+    });
+    expect(value.showOpenDialog).not.toHaveBeenCalled();
+    expect(value.reconnect).not.toHaveBeenCalled();
+    expect(value.confirmChanged).toHaveBeenCalledWith(expect.objectContaining({ previewId }), expect.any(Function));
+    expect(value.jobs.resumeOriginalSourceReconnect).toHaveBeenCalledOnce();
   });
 });
