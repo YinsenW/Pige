@@ -486,7 +486,8 @@ and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
   it and locale/client turn; Main owns instructions, CAS and apply.
 - Link has no renderer target: Pi selects an opaque ref; Main fences pages and publishes one
   reversible `update_page`. Drift fails closed; recovery adopts one effect.
-- Create note reuses selection review; only an applied authoritative note page ID navigates.
+- `create_note | create_claim | create_question` reuse one selection review; applied navigation
+  requires the authoritative matching page type.
 - Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters. Decisions bind
   revision; private proposal details stay Main-only. Activity owns Undo.
 

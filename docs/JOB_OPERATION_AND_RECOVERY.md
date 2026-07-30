@@ -132,12 +132,11 @@ and binds cursors to vault plus snapshot. Summaries grant selection only; the re
 owns follow-up. Failure preserves the timeline and never resumes Provider/Job work.
 
 Reader selection binds checksummed page/span/content/action refs; Job/instruction omit body
-and UI localizes presentation. Pi's explicit typed replacement may persist the private
-selection/replacement checkpoint without changing a page. Reader Link instead persists one
-opaque selected-target checkpoint, then fences both current notes and publishes one reversible
-`update_page`. Recovery adopts the matching checkpoint/Operation/proposal or link and never
-replays model/effect work or duplicates an edge. Missing, ambiguous, self, existing, corrupt
-or drifted evidence fails body-free; assistant prose supplies neither replacement nor target.
+and UI localizes presentation. Typed replacement may persist a private checkpoint without writing.
+Link persists one opaque target checkpoint, fences both notes and publishes one reversible
+`update_page`. Note/claim/question creation binds one action across Job, proposal and `create_page`.
+Recovery adopts only matching checkpoints/effects once. Missing, ambiguous, self, existing,
+corrupt or drifted evidence fails body-free; assistant prose grants neither replacement nor target.
 
 Authored current-note replace requires same-turn read. Main binds private inspection/revision plus
 Job/tool/model/policy to <=16 KiB Markdown and always proposes. Approval CAS-writes one reversible
