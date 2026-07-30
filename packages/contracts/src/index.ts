@@ -2,6 +2,7 @@ import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
   AgentConversationHistoryCursor,
+  AgentConversationHistoryQuery,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,
@@ -379,6 +380,7 @@ import type {
 export type {
   AgentAttachmentCandidate,
   AgentConversationHistoryCursor,
+  AgentConversationHistoryQuery,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
   AgentConversationHistorySummary,

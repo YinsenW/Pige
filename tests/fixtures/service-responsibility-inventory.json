@@ -3,7 +3,7 @@
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 222,
-  "baselineLines": 112168,
+  "baselineLines": 112186,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -20,7 +20,7 @@
     ],
     "authority_reliability": [
       ["agent-conversation-export-service.ts", 182, "prd"],
-      ["agent-conversation-history.ts", 571, "r"],
+      ["agent-conversation-history.ts", 589, "r"],
       ["agent-conversation-pagination.ts", 134, "r"],
       ["agent-memory-lifecycle.ts", 507, "rd"],
       ["agent-page-update-service.ts", 1556, "rdf"],

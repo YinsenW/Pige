@@ -274,10 +274,35 @@ describe("Home Pi Agent service", () => {
     expect(JSON.stringify(result)).not.toMatch(/canFollowUp|jobId|providerId|path/u);
     expect(service.conversationHistory({
       apiVersion: 1,
-      activeVaultId: "vault_20260729_wrongvault01"
+      activeVaultId: fixture.vault.vaultId,
+      query: "DURABLE"
+    })).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: fixture.vault.vaultId,
+      query: "DURABLE",
+      status: "ready",
+      currentConversationId: preserved.event.conversationId,
+      conversations: [{ conversationId: preserved.event.conversationId }],
+      hasMore: false
+    });
+    expect(service.conversationHistory({
+      apiVersion: 1,
+      activeVaultId: fixture.vault.vaultId,
+      query: "missing"
+    })).toMatchObject({
+      query: "missing",
+      status: "ready",
+      currentConversationId: preserved.event.conversationId,
+      conversations: []
+    });
+    expect(service.conversationHistory({
+      apiVersion: 1,
+      activeVaultId: "vault_20260729_wrongvault01",
+      query: "durable"
     })).toEqual({
       apiVersion: 1,
       activeVaultId: "vault_20260729_wrongvault01",
+      query: "durable",
       status: "failed"
     });
   });
