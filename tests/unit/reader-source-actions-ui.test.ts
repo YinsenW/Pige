@@ -26,7 +26,13 @@ const labels: ReaderSourceActionLabels = {
   reconnected: "Original reconnected.",
   reconnectIneligible: "This source cannot be reconnected.",
   reconnectMismatch: "Choose the original with the same content and format.",
-  reconnectFailed: "The original source could not be reconnected."
+  reconnectFailed: "The original source could not be reconnected.",
+  changedTitle: "Use this changed file?",
+  changedSummary: "The saved source was {before}; this file is {after}.",
+  changedEffect: "Rebuild {count} items and refresh the page.",
+  changedEffectNoPage: "Rebuild {count} items.",
+  changedCancel: "Keep saved source",
+  changedConfirm: "Use and refresh"
 };
 
 afterEach(() => {
@@ -205,6 +211,41 @@ describe("Reader source actions", () => {
     });
     expect(harness.container.querySelector('[role="status"]')?.textContent).toBe(labels.reconnectMismatch);
     expect(reconnect.disabled).toBe(false);
+    await harness.unmount();
+  });
+
+  it("keeps changed Reader content pending until explicit confirmation", async () => {
+    const sourceId = "src_20260730_reader001";
+    const preview = {
+      previewId: `sourcerelinkpreview_${"d".repeat(32)}`,
+      displayName: "research.txt",
+      previousSize: 10,
+      currentSize: 20,
+      affectedArtifactCount: 1,
+      refreshesSourcePage: true
+    };
+    const onReconnectOriginal = vi.fn(async (_sourceId: string, previewId?: string) => previewId
+      ? { outcome: "reconnected" as const, render: {
+          summary: { pageId: "page_20260730_reader001", title: "Source", pageType: "source" as const,
+            status: "active" as const, pagePath: "wiki/source.md", sourceIds: [sourceId],
+            createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z" },
+          html: "<p>Changed</p>", byteSize: 7, renderContextId: `notectx_${"e".repeat(32)}`
+        } }
+      : { outcome: "changed" as const, preview });
+    const onReconnected = vi.fn();
+    const harness = await mount({
+      sources: [{ sourceId, label: "Saved source 1", canRevealOriginal: false, canReconnectOriginal: true }],
+      onRevealOriginal: vi.fn(async () => "unavailable"), onReconnectOriginal, onReconnected
+    });
+    await act(async () => { reconnectButton(harness.container, sourceId).click(); await settle(harness.dom); });
+    expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(onReconnectOriginal).toHaveBeenCalledWith(sourceId);
+    const confirm = Array.from(harness.container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === labels.changedConfirm)!;
+    await act(async () => { confirm.click(); await settle(harness.dom); });
+    expect(onReconnectOriginal).toHaveBeenLastCalledWith(sourceId, preview.previewId);
+    expect(onReconnected).toHaveBeenCalledOnce();
+    expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
     await harness.unmount();
   });
 });

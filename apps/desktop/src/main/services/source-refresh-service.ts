@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import type {
   KnowledgeActivitySummary,
   KnowledgeActivityUndoResult,
@@ -25,6 +26,7 @@ import type { OcrPort } from "./ocr-service";
 import { acquireSourceRefreshLocator, readCurrentSourceRecordSnapshot } from "./source-file-access";
 import { SourcePageService } from "./source-page-service";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
+import { createChangedSourceRelinkOperation } from "./source-relink-operation";
 
 export interface SourceRefreshVaultPort {
   current(): VaultSummary | undefined;
@@ -37,6 +39,12 @@ interface PendingPreview {
   readonly record: SourceRecord;
   readonly snapshot: VerifiedFileSnapshot;
   readonly location: "managed_copy" | "referenced_original";
+  readonly replacementOriginal?: {
+    readonly uri: string;
+    readonly path: string;
+    readonly lastKnownMtime: string;
+    readonly requestId: string;
+  };
   readonly createdAtMs: number;
 }
 
@@ -60,6 +68,20 @@ interface SourceRefreshReceipt {
   readonly afterRevision?: string;
   readonly files: readonly ReceiptFile[];
   readonly sourcePageConflict?: boolean;
+  readonly relinkOperation?: OperationRecord;
+}
+
+export interface ReferencedOriginalReplacementInput {
+  readonly activeVaultId: string;
+  readonly requestId: string;
+  readonly beforeRecord: SourceRecord;
+  readonly selectedPath: string;
+  readonly selectedMtime: string;
+  readonly snapshot: VerifiedFileSnapshot;
+}
+
+export interface SourceRefreshRecoveryResult extends KnowledgeActivityRecoveryResult {
+  readonly relinkedSourceIds?: readonly string[];
 }
 
 const PREVIEW_TTL_MS = 10 * 60 * 1000;
@@ -87,6 +109,62 @@ export class SourceRefreshService {
     this.#parser = parser;
     this.#sourcePages = sourcePages;
     this.#ocr = ocr;
+  }
+
+  canReplaceReferencedOriginal(record: SourceRecord): boolean {
+    return record.storageStrategy === "reference_original" && isEligible(record, this.#parser, this.#ocr);
+  }
+
+  async replaceReferencedOriginal(
+    input: ReferencedOriginalReplacementInput,
+    assertCurrent: () => boolean
+  ): Promise<{
+    readonly operationId: string;
+    readonly refreshOperationId: string;
+    readonly jobId: string;
+    readonly sourceRevision: string;
+    readonly sourcePageConflict: boolean;
+  }> {
+    const scope = this.#scope(input.activeVaultId);
+    if (!scope || !assertCurrent()) throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+    const current = readCurrentSourceRecordSnapshot(scope.vaultPath, input.beforeRecord.id)?.record;
+    if (!current || sourceRevision(current) !== sourceRevision(input.beforeRecord) ||
+      !this.canReplaceReferencedOriginal(current)) {
+      throw new PigeDomainError("source.reconnect_stale", "The Source Record changed before replacement refresh.");
+    }
+    const request: SourceRefreshPreviewRequest = {
+      apiVersion: 1,
+      requestId: `sourcerefreshreq_${randomUUID().replaceAll("-", "")}`,
+      activeVaultId: input.activeVaultId,
+      currentPageId: current.knowledgePageId ?? "page_19700101_00000000",
+      renderContextId: `notectx_${"0".repeat(32)}`,
+      sourceId: current.id
+    };
+    const pending: PendingPreview = {
+      request,
+      sourceRevision: sourceRevision(current),
+      record: current,
+      snapshot: input.snapshot,
+      location: "referenced_original",
+      replacementOriginal: {
+        uri: pathToFileURL(input.selectedPath).href,
+        path: input.selectedPath,
+        lastKnownMtime: input.selectedMtime,
+        requestId: input.requestId
+      },
+      createdAtMs: Date.now()
+    };
+    if (!assertCurrent() || !this.#sameScope(scope)) {
+      throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+    }
+    const result = await this.#publish(scope, current, pending);
+    return {
+      operationId: result.relinkOperationId!,
+      refreshOperationId: result.operationId,
+      jobId: result.jobId,
+      sourceRevision: result.sourceRevision,
+      sourcePageConflict: result.sourcePageConflict
+    };
   }
 
   async preview(
@@ -257,13 +335,18 @@ export class SourceRefreshService {
     return { status: "undone", operationId: operation.id, undoOperationId: undo.id };
   }
 
-  recoverIncompleteOperations(): KnowledgeActivityRecoveryResult {
+  recoverIncompleteOperations(): SourceRefreshRecoveryResult {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return { recovered: 0, failed: 0 };
     let recovered = 0;
     let failed = 0;
+    const relinkedSourceIds = new Set<string>();
     for (const receipt of listReceipts(vaultPath)) {
-      if (receipt.state === "applied" || receipt.state === "undone" || receipt.state === "rolled_back") continue;
+      if (receipt.state === "applied") {
+        if (receipt.relinkOperation) relinkedSourceIds.add(receipt.sourceId);
+        continue;
+      }
+      if (receipt.state === "undone" || receipt.state === "rolled_back") continue;
       try {
         if (receipt.state === "prepared") {
           const current = readCurrentSourceRecordSnapshot(vaultPath, receipt.sourceId)?.record;
@@ -284,6 +367,10 @@ export class SourceRefreshService {
           writeSourceRecord(vaultPath, receipt.sourceId, receipt.afterRecord, recordFileChecksum(vaultPath, receipt.sourceId));
         }
         writeOperation(vaultPath, createRefreshOperation(receipt));
+        if (receipt.relinkOperation) {
+          writeOperation(vaultPath, receipt.relinkOperation);
+          relinkedSourceIds.add(receipt.sourceId);
+        }
         writeCompletedJob(vaultPath, receipt);
         writeReceipt(vaultPath, { ...receipt, state: "applied" });
         recovered += 1;
@@ -291,7 +378,11 @@ export class SourceRefreshService {
         failed += 1;
       }
     }
-    return { recovered, failed };
+    return {
+      recovered,
+      failed,
+      ...(relinkedSourceIds.size > 0 ? { relinkedSourceIds: [...relinkedSourceIds].sort() } : {})
+    };
   }
 
   async #publish(
@@ -303,6 +394,7 @@ export class SourceRefreshService {
     readonly jobId: string;
     readonly sourceRevision: string;
     readonly sourcePageConflict: boolean;
+    readonly relinkOperationId?: string;
   }> {
     const dateKey = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     const seed = createHash("sha256").update(`${beforeRecord.id}:${pending.snapshot.checksum}:${randomUUID()}`).digest("hex");
@@ -316,6 +408,11 @@ export class SourceRefreshService {
     if (process.platform !== "win32") fs.chmodSync(inputPath, 0o400);
     const relativeInputPath = toVaultRelative(scope.vaultPath, inputPath);
     const files = snapshotBeforeFiles(scope.vaultPath, operationId, jobId, beforeRecord);
+    const relinkOperation = pending.replacementOriginal
+      ? createChangedSourceRelinkOperation({ requestId: pending.replacementOriginal.requestId,
+          refreshOperationId: operationId, jobId, record: beforeRecord,
+          beforeChecksum: sourceFingerprint(beforeRecord).checksum, afterChecksum: pending.snapshot.checksum })
+      : undefined;
     let receipt: SourceRefreshReceipt = {
       schemaVersion: 1,
       operationId,
@@ -324,7 +421,8 @@ export class SourceRefreshService {
       state: "prepared",
       beforeRecord,
       beforeRevision: sourceRevision(beforeRecord),
-      files
+      files,
+      ...(relinkOperation ? { relinkOperation } : {})
     };
     writeReceipt(scope.vaultPath, receipt);
     writeJob(scope.vaultPath, createRunningJob(scope.vaultId, jobId, beforeRecord, pending.location));
@@ -334,9 +432,14 @@ export class SourceRefreshService {
       ...(beforeRecord.storageStrategy === "reference_original" ? {
         original: {
           ...beforeRecord.original!,
+          ...(pending.replacementOriginal ? {
+            uri: pending.replacementOriginal.uri,
+            path: pending.replacementOriginal.path,
+            lastKnownMtime: pending.replacementOriginal.lastKnownMtime
+          } : {}),
           checksum: pending.snapshot.checksum,
           lastKnownSize: pending.snapshot.size,
-          lastKnownMtime: now
+          lastKnownMtime: pending.replacementOriginal?.lastKnownMtime ?? now
         }
       } : {
         managedCopy: {
@@ -418,9 +521,16 @@ export class SourceRefreshService {
       writeReceipt(scope.vaultPath, receipt);
       writeSourceRecord(scope.vaultPath, beforeRecord.id, finalRecord, recordFileChecksum(scope.vaultPath, beforeRecord.id));
       writeOperation(scope.vaultPath, createRefreshOperation(receipt));
+      if (receipt.relinkOperation) writeOperation(scope.vaultPath, receipt.relinkOperation);
       writeCompletedJob(scope.vaultPath, receipt);
       writeReceipt(scope.vaultPath, { ...receipt, state: "applied" });
-      return { operationId, jobId, sourceRevision: receipt.afterRevision!, sourcePageConflict };
+      return {
+        operationId,
+        jobId,
+        sourceRevision: receipt.afterRevision!,
+        sourcePageConflict,
+        ...(receipt.relinkOperation ? { relinkOperationId: receipt.relinkOperation.id } : {})
+      };
     } catch (caught) {
       const current = readCurrentSourceRecordSnapshot(scope.vaultPath, beforeRecord.id)?.record;
       if (current?.metadata.sourceRefreshInFlight === operationId) {
@@ -701,7 +811,7 @@ function writeCompletedJob(vaultPath: string, receipt: SourceRefreshReceipt): vo
     updatedAt: now,
     finishedAt: now,
     outputRefs: [{ kind: "source", id: receipt.sourceId, checksum: receipt.afterRecord ? sourceFingerprint(receipt.afterRecord).checksum : undefined, role: "source_refresh_revision" }],
-    operationIds: [receipt.operationId],
+    operationIds: [receipt.operationId, ...(receipt.relinkOperation ? [receipt.relinkOperation.id] : [])],
     message: receipt.sourcePageConflict
       ? "Source revision refreshed; a user-edited source page was preserved."
       : "Source revision refreshed and derived local evidence updated."

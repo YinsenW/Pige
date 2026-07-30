@@ -8,6 +8,7 @@ import type {
   ReferencedOriginalReconnectCandidate
 } from "@pige/contracts";
 import { ReaderSourceRefreshAction } from "./ReaderSourceRefreshAction";
+import { SourceRelinkChangedDialog, type SourceRelinkChangedPreview } from "./SourceRelinkChangedDialog";
 
 export type ReaderSourceActionOutcome =
   | "revealed"
@@ -17,6 +18,7 @@ export type ReaderSourceActionOutcome =
   | "not_found"
   | "ineligible"
   | "mismatch"
+  | "changed"
   | "unavailable"
   | "failed";
 
@@ -43,6 +45,12 @@ export interface ReaderSourceActionLabels {
   readonly reconnectIneligible: string;
   readonly reconnectMismatch: string;
   readonly reconnectFailed: string;
+  readonly changedTitle: string;
+  readonly changedSummary: string;
+  readonly changedEffect: string;
+  readonly changedEffectNoPage: string;
+  readonly changedCancel: string;
+  readonly changedConfirm: string;
 }
 
 export function readerSourceActionLabels(t: (key: string) => string): ReaderSourceActionLabels {
@@ -60,7 +68,13 @@ export function readerSourceActionLabels(t: (key: string) => string): ReaderSour
     reconnected: t("note.reconnectOriginalSource.reconnected"),
     reconnectIneligible: t("note.reconnectOriginalSource.ineligible"),
     reconnectMismatch: t("note.reconnectOriginalSource.mismatch"),
-    reconnectFailed: t("note.reconnectOriginalSource.failed")
+    reconnectFailed: t("note.reconnectOriginalSource.failed"),
+    changedTitle: t("sourceRelinkChanged.title"),
+    changedSummary: t("sourceRelinkChanged.changeSummary"),
+    changedEffect: t("sourceRelinkChanged.effectSummary"),
+    changedEffectNoPage: t("sourceRelinkChanged.effectSummaryNoPage"),
+    changedCancel: t("sourceRelinkChanged.cancel"),
+    changedConfirm: t("sourceRelinkChanged.confirm")
   };
 }
 
@@ -74,6 +88,7 @@ type ReaderSourceActionNotice = Exclude<ReaderSourceActionOutcome, "cancelled">;
 type ReaderSourceReconnectResponse = {
   readonly outcome: Exclude<ReaderSourceActionOutcome, "revealed" | "unavailable">;
   readonly render?: NoteRenderResult;
+  readonly preview?: SourceRelinkChangedPreview & { readonly previewId: string };
 };
 
 export function ReaderSourceActions(props: {
@@ -81,7 +96,7 @@ export function ReaderSourceActions(props: {
   readonly sources: readonly ReaderSourceActionItem[];
   readonly labels: ReaderSourceActionLabels;
   readonly onRevealOriginal: (sourceId: string) => Promise<ReaderSourceActionOutcome>;
-  readonly onReconnectOriginal?: (sourceId: string) => Promise<ReaderSourceReconnectResponse>;
+  readonly onReconnectOriginal?: (sourceId: string, previewId?: string) => Promise<ReaderSourceReconnectResponse>;
   readonly onReconnected?: (sourceId: string, render: NoteRenderResult) => void;
 }): React.JSX.Element | null {
   const eligibleSources = props.sources.filter((source) =>
@@ -96,12 +111,17 @@ export function ReaderSourceActions(props: {
     readonly action: "reveal" | "reconnect";
     readonly outcome: ReaderSourceActionNotice;
   } | null>(null);
+  const [changedPreview, setChangedPreview] = useState<{
+    readonly source: ReaderSourceActionItem;
+    readonly preview: SourceRelinkChangedPreview & { readonly previewId: string };
+  } | null>(null);
 
   useEffect(() => {
     ownerIdentityRef.current = props.ownerIdentity;
     pendingRef.current = null;
     setPendingAction(null);
     setNotice(null);
+    setChangedPreview(null);
   }, [props.ownerIdentity]);
 
   const activate = async (
@@ -123,12 +143,14 @@ export function ReaderSourceActions(props: {
     setNotice(null);
     let outcome: ReaderSourceActionOutcome = "failed";
     let reconnectedRender: NoteRenderResult | undefined;
+    let changed: ReaderSourceReconnectResponse["preview"];
     try {
       if (action === "reveal") outcome = await props.onRevealOriginal(source.sourceId);
       else {
         const response = await props.onReconnectOriginal!(source.sourceId);
         outcome = response.outcome;
         reconnectedRender = response.render;
+        changed = response.preview;
       }
     } catch {
       outcome = "failed";
@@ -139,7 +161,8 @@ export function ReaderSourceActions(props: {
       ) return;
       pendingRef.current = null;
       setPendingAction(null);
-      setNotice(outcome === "cancelled" ? null : { sourceId: source.sourceId, action, outcome });
+      if (outcome === "changed" && changed) setChangedPreview({ source, preview: changed });
+      setNotice(outcome === "cancelled" || outcome === "changed" ? null : { sourceId: source.sourceId, action, outcome });
       if (action === "reconnect" && outcome === "reconnected" && reconnectedRender) {
         props.onReconnected?.(source.sourceId, reconnectedRender);
       }
@@ -151,6 +174,32 @@ export function ReaderSourceActions(props: {
         window.requestAnimationFrame(restoreFocus);
       } else {
         window.setTimeout(restoreFocus, 0);
+      }
+    }
+  };
+
+  const confirmChanged = async (): Promise<void> => {
+    if (!changedPreview || pendingRef.current || !props.onReconnectOriginal) return;
+    const value = changedPreview;
+    const pending: PendingSourceAction = { ownerIdentity: props.ownerIdentity, sourceId: value.source.sourceId, action: "reconnect" };
+    pendingRef.current = pending;
+    setPendingAction(pending);
+    try {
+      const response = await props.onReconnectOriginal(value.source.sourceId, value.preview.previewId);
+      if (ownerIdentityRef.current !== pending.ownerIdentity || pendingRef.current !== pending) return;
+      setChangedPreview(null);
+      setNotice(response.outcome === "reconnected" ? { sourceId: value.source.sourceId, action: "reconnect", outcome: "reconnected" }
+        : response.outcome === "cancelled" || response.outcome === "changed" ? null
+          : { sourceId: value.source.sourceId, action: "reconnect", outcome: response.outcome });
+      if (response.outcome === "reconnected" && response.render) props.onReconnected?.(value.source.sourceId, response.render);
+    } catch {
+      setChangedPreview(null);
+      setNotice({ sourceId: value.source.sourceId, action: "reconnect", outcome: "failed" });
+    } finally {
+      if (pendingRef.current === pending) {
+        pendingRef.current = null;
+        setPendingAction(null);
+        window.requestAnimationFrame(() => triggerRefs.current.get(`reconnect:${value.source.sourceId}`)?.focus());
       }
     }
   };
@@ -207,6 +256,20 @@ export function ReaderSourceActions(props: {
           </div>
         );
       })}
+      {changedPreview ? <SourceRelinkChangedDialog preview={changedPreview.preview} pending={pendingAction !== null}
+        t={(key) => ({
+          "sourceRelinkChanged.title": props.labels.changedTitle,
+          "sourceRelinkChanged.changeSummary": props.labels.changedSummary,
+          "sourceRelinkChanged.effectSummary": props.labels.changedEffect,
+          "sourceRelinkChanged.effectSummaryNoPage": props.labels.changedEffectNoPage,
+          "sourceRelinkChanged.cancel": props.labels.changedCancel,
+          "sourceRelinkChanged.confirm": props.labels.changedConfirm
+        })[key] ?? key}
+        onCancel={() => {
+          const sourceId = changedPreview.source.sourceId;
+          setChangedPreview(null);
+          window.requestAnimationFrame(() => triggerRefs.current.get(`reconnect:${sourceId}`)?.focus());
+        }} onConfirm={() => void confirmChanged()} /> : null}
     </div>
   );
 }
@@ -256,7 +319,7 @@ export function ReaderSourceActionSurface(props: {
         return revealResultMatches(request, result) ? result.status : "failed";
       }}
       {...(props.onReconnectOriginalSource ? {
-        onReconnectOriginal: async (sourceId: string): Promise<ReaderSourceReconnectResponse> => {
+        onReconnectOriginal: async (sourceId: string, previewId?: string): Promise<ReaderSourceReconnectResponse> => {
           const { activeVaultId, currentPageId, renderContextId, onReconnectOriginalSource } = props;
           const proof = props.sources.find((source) => source.sourceId === sourceId)?.reconnectProof;
           if (!activeVaultId || !renderContextId || !onReconnectOriginalSource || !proof) return { outcome: "failed" };
@@ -272,13 +335,16 @@ export function ReaderSourceActionSurface(props: {
             expectedAvailability: proof.expectedAvailability,
             expectedChecksum: proof.expectedChecksum,
             expectedSize: proof.expectedSize,
-            formatIdentity: proof.formatIdentity
+            formatIdentity: proof.formatIdentity,
+            ...(previewId ? { previewId } : {})
           };
           const result = await onReconnectOriginalSource(request);
           if (!reconnectResultMatches(request, result)) return { outcome: "failed" };
           return result.status === "reconnected"
             ? { outcome: "reconnected", render: result.render }
-            : { outcome: result.status };
+            : result.status === "changed"
+              ? { outcome: "changed", preview: result.preview }
+              : { outcome: result.status };
         }
       } : {})}
       {...(props.onReconnected ? { onReconnected: props.onReconnected } : {})}

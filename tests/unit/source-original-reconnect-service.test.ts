@@ -5,6 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SourceRecordSchema } from "@pige/schemas";
 import { SourceOriginalReconnectService } from "../../apps/desktop/src/main/services/source-original-reconnect-service";
+import { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
@@ -73,7 +74,7 @@ describe("source original reconnect service", () => {
 
     const committed = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8")));
     expect(committed.original).toMatchObject({
-      path: replacement,
+      path: fs.realpathSync.native(replacement),
       lastKnownSize: value.body.byteLength
     });
     expect(committed.original?.uri).toMatch(/^file:/);
@@ -124,6 +125,63 @@ describe("source original reconnect service", () => {
     expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
   });
 
+  it("previews changed content safely and publishes it only after confirmation through source refresh", async () => {
+    const value = fixture();
+    const replacement = path.join(value.root, "replacement.txt");
+    const changedBody = Buffer.from("a genuinely changed source revision\n", "utf8");
+    fs.writeFileSync(replacement, changedBody);
+    const refresh = new SourceRefreshService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    }, { canParse: () => false, parseSource: async () => { throw new Error("not used for text"); } });
+    const service = new SourceOriginalReconnectService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    }, () => new Date("2026-07-31T08:00:00.000Z"), refresh);
+    const proof = service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected repair proof.");
+    const before = fs.readFileSync(value.recordPath, "utf8");
+
+    const preview = await service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_changedpreview1",
+      ...proof
+    }, replacement);
+    expect(preview).toMatchObject({
+      status: "changed",
+      preview: { displayName: "source.txt", previousSize: value.body.byteLength, currentSize: changedBody.byteLength }
+    });
+    expect(JSON.stringify(preview)).not.toContain(replacement);
+    expect(JSON.stringify(preview)).not.toContain(changedBody.toString("utf8"));
+    expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
+    expect(listJsonFiles(path.join(value.vaultPath, ".pige", "jobs"))).toEqual([]);
+    if (preview.status !== "changed") throw new Error("Expected changed preview.");
+
+    const result = await service.confirmChanged({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_changedconfirm1",
+      ...proof,
+      previewId: preview.preview.previewId
+    });
+    expect(result).toMatchObject({ status: "reconnected", contentState: "changed", operationId: expect.any(String) });
+    const committed = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8")));
+    expect(committed.original).toMatchObject({
+      path: fs.realpathSync.native(replacement),
+      checksum: `sha256:${createHash("sha256").update(changedBody).digest("hex")}`,
+      lastKnownSize: changedBody.byteLength
+    });
+    expect(fs.readFileSync(path.join(value.vaultPath, committed.knowledgePagePath!), "utf8"))
+      .toContain("a genuinely changed source revision");
+    const operations = listJsonFiles(path.join(value.vaultPath, ".pige", "operations"))
+      .map((file) => JSON.parse(fs.readFileSync(file, "utf8")) as { kind: string });
+    expect(operations.map((operation) => operation.kind).sort()).toEqual(["relink_source", "update_source_record"]);
+    expect(listJsonFiles(path.join(value.vaultPath, ".pige", "jobs"))).toHaveLength(1);
+    expect(refresh.recoverIncompleteOperations()).toMatchObject({
+      recovered: 0, failed: 0, relinkedSourceIds: [value.sourceId]
+    });
+    expect(service.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
+  });
+
   it("removes its private receipt when the bound owner becomes stale after selection", async () => {
     const value = fixture();
     const replacement = path.join(value.root, "replacement.txt");
@@ -165,7 +223,7 @@ describe("source original reconnect service", () => {
       ...proof
     }, replacement)).resolves.toEqual({ status: "failed" });
     expect(SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8"))).original?.path)
-      .toBe(replacement);
+      .toBe(fs.realpathSync.native(replacement));
     expect(fs.readdirSync(path.join(value.vaultPath, ".pige/private/source-reconnect-receipts"))).toHaveLength(1);
 
     fs.rmSync(operationsRoot);
@@ -174,9 +232,24 @@ describe("source original reconnect service", () => {
       current: () => value.vault,
       activeVaultPath: () => value.vaultPath
     });
-    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(restarted.recoverIncompleteOperations()).toEqual({
+      recovered: 1, failed: 0, relinkedSourceIds: [value.sourceId]
+    });
     expect(fs.readdirSync(path.join(value.vaultPath, ".pige/private/source-reconnect-receipts"))).toEqual([]);
     expect(fs.readdirSync(path.join(operationsRoot, "2026/07"))).toHaveLength(1);
     expect(restarted.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
   });
 });
+
+function listJsonFiles(root: string): string[] {
+  try {
+    return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+      const child = path.join(root, entry.name);
+      return entry.isDirectory() && !entry.isSymbolicLink()
+        ? listJsonFiles(child)
+        : entry.isFile() && entry.name.endsWith(".json") ? [child] : [];
+    });
+  } catch (caught) {
+    return (caught as NodeJS.ErrnoException).code === "ENOENT" ? [] : (() => { throw caught; })();
+  }
+}

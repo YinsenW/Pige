@@ -41,6 +41,7 @@ import { ConversationEarlierControl, projectCompletedConversation, useConversati
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HomeJobAction } from "./components/HomeJobAction";
 import { HighRiskConfirmationDialog } from "./components/HighRiskConfirmationDialog";
+import { useHomeSourceReconnect } from "./components/useHomeSourceReconnect";
 import { PermissionsPrivacySettingsPanel } from "./components/PermissionsPrivacySettingsPanel";
 import { VaultMigrationDialog } from "./components/VaultMigrationDialog";
 import { TaskExecutionInteractionStatus } from "./components/TaskExecutionInteraction";
@@ -4550,11 +4551,8 @@ function HomeComposer(props: {
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
   const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
-  const [sourceReconnectPendingJobId, setSourceReconnectPendingJobId] = useState<string | null>(null);
-  const [sourceReconnectNotice, setSourceReconnectNotice] = useState<{
-    readonly kind: "status" | "error";
-    readonly key: string;
-  } | null>(null);
+  const sourceReconnect = useHomeSourceReconnect({ activeVaultId: props.activeVault?.vaultId,
+    recentJobs: props.recentJobs, onHomeStateChanged: props.onHomeStateChanged, t: props.t });
   const [proposalReview, setProposalReview] = useState<{
     readonly activeVaultId: string;
     readonly jobId: string;
@@ -4598,14 +4596,6 @@ function HomeComposer(props: {
   const conversationTimelineRef = useRef<HTMLElement | null>(null);
   const homeSectionRef = useRef<HTMLElement | null>(null);
   const processingPanelRef = useRef<HTMLElement | null>(null);
-  const sourceReconnectSequenceRef = useRef(0);
-  const sourceReconnectActiveRef = useRef<{
-    readonly sequence: number;
-    readonly activeVaultId: string;
-    readonly waitingJobId: string;
-    readonly expectedJobUpdatedAt: string;
-  } | null>(null);
-  const recentJobsRef = useRef(props.recentJobs);
   const followConversationRef = useRef(true);
   const conversationPagination = useConversationPagination({
     ownerKey: props.activeVault
@@ -4666,19 +4656,11 @@ function HomeComposer(props: {
   const selectedHistoryConversationIdRef = useRef<string | null>(selectedHistoryConversationId);
   const activeAgentDraftRef = useRef<ActiveAgentDraftBinding | null>(null);
   activeVaultIdRef.current = props.activeVault?.vaultId;
-  recentJobsRef.current = props.recentJobs;
   failedFileDropRecoveryRef.current = failedFileDropRecovery;
   selectedHistoryConversationIdRef.current = selectedHistoryConversationId;
   selectedNoteRef.current = selectedNote;
   voiceLanguageTagRef.current = props.locale;
   draftTextRef.current = text;
-
-  useEffect(() => {
-    sourceReconnectSequenceRef.current += 1;
-    sourceReconnectActiveRef.current = null;
-    setSourceReconnectPendingJobId(null);
-    setSourceReconnectNotice(null);
-  }, [props.activeVault?.vaultId]);
 
   useEffect(() => {
     editorOpenSequence.current += 1;
@@ -5196,58 +5178,11 @@ function HomeComposer(props: {
     effectiveAgentRunState
   ].join(":");
 
-  const reconnectOriginalSource = async (job: JobSummary): Promise<void> => {
-    const activeVaultId = activeVaultIdRef.current;
-    if (!activeVaultId || job.canReconnectDependency !== true || sourceReconnectActiveRef.current) return;
-    const identity = {
-      sequence: ++sourceReconnectSequenceRef.current,
-      activeVaultId,
-      waitingJobId: job.id,
-      expectedJobUpdatedAt: job.updatedAt
-    };
-    sourceReconnectActiveRef.current = identity;
-    setSourceReconnectPendingJobId(job.id);
-    setSourceReconnectNotice({ kind: "status", key: "home.reconnectOriginalSourceChecking" });
-    try {
-      const result = await window.pige.jobs.reconnectOriginalSource({
-        apiVersion: 1,
-        requestId: `sourcereconnectreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
-        activeVaultId: identity.activeVaultId,
-        waitingJobId: identity.waitingJobId,
-        expectedJobUpdatedAt: identity.expectedJobUpdatedAt
-      });
-      const currentJob = recentJobsRef.current.find((candidate) => candidate.id === identity.waitingJobId);
-      if (sourceReconnectActiveRef.current !== identity || activeVaultIdRef.current !== identity.activeVaultId ||
-        currentJob?.updatedAt !== identity.expectedJobUpdatedAt ||
-        result.activeVaultId !== identity.activeVaultId || result.waitingJobId !== identity.waitingJobId ||
-        result.expectedJobUpdatedAt !== identity.expectedJobUpdatedAt) {
-        if (sourceReconnectActiveRef.current === identity) setSourceReconnectNotice(null);
-        return;
-      }
-      if (result.status === "reconnected") {
-        setSourceReconnectNotice({ kind: "status", key: "home.reconnectOriginalSourceResolved" });
-        await props.onHomeStateChanged().catch(() => undefined);
-      } else if (result.status === "cancelled") setSourceReconnectNotice(null);
-      else if (result.status === "stale" || result.status === "not_found") {
-        setSourceReconnectNotice({ kind: "error", key: "home.reconnectOriginalSourceStale" });
-      } else setSourceReconnectNotice({ kind: "error", key: "home.reconnectOriginalSourceFailed" });
-    } catch {
-      if (sourceReconnectActiveRef.current === identity && activeVaultIdRef.current === identity.activeVaultId) {
-        setSourceReconnectNotice({ kind: "error", key: "home.reconnectOriginalSourceFailed" });
-      }
-    } finally {
-      if (sourceReconnectActiveRef.current === identity) {
-        sourceReconnectActiveRef.current = null;
-        setSourceReconnectPendingJobId(null);
-      }
-    }
-  };
-
   const sourceRepairAction = (job: JobSummary) => job.class === "agent_turn" && job.canReconnectDependency === true ? {
     label: props.t("home.reconnectOriginalSource"),
     pendingLabel: props.t("home.reconnectOriginalSourceChecking"),
-    pending: sourceReconnectPendingJobId === job.id,
-    onActivate: () => reconnectOriginalSource(job),
+    pending: sourceReconnect.pendingJobId === job.id,
+    onActivate: () => sourceReconnect.reconnect(job),
     returnFocusRef: processingPanelRef
   } : undefined;
 
@@ -6404,11 +6339,12 @@ function HomeComposer(props: {
             })}
             </div>
           ) : null}
-          {sourceReconnectNotice ? <p
-            className={sourceReconnectNotice.kind === "error" ? "error" : "muted"}
-            role={sourceReconnectNotice.kind === "error" ? "alert" : "status"}
+          {sourceReconnect.notice ? <p
+            className={sourceReconnect.notice.kind === "error" ? "error" : "muted"}
+            role={sourceReconnect.notice.kind === "error" ? "alert" : "status"}
             aria-live="polite"
-          >{props.t(sourceReconnectNotice.key)}</p> : null}
+          >{props.t(sourceReconnect.notice.key)}</p> : null}
+          {sourceReconnect.dialog}
         </section>
       ) : null}
       {props.activeVault && selectedNote === null ? (
