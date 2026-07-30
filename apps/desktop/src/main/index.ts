@@ -293,6 +293,7 @@ import { PiPackageInstallTaskService } from "./services/pi-package-install-task-
 import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
 import { NoteArchiveService } from "./services/note-archive-service";
+import { NoteTagService } from "./services/note-tag-service";
 import { NoteMergeService } from "./services/note-merge-service";
 import { NoteRelateService } from "./services/note-relate-service";
 import {
@@ -401,6 +402,7 @@ let libraryTagRenameService: LibraryTagRenameService | undefined;
 let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
+let noteTagService: NoteTagService | undefined;
 let noteMergeService: NoteMergeService | undefined;
 let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
@@ -1628,6 +1630,10 @@ const getNoteArchiveService = (): NoteArchiveService => {
   noteArchiveService ??= new NoteArchiveService(getNotesService(), getNoteMarkdownEditorService());
   return noteArchiveService;
 };
+const getNoteTagService = (): NoteTagService => {
+  noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
+  return noteTagService;
+};
 const getNoteMergeService = (): NoteMergeService => {
   noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
   return noteMergeService;
@@ -2790,6 +2796,7 @@ registerReaderIpc({
   getReaderSourceReconnectService,
   getNoteTrashService,
   getNoteArchiveService,
+  getNoteTagService,
   getNoteMergeService,
   getNoteRelateService,
   getNoteMarkdownImportService,
@@ -3291,6 +3298,7 @@ app.whenReady().then(async () => {
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
+  noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
   libraryTagRenameService = new LibraryTagRenameService(getVaultService());
   noteRelateService = new NoteRelateService(

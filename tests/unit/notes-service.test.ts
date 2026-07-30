@@ -40,6 +40,7 @@ function writePage(input: {
   readonly title: string;
   readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
   readonly aliases?: readonly string[];
+  readonly tags?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly body?: string;
 }): void {
@@ -54,6 +55,7 @@ created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
 status: "active"
 aliases: ${JSON.stringify(input.aliases ?? [])}
+tags: ${JSON.stringify(input.tags ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 ---
 
@@ -134,7 +136,7 @@ describe("notes service", () => {
   it("opens and commits an owner-bound editor session with a refreshed canonical render", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_editable1234";
-    writePage({ vaultPath, fileName: "editable.md", pageId, title: "Editable", body: "Before" });
+    writePage({ vaultPath, fileName: "editable.md", pageId, title: "Editable", tags: ["draft"], body: "Before" });
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
     const operations: string[] = [];
     const editor = new NoteMarkdownEditorService(vaults, {
@@ -142,6 +144,9 @@ describe("notes service", () => {
     });
     const notes = new NotesService(vaults, undefined, undefined, editor);
     const rendered = await notes.render({ pageId }, OWNER_ID);
+    expect(rendered.tagging).toEqual({
+      tags: ["draft"], canAdd: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u)
+    });
     const open = notes.openEditor(OWNER_ID, {
       apiVersion: 1,
       requestId: "noteeditreq_open1234",
