@@ -9,7 +9,6 @@ import {
   parseElectronBuilderUpdateMetadata,
   verifyReleaseManifest
 } from "../../scripts/release/release-artifacts.mjs";
-import { materializeNotarizationKey } from "../../scripts/release/materialize-notarization-key.mjs";
 import {
   assertReleaseInvocation,
   parseReleaseTag,
@@ -75,30 +74,18 @@ describe("release publication", () => {
     expect(() => resolveExactTagCommit(root, "v0.1.0-alpha.2")).toThrow(/does not exist/u);
   });
 
-  it("materializes only a bounded PEM notarization key with private permissions", () => {
-    const root = tempRoot();
-    const output = path.join(root, "private/AuthKey.p8");
-    const pem = `-----BEGIN PRIVATE KEY-----\n${"A".repeat(80)}\n-----END PRIVATE KEY-----\n`;
-    materializeNotarizationKey(Buffer.from(pem).toString("base64"), output);
-    expect(fs.readFileSync(output, "utf8")).toBe(pem);
-    expect(fs.statSync(output).mode & 0o777).toBe(0o600);
-    expect(() => materializeNotarizationKey(Buffer.from("not a key").toString("base64"), path.join(root, "bad"))).toThrow();
-  });
-
   it.each([
     ["macos-arm64", "0.1.0-alpha.1", [
-      "Pige-0.1.0-alpha.1-arm64.dmg",
-      "Pige-0.1.0-alpha.1-arm64.zip",
-      "Pige-0.1.0-alpha.1-arm64.zip.blockmap"
-    ], "alpha-mac.yml", "Pige-0.1.0-alpha.1-arm64.zip"],
+      "Pige-0.1.0-alpha.1-arm64.zip"
+    ], undefined, "Pige-0.1.0-alpha.1-arm64.zip"],
     ["windows-x64", "0.1.0-alpha.1", [
       "Pige-0.1.0-alpha.1-x64-setup.exe",
       "Pige-0.1.0-alpha.1-x64-setup.exe.blockmap"
     ], "alpha.yml", "Pige-0.1.0-alpha.1-x64-setup.exe"]
-  ] as const)("creates and independently verifies %s manifests", (platform, version, artifactNames, metadataName, updateName) => {
+    ] as const)("creates and independently verifies %s manifests", (platform, version, artifactNames, metadataName, updateName) => {
     const root = tempRoot();
     for (const [index, name] of artifactNames.entries()) fs.writeFileSync(path.join(root, name), `artifact-${index}`);
-    writeMetadata(root, metadataName, version, updateName);
+    if (metadataName) writeMetadata(root, metadataName, version, updateName);
     const manifest = createReleaseManifest({ directory: root, platform, tag: `v${version}`, commit });
     expect(manifest.files.map((file) => file.name)).toContain(updateName);
     expect(verifyReleaseManifest({ directory: root, platform, tag: `v${version}`, commit })).toEqual(manifest);
@@ -113,29 +100,32 @@ describe("release publication", () => {
     )).not.toThrow();
     const root = tempRoot();
     for (const name of [
-      "Pige-0.1.0-alpha.1-arm64.dmg",
-      "Pige-0.1.0-alpha.1-arm64.zip",
-      "Pige-0.1.0-alpha.1-arm64.zip.blockmap"
+      "Pige-0.1.0-alpha.1-x64-setup.exe",
+      "Pige-0.1.0-alpha.1-x64-setup.exe.blockmap"
     ]) fs.writeFileSync(path.join(root, name), "artifact");
-    writeMetadata(root, "alpha-mac.yml", "0.1.0-alpha.2", "Pige-0.1.0-alpha.1-arm64.zip");
+    writeMetadata(root, "alpha.yml", "0.1.0-alpha.2", "Pige-0.1.0-alpha.1-x64-setup.exe");
     expect(() => createReleaseManifest({
-      directory: root, platform: "macos-arm64", tag: "v0.1.0-alpha.1", commit
+      directory: root, platform: "windows-x64", tag: "v0.1.0-alpha.1", commit
     })).toThrow(/version mismatch/u);
   });
 
-  it("keeps unsigned packageability isolated from the signed release workflow", () => {
+  it("publishes only a qualified versioned ad-hoc macOS ZIP without trusted signing authority", () => {
     const root = process.cwd();
     const packageability = fs.readFileSync(path.join(root, ".github/workflows/packageability.yml"), "utf8");
     const workflow = fs.readFileSync(path.join(root, ".github/workflows/release.yml"), "utf8");
-    const releaseConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.release.yml"), "utf8");
     const packageabilityConfig = fs.readFileSync(path.join(root, "apps/desktop/electron-builder.yml"), "utf8");
+    const releaseBuilder = fs.readFileSync(path.join(root, "scripts/release/run-release-builder.mjs"), "utf8");
+    const downloadedQualification = fs.readFileSync(
+      path.join(root, "scripts/release/macos-downloaded-qualification.mjs"),
+      "utf8"
+    );
     const rootPackage = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
     const packageResourcePreparation = fs.readFileSync(
       path.join(root, "scripts/release/prepare-package-resources.mjs"),
       "utf8"
     );
 
-    expect(packageability).toContain("Build unsigned macOS arm64 artifact");
+    expect(packageability).toContain("Build ad-hoc sealed macOS arm64 artifact");
     expect(packageability).toContain("Build unsigned Windows x64 artifact");
     expect(packageability).not.toContain("production-release");
     expect(packageabilityConfig).toContain("forceCodeSigning: false");
@@ -148,38 +138,36 @@ describe("release publication", () => {
     expect(workflow).toContain("actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7");
     expect(workflow).toContain("actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6");
     expect(workflow).toContain("github.ref_protected");
-    expect(workflow).toContain("environment: production-release");
     expect(workflow).toContain("PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}");
-    expect(workflow).not.toContain("APPLE_API_KEY: ${{ runner.temp }}");
-    expect(workflow).toContain(
-      'echo "APPLE_API_KEY=$RUNNER_TEMP/pige-notarization/AuthKey.p8" >> "$GITHUB_ENV"'
-    );
     expect(workflow).toContain("needs: [validate, verify-macos-arm64]");
     expect(workflow).toContain("pige-verified-macos-arm64-");
     expect(workflow).toContain("macos-downloaded-qualification.mjs");
     expect(workflow).toContain("pige-qualified-macos-arm64-");
     expect(workflow).not.toContain("verify-windows-x64");
     expect(workflow).not.toContain("pige-verified-windows-x64-");
-    expect(workflow).toContain("notarize-macos-container.mjs");
+    expect(workflow).toContain("Build versioned ad-hoc ZIP");
+    expect(downloadedQualification).toContain("expected-untrusted and intact");
+    expect(workflow).toContain("Privacy & Security > Open Anyway");
+    expect(workflow).toContain("Automatic updates are unavailable");
     expect(workflow).toContain('gh release create "$PIGE_RELEASE_TAG"');
     expect(workflow).toContain("--verify-tag");
     expect(workflow).toContain("--prerelease");
-    expect(workflow).toContain("artifacts/release-publication/macos-arm64/alpha-mac.yml");
+    expect(workflow).toContain("Pige-${{ needs.validate.outputs.version }}-arm64.zip");
+    expect(workflow).toContain("pige.cdx.json");
+    expect(workflow).toContain("third-party-attribution.json");
+    expect(workflow).toContain("macos-downloaded-qualification.json");
+    expect(workflow).toContain("RELEASE-EVIDENCE-SHA256SUMS.txt");
+    expect(workflow).toContain("downloaded-packaged-ui.png");
     expect(packageability).toContain("windows-x64:");
-    expect(workflow).not.toContain("artifacts/release-publication/macos-arm64/*.yml");
-    expect(workflow).not.toContain("artifacts/release-publication/windows-x64/*.yml");
+    expect(workflow).not.toContain(".dmg");
+    expect(workflow).not.toContain(".blockmap");
+    expect(workflow).not.toContain("alpha-mac.yml");
+    expect(workflow).not.toMatch(/(?:production-release|Developer ID|notari|staple|APPLE_|CSC_)/u);
     expect(workflow).not.toContain("softprops/action-gh-release");
 
-    expect(releaseConfig).toContain("forceCodeSigning: true");
-    expect(releaseConfig).toContain("hardenedRuntime: true");
-    expect(releaseConfig).toContain("notarize: true");
-    expect(releaseConfig).toContain("releaseType: prerelease");
-    expect(releaseConfig).toContain("channel: alpha");
-    expect(releaseConfig).toContain("verifyUpdateCodeSignature: true");
-    expect(releaseConfig).toContain("from: ../../resources/parser-manifests");
-    expect(releaseConfig).toContain("to: parser-manifests");
-    expect(releaseConfig).toContain("from: ../../resources/curated-packages/pi-package-catalog.manifest.json");
-    expect(releaseConfig).toContain("to: curated-packages/pi-package-catalog.manifest.json");
+    expect(releaseBuilder).toContain('macosAdHoc ? "electron-builder.yml"');
+    expect(releaseBuilder).toContain("sanitizeElectronBuilderEnvironment(process.env)");
+    expect(releaseBuilder).not.toMatch(/(?:PIGE_MACOS_|APPLE_API|Developer ID)/u);
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("run-release-builder.mjs");
     expect(rootPackage.scripts["release:package:mac:arm64"]).toContain("--preflight-only=true");
     expect(rootPackage.scripts["release:package:win:x64"]).toContain("run-release-builder.mjs");
@@ -187,15 +175,6 @@ describe("release publication", () => {
     expect(packageResourcePreparation).toContain("process.env.PIGE_RELEASE_TAG");
     expect(packageResourcePreparation).toContain("version does not match the release tag");
 
-    const schemaValidation = spawnSync(process.execPath, ["--input-type=module", "-e", [
-      "import fs from 'node:fs'",
-      "import yaml from 'js-yaml'",
-      "import { validateConfiguration } from 'app-builder-lib/out/util/config/config.js'",
-      "import { DebugLogger } from 'builder-util/out/DebugLogger.js'",
-      "const config=yaml.load(fs.readFileSync('apps/desktop/electron-builder.release.yml','utf8'))",
-      "await validateConfiguration(config,new DebugLogger(false))"
-    ].join(";")], { cwd: root, encoding: "utf8" });
-    expect(schemaValidation.status, schemaValidation.stderr).toBe(0);
   });
 
   it("aggregates a bounded downloaded-app process tree and renderer-safe UI evidence", () => {
@@ -205,6 +184,7 @@ describe("release publication", () => {
       schemaVersion: 1,
       status: "passed",
       runtimeIdentity: { appName: "Pige", appVersion: "0.1.0-alpha.2", isPackaged: true },
+      semanticRuntime: { embedding: { buildType: "prebuilt" }, sqliteVec: true },
       pi: { adapterMode: "embedded_pi_sdk" },
       home: { state: "completed", citationCount: 1 },
       renderer: {

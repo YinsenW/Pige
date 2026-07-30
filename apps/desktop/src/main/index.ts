@@ -300,8 +300,7 @@ import {
   TaskExecutionRecipeService,
   type TaskExecutionRecipeToolRoots
 } from "./services/task-execution-recipe-service";
-import { ElectronUpdaterAdapter } from "./services/electron-updater-adapter";
-import { UpdateService } from "./services/update-service";
+import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
@@ -839,7 +838,7 @@ const getUpdateService = (): UpdateService => {
   if (!updateService) {
     updateService = new UpdateService({
       settings: getLocalSettingsStore(),
-      adapter: new ElectronUpdaterAdapter({ isPackaged: app.isPackaged }),
+      adapter: new NoNetworkUpdateCheckAdapter(),
       currentVersion: app.getVersion(),
       publish: publishUpdateStatus,
       hasBlockingWork: hasUpdateBlockingWork,
@@ -3009,7 +3008,7 @@ app.whenReady().then(async () => {
   });
   updateService = new UpdateService({
     settings: getLocalSettingsStore(),
-    adapter: new ElectronUpdaterAdapter({ isPackaged: app.isPackaged }),
+    adapter: new NoNetworkUpdateCheckAdapter(),
     currentVersion: app.getVersion(),
     publish: publishUpdateStatus,
     hasBlockingWork: hasUpdateBlockingWork,

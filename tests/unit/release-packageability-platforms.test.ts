@@ -36,7 +36,7 @@ describe("release packageability platforms", () => {
       arch: "arm64",
       hostPlatform: "darwin",
       outputDirectory: "macos-arm64",
-      packageKind: "unsigned_zip_preflight",
+      packageKind: "ad_hoc_zip",
       packagedRuntimeSmokeTimeoutMs: 60_000
     });
     expect(target.requiredSbomComponents).toEqual(["pige-speech", "pige-vision-ocr"]);
@@ -54,6 +54,11 @@ describe("release packageability platforms", () => {
     expect(findDistributableNames(["Pige-0.0.0-arm64.zip", "latest-mac.yml"], target)).toEqual([
       "Pige-0.0.0-arm64.zip"
     ]);
+    expect(findDistributableNames(
+      ["Pige-0.0.0-arm64.zip", "Pige-0.1.0-alpha.7-arm64.zip"],
+      target,
+      "0.1.0-alpha.7"
+    )).toEqual(["Pige-0.1.0-alpha.7-arm64.zip"]);
     expect(() => assertPackageabilityHost(target, "linux")).toThrow(/requires host darwin/u);
   });
 
@@ -262,6 +267,7 @@ describe("release packageability platforms", () => {
     expect(workflow).toContain("windows-x64:");
     expect(workflow).toContain("runs-on: windows-2025");
     expect(workflow).toContain("npm run smoke:packaged:win:x64");
+    expect(workflow).toContain("Build ad-hoc sealed macOS arm64 artifact");
     expect(workflow).toContain("macos-arm64-distribution:");
     expect(workflow).toContain("needs: macos-arm64");
     expect(workflow).toContain("actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131");
@@ -279,6 +285,8 @@ describe("release packageability platforms", () => {
       CSC_FOR_PULL_REQUEST: "false",
       CSC_IDENTITY_AUTO_DISCOVERY: "true",
       WIN_CSC_LINK: "secret-windows-certificate",
+      PIGE_MACOS_SIGNING_IDENTITY: "Developer ID Application: Private",
+      PIGE_MACOS_TEAM_ID: "PRIVATE1234",
       APPLE_ID: "private-account",
       APPLE_APP_SPECIFIC_PASSWORD: "private-password",
       APPLE_API_KEY: "private-key"
@@ -345,6 +353,13 @@ describe("release packageability platforms", () => {
     expect(classifyMacGatekeeperAssessment(
       rejectedAssessment,
       "Pige.app: rejected\ncode has no resources but signature indicates they must be present"
+    )).toEqual({
+      expectedUntrustedRejection: false,
+      invalidDiagnostic: true
+    });
+    expect(classifyMacGatekeeperAssessment(
+      rejectedAssessment,
+      "Pige.app: rejected because the bundle format is ambiguous (could be app or framework)"
     )).toEqual({
       expectedUntrustedRejection: false,
       invalidDiagnostic: true

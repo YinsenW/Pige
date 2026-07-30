@@ -32,7 +32,8 @@ const { outputRoot, appPath, executablePath, resourcesPath, asarPath, reportPath
   buildId
 );
 const distributablePaths = fs.existsSync(outputRoot)
-  ? findDistributableNames(fs.readdirSync(outputRoot), target).map((name) => path.join(outputRoot, name))
+  ? findDistributableNames(fs.readdirSync(outputRoot), target, expectedAppVersion)
+    .map((name) => path.join(outputRoot, name))
   : [];
 if (distributablePaths.length !== 1) {
   throw new Error(`Expected exactly one ${target.platform}-${target.arch} packageability artifact.`);
@@ -198,6 +199,10 @@ try {
       : { status: "unsigned", codeSigned: false }
   };
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+  fs.copyFileSync(
+    packagedRuntimeResult.screenshotPath,
+    path.join(path.dirname(reportPath), packagedRuntimeResult.renderer.uiEvidence.fileName)
+  );
   const serializedReport = `${JSON.stringify(report, null, 2)}\n`;
   if (serializedReport.includes(root) || /(?:\/Users\/|[A-Za-z]:\\Users\\|Authorization\s*:|Bearer\s+\S+)/iu.test(serializedReport)) {
     throw new Error("Packaged smoke report contains a private path or credential-shaped value.");

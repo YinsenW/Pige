@@ -1770,7 +1770,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).not.toMatch(/recordEvent\([\s\S]{0,240}message:\s*caught\.message/);
   });
 
-  it("exposes the parsed body-free signed update lifecycle", () => {
+  it("keeps the typed update lifecycle unavailable without a trusted signing identity", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
@@ -1802,6 +1802,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.apply", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.on("updates.statusChanged", handler)');
     expect(serviceSource).toContain("class NoNetworkUpdateCheckAdapter");
+    expect(mainSource.match(/new NoNetworkUpdateCheckAdapter\(\)/gu)).toHaveLength(2);
+    expect(mainSource).not.toContain("new ElectronUpdaterAdapter");
     expect(serviceSource).not.toContain("electron-updater");
     expect(serviceSource).not.toContain("fetch(");
     expect(serviceSource).not.toContain("https://");

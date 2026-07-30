@@ -1439,6 +1439,8 @@ Must implement:
 - Settings: Skills and Pi Packages under Extensions.
 - Settings: Vault & Note Storage plus Index & Maintenance under Knowledge Base.
 - Settings: language, appearance, updates, and diagnostics.
+- v0.1 Updates truthfully reports automatic update unavailable and directs users to the
+  canonical GitHub prerelease/manual Open Anyway flow; it never presents download/apply progress.
 - Accessibility: keyboard navigation, visible focus, accessible icon labels, and readable contrast.
 - Home knowledge retrieval.
 - Note Agent panel.

@@ -1,4 +1,4 @@
-name: Signed prerelease publication
+name: Ad-hoc macOS prerelease publication
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: signed-release-${{ github.ref_name }}
+  group: ad-hoc-release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -72,22 +72,16 @@ jobs:
         run: npm test -- --maxWorkers=1
 
   build-macos-arm64:
-    name: Build signed and notarized macOS arm64
+    name: Build ad-hoc sealed macOS arm64 ZIP
     needs: [validate, quality]
     runs-on: macos-26
     timeout-minutes: 60
-    environment: production-release
     env:
       PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
       PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
-      CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      PIGE_MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      PIGE_MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
-      PIGE_APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
-      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      PIGE_EXPECTED_APP_VERSION: ${{ needs.validate.outputs.version }}
+      PIGE_REPORT_BUILD_ID: ${{ needs.validate.outputs.commit }}
     steps:
       - name: Checkout validated release commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -106,126 +100,141 @@ jobs:
       - name: Audit packaged runtime dependencies
         run: npm audit --omit=dev
 
-      - name: Configure ephemeral notarization key path
-        run: echo "APPLE_API_KEY=$RUNNER_TEMP/pige-notarization/AuthKey.p8" >> "$GITHUB_ENV"
-
-      - name: Materialize ephemeral notarization key
-        run: node scripts/release/materialize-notarization-key.mjs --output="$APPLE_API_KEY"
-
-      - name: Build signed and notarized release artifacts
+      - name: Build versioned ad-hoc ZIP
         run: npm run release:package:mac:arm64
 
-      - name: Notarize and staple release DMG
-        run: >-
-          node scripts/release/notarize-macos-container.mjs
-          --directory=artifacts/release-publication/macos-arm64
-          --tag="$PIGE_RELEASE_TAG"
+      - name: Verify built application and distribution
+        run: npm run smoke:packaged:mac:arm64
 
-      - name: Verify local signatures, notarization, and staple
-        run: >-
-          node scripts/release/verify-macos-release.mjs
-          --directory=artifacts/release-publication/macos-arm64
-          --tag="$PIGE_RELEASE_TAG"
-          --team-id="$PIGE_MACOS_TEAM_ID"
-
-      - name: Create immutable artifact manifest
+      - name: Create immutable ZIP manifest
         run: >-
           npm run release:artifacts --
           --action=create
-          --directory=artifacts/release-publication/macos-arm64
+          --directory=artifacts/release-packageability/macos-arm64
           --platform=macos-arm64
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
 
-      - name: Remove notarization key
-        if: always()
-        run: rm -f "$APPLE_API_KEY"
+      - name: Stage bounded build evidence
+        run: |
+          cp "artifacts/test-reports/packageability/macos-arm64/$PIGE_RELEASE_COMMIT/report.json" \
+            artifacts/release-packageability/macos-arm64/packageability-report.json
+          cp "artifacts/test-reports/packageability/macos-arm64/$PIGE_RELEASE_COMMIT/packaged-ui.png" \
+            artifacts/release-packageability/macos-arm64/packaged-ui.png
+          cp artifacts/release-packageability/package-resources/sbom/pige.cdx.json \
+            artifacts/release-packageability/macos-arm64/pige.cdx.json
+          cp artifacts/release-packageability/package-resources/legal/third-party-attribution.json \
+            artifacts/release-packageability/macos-arm64/third-party-attribution.json
+          cp NOTICE artifacts/release-packageability/macos-arm64/NOTICE
+          cp LICENSE artifacts/release-packageability/macos-arm64/LICENSE
 
-      - name: Upload unverified macOS release candidate
+      - name: Upload untrusted but intact macOS candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pige-release-macos-arm64-${{ needs.validate.outputs.commit }}
           path: |
-            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.dmg
-            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip
-            artifacts/release-publication/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip.blockmap
-            artifacts/release-publication/macos-arm64/alpha-mac.yml
-            artifacts/release-publication/macos-arm64/release-manifest-macos-arm64.json
-            artifacts/release-publication/macos-arm64/SHA256SUMS-macos-arm64.txt
-            artifacts/release-publication/macos-arm64/macos-signature-report.json
+            artifacts/release-packageability/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip
+            artifacts/release-packageability/macos-arm64/release-manifest-macos-arm64.json
+            artifacts/release-packageability/macos-arm64/SHA256SUMS-macos-arm64.txt
+            artifacts/release-packageability/macos-arm64/packageability-report.json
+            artifacts/release-packageability/macos-arm64/packaged-ui.png
+            artifacts/release-packageability/macos-arm64/pige.cdx.json
+            artifacts/release-packageability/macos-arm64/third-party-attribution.json
+            artifacts/release-packageability/macos-arm64/NOTICE
+            artifacts/release-packageability/macos-arm64/LICENSE
           if-no-files-found: error
           retention-days: 2
 
   verify-macos-arm64:
-    name: Independently verify downloaded macOS arm64
+    name: Qualify freshly downloaded ad-hoc macOS arm64 ZIP
     needs: [validate, build-macos-arm64]
     runs-on: macos-26
     timeout-minutes: 20
-    environment: production-release
     env:
       PIGE_RELEASE_TAG: ${{ needs.validate.outputs.tag }}
       PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
-      PIGE_MACOS_TEAM_ID: ${{ secrets.MACOS_TEAM_ID }}
     steps:
       - name: Checkout verifier at validated commit
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24.14.0"
+
       - name: Download macOS candidate
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: pige-release-macos-arm64-${{ needs.validate.outputs.commit }}
-          path: artifacts/release-publication/macos-arm64
+          path: artifacts/release-packageability/macos-arm64
 
-      - name: Verify immutable checksums and update metadata
+      - name: Verify immutable downloaded ZIP manifest
         run: >-
           node scripts/release/release-artifacts.mjs
           --action=verify
-          --directory=artifacts/release-publication/macos-arm64
+          --directory=artifacts/release-packageability/macos-arm64
           --platform=macos-arm64
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
 
-      - name: Independently verify Developer ID and notarization
-        run: >-
-          node scripts/release/verify-macos-release.mjs
-          --directory=artifacts/release-publication/macos-arm64
-          --tag="$PIGE_RELEASE_TAG"
-          --team-id="$PIGE_MACOS_TEAM_ID"
-
-      - name: Qualify downloaded installed application
+      - name: Qualify downloaded app, Gatekeeper class, runtime, UI, and memory
         run: >-
           node scripts/release/macos-downloaded-qualification.mjs
-          --directory=artifacts/release-publication/macos-arm64
+          --directory=artifacts/release-packageability/macos-arm64
           --tag="$PIGE_RELEASE_TAG"
           --commit="$PIGE_RELEASE_COMMIT"
-          --team-id="$PIGE_MACOS_TEAM_ID"
+          --build-report=artifacts/release-packageability/macos-arm64/packageability-report.json
           --report=artifacts/release-evidence/v0.1/macos-downloaded/${{ needs.validate.outputs.commit }}/qualification.json
+
+      - name: Stage and checksum downloaded qualification evidence
+        run: |
+          cp "artifacts/release-evidence/v0.1/macos-downloaded/$PIGE_RELEASE_COMMIT/qualification.json" \
+            artifacts/release-packageability/macos-arm64/macos-downloaded-qualification.json
+          cp "artifacts/release-evidence/v0.1/macos-downloaded/$PIGE_RELEASE_COMMIT/packaged-ui.png" \
+            artifacts/release-packageability/macos-arm64/downloaded-packaged-ui.png
+          cd artifacts/release-packageability/macos-arm64
+          shasum -a 256 \
+            packageability-report.json packaged-ui.png \
+            macos-downloaded-qualification.json downloaded-packaged-ui.png \
+            pige.cdx.json third-party-attribution.json NOTICE LICENSE \
+            > RELEASE-EVIDENCE-SHA256SUMS.txt
 
       - name: Upload verified macOS release assets
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pige-verified-macos-arm64-${{ needs.validate.outputs.commit }}
-          path: artifacts/release-publication/macos-arm64
+          path: |
+            artifacts/release-packageability/macos-arm64/Pige-${{ needs.validate.outputs.version }}-arm64.zip
+            artifacts/release-packageability/macos-arm64/release-manifest-macos-arm64.json
+            artifacts/release-packageability/macos-arm64/SHA256SUMS-macos-arm64.txt
+            artifacts/release-packageability/macos-arm64/packageability-report.json
+            artifacts/release-packageability/macos-arm64/packaged-ui.png
+            artifacts/release-packageability/macos-arm64/macos-downloaded-qualification.json
+            artifacts/release-packageability/macos-arm64/downloaded-packaged-ui.png
+            artifacts/release-packageability/macos-arm64/RELEASE-EVIDENCE-SHA256SUMS.txt
+            artifacts/release-packageability/macos-arm64/pige.cdx.json
+            artifacts/release-packageability/macos-arm64/third-party-attribution.json
+            artifacts/release-packageability/macos-arm64/NOTICE
+            artifacts/release-packageability/macos-arm64/LICENSE
           if-no-files-found: error
           retention-days: 2
 
-      - name: Upload downloaded macOS qualification evidence
+      - name: Upload downloaded qualification evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pige-qualified-macos-arm64-${{ needs.validate.outputs.commit }}
           path: artifacts/release-evidence/v0.1/macos-downloaded/${{ needs.validate.outputs.commit }}
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 14
 
   publish:
-    name: Publish verified GitHub prerelease
+    name: Publish qualified GitHub prerelease
     needs: [validate, verify-macos-arm64]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    environment: production-release
     permissions:
       contents: write
     env:
@@ -239,26 +248,45 @@ jobs:
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
-      - name: Download independently verified macOS assets
+      - name: Download independently qualified macOS assets
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: pige-verified-macos-arm64-${{ needs.validate.outputs.commit }}
-          path: artifacts/release-publication/macos-arm64
+          path: artifacts/release-packageability/macos-arm64
 
       - name: Reverify exact publication bytes
-        run: node scripts/release/release-artifacts.mjs --action=verify --directory=artifacts/release-publication/macos-arm64 --platform=macos-arm64 --tag="$PIGE_RELEASE_TAG" --commit="$PIGE_RELEASE_COMMIT"
-
-      - name: Publish immutable prerelease assets
         run: >-
-          gh release create "$PIGE_RELEASE_TAG"
-          artifacts/release-publication/macos-arm64/*.dmg
-          artifacts/release-publication/macos-arm64/*.zip
-          artifacts/release-publication/macos-arm64/*.blockmap
-          artifacts/release-publication/macos-arm64/alpha-mac.yml
-          artifacts/release-publication/macos-arm64/release-manifest-macos-arm64.json
-          artifacts/release-publication/macos-arm64/SHA256SUMS-macos-arm64.txt
-          --repo "$GITHUB_REPOSITORY"
-          --verify-tag
-          --prerelease
-          --generate-notes
-          --title "Pige $PIGE_RELEASE_VERSION (Alpha)"
+          node scripts/release/release-artifacts.mjs
+          --action=verify
+          --directory=artifacts/release-packageability/macos-arm64
+          --platform=macos-arm64
+          --tag="$PIGE_RELEASE_TAG"
+          --commit="$PIGE_RELEASE_COMMIT"
+
+      - name: Publish immutable ad-hoc prerelease
+        run: |
+          cat > "$RUNNER_TEMP/pige-release-notes.md" <<'EOF'
+          This macOS arm64 alpha is ad-hoc signed. macOS will identify it as coming from an unknown developer; it must never report the app as damaged or invalid.
+
+          After attempting to open Pige, use System Settings > Privacy & Security > Open Anyway if you choose to trust this download. Verify the published SHA-256 manifest before opening it.
+
+          Automatic updates are unavailable in this alpha. Install future versions by downloading them manually from this GitHub Releases page.
+          EOF
+          gh release create "$PIGE_RELEASE_TAG" \
+            "artifacts/release-packageability/macos-arm64/Pige-$PIGE_RELEASE_VERSION-arm64.zip" \
+            artifacts/release-packageability/macos-arm64/release-manifest-macos-arm64.json \
+            artifacts/release-packageability/macos-arm64/SHA256SUMS-macos-arm64.txt \
+            artifacts/release-packageability/macos-arm64/packageability-report.json \
+            artifacts/release-packageability/macos-arm64/packaged-ui.png \
+            artifacts/release-packageability/macos-arm64/macos-downloaded-qualification.json \
+            artifacts/release-packageability/macos-arm64/downloaded-packaged-ui.png \
+            artifacts/release-packageability/macos-arm64/RELEASE-EVIDENCE-SHA256SUMS.txt \
+            artifacts/release-packageability/macos-arm64/pige.cdx.json \
+            artifacts/release-packageability/macos-arm64/third-party-attribution.json \
+            artifacts/release-packageability/macos-arm64/NOTICE \
+            artifacts/release-packageability/macos-arm64/LICENSE \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --notes-file "$RUNNER_TEMP/pige-release-notes.md" \
+            --title "Pige $PIGE_RELEASE_VERSION (macOS arm64 Alpha)"
