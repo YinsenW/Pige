@@ -190,6 +190,8 @@ import type {
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderContextId,
@@ -506,6 +508,8 @@ export type {
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteRenderResult,
@@ -1201,6 +1205,7 @@ export interface KnowledgeActivitySummary {
     | "create_page"
     | "update_page"
     | "archive_page"
+    | "restore_page"
     | "trash_page"
     | "update_collection_cell"
     | "add_collection_row"
@@ -2078,6 +2083,9 @@ export interface PigeDesktopApi {
     readonly archiveCurrent: (
       request: NoteArchiveCurrentRequest
     ) => Promise<NoteArchiveCurrentResult>;
+    readonly restoreArchived: (
+      request: NoteRestoreArchivedRequest
+    ) => Promise<NoteRestoreArchivedResult>;
     readonly trashCurrent: (
       request: NoteTrashCurrentRequest
     ) => Promise<NoteTrashCurrentResult>;

@@ -19,6 +19,8 @@ import type {
   LibraryTagsResult,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteRenderResult,
   NoteMergeRequest,
   NoteMergeResult,
@@ -52,7 +54,10 @@ import {
   type LibraryTagsBrowserLabels,
 } from "../../apps/desktop/src/renderer/src/components/LibraryTagsBrowser";
 import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
-import { ReaderDocumentActions } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
+import {
+  ReaderDocumentActions,
+  submitReaderNoteRestore,
+} from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
@@ -152,6 +157,94 @@ describe("full UI Library", () => {
     });
     expect(calls).toBe(2);
     expect(adopted).toEqual([archived]);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("restores an archived note once, retains the dialog on failure, and adopts only the authoritative active render", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const revision = `noteeditrev_${"b".repeat(32)}`;
+    const note = {
+      ...readerNote(),
+      summary: { ...readerNote().summary, status: "archived" as const },
+      restoreEligibility: { canRestore: true, revision }
+    };
+    const active = {
+      ...readerNote(),
+      html: "<p>Restored body.</p>",
+      restoreEligibility: { canRestore: false, revision: `noteeditrev_${"c".repeat(32)}` }
+    };
+    let mode: "stale" | "committed" = "stale";
+    const requests: NoteRestoreArchivedRequest[] = [];
+    const adopted: NoteRenderResult[] = [];
+    const submit = async (request: NoteRestoreArchivedRequest): Promise<NoteRestoreArchivedResult> => {
+      requests.push(request);
+      return mode === "committed"
+        ? { ...request, status: "committed", operationId: "operation_restore_note", render: active }
+        : { ...request, status: "stale" };
+    };
+    await act(async () => {
+      root.render(createElement(ReaderDocumentActions, {
+        ownerIdentity: `vault_1:${note.summary.pageId}:${note.renderContextId}:${revision}`,
+        canMoveToTrash: false,
+        canMerge: false,
+        canRestore: true,
+        currentTitle: note.summary.title,
+        labels: {
+          more: "More note actions", menu: "Note actions", moveToTrash: "Move to Trash",
+          title: "Move this note to Trash?", description: "Trash description", cancel: "Cancel",
+          confirm: "Move to Trash", pending: "Moving…", failed: "Trash failed"
+        },
+        restoreLabels: {
+          action: "Restore", title: "Restore this note?", description: "Restore description",
+          cancel: "Cancel", confirm: "Restore", pending: "Restoring…", failed: "Restore failed"
+        },
+        mergeLabels: {
+          title: "Merge", description: "Merge description", survivor: "Keep", target: "Target",
+          loading: "Loading", empty: "Empty", cancel: "Cancel", confirm: "Merge",
+          pending: "Merging", failed: "Merge failed"
+        },
+        onMoveToTrash: async () => "retained",
+        onLoadMergeTargets: async () => [],
+        onMerge: async () => ({ status: "retained" }),
+        onRestore: () => submitReaderNoteRestore({ note, activeVaultId: "vault_1", submit, currentNote: () => note }),
+        onCommitted: () => undefined,
+        onMergeCommitted: () => undefined,
+        onRestoreCommitted: (render) => adopted.push(render)
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await act(async () => {
+      buttonWithLabel(container, "More note actions").click();
+      await settle(dom);
+      buttonNamed(container, "Restore").click();
+      await settle(dom);
+      buttonNamed(container, "Restore").click();
+      buttonNamed(container, "Restore").click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: "vault_1",
+      currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId,
+      expectedRevision: revision
+    });
+    expect(Object.keys(requests[0]!)).toEqual([
+      "apiVersion", "requestId", "activeVaultId", "currentPageId", "renderContextId", "expectedRevision"
+    ]);
+    expect(container.textContent).toContain("Restore failed");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
+    mode = "committed";
+    await act(async () => {
+      buttonNamed(container, "Restore").click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(2);
+    expect(adopted).toEqual([active]);
     await act(async () => root.unmount());
     dom.window.close();
   });
