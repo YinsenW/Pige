@@ -168,6 +168,7 @@ import { registerDiagnosticsIpc } from "./register-diagnostics-ipc";
 import { registerConversationExportIpc } from "./register-conversation-export-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
+import { registerConversationHistoryIpc } from "./register-conversation-history-ipc";
 import {
   AgentIngestService,
   type AgentIngestCapabilitySnapshot,
@@ -406,6 +407,7 @@ let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
+const homeConversationHistory = new AgentConversationHistory();
 let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
@@ -1547,7 +1549,7 @@ const getHomeAgentService = (): HomeAgentService => {
       },
       new HomeSkillStagingToolService(getSkillUrlInstallService()),
       getExternalWebSkillRuntimeService(),
-      undefined,
+      homeConversationHistory,
       new HomeAuthoredTextCaptureService(getCaptureService(), getJobsService())
     );
   }
@@ -2410,6 +2412,16 @@ ipcMain.handle("agent.conversationTrash", (_event, request: ConversationTrashLis
 ipcMain.handle("agent.restoreConversation", (_event, request: ConversationRestoreRequest) => {
   const parsedRequest = ConversationRestoreRequestSchema.parse(request);
   return ConversationRestoreResultSchema.parse(getConversationTrashService().restore(parsedRequest));
+});
+registerConversationHistoryIpc({
+  ipcMain,
+  getActiveVault: () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  },
+  assertWriterLease: (vaultPath) => getVaultService().assertWriterLease(vaultPath),
+  history: homeConversationHistory
 });
 ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
   const parsedPayload = AgentSubmitTurnIpcPayloadSchema.parse(payload);

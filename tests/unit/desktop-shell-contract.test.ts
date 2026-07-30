@@ -17,6 +17,33 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("freezes one strict pathless durable conversation title mutation", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-conversation-history-ipc.ts"), "utf8"
+    );
+    const titleSchemas = schemasSource.slice(
+      schemasSource.indexOf("export const AgentConversationTitleSchema"),
+      schemasSource.indexOf("export const AgentConversationMessageSchema")
+    );
+    expect(titleSchemas).toContain("expectedTailEventId: ConversationEventIdSchema");
+    expect(titleSchemas).toContain("expectedTitleRevision:");
+    expect(titleSchemas).toContain("title: AgentConversationTitleSchema.nullable()");
+    expect(contractsSource).toContain("readonly setConversationTitle: (");
+    expect(preloadSource).toContain("AgentConversationSetTitleRequestSchema.parse(request)");
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.setConversationTitle", parsedRequest)');
+    expect(preloadSource).toContain("Invalid conversation title response identity.");
+    expect(mainSource).toContain("registerConversationHistoryIpc({");
+    expect(registrarSource).toContain('options.ipcMain.handle("agent.setConversationTitle"');
+    expect(registrarSource).toContain("options.assertWriterLease(active.vaultPath)");
+    for (const privateField of ["path:", "body:", "providerId:", "modelId:", "toolPayload:", "secret:"]) {
+      expect(titleSchemas).not.toMatch(new RegExp(`\\n  ${privateField}`, "u"));
+    }
+  });
+
   it("loads Provider credentials from app data without invoking the OS keychain", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const storeSource = fs.readFileSync(
