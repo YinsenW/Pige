@@ -40,6 +40,68 @@ afterEach(() => {
 });
 
 describe("RestoreCoordinatorService", () => {
+  it("settles an exact in-flight Restore cancellation on the same durable Job before publication", async () => {
+    const fixture = await makeFixture("clone_as_new");
+    const applySpy = vi.spyOn(fixture.backup, "applyRestore").mockImplementation(async (input) =>
+      new Promise((_, reject) => {
+        if (!input.signal) return reject(new Error("Missing Restore cancellation signal."));
+        const stop = (): void => reject(input.signal?.reason);
+        if (input.signal.aborted) stop();
+        else input.signal.addEventListener("abort", stop, { once: true });
+      })
+    );
+    const coordinator = trackCoordinator(new RestoreCoordinatorService({
+      ...coordinatorOptions(fixture),
+      pauseMutableWork: async () => () => undefined,
+      rebuildIndexes: async () => rebuildResult()
+    }));
+    const apply = coordinator.apply({
+      preview: fixture.applying,
+      destinationPath: fixture.destinationPath,
+      replaceConfirmed: false
+    });
+    await vi.waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1));
+
+    expect(["cancel_requested", "cancelled"]).toContain(
+      coordinator.cancel(fixture.applying.previewId, fixture.applying.mode)
+    );
+    await expect(apply).resolves.toEqual({ status: "canceled" });
+
+    const jobs = readRecords(path.join(fixture.userDataPath, "restore-coordinator", ".pige", "jobs"));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      state: "cancelled",
+      cancellation: expect.objectContaining({ requestedBy: "user" })
+    });
+    expect(fixture.vaults.activeVaultPath()).toBe(fixture.sourceVaultPath);
+    expect(fs.existsSync(fixture.destinationPath)).toBe(false);
+    expect(coordinator.cancel(fixture.applying.previewId, fixture.applying.mode)).toBe("not_found");
+  });
+
+  it("reports cancellation as too late after destination commit and finishes the safe checkpoint", async () => {
+    const fixture = await makeFixture("clone_as_new");
+    let finishRebuild: ((value: ReturnType<typeof rebuildResult>) => void) | undefined;
+    const rebuild = vi.fn(() => new Promise<ReturnType<typeof rebuildResult>>((resolve) => {
+      finishRebuild = resolve;
+    }));
+    const coordinator = trackCoordinator(new RestoreCoordinatorService({
+      ...coordinatorOptions(fixture),
+      pauseMutableWork: async () => () => undefined,
+      rebuildIndexes: rebuild
+    }));
+    const apply = coordinator.apply({
+      preview: fixture.applying,
+      destinationPath: fixture.destinationPath,
+      replaceConfirmed: false
+    });
+    await vi.waitFor(() => expect(rebuild).toHaveBeenCalledTimes(1), { timeout: 5_000 });
+
+    expect(coordinator.cancel(fixture.applying.previewId, fixture.applying.mode)).toBe("too_late");
+    finishRebuild?.(rebuildResult());
+    await expect(apply).resolves.toEqual({ status: "restored", jobId: expect.stringMatching(/^job_/u) });
+    expect(fixture.vaults.activeVaultPath()).toBe(fixture.destinationPath);
+  });
+
   it("clones once, switches the machine binding, writes one Operation, and adopts an exact retry", async () => {
     const fixture = await makeFixture("clone_as_new");
     const rebuild = vi.fn(async () => rebuildResult());

@@ -1089,7 +1089,8 @@ closed outcomes adopt authoritative registry truth.
 
 The Vault section above owns current Backup presentation. Restore preview shows only the
 typed archive summary and explicit identity mode owned by the API/Data contracts; no raw
-path, secret, entry detail, or fixed include-option mock is UI authority.
+path, secret, entry detail, or fixed include-option mock is UI authority. Apply offers one
+focus-preserving Cancel; a late request reports safe completion, never rollback.
 
 ### Appearance And Language
 

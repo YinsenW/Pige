@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { openPromise } from "yauzl";
 import { ZipFile } from "yazl";
 import { BackupManifestSchema, JobRecordSchema, SourceRecordSchema, type BackupManifest } from "@pige/schemas";
+import { PigeDomainError } from "@pige/domain";
 import {
   BackupRestoreService,
   createRestoreDestinationIdentity,
@@ -500,6 +501,33 @@ describe("backup restore service", () => {
     expect(isPigeVault(restored.restoredVaultPath)).toBe(true);
     expect(fs.existsSync(sidecarPath)).toBe(false);
     expect(fs.existsSync(markerPath)).toBe(false);
+  });
+
+  it("cancels Restore at a safe pre-publication checkpoint and removes owned temporary output", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "cancelled-restore.pige-backup.zip");
+    const restoreParent = path.join(root, "cancelled-restore-targets");
+    const service = new BackupRestoreService();
+    await service.createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await service.inspectRestoreArchive(backupPath);
+    const controller = new AbortController();
+    const cancellation = new PigeDomainError("restore.cancelled", "Synthetic user cancellation.");
+    const input = createTestRestoreInput(backupPath, restoreParent, preview, {
+      signal: controller.signal,
+      onPhase(event) {
+        if (event.phase === "destination_reserved") controller.abort(cancellation);
+      }
+    });
+    const destinationPath = input.destinationIdentity.destinationPath;
+    const sidecarPath = path.join(
+      path.dirname(destinationPath),
+      `.${path.basename(destinationPath)}.pige-restore.json`
+    );
+
+    await expect(service.applyRestore(input)).rejects.toBe(cancellation);
+    expect(fs.existsSync(destinationPath)).toBe(false);
+    expect(fs.existsSync(sidecarPath)).toBe(false);
+    expect(fs.readdirSync(restoreParent).filter((entry) => entry.startsWith(".pige-restore-"))).toEqual([]);
   });
 
   it("validates and adopts an exact cleanly committed destination without rewriting it", async () => {
@@ -2529,6 +2557,7 @@ interface RestoreTestOverrides {
   readonly resultVaultId?: string;
   readonly destinationPath?: string;
   readonly onPhase?: RestoreCoreApplyInput["onPhase"];
+  readonly signal?: AbortSignal;
 }
 
 async function applyTestRestore(
@@ -2567,7 +2596,8 @@ function createTestRestoreInput(
     ),
     destinationIdentity: createRestoreDestinationIdentity(destinationPath, pathSafety),
     pathSafety,
-    ...(overrides.onPhase ? { onPhase: overrides.onPhase } : {})
+    ...(overrides.onPhase ? { onPhase: overrides.onPhase } : {}),
+    ...(overrides.signal ? { signal: overrides.signal } : {})
   };
 }
 

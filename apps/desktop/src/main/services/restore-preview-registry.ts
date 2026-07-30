@@ -100,6 +100,15 @@ export class RestorePreviewRegistry {
     return this.#states.get(senderId) === preview;
   }
 
+  isApplying(
+    senderId: number,
+    request: { readonly previewId: string; readonly mode: RestoreIdentityMode }
+  ): boolean {
+    const current = this.#states.get(senderId);
+    return isApplyingRestorePreview(current) &&
+      current.previewId === request.previewId && current.mode === request.mode;
+  }
+
   release(senderId: number, preview: ApplyingRestorePreview): void {
     if (this.isCurrent(senderId, preview)) this.#states.set(senderId, preview.readyIdentity);
   }

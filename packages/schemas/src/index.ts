@@ -4276,6 +4276,19 @@ export const BackupContinueIncompleteResultSchema = BackupContinueIncompleteRequ
   status: z.enum(["continued", "cancelled", "stale", "not_found", "ineligible", "failed"])
 }).strict();
 
+export const RESTORE_CANCEL_CHANNEL = "restore.cancel" as const;
+export const RestoreCancelRequestIdSchema = z.string()
+  .regex(/^restorecancelreq_[a-z0-9]{8,64}$/);
+export const RestoreCancelRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: RestoreCancelRequestIdSchema,
+  previewId: z.string().min(1).max(256),
+  mode: z.enum(["clone_as_new", "replace_existing"])
+}).strict();
+export const RestoreCancelResultSchema = RestoreCancelRequestSchema.extend({
+  status: z.enum(["cancel_requested", "cancelled", "too_late", "stale", "not_found", "failed"])
+}).strict();
+
 export const ExternalManagedCopyRootBindingSchema = z.object({
   rootId: RootBindingIdSchema,
   vaultId: VaultIdSchema,
@@ -9298,6 +9311,9 @@ export type BackupReconnectDestinationResult = z.infer<typeof BackupReconnectDes
 export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
 export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
 export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;
+export type RestoreCancelRequestId = z.infer<typeof RestoreCancelRequestIdSchema>;
+export type RestoreCancelRequest = z.infer<typeof RestoreCancelRequestSchema>;
+export type RestoreCancelResult = z.infer<typeof RestoreCancelResultSchema>;
 export type ReferencedOriginalReconnectRequestId = z.infer<typeof ReferencedOriginalReconnectRequestIdSchema>;
 export type ReferencedOriginalReconnectRequest = z.infer<typeof ReferencedOriginalReconnectRequestSchema>;
 export type ReferencedOriginalReconnectJobProjection = z.infer<

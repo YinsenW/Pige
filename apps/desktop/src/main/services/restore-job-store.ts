@@ -17,6 +17,7 @@ import {
 } from "@pige/schemas";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
+import { requestRestoreJobCancellation, settleRestoreJobCancellation } from "./restore-job-cancellation";
 import { acquireVaultWriterLease, type VaultWriterLease } from "./vault-writer-lease";
 
 export const RESTORE_CHECKPOINT_IDS = [
@@ -300,6 +301,8 @@ export class RestoreJobStore {
     assertRestoreApplyState(snapshot.job);
     return snapshot;
   }
+  requestCancellation(snapshot: JobRecordSnapshot): JobRecordSnapshot { return requestRestoreJobCancellation(this.#coordinator(), snapshot); }
+  settleCancellation(snapshot: JobRecordSnapshot): JobRecordSnapshot { return settleRestoreJobCancellation(this.#coordinator(), snapshot); }
 
   recoverInterrupted(snapshot: JobRecordSnapshot): JobRecordSnapshot {
     if (snapshot.job.state !== "running" && snapshot.job.state !== "cancel_requested") return snapshot;

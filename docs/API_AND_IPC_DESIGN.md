@@ -878,29 +878,12 @@ Commands:
 - `backup.reconnectDependency`
 - `restore.preview`
 - `restore.apply`
+- `restore.cancel`
 
-Current typed bridge:
-
-```ts
-type RestoreApplyRequest = {
-  previewId: string;
-  mode: "replace_existing" | "clone_as_new";
-};
-type RestoreApplyResult =
-  | { status: "restored"; jobId: string }
-  | { status: "canceled" };
-
-type BackupReconnectDependencyRequest = {
-  apiVersion: 1; requestId: string; activeVaultId: string; waitingJobId: string;
-};
-type BackupReconnectDependencyResult = BackupReconnectDependencyRequest & {
-  status: "resolved" | "cancelled" | "stale" | "not_found" | "failed";
-};
-```
-
-`BackupReconnectDependencyRequestSchema` and
-`BackupReconnectDependencyResultSchema` in `@pige/schemas` are the canonical strict
-runtime owner; contracts export their inferred types rather than restating them.
+`RestoreApplyRequest` binds preview plus `replace_existing | clone_as_new`; its result is
+`restored` with Job ID or `canceled`. `BackupReconnectDependencyRequestSchema` binds
+API/request/vault/waiting Job; its result is `resolved | cancelled | stale | not_found |
+failed`. `@pige/schemas` owns strict runtime shapes and contracts export inferred types.
 
 Rules:
 
@@ -924,11 +907,13 @@ Rules:
   legacy input and dependency counts without raw detail. Apply requires that ID plus
   `replace_existing` (preserve vault ID) or `clone_as_new` (mint ID/lineage), one replay-safe
   lease, descriptor reread and owned staging; a folder is not a mode.
-- Main owns picker and replace confirmation. Apply returns only cancel or its machine-local
-  Restore Job ID; its vault-scoped `restore_applied` Operation links by ID and renderer
-  refreshes normal state. Data Architecture owns no-replace/manifest-last/rollback rules;
+- Main owns picker/replace confirmation. Apply returns cancel or machine-local Restore Job ID;
+  its `restore_applied` Operation links by ID. Cancel binds preview/mode/in-flight owner and
+  returns `cancel_requested | cancelled | too_late | stale | not_found | failed`; committed
+  output wins. Results expose no path, body, Job internals or raw error. Data Architecture owns
+  no-replace/manifest-last/rollback rules;
   migration breadth, cross-file atomicity, final syscall TOCTOU and platform proof remain open.
-- The coherent five-channel block moves from `main/index.ts` to
+- The coherent six-channel block moves from `main/index.ts` to
   `apps/desktop/src/main/register-backup-restore-ipc.ts`; Main remains composition root,
   protected contract scanning includes the registrar, and behavior otherwise stays fixed.
 

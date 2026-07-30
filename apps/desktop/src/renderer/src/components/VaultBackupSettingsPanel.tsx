@@ -16,7 +16,7 @@ import {
 } from "./BackupDestinationReconnectAction";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
-type RestorePhase = "idle" | "previewing" | "applying";
+type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
 
 function restoreWarningMessageKey(code: RestorePreviewWarning["code"]): string {
   switch (code) {
@@ -38,6 +38,8 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
   const [restorePhase, setRestorePhase] = useState<RestorePhase>("idle");
   const [restoreErrorKey, setRestoreErrorKey] = useState<string | null>(null);
   const restoreInFlight = useRef(false);
+  const cancelInFlight = useRef(false);
+  const activeRestoreIdentity = useRef<{ readonly previewId: string; readonly mode: RestoreMode } | null>(null);
   const pendingRestoreFocus = useRef<RefObject<HTMLButtonElement | null> | null>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const applyButtonRef = useRef<HTMLButtonElement>(null);
@@ -96,13 +98,14 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
     onRestoreStart();
     setRestoreErrorKey(null);
     setRestorePhase("applying");
+    const identity = { previewId: restorePreview.previewId, mode: restoreMode } as const;
+    activeRestoreIdentity.current = identity;
     try {
-      const result = await window.pige.backup.applyRestore({
-        previewId: restorePreview.previewId,
-        mode: restoreMode
-      });
+      const result = await window.pige.backup.applyRestore(identity);
       if (result.status === "canceled") {
-        restoreFocus(applyButtonRef);
+        setRestorePreview(null);
+        setRestoreMode(null);
+        restoreFocus(previewButtonRef);
         return;
       }
       setRestorePreview(null);
@@ -112,13 +115,41 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
       setRestoreErrorKey("backup.restoreFailed");
       restoreFocus(restorePreview ? applyButtonRef : previewButtonRef);
     } finally {
+      if (activeRestoreIdentity.current === identity) activeRestoreIdentity.current = null;
       restoreInFlight.current = false;
       setRestorePhase("idle");
       commitRestoreFocus();
     }
   };
 
-  const cancelRestore = (): void => {
+  const cancelRestore = async (): Promise<void> => {
+    const active = activeRestoreIdentity.current;
+    if (active && restoreInFlight.current) {
+      if (cancelInFlight.current) return;
+      cancelInFlight.current = true;
+      setRestoreErrorKey(null);
+      setRestorePhase("cancelling");
+      try {
+        const result = await window.pige.backup.cancelRestore({
+          apiVersion: 1,
+          requestId: `restorecancelreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+          ...active
+        });
+        if (result.status === "too_late") {
+          setRestoreErrorKey("backup.restoreCancelTooLate");
+          setRestorePhase("finishing");
+        } else if (result.status !== "cancel_requested" && result.status !== "cancelled") {
+          setRestoreErrorKey("backup.restoreCancelFailed");
+          setRestorePhase("applying");
+        }
+      } catch {
+        setRestoreErrorKey("backup.restoreCancelFailed");
+        setRestorePhase("applying");
+      } finally {
+        cancelInFlight.current = false;
+      }
+      return;
+    }
     if (restoreInFlight.current) return;
     setRestorePreview(null);
     setRestoreMode(null);
@@ -162,6 +193,9 @@ export function RestorePreviewPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const applying = props.phase === "applying";
+  const cancelling = props.phase === "cancelling";
+  const finishing = props.phase === "finishing";
+  const restoreActive = applying || cancelling || finishing;
   const settingsVariant = props.variant === "settings";
   const applyDisabled = props.phase !== "idle" || props.mode === null ||
     props.preview.invalidFileCount > 0 || !props.preview.permittedModes.includes(props.mode);
@@ -272,19 +306,24 @@ export function RestorePreviewPanel(props: {
       {props.t("backup.replaceWarning")}
     </p> : settingsVariant ? <p className="settings-warning" role="note">{props.t("backup.restorePrivacyWarning")}</p> : null}
     {props.preview.invalidFileCount > 0 ? <p className="error" role="alert">{props.t("backup.restoreInvalid")}</p> : null}
-    {props.errorKey ? <p className="error" role="alert">{props.t(props.errorKey)}</p> : null}
-    {applying ? <p className="muted" role="status">{props.t("backup.restoreProgress")}</p> : null}
+    {props.errorKey ? <p
+      className={props.errorKey === "backup.restoreCancelTooLate" ? "muted" : "error"}
+      role={props.errorKey === "backup.restoreCancelTooLate" ? "status" : "alert"}
+    >{props.t(props.errorKey)}</p> : null}
+    {restoreActive ? <p className="muted" role="status">
+      {props.t(cancelling ? "backup.restoreStopping" : "backup.restoreProgress")}
+    </p> : null}
   </>;
   const actions = <div className={settingsVariant ? "settings-inline-actions restore-settings-actions" : "settings-actions"}>
-    {settingsVariant ? <button type="button" className="settings-button" disabled={props.phase !== "idle"} onClick={props.onCancel}>
-      {props.t("backup.restoreCancel")}
+    {settingsVariant ? <button type="button" className="settings-button" disabled={props.phase === "previewing" || cancelling || finishing} onClick={() => void props.onCancel()}>
+      {props.t(cancelling ? "backup.restoreStopping" : "backup.restoreCancel")}
     </button> : null}
     <button ref={props.applyButtonRef} type="button" className={settingsVariant ? "settings-button primary" : undefined}
       disabled={applyDisabled} onClick={() => void props.onApply()}>
-      {applying ? props.t("backup.restoring") : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
+      {restoreActive ? props.t("backup.restoring") : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
     </button>
-    {!settingsVariant ? <button type="button" className="secondary" disabled={props.phase !== "idle"} onClick={props.onCancel}>
-      {props.t("backup.restoreCancel")}
+    {!settingsVariant ? <button type="button" className="secondary" disabled={props.phase === "previewing" || cancelling || finishing} onClick={() => void props.onCancel()}>
+      {props.t(cancelling ? "backup.restoreStopping" : "backup.restoreCancel")}
     </button> : null}
   </div>;
 

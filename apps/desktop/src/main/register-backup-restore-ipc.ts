@@ -18,6 +18,8 @@ import type {
   BackupRestoreStatus,
   RestoreApplyRequest,
   RestoreApplyResult,
+  RestoreCancelRequest,
+  RestoreCancelResult,
   RestorePreviewResult,
   VaultSummary
 } from "@pige/contracts";
@@ -31,6 +33,9 @@ import {
   BackupReconnectDependencyResultSchema,
   BackupReconnectDestinationRequestSchema,
   BackupReconnectDestinationResultSchema,
+  RESTORE_CANCEL_CHANNEL,
+  RestoreCancelRequestSchema,
+  RestoreCancelResultSchema,
   type Locale
 } from "@pige/schemas";
 import type { BackupCoordinatorService } from "./services/backup-coordinator-service";
@@ -309,6 +314,16 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       else previews.release(senderId, accepted);
       throw caught;
     }
+  });
+  options.ipcMain.handle(RESTORE_CANCEL_CHANNEL, (
+    event,
+    request: RestoreCancelRequest
+  ): RestoreCancelResult => {
+    const parsed = RestoreCancelRequestSchema.parse(request);
+    const result = (status: RestoreCancelResult["status"]): RestoreCancelResult =>
+      RestoreCancelResultSchema.parse({ ...parsed, status });
+    if (!previews.isApplying(event.sender.id, parsed)) return result("stale");
+    return result(options.getRestoreCoordinator().cancel(parsed.previewId, parsed.mode));
   });
 }
 
