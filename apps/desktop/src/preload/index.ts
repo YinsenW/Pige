@@ -147,6 +147,8 @@ import type {
   NoteAddTagResult,
   NoteRenameRequest,
   NoteRenameResult,
+  NoteAliasChangeRequest,
+  NoteAliasChangeResult,
   NoteTrashCurrentRequest,
   NoteTrashCurrentResult,
   NoteTrashListRequest,
@@ -530,6 +532,9 @@ import {
   NOTE_RENAME_CHANNEL,
   NoteRenameRequestSchema,
   NoteRenameResultSchema,
+  NOTE_CHANGE_ALIAS_CHANNEL,
+  NoteAliasChangeRequestSchema,
+  NoteAliasChangeResultSchema,
   NOTE_TRASH_CURRENT_CHANNEL,
   NoteTrashCurrentRequestSchema,
   NoteTrashCurrentResultSchema,
@@ -1790,6 +1795,10 @@ const api: PigeDesktopApi = {
     rename: async (request: NoteRenameRequest): Promise<NoteRenameResult> =>
       NoteRenameResultSchema.parse(
         await ipcRenderer.invoke(NOTE_RENAME_CHANNEL, NoteRenameRequestSchema.parse(request))
+      ),
+    changeAlias: async (request: NoteAliasChangeRequest): Promise<NoteAliasChangeResult> =>
+      NoteAliasChangeResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_CHANGE_ALIAS_CHANNEL, NoteAliasChangeRequestSchema.parse(request))
       ),
     trashCurrent: async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> =>
       NoteTrashCurrentResultSchema.parse(

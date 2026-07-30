@@ -189,7 +189,7 @@ export class NotesService {
       throw new PigeDomainError("note_changed", "The Markdown page changed while it was rendered.");
     }
 
-    const hrefs = extractRenderedInternalHrefs(rendered.html), frontmatter = parsePigeFrontmatter(stable.markdown)?.frontmatter;
+    const hrefs = extractRenderedInternalHrefs(rendered.html), frontmatter = parsePigeFrontmatter(stable.markdown)?.frontmatter, rawAliases = frontmatter?.aliases ?? [], aliases = rawAliases.filter((alias, index) => alias.length > 0 && alias.length <= 120 && alias === alias.normalize("NFKC").replace(/\s+/gu, " ").trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) && Boolean(normalizeMarkdownPageReferenceKey(alias)) && rawAliases.findIndex((value) => normalizeMarkdownPageReferenceKey(value) === normalizeMarkdownPageReferenceKey(alias)) === index);
     const referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
     const renderContextId = ownerId === undefined
       ? undefined
@@ -227,7 +227,7 @@ export class NotesService {
               trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) }, renameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
-              historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) },
+              historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) }, ...(aliases.length === rawAliases.length && aliases.length <= 64 ? { aliasing: { aliases, canAdd: stable.document.summary.status === "active" && aliases.length < 64, canRemove: stable.document.summary.status === "active" && aliases.length > 0, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
               tagging: { tags: [...(frontmatter?.tags ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, revision: publicEditorRevision(stable.pageContentHash) }
             }
           : {})

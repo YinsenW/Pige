@@ -147,6 +147,8 @@ describe("notes service", () => {
     expect(rendered.tagging).toEqual({
       tags: ["draft"], canAdd: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u)
     });
+    expect(rendered.aliasing).toEqual({ aliases: [], canAdd: true, canRemove: false,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u) });
     const open = notes.openEditor(OWNER_ID, {
       apiVersion: 1,
       requestId: "noteeditreq_open1234",
@@ -174,6 +176,14 @@ describe("notes service", () => {
     expect(saved.render.summary.pageId).toBe(pageId);
     expect(saved.render.renderContextId).not.toBe(open.renderContextId);
     expect(operations).toEqual([saved.operationId]);
+  });
+
+  it("keeps malformed or duplicate aliases out of the mutation eligibility projection without breaking Reader", async () => {
+    const { vaultPath, vault } = makeVault(), pageId = "page_20260731_badaliases01";
+    writePage({ vaultPath, fileName: "bad-aliases.md", pageId, title: "Alias safety", aliases: [" Existing ", "existing"] });
+    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    expect(rendered.summary.pageId).toBe(pageId);
+    expect(rendered.aliasing).toBeUndefined();
   });
 
   it("keeps non-note pages out of editor sessions and reports page-type mutation explicitly", async () => {
