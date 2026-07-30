@@ -7,6 +7,8 @@ import type {
   AgentConversationResult,
   AgentConversationHistoryListRequest,
   AgentConversationHistoryListResult,
+  AgentConversationExportRequest,
+  AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
   ConversationTrashListRequest,
@@ -314,6 +316,9 @@ import {
   AgentConversationResultSchema,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  AGENT_CONVERSATION_EXPORT_CHANNEL,
+  AgentConversationExportRequestSchema,
+  AgentConversationExportResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
   ConversationTrashListRequestSchema,
@@ -1328,6 +1333,22 @@ const api: PigeDesktopApi = {
       const parsedRequest = AgentConversationHistoryListRequestSchema.parse(request);
       const result = await ipcRenderer.invoke("agent.conversationHistory", parsedRequest) as unknown;
       return AgentConversationHistoryListResultSchema.parse(result);
+    },
+    exportConversation: async (
+      request: AgentConversationExportRequest
+    ): Promise<AgentConversationExportResult> => {
+      const parsedRequest = AgentConversationExportRequestSchema.parse(request);
+      const result = AgentConversationExportResultSchema.parse(
+        await ipcRenderer.invoke(AGENT_CONVERSATION_EXPORT_CHANNEL, parsedRequest)
+      );
+      if (result.requestId !== parsedRequest.requestId ||
+          result.activeVaultId !== parsedRequest.activeVaultId ||
+          result.conversationId !== parsedRequest.conversationId ||
+          ((result.status === "exported" || result.status === "cancelled") &&
+            result.tailEventId !== parsedRequest.expectedTailEventId)) {
+        throw new Error("Invalid conversation export response identity.");
+      }
+      return result;
     },
     trashConversation: async (request: ConversationTrashRequest): Promise<ConversationTrashResult> => {
       const parsedRequest = ConversationTrashRequestSchema.parse(request);

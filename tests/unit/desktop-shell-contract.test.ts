@@ -580,6 +580,26 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).not.toContain("trashPath:");
   });
 
+  it("strictly bridges one pathless Main-owned durable conversation export", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-conversation-export-ipc.ts"),
+      "utf8"
+    );
+    expect(contractsSource).toContain("readonly exportConversation: (");
+    expect(contractsSource).toContain("request: AgentConversationExportRequest");
+    expect(contractsSource).toContain(") => Promise<AgentConversationExportResult>;");
+    expect(preloadSource).toContain("AgentConversationExportRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ipcRenderer.invoke(AGENT_CONVERSATION_EXPORT_CHANNEL, parsedRequest)");
+    expect(preloadSource).toContain("AgentConversationExportResultSchema.parse(");
+    expect(mainSource).toContain("registerConversationExportIpc({");
+    expect(mainSource).toContain("dialog.showSaveDialog(window, options)");
+    expect(registrarSource).not.toContain("outputPath:");
+    expect(registrarSource).not.toContain("filePath: selection.filePath");
+  });
+
   it("uses a CommonJS preload entry compatible with Electron sandboxed preload execution", () => {
     expect(PRELOAD_ENTRY_FILENAME).toBe("index.cjs");
 

@@ -460,14 +460,13 @@ Event types:
 
 Rules:
 
-- Normal short user and assistant messages are stored directly.
-- Trash moves exact JSONL to confined private storage and records revision/hash receipts.
-  Restore requires an unoccupied original identity/path; retry/restart adopts one Operation
-  without Provider replay. Renderer inventories expose previews/opaque IDs only.
-- Large pastes are one managed source; conversation/Job keep bounded ordered refs under
-  `resources/large-paste-boundary.manifest.json`, and retry reuses source IDs.
-- File refs carry ID/name/kind; bodies/paths/checksums remain in Source Records. Saved answers
-  live once as pages; unsaved text and safe citations may remain as events.
+- Short messages are stored directly. Large pastes remain one managed source with bounded ordered
+  refs under `resources/large-paste-boundary.manifest.json`; retry reuses source IDs.
+- Trash moves exact JSONL with revision/hash receipt; restore requires the free original identity
+  and restart adopts once without Provider replay. Public inventory is preview/opaque-ID only.
+- File refs carry ID/name/kind; bodies/paths/checksums stay in Source Records. Saved answers live once
+  as pages. Export rereads one tail into Main-selected reference-based JSON, excluding paths, source
+  bodies, secrets and model/tool internals.
 - Prompts/raw responses stay out. Selection stores strict presentation only; Jobs/proposals/
   Operations own review/apply, and restart neither refetches nor calls Provider.
 - Conversation records are not the knowledge source of truth; they are the activity history.

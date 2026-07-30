@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type {
   AgentConversationHistoryCursor,
   AgentConversationHistorySummary,
+  AgentConversationExportRequest,
   ConversationTrashSummary
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
@@ -35,11 +36,15 @@ export function ConversationHistoryPanel(props: {
   const [trashed, setTrashed] = useState<readonly ConversationTrashSummary[]>([]);
   const [pendingTrash, setPendingTrash] = useState<AgentConversationHistorySummary | null>(null);
   const [lifecycleNotice, setLifecycleNotice] = useState<"trashed" | "restored" | "failed" | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ readonly conversationId: string; readonly status: "exported" | "stale" | "not_found" | "failed" } | null>(null);
   const requestSequenceRef = useRef(0);
   const operationRef = useRef(false);
   const activeVaultIdRef = useRef(props.activeVaultId);
+  const historyRef = useRef(history);
   const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
+  historyRef.current = history;
 
   useEffect(() => {
     requestSequenceRef.current += 1;
@@ -52,6 +57,8 @@ export function ConversationHistoryPanel(props: {
     setTrashed([]);
     setPendingTrash(null);
     setLifecycleNotice(null);
+    setExportingId(null);
+    setExportNotice(null);
   }, [props.activeVaultId]);
 
   const loadHistory = async (cursor?: AgentConversationHistoryCursor): Promise<HistoryState | null> => {
@@ -132,6 +139,45 @@ export function ConversationHistoryPanel(props: {
       return;
     }
     await open(current.currentConversationId, "current", trigger);
+  };
+
+  const exportConversation = async (conversation: AgentConversationHistorySummary): Promise<void> => {
+    if (operationRef.current || props.disabled) return;
+    operationRef.current = true;
+    setExportingId(conversation.conversationId);
+    setExportNotice(null);
+    const sequence = ++requestSequenceRef.current;
+    const request: AgentConversationExportRequest = {
+      apiVersion: 1,
+      requestId: `conversation_export_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId: props.activeVaultId,
+      conversationId: conversation.conversationId,
+      expectedTailEventId: conversation.tailEventId
+    };
+    try {
+      const result = await window.pige.agent.exportConversation(request);
+      const current = historyRef.current.conversations.find(({ conversationId }) =>
+        conversationId === request.conversationId
+      );
+      if (sequence !== requestSequenceRef.current ||
+          activeVaultIdRef.current !== request.activeVaultId ||
+          current?.tailEventId !== request.expectedTailEventId ||
+          result.requestId !== request.requestId ||
+          result.activeVaultId !== request.activeVaultId ||
+          result.conversationId !== request.conversationId) return;
+      if (result.status !== "cancelled") {
+        setExportNotice({ conversationId: request.conversationId, status: result.status });
+      }
+    } catch {
+      if (sequence === requestSequenceRef.current && activeVaultIdRef.current === request.activeVaultId) {
+        setExportNotice({ conversationId: request.conversationId, status: "failed" });
+      }
+    } finally {
+      if (sequence === requestSequenceRef.current) {
+        operationRef.current = false;
+        setExportingId(null);
+      }
+    }
   };
 
   const loadTrash = async (): Promise<void> => {
@@ -266,21 +312,26 @@ export function ConversationHistoryPanel(props: {
       {expanded ? (
         <div className="settings-card" aria-label={props.t("conversation.history")}>
           {history.conversations.map((conversation) => (
-            <div className="conversation-history-row" key={conversation.conversationId}>
+            <div className="settings-row conversation-history-row" key={conversation.conversationId}>
               <button
                 type="button"
                 className="settings-row conversation-history-open"
                 aria-current={props.selectedConversationId === conversation.conversationId ? "true" : undefined}
-                disabled={props.disabled || loading}
+                disabled={props.disabled || loading || exportingId !== null}
                 onClick={(event) => void open(conversation.conversationId, "history", event.currentTarget)}
               >
                 <span><strong>{conversation.safePreview || props.t("conversation.previewUnavailable")}</strong><small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small></span>
               </button>
               {conversation.revision && props.selectedConversationId !== conversation.conversationId ? (
-                <button type="button" className="quiet-button" disabled={props.disabled || loading} onClick={() => { setPendingTrash(conversation); setLifecycleNotice(null); }}>
+                <button type="button" className="quiet-button" disabled={props.disabled || loading || exportingId !== null} onClick={() => { setPendingTrash(conversation); setLifecycleNotice(null); }}>
                   {props.t("conversation.moveToTrash")}
                 </button>
               ) : null}
+              <button type="button" className="quiet-button"
+                disabled={props.disabled || loading || exportingId !== null}
+                onClick={() => void exportConversation(conversation)}>
+                {props.t(exportingId === conversation.conversationId ? "conversation.exporting" : "conversation.export")}
+              </button>
             </div>
           ))}
           {pendingTrash ? (
@@ -292,6 +343,10 @@ export function ConversationHistoryPanel(props: {
               </div>
             </div>
           ) : null}
+          {exportNotice ? <p className={exportNotice.status === "exported" ? "settings-note" : "error"}
+            role={exportNotice.status === "exported" ? "status" : "alert"}>
+            {props.t(`conversation.export_${exportNotice.status}`)}
+          </p> : null}
           {!loading && history.conversations.length === 0 && !failed ? (
             <p className="settings-note">{props.t("conversation.historyEmpty")}</p>
           ) : null}

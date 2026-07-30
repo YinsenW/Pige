@@ -3962,7 +3962,9 @@ describe("Home durable Agent conversation UI", () => {
 
     await clickButton(dom, container, enMessages["conversation.history"]);
     await waitFor(dom, () => container.textContent?.includes("Show the older plan.") === true);
-    const historicalTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-conversation-history-panel] .settings-row"))
+    const historicalTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>(
+      "[data-conversation-history-panel] .settings-row > button:first-child"
+    ))
       .find((button) => button.textContent?.includes("Show the older plan."));
     if (!historicalTrigger) throw new Error("Historical conversation trigger not found.");
     await act(async () => {

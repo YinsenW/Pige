@@ -604,7 +604,8 @@ Reader save writes reversible `update_page`; merge binds one two-page receipt. R
 an integrity-checked private image and deterministic `restore_page`; retry/restart adopts once and
 Undo restores the displaced note. Drift preserves live bytes. Memory commits private receipts before
 `update_memory`/`trash_memory`; Undo/restart uses exact `restore_memory`. Conversation trash/restore
-binds JSONL hash/revision/receipt without Provider replay. Knowledge Health repair uses reversible
+binds JSONL hash/revision/receipt without Provider replay. Conversation export binds current tail,
+rereads before external write and creates no Job/Operation; failure leaves history intact. Knowledge Health repair uses reversible
 `update_page` bound to report/index/source/target/occurrence; restart adopts once.
 
 Rules:

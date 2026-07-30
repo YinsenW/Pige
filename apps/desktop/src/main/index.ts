@@ -165,6 +165,7 @@ import { registerSkillsIpc } from "./register-skills-ipc";
 import { registerPiPackagesIpc } from "./register-pi-packages-ipc";
 import { registerLocalCapabilitiesIpc } from "./register-local-capabilities-ipc";
 import { registerDiagnosticsIpc } from "./register-diagnostics-ipc";
+import { registerConversationExportIpc } from "./register-conversation-export-ipc";
 import { registerCurrentNoteAppendIpc } from "./register-current-note-append-ipc";
 import { registerCurrentNoteReplaceIpc } from "./register-current-note-replace-ipc";
 import {
@@ -237,6 +238,7 @@ import { ManagedCollectionService } from "./services/managed-collection-service"
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
+import { AgentConversationExportService } from "./services/agent-conversation-export-service";
 import { ConversationTrashService } from "./services/conversation-trash-service";
 import {
   HomeAgentService,
@@ -403,6 +405,7 @@ let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
+const agentConversationExportService = new AgentConversationExportService();
 let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
@@ -2371,6 +2374,18 @@ ipcMain.handle("speech.cancel", (event, request: SpeechCancelRequest) =>
   getSpeechService().cancel(event.sender.id, SpeechCancelRequestSchema.parse(request))
 );
 ipcMain.handle("speech.openSystemSettings", () => getSpeechService().openSystemSettings());
+registerConversationExportIpc({
+  ipcMain,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
+  getActiveVaultBinding: () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  },
+  exportConversation: (binding, request, destinationPath) =>
+    agentConversationExportService.export(binding, request, destinationPath)
+});
 ipcMain.handle("agent.runtimeStatus", () => getAgentRuntimeService().runtimeStatus());
 ipcMain.handle("agent.conversation", (_event, request?: AgentConversationRequest) => {
   const parsedRequest = AgentConversationRequestSchema.parse(request ?? {});
