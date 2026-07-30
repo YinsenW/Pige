@@ -134,6 +134,7 @@ describe("registerReaderIpc", () => {
       "notes.importMarkdown",
       "notes.merge",
       "notes.relate",
+      "notes.unrelate",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",

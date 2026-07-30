@@ -3683,6 +3683,7 @@ export function LibraryPanel(props: {
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote}
+          {...(props.onCurrentNoteRelated ? { onRelatedChanged: props.onCurrentNoteRelated } : {})}
           {...(props.onOpenSourceReference ? { onOpenSourceReference: props.onOpenSourceReference } : {})}
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           {...(props.onReconnectOriginalSource ? {
@@ -6679,6 +6680,7 @@ function HomeComposer(props: {
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}
                 onOpenRelated={openResult}
+                onRelatedChanged={adoptMergedHomeNote}
                 {...(selectedNote.renderContextId ? { onActivateInlineReference: activateInlineReference } : {})}
                 onDevelopment={props.onDevelopment}
                 t={props.t}

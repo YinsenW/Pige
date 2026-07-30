@@ -30,6 +30,7 @@ import type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnrelateRequest,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -1994,6 +1995,41 @@ describe("full UI Library", () => {
     expect(adopted).toEqual([committedRender]);
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("confirms removal of one exact outgoing relation and adopts only the authoritative Reader", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const note = { ...readerNote(), trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const target = libraryList().pages.find((page) => page.pageType === "note" && page.pageId !== note.summary.pageId)!;
+    const requests: NoteUnrelateRequest[] = [];
+    const adopted: NoteRenderResult[] = [];
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: {
+      unrelate: async (request: NoteUnrelateRequest) => {
+        requests.push(request);
+        return { ...request, status: "committed" as const, operationId: "op_20260731_unrelate01", render: note };
+      }
+    } } });
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note, activeVaultId: "vault_20260715_fullui01",
+        related: { queriedAt: "2026-07-31T00:00:00.000Z", activeVaultId: "vault_20260715_fullui01",
+          pageId: note.summary.pageId, totalOutgoing: 1, totalBacklinks: 0, invalidPageCount: 0,
+          outgoing: [{ relation: "outgoing", target: target.pageId, summary: target }], backlinks: [], degraded: false },
+        relatedLoadingPageId: null, onOpenRelated: async () => undefined,
+        onRelatedChanged: (render) => adopted.push(render), onDevelopment: () => undefined, t,
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonNamed(container, "Remove"));
+    await clickButton(dom, buttonNamed(container, "Remove relation"));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ currentPageId: note.summary.pageId, targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt });
+    expect(adopted).toEqual([note]);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(container, "Remove"));
+    await act(async () => root.unmount()); dom.window.close();
   });
 
   it("renders one page title when Markdown repeats the exact frontmatter title", async () => {

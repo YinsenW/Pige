@@ -61,6 +61,31 @@ describe("NoteRelateService", () => {
     expect(render).toHaveBeenCalledWith({ pageId: request.currentPageId }, "reader_owner");
   });
 
+  it("removes one exact related_to edge and rejects an absent edge without mutation", async () => {
+    const vaultPath = createVault();
+    const save = vi.fn(() => ({
+      status: "committed" as const, requestId: "noteeditreq_internal",
+      activeVaultId: request.activeVaultId, pageId: request.currentPageId,
+      revisionId: `sha256:${"b".repeat(64)}`, renderIdentity: `sha256:${"c".repeat(64)}`,
+      operationId: "op_20260730_noteunrelate1",
+    }));
+    const service = new NoteRelateService({
+      resolveTrashTarget: vi.fn(() => readyCurrent(() => true)), render: vi.fn(async () => relatedRender()),
+    } as never, { open: vi.fn(() => openedCurrent([request.targetPageId])), save } as never, () => vaultPath);
+    const unrelateRequest = { ...request, requestId: "noteunrelatereq_abcdefghijklmnop" };
+    await expect(service.unrelate("reader_owner", unrelateRequest)).resolves.toMatchObject({
+      ...unrelateRequest, status: "committed", operationId: "op_20260730_noteunrelate1",
+    });
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ markdown: expect.stringContaining("related_page_ids: []") }));
+
+    const absent = new NoteRelateService({
+      resolveTrashTarget: vi.fn(() => readyCurrent(() => true)), render: vi.fn(),
+    } as never, { open: vi.fn(() => openedCurrent()), save: vi.fn() } as never, () => vaultPath);
+    await expect(absent.unrelate("reader_owner", unrelateRequest)).resolves.toEqual({
+      ...unrelateRequest, status: "ineligible",
+    });
+  });
+
   it("fails before mutation for target drift, self/duplicate edges, and current Reader drift", async () => {
     const vaultPath = createVault();
     const save = vi.fn();
@@ -86,10 +111,15 @@ describe("NoteRelateService", () => {
     await expect(staleCurrent.relate("reader_owner", request)).resolves.toEqual({ ...request, status: "stale" });
   });
 
-  it("commits one real update_page Activity and restores exact bytes through Undo", async () => {
+  it("removes through one real update_page Activity and restores exact bytes through Undo", async () => {
     const vaultPath = createVault();
     const sourcePath = path.join(vaultPath, "wiki", "source.md");
-    const before = noteMarkdown(request.currentPageId, "Source note", "2026-07-30T09:00:00.000Z");
+    const before = noteMarkdown(
+      request.currentPageId,
+      "Source note",
+      "2026-07-30T09:00:00.000Z",
+      [request.targetPageId],
+    );
     fs.writeFileSync(sourcePath, before, "utf8");
     const vaults = {
       current: () => ({
@@ -111,14 +141,15 @@ describe("NoteRelateService", () => {
     const service = new NoteRelateService(notes, editor, () => vaultPath,
       () => new Date("2026-07-30T11:00:00.000Z"));
 
-    const result = await service.relate(ownerId, {
+    const result = await service.unrelate(ownerId, {
       ...request,
+      requestId: "noteunrelatereq_undoabcdefghijk",
       renderContextId: rendered.renderContextId,
       expectedRevision,
     });
     expect(result.status).toBe("committed");
     if (result.status !== "committed") throw new Error("Expected relation commit.");
-    expect(fs.readFileSync(sourcePath, "utf8")).toContain(`related_page_ids: ["${request.targetPageId}"]`);
+    expect(fs.readFileSync(sourcePath, "utf8")).toContain("related_page_ids: []");
     const operation = readOperation(vaultPath, result.operationId);
     expect(activity.activitySummary(operation)).toMatchObject({ kind: "update_page", canUndo: true });
     expect(activity.undo(operation, operation.after?.id)).toMatchObject({ status: "undone" });

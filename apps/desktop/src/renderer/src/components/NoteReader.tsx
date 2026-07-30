@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
-  LibraryRelatedPage, LibraryRelatedResult,
+  LibraryRelatedResult,
   NoteOpenSourceReferenceRequest, NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest, NoteReconnectOriginalSourceResult,
   NoteRenderResult,
@@ -20,7 +20,8 @@ import type { Locale } from "@pige/schemas";
 import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } from "./ReaderInlineReferenceSurface";
 import { NoteReaderSourceActions, ReaderSourceRevealAction, readerSourceActionLabels } from "./ReaderSourceActions";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
-export type NoteRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
+import { NoteRelatedPanel, type NoteRelatedState } from "./NoteRelatedPanel";
+export type { NoteRelatedState } from "./NoteRelatedPanel";
 
 function readerSelectionEndpoint(
   reader: HTMLElement | null,
@@ -76,6 +77,7 @@ export function NoteReader(props: {
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
+  readonly onRelatedChanged?: (render: NoteRenderResult) => void;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -904,97 +906,14 @@ export function NoteReader(props: {
         </section>
       ) : null}
       <NoteRelatedPanel
+        note={props.note}
+        {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
         related={props.related}
         loadingPageId={props.relatedLoadingPageId}
         onOpen={props.onOpenRelated}
+        {...(props.onRelatedChanged ? { onCommitted: props.onRelatedChanged } : {})}
         t={props.t}
       />
     </article>
-  );
-}
-
-function NoteRelatedPanel(props: {
-  readonly related: NoteRelatedState;
-  readonly loadingPageId: string | null;
-  readonly onOpen: (pageId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  if (props.related === "loading" || props.related === "unavailable") {
-    return (
-      <aside className="note-related" aria-label={props.t("note.related")}>
-        <h2>{props.t("note.related")}</h2>
-        <p className="related-empty">
-          {props.related === "loading" ? props.t("note.relatedLoading") : props.t("note.relatedUnavailable")}
-        </p>
-      </aside>
-    );
-  }
-
-  const outgoing = props.related?.outgoing ?? [];
-  const backlinks = props.related?.backlinks ?? [];
-  const total = (props.related?.totalOutgoing ?? 0) + (props.related?.totalBacklinks ?? 0);
-
-  if (!props.related || total === 0) {
-    return (
-      <aside className="note-related" aria-label={props.t("note.related")}>
-        <h2>{props.t("note.related")}</h2>
-        <p className="related-empty">{props.related?.degraded ? props.t("note.relatedUnavailable") : props.t("note.relatedEmpty")}</p>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="note-related" aria-label={props.t("note.related")}>
-      <h2>{props.t("note.related")}</h2>
-      <RelatedGroup
-        title={props.t("note.outgoingLinks")}
-        pages={outgoing}
-        loadingPageId={props.loadingPageId}
-        onOpen={props.onOpen}
-        t={props.t}
-      />
-      <RelatedGroup
-        title={props.t("note.backlinks")}
-        pages={backlinks}
-        loadingPageId={props.loadingPageId}
-        onOpen={props.onOpen}
-        t={props.t}
-      />
-    </aside>
-  );
-}
-
-function RelatedGroup(props: {
-  readonly title: string;
-  readonly pages: readonly LibraryRelatedPage[];
-  readonly loadingPageId: string | null;
-  readonly onOpen: (pageId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element | null {
-  if (props.pages.length === 0) return null;
-
-  return (
-    <section className="related-group">
-      <h3>{props.title}</h3>
-      <div className="related-list">
-        {props.pages.map((page) => (
-          <article className="related-row" key={`${page.relation}:${page.summary.pageId}`}>
-            <div>
-              <strong>{page.summary.title}</strong>
-              <span>{page.target || page.summary.pagePath}</span>
-            </div>
-            <button
-              type="button"
-              className="ghost"
-              aria-label={`${props.t("note.open")}: ${page.summary.title}`}
-              disabled={props.loadingPageId === page.summary.pageId}
-              onClick={() => void props.onOpen(page.summary.pageId)}
-            >
-              {props.loadingPageId === page.summary.pageId ? props.t("note.opening") : props.t("note.open")}
-            </button>
-          </article>
-        ))}
-      </div>
-    </section>
   );
 }

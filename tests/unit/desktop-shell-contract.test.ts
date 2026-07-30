@@ -258,6 +258,10 @@ describe("desktop shell build contract", () => {
     expect(notesApi).toContain("readonly relate: (request: NoteRelateRequest) => Promise<NoteRelateResult>;");
     expect(preloadSource).toContain("NoteRelateRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteRelateResultSchema.parse(");
+    expect(relationSchemas).toContain('NOTE_UNRELATE_CHANNEL = "notes.unrelate"');
+    expect(notesApi).toContain("readonly unrelate: (request: NoteUnrelateRequest) => Promise<NoteUnrelateResult>;");
+    expect(preloadSource).toContain("NoteUnrelateRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteUnrelateResultSchema.parse(");
     for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "relationType"]) {
       expect(relationSchemas).not.toContain(privateField);
     }

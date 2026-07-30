@@ -143,6 +143,8 @@ import type {
   NoteMergeResult,
   NoteRelateRequest,
   NoteRelateResult,
+  NoteUnrelateRequest,
+  NoteUnrelateResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
   NoteArchiveCurrentRequest,
@@ -557,6 +559,9 @@ import {
   NOTE_RELATE_CHANNEL,
   NoteRelateRequestSchema,
   NoteRelateResultSchema,
+  NOTE_UNRELATE_CHANNEL,
+  NoteUnrelateRequestSchema,
+  NoteUnrelateResultSchema,
   NOTE_IMPORT_MARKDOWN_CHANNEL,
   NoteImportMarkdownRequestSchema,
   NoteImportMarkdownResultSchema,
@@ -1887,6 +1892,10 @@ const api: PigeDesktopApi = {
     relate: async (request: NoteRelateRequest): Promise<NoteRelateResult> =>
       NoteRelateResultSchema.parse(
         await ipcRenderer.invoke(NOTE_RELATE_CHANNEL, NoteRelateRequestSchema.parse(request))
+      ),
+    unrelate: async (request: NoteUnrelateRequest): Promise<NoteUnrelateResult> =>
+      NoteUnrelateResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_UNRELATE_CHANNEL, NoteUnrelateRequestSchema.parse(request))
       ),
     importMarkdown: async (request: NoteImportMarkdownRequest): Promise<NoteImportMarkdownResult> =>
       NoteImportMarkdownResultSchema.parse(

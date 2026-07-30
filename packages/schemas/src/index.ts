@@ -2161,6 +2161,23 @@ export const NoteRelateResultSchema = z.discriminatedUnion("status", [
   )
 ]);
 
+export const NOTE_UNRELATE_CHANNEL = "notes.unrelate" as const;
+export const NoteUnrelateRequestIdSchema = z.string().regex(/^noteunrelatereq_[a-z0-9]{16,64}$/u);
+export const NoteUnrelateRequestSchema = NoteRelateRequestSchema.safeExtend({
+  requestId: NoteUnrelateRequestIdSchema
+}).strict();
+const NoteUnrelateResultIdentitySchema = NoteUnrelateRequestSchema;
+export const NoteUnrelateResultSchema = z.discriminatedUnion("status", [
+  NoteUnrelateResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteUnrelateResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+
 export const KNOWLEDGE_HEALTH_MAX_TARGET_CANDIDATES = 20;
 const KnowledgeHealthRepairProofFields = {
   apiVersion: z.literal(1),
@@ -10512,6 +10529,9 @@ export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;
 export type NoteRelateRequestId = z.infer<typeof NoteRelateRequestIdSchema>;
 export type NoteRelateRequest = z.infer<typeof NoteRelateRequestSchema>;
 export type NoteRelateResult = z.infer<typeof NoteRelateResultSchema>;
+export type NoteUnrelateRequestId = z.infer<typeof NoteUnrelateRequestIdSchema>;
+export type NoteUnrelateRequest = z.infer<typeof NoteUnrelateRequestSchema>;
+export type NoteUnrelateResult = z.infer<typeof NoteUnrelateResultSchema>;
 export type NoteResolveInlineReferenceRequest = z.infer<typeof NoteResolveInlineReferenceRequestSchema>;
 export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineReferenceResultSchema>;
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;

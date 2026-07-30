@@ -3,6 +3,8 @@ import type {
   NoteRelateRequest,
   NoteRelateResult,
   NoteRenderResult,
+  NoteUnrelateRequest,
+  NoteUnrelateResult,
 } from "@pige/contracts";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { PageIdSchema } from "@pige/schemas";
@@ -36,6 +38,20 @@ export class NoteRelateService {
   }
 
   async relate(ownerId: string, request: NoteRelateRequest): Promise<NoteRelateResult> {
+    return this.#mutate(ownerId, request, "add");
+  }
+
+  async unrelate(ownerId: string, request: NoteUnrelateRequest): Promise<NoteUnrelateResult> {
+    return this.#mutate(ownerId, request, "remove");
+  }
+
+  async #mutate(ownerId: string, request: NoteRelateRequest, mode: "add"): Promise<NoteRelateResult>;
+  async #mutate(ownerId: string, request: NoteUnrelateRequest, mode: "remove"): Promise<NoteUnrelateResult>;
+  async #mutate(
+    ownerId: string,
+    request: NoteRelateRequest | NoteUnrelateRequest,
+    mode: "add" | "remove",
+  ): Promise<NoteRelateResult | NoteUnrelateResult> {
     const current = this.#targets.resolveTrashTarget(ownerId, {
       activeVaultId: request.activeVaultId,
       pageId: request.currentPageId,
@@ -53,7 +69,7 @@ export class NoteRelateService {
     if (opened.revisionId !== current.pageContentHash || !current.assertCurrent() || !target.assertCurrent()) {
       return closed(request, "stale");
     }
-    const markdown = relateMarkdown(opened.markdown, request.targetPageId, this.#now().toISOString());
+    const markdown = relateMarkdown(opened.markdown, request.targetPageId, this.#now().toISOString(), mode);
     if (!markdown) return closed(request, "ineligible");
     const saved = this.#editor.save({
       requestId: internalRequestId(request.requestId),
@@ -110,19 +126,22 @@ function readTarget(vaultPath: string, pageId: string, expectedUpdatedAt: string
   };
 }
 
-function relateMarkdown(markdown: string, targetPageId: string, now: string): string | undefined {
+function relateMarkdown(markdown: string, targetPageId: string, now: string, mode: "add" | "remove"): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
   if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
   const related = readInlinePageIds(parsed.raw);
-  if (!Array.isArray(related) || related.length >= 64 || related.includes(targetPageId) ||
-      related.some((pageId) => !PageIdSchema.safeParse(pageId).success)) return undefined;
+  if (!Array.isArray(related) || related.some((pageId) => !PageIdSchema.safeParse(pageId).success)) return undefined;
+  const hasTarget = related.includes(targetPageId);
+  if ((mode === "add" && (related.length >= 64 || hasTarget)) || (mode === "remove" && !hasTarget)) return undefined;
   const updatedAt = monotonicTimestamp(String(parsed.frontmatter.updated_at ?? ""), now);
   const relatedMatches = [...parsed.raw.matchAll(/^related_page_ids:[^\r\n]*$/gmu)];
   const updatedMatches = [...parsed.raw.matchAll(/^updated_at:[^\r\n]*$/gmu)];
   const rawStart = markdown.indexOf(parsed.raw);
   if (relatedMatches.length !== 1 || updatedMatches.length !== 1 || rawStart < 0) return undefined;
   const nextRaw = parsed.raw
-    .replace(/^related_page_ids:[^\r\n]*$/mu, `related_page_ids: ${JSON.stringify([...related, targetPageId])}`)
+    .replace(/^related_page_ids:[^\r\n]*$/mu, `related_page_ids: ${JSON.stringify(mode === "add"
+      ? [...related, targetPageId]
+      : related.filter((pageId) => pageId !== targetPageId))}`)
     .replace(/^updated_at:[^\r\n]*$/mu, `updated_at: ${JSON.stringify(updatedAt)}`);
   return `${markdown.slice(0, rawStart)}${nextRaw}${markdown.slice(rawStart + parsed.raw.length)}`;
 }
@@ -153,6 +172,9 @@ function mapSaveStatus(status: "stale" | "not_found" | "invalid" | "failed"): "s
   return status === "invalid" ? "ineligible" : status;
 }
 
-function closed(request: NoteRelateRequest, status: Exclude<NoteRelateResult["status"], "committed">): NoteRelateResult {
+function closed(
+  request: NoteRelateRequest | NoteUnrelateRequest,
+  status: Exclude<NoteRelateResult["status"], "committed">
+): NoteRelateResult | NoteUnrelateResult {
   return { ...request, status };
 }
