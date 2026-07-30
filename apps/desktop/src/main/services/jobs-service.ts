@@ -134,6 +134,7 @@ import {
   type ReaderSelectionJobScope
 } from "./reader-selection-job-binding";
 import type { AgentSourceToolExecutionPort } from "./agent-source-tool-execution";
+import { canReconnectBackupDestination } from "./backup-destination-reconnect-service";
 
 type JobRecordFile = JobRecordSnapshot;
 
@@ -4127,6 +4128,7 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     ...(sourceRecord ? { sourceDisplayName: sourceRecord.original?.displayName ?? sourceRecord.kind } : {}),
     ...(backupKind ? { backupKind } : {}),
     canReconnectDependency: canReconnectDependency(job),
+    canReconnectBackupDestination: canReconnectBackupDestination(job),
     canContinueIncomplete: canContinueIncomplete(job),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,

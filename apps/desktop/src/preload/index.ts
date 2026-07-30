@@ -20,6 +20,8 @@ import type {
   BackupCreateResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupReconnectDestinationRequest,
+  BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
   BackupReconnectDependencyResult,
   AppearanceSettingsSummary,
@@ -263,6 +265,9 @@ import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
+  BACKUP_RECONNECT_DESTINATION_CHANNEL,
+  BackupReconnectDestinationRequestSchema,
+  BackupReconnectDestinationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -1816,6 +1821,23 @@ const api: PigeDesktopApi = {
       return BackupReconnectDependencyResultSchema.parse(
         await ipcRenderer.invoke("backup.reconnectDependency", parsedRequest)
       );
+    },
+    reconnectDestination: async (
+      request: BackupReconnectDestinationRequest
+    ): Promise<BackupReconnectDestinationResult> => {
+      const parsedRequest = BackupReconnectDestinationRequestSchema.parse(request);
+      const result = BackupReconnectDestinationResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_RECONNECT_DESTINATION_CHANNEL, parsedRequest)
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.waitingJobId !== parsedRequest.waitingJobId ||
+        result.expectedJobUpdatedAt !== parsedRequest.expectedJobUpdatedAt
+      ) {
+        throw new Error("Invalid Backup destination reconnect response identity.");
+      }
+      return result;
     },
     continueIncomplete: async (
       request: BackupContinueIncompleteRequest

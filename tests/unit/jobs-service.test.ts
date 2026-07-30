@@ -11,6 +11,7 @@ import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/mai
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
+import { backupDestinationDependency } from "../../apps/desktop/src/main/services/backup-destination-reconnect-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
@@ -280,7 +281,10 @@ describe("jobs service", () => {
       createdAt: "2026-07-10T01:00:00.000Z",
       updatedAt: "2026-07-10T01:02:00.000Z",
       activeVaultId: vault.vaultId,
-      inputRefs: [{ kind: "external_uri", path: "/private/hidden-wait.zip", role: "backup_destination" }],
+      inputRefs: [
+        { kind: "external_uri", path: "/private/hidden-wait.pige-backup.zip", role: "backup_destination" },
+        { kind: "backup", id: "backup_20260710_hiddenwait01", role: "backup_identity" }
+      ],
       outputRefs: [],
       message: "A body-free Backup wait."
     } as const;
@@ -303,6 +307,19 @@ describe("jobs service", () => {
         messageKey: "errors.model_provider.missing"
       }
     }));
+    const destinationWaitingBase = JobRecordSchema.parse({
+      ...waitingBase,
+      id: "job_20260710_backupdest1",
+      waitingDependency: {
+        dependencyKind: "model_provider",
+        requiredAction: "configure_model",
+        messageKey: "errors.model_provider.missing"
+      }
+    });
+    writeJob(vaultPath, JobRecordSchema.parse({
+      ...destinationWaitingBase,
+      waitingDependency: backupDestinationDependency(destinationWaitingBase)
+    }));
 
     const summaries = jobs.list({ classes: ["backup"], limit: 10 }).jobs;
 
@@ -310,10 +327,14 @@ describe("jobs service", () => {
       ["job_20260710_backupuser1", "user_backup"],
       ["job_20260710_backuproll1", "restore_rollback"],
       ["job_20260710_backupwait1", "user_backup"],
+      ["job_20260710_backupdest1", "user_backup"],
       ["job_20260710_backupother1", "user_backup"]
     ]));
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canReconnectDependency).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canContinueIncomplete).toBe(true);
+    expect(summaries.find((job) => job.id === "job_20260710_backupdest1")?.canReconnectBackupDestination).toBe(true);
+    expect(summaries.filter((job) => job.id !== "job_20260710_backupdest1")
+      .every((job) => job.canReconnectBackupDestination === false)).toBe(true);
     expect(summaries.filter((job) => job.id !== "job_20260710_backupwait1")
       .every((job) => job.canReconnectDependency === false)).toBe(true);
     expect(summaries.filter((job) => job.id !== "job_20260710_backupwait1")

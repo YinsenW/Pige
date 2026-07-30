@@ -10,6 +10,8 @@ import {
   AppearanceThemeMutationResultSchema,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
+  BackupReconnectDestinationRequestSchema,
+  BackupReconnectDestinationResultSchema,
   BackupReconnectDependencyRequestSchema,
   BackupReconnectDependencyResultSchema,
   ReferencedOriginalReconnectRequestSchema,
@@ -3200,6 +3202,38 @@ describe("schemas", () => {
       ...request,
       status: "failed",
       path: "/private/source-root",
+      error: { code: "raw" }
+    })).toThrow();
+  });
+
+  it("keeps Backup destination reconnect currentness-bound and pathless", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "backupdestinationreconnectreq_abcdefgh",
+      activeVaultId: "vault_20260709_abcdefgh",
+      waitingJobId: "job_20260709_abcdefgh",
+      expectedJobUpdatedAt: "2026-07-30T01:02:03.000Z"
+    } as const;
+    expect(BackupReconnectDestinationRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["path", "absolutePath", "rootId", "sourceId", "body", "rawError"] as const) {
+      expect(() => BackupReconnectDestinationRequestSchema.parse({ ...request, [privateField]: "private" }))
+        .toThrow();
+    }
+    for (const status of [
+      "reconnected",
+      "cancelled",
+      "stale",
+      "not_found",
+      "ineligible",
+      "failed"
+    ] as const) {
+      expect(BackupReconnectDestinationResultSchema.parse({ ...request, status }))
+        .toEqual({ ...request, status });
+    }
+    expect(() => BackupReconnectDestinationResultSchema.parse({
+      ...request,
+      status: "failed",
+      path: "/private/backup-root",
       error: { code: "raw" }
     })).toThrow();
   });

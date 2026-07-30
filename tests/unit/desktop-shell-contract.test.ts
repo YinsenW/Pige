@@ -110,6 +110,33 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes one pathless currentness-bound Backup destination reconnect channel", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const backupApi = contractsSource.slice(
+      contractsSource.indexOf("readonly backup: {"),
+      contractsSource.indexOf("readonly system: {")
+    );
+
+    expect(schemasSource).toContain(
+      'BACKUP_RECONNECT_DESTINATION_CHANNEL = "backup.reconnectDestination"'
+    );
+    expect(schemasSource).toContain("BackupReconnectDestinationRequestSchema");
+    expect(schemasSource).toContain("expectedJobUpdatedAt: z.string().datetime({ offset: true })");
+    expect(schemasSource).toContain('"reconnected", "cancelled", "stale", "not_found", "ineligible", "failed"');
+    expect(contractsSource).toContain("readonly canReconnectBackupDestination: boolean;");
+    expect(backupApi).toContain("readonly reconnectDestination: (");
+    expect(backupApi).toContain("request: BackupReconnectDestinationRequest");
+    expect(backupApi).toContain(") => Promise<BackupReconnectDestinationResult>;");
+    expect(preloadSource).toContain("BackupReconnectDestinationRequestSchema.parse(request)");
+    expect(preloadSource).toContain("BACKUP_RECONNECT_DESTINATION_CHANNEL");
+    expect(preloadSource).toContain("Invalid Backup destination reconnect response identity.");
+    for (const privateField of ["path", "absolutePath", "rootId", "sourceId", "body", "rawError"]) {
+      expect(backupApi).not.toContain(privateField);
+    }
+  });
+
   it("freezes one pathless currentness-bound referenced-original reconnect channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

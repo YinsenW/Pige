@@ -3747,6 +3747,20 @@ export const BackupReconnectDependencyResultSchema = z.object({
   status: z.enum(["resolved", "cancelled", "stale", "not_found", "failed"])
 }).strict();
 
+export const BACKUP_RECONNECT_DESTINATION_CHANNEL = "backup.reconnectDestination" as const;
+export const BackupReconnectDestinationRequestIdSchema = z.string()
+  .regex(/^backupdestinationreconnectreq_[a-z0-9]{8,64}$/);
+export const BackupReconnectDestinationRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupReconnectDestinationRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  waitingJobId: JobIdSchema,
+  expectedJobUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const BackupReconnectDestinationResultSchema = BackupReconnectDestinationRequestSchema.extend({
+  status: z.enum(["reconnected", "cancelled", "stale", "not_found", "ineligible", "failed"])
+}).strict();
+
 export const BACKUP_CONTINUE_INCOMPLETE_CHANNEL = "backup.continueIncomplete" as const;
 export const BackupContinueIncompleteRequestIdSchema = z.string()
   .regex(/^backupcontinuereq_[a-z0-9]{8,64}$/);
@@ -7235,7 +7249,8 @@ export const WaitingDependencySummarySchema = z.object({
     "local_model",
     "runtime_capability",
     "vault_binding",
-    "external_source"
+    "external_source",
+    "external_destination"
   ]),
   dependencyId: z.string().min(1).optional(),
   requiredAction: z.enum([
@@ -8179,6 +8194,9 @@ export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;
 export type BackupReconnectDependencyResult = z.infer<typeof BackupReconnectDependencyResultSchema>;
+export type BackupReconnectDestinationRequestId = z.infer<typeof BackupReconnectDestinationRequestIdSchema>;
+export type BackupReconnectDestinationRequest = z.infer<typeof BackupReconnectDestinationRequestSchema>;
+export type BackupReconnectDestinationResult = z.infer<typeof BackupReconnectDestinationResultSchema>;
 export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
 export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
 export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;
