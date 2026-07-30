@@ -14,6 +14,13 @@ const continueRequest = {
   waitingJobId: request.waitingJobId,
   expectedJobUpdatedAt: "2026-07-26T00:00:00.000Z"
 } as const;
+const destinationRequest = {
+  apiVersion: 1,
+  requestId: "backupdestinationreconnectreq_abcdefgh",
+  activeVaultId: request.activeVaultId,
+  waitingJobId: request.waitingJobId,
+  expectedJobUpdatedAt: "2026-07-26T00:00:00.000Z"
+} as const;
 
 describe("registerBackupRestoreIpc", () => {
   it("returns only the strict resolved identity after Main-owned repair and same-Job resume", async () => {
@@ -47,6 +54,39 @@ describe("registerBackupRestoreIpc", () => {
       .rejects.toThrow();
     await expect(handler({ sender: sender() }, request)).resolves.toEqual({ ...request, status: "cancelled" });
     expect(reconnectDependency).not.toHaveBeenCalled();
+  });
+
+  it("rechecks destination currentness after the Main picker and resumes only the exact same Job", async () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    const reconnectDestination = vi.fn(() => "reconnected" as const);
+    let inspections = 0;
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      reconnectDestination,
+      inspectDestinationReconnectCandidate: () => ++inspections === 1
+        ? { status: "ready", candidate: destinationCandidate }
+        : { status: "stale" },
+      showOpenDialog: async () => ({ canceled: false, filePaths: ["/private/main-only-backup-root"] })
+    });
+
+    await expect(handlers.get("backup.reconnectDestination")?.(
+      { sender: sender() },
+      destinationRequest
+    )).resolves.toEqual({ ...destinationRequest, status: "stale" });
+    expect(reconnectDestination).not.toHaveBeenCalled();
+
+    inspections = 0;
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      reconnectDestination,
+      inspectDestinationReconnectCandidate: () => ({ status: "ready", candidate: destinationCandidate }),
+      showOpenDialog: async () => ({ canceled: false, filePaths: ["/private/main-only-backup-root"] })
+    });
+    await expect(handlers.get("backup.reconnectDestination")?.(
+      { sender: sender() },
+      destinationRequest
+    )).resolves.toEqual({ ...destinationRequest, status: "reconnected" });
+    expect(reconnectDestination).toHaveBeenCalledWith(destinationCandidate, "/private/main-only-backup-root");
   });
 
   it("confirms and continues the exact same incomplete Backup Job without private authority", async () => {
@@ -108,6 +148,12 @@ const incompleteCandidate = {
   jobUpdatedAt: continueRequest.expectedJobUpdatedAt,
   rootId: "root_private"
 } as const;
+const destinationCandidate = {
+  jobId: destinationRequest.waitingJobId,
+  vaultId: destinationRequest.activeVaultId,
+  jobUpdatedAt: destinationRequest.expectedJobUpdatedAt,
+  dependencyId: "backup_destination:0123456789abcdef"
+} as const;
 
 function sender() {
   return { id: 7, once: vi.fn(), isDestroyed: () => false };
@@ -117,6 +163,8 @@ function register(
   handlers: Map<string, (...args: any[]) => unknown>,
   overrides: {
     readonly reconnectDependency: ReturnType<typeof vi.fn>;
+    readonly reconnectDestination?: ReturnType<typeof vi.fn>;
+    readonly inspectDestinationReconnectCandidate?: () => unknown;
     readonly continueIncomplete?: ReturnType<typeof vi.fn>;
     readonly inspectIncompleteCandidate?: () => unknown;
     readonly showOpenDialog: () => Promise<{ readonly canceled: boolean; readonly filePaths: readonly string[] }>;
@@ -144,6 +192,11 @@ function register(
     getBackupCoordinator: () => ({
       inspectReconnectCandidate: () => ({ status: "ready", candidate }),
       reconnectDependency: overrides.reconnectDependency,
+      inspectDestinationReconnectCandidate: overrides.inspectDestinationReconnectCandidate ?? (() => ({
+        status: "ready",
+        candidate: destinationCandidate
+      })),
+      reconnectDestination: overrides.reconnectDestination ?? vi.fn(() => "reconnected" as const),
       inspectIncompleteCandidate: overrides.inspectIncompleteCandidate ?? (() => ({
         status: "ready",
         candidate: incompleteCandidate

@@ -239,7 +239,7 @@ describe("BackupCoordinatorService", () => {
     expect(fs.existsSync(normalizeDestination(cancelled.destination))).toBe(false);
   });
 
-  it("fails closed when the destination ancestor changes after Job binding but before core execution", async () => {
+  it("reconnects an unavailable external destination and resumes the same Job after restart", async () => {
     const fixture = makeRealCoordinatorFixture("ancestorchange01");
     const destinationParent = path.dirname(normalizeDestination(fixture.destination));
     fs.mkdirSync(destinationParent, { recursive: true });
@@ -257,15 +257,59 @@ describe("BackupCoordinatorService", () => {
       }
     };
 
-    const job = await new BackupCoordinatorService({ ...fixture.options, backupService: swappingCore })
-      .create(fixture.destination);
+    const scheduled: Array<() => Promise<void>> = [];
+    const options = {
+      ...fixture.options,
+      backupService: swappingCore,
+      schedule: (task: () => Promise<void>) => { scheduled.push(task); }
+    };
+    const coordinator = new BackupCoordinatorService(options);
+    const job = await coordinator.create(fixture.destination);
 
     expect(job).toMatchObject({
-      state: "failed_final",
-      error: { code: "backup.destination_changed", retryable: false }
+      state: "waiting_dependency",
+      waitingDependency: {
+        dependencyKind: "external_destination",
+        requiredAction: "reconnect_path",
+        messageKey: "errors.backup.destination_reconnect_required"
+      }
     });
+    expect(JSON.stringify(job)).not.toContain(displacedParent);
     expect(fs.readdirSync(destinationParent)).toEqual([]);
     expect(listOperationFiles(fixture.vaultPath)).toEqual([]);
+
+    const vaultId = loadVaultSummary(fixture.vaultPath).vaultId;
+    const restartedWaiting = new BackupCoordinatorService(options);
+    expect(restartedWaiting.inspectDestinationReconnectCandidate(vaultId, job.id, "2026-07-14T00:00:00.000Z"))
+      .toEqual({ status: "stale" });
+    const inspected = restartedWaiting.inspectDestinationReconnectCandidate(vaultId, job.id, job.updatedAt);
+    expect(inspected.status).toBe("ready");
+    if (inspected.status !== "ready") throw new Error("Expected destination reconnect eligibility.");
+
+    expect(restartedWaiting.reconnectDestination(inspected.candidate, fixture.vaultPath)).toBe("failed");
+    expect(readJob(fixture.vaultPath, job.id)).toMatchObject({
+      id: job.id,
+      state: "waiting_dependency",
+      updatedAt: job.updatedAt
+    });
+
+    const replacementRoot = path.join(fixture.root, "replacement-backups");
+    fs.mkdirSync(replacementRoot);
+    expect(restartedWaiting.reconnectDestination(inspected.candidate, replacementRoot)).toBe("reconnected");
+    expect(readJob(fixture.vaultPath, job.id)).toMatchObject({ id: job.id, state: "queued" });
+    expect(scheduled).toHaveLength(1);
+
+    const restarted = new BackupCoordinatorService(options);
+    expect(await restarted.recoverInterrupted()).toEqual({ recovered: 1, failed: 0 });
+    const completed = readJob(fixture.vaultPath, job.id);
+    expect(completed).toMatchObject({ id: job.id, state: "completed" });
+    expect(completed.outputRefs?.find((ref) => ref.role === "backup_archive")?.path)
+      .toBe(path.join(fs.realpathSync.native(replacementRoot), path.basename(normalizeDestination(fixture.destination))));
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+
+    await scheduled[0]!();
+    expect(readJob(fixture.vaultPath, job.id)).toMatchObject({ id: job.id, state: "completed" });
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
   });
 
   it("terminalizes a corrupted checkpoint-bound final archive instead of retrying it on every startup", async () => {

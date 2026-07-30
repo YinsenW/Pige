@@ -7249,7 +7249,8 @@ export const WaitingDependencySummarySchema = z.object({
     "local_model",
     "runtime_capability",
     "vault_binding",
-    "external_source"
+    "external_source",
+    "external_destination"
   ]),
   dependencyId: z.string().min(1).optional(),
   requiredAction: z.enum([

@@ -42,6 +42,14 @@ import {
   type BackupRetryResult,
   type BackupServicePort
 } from "./backup-reconnect-coordinator";
+import {
+  backupDestinationDependency,
+  inspectBackupDestinationReconnectCandidate,
+  isBackupDestinationReconnectFailure,
+  reconnectBackupDestination,
+  type BackupDestinationReconnectCandidate,
+  type BackupDestinationReconnectCandidateResult
+} from "./backup-destination-reconnect-service";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 export const BACKUP_CHECKPOINT_IDS = [
@@ -156,6 +164,59 @@ export class BackupCoordinatorService {
       expectedJobUpdatedAt,
       snapshot
     );
+  }
+
+  inspectDestinationReconnectCandidate(
+    activeVaultId: string,
+    jobIdInput: string,
+    expectedJobUpdatedAt: string
+  ): BackupDestinationReconnectCandidateResult {
+    const active = this.#captureActiveVault();
+    const jobId = parseRequestedJobId(jobIdInput);
+    const store = this.#store(active.vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, jobId));
+    return inspectBackupDestinationReconnectCandidate(
+      active.vaultId,
+      activeVaultId,
+      jobId,
+      expectedJobUpdatedAt,
+      snapshot
+    );
+  }
+
+  reconnectDestination(
+    candidate: BackupDestinationReconnectCandidate,
+    selectedDirectory: string
+  ): "reconnected" | "stale" | "not_found" | "ineligible" | "failed" {
+    const active = this.#captureActiveVault();
+    const inspected = this.inspectDestinationReconnectCandidate(
+      candidate.vaultId,
+      candidate.jobId,
+      candidate.jobUpdatedAt
+    );
+    if (inspected.status !== "ready") return inspected.status;
+    const store = this.#store(active.vaultPath);
+    const snapshot = readJobIfPresent(store, jobFilePath(active.vaultPath, candidate.jobId));
+    try {
+      const queued = reconnectBackupDestination({
+        store,
+        snapshot,
+        candidate,
+        selectedDirectory,
+        vaultPath: active.vaultPath,
+        now: this.#now()
+      });
+      const binding = readBackupBinding(queued.job, active.vaultPath);
+      this.#schedule(async () => {
+        await this.#run(store, queued, binding).then(() => undefined, () => undefined);
+      });
+      return "reconnected";
+    } catch (caught) {
+      if (isContention(caught)) return "stale";
+      if (caught instanceof PigeDomainError && caught.code === "backup.destination_reconnect_stale") return "stale";
+      if (caught instanceof PigeDomainError && caught.code === "job.record_not_found") return "not_found";
+      return "failed";
+    }
   }
 
   async continueIncomplete(
@@ -331,7 +392,18 @@ export class BackupCoordinatorService {
         } else {
           recovered += 1;
         }
-      } catch {
+      } catch (caught) {
+        if (isBackupDestinationReconnectFailure(caught)) {
+          try {
+            const waiting = markFailed(store, initialSnapshot, caught, this.#now());
+            if (waiting.job.state === "waiting_dependency") {
+              failed += 1;
+              continue;
+            }
+          } catch {
+            // Preserve the original recovery failure count when durable reconciliation cannot commit.
+          }
+        }
         failed += 1;
       }
     }
@@ -697,6 +769,16 @@ function markFailed(
       retryReason: caught.code,
       requiresUserAction: true,
       message: "Backup is waiting for a required managed source location."
+    });
+  }
+  if (isBackupDestinationReconnectFailure(caught) && !checkpointDone(snapshot.job, "archive_finalized")) {
+    return coordinator(store, nowSource).settle(snapshot, {
+      kind: "waiting",
+      reason: "dependency",
+      dependency: backupDestinationDependency(snapshot.job),
+      retryReason: caught instanceof PigeDomainError ? caught.code : "backup.destination_changed",
+      requiresUserAction: true,
+      message: "Backup is waiting for an external destination to be reconnected."
     });
   }
   const retryable = isRetryableFailure(caught);
