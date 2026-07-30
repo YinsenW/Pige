@@ -145,6 +145,12 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteRevisionHistoryListRequest,
+  NoteRevisionHistoryListResult,
+  NoteRevisionHistoryOpenRequest,
+  NoteRevisionHistoryOpenResult,
+  NoteRevisionHistoryRestoreRequest,
+  NoteRevisionHistoryRestoreResult,
   NoteDocument,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
@@ -515,6 +521,15 @@ import {
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  NOTE_REVISION_HISTORY_LIST_CHANNEL,
+  NOTE_REVISION_HISTORY_OPEN_CHANNEL,
+  NOTE_REVISION_HISTORY_RESTORE_CHANNEL,
+  NoteRevisionHistoryListRequestSchema,
+  NoteRevisionHistoryListResultSchema,
+  NoteRevisionHistoryOpenRequestSchema,
+  NoteRevisionHistoryOpenResultSchema,
+  NoteRevisionHistoryRestoreRequestSchema,
+  NoteRevisionHistoryRestoreResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -1753,6 +1768,30 @@ const api: PigeDesktopApi = {
       NoteTrashRestoreResultSchema.parse(
         await ipcRenderer.invoke(NOTE_TRASH_RESTORE_CHANNEL, NoteTrashRestoreRequestSchema.parse(request))
       ),
+    listRevisionHistory: async (
+      request: NoteRevisionHistoryListRequest
+    ): Promise<NoteRevisionHistoryListResult> => NoteRevisionHistoryListResultSchema.parse(
+      await ipcRenderer.invoke(
+        NOTE_REVISION_HISTORY_LIST_CHANNEL,
+        NoteRevisionHistoryListRequestSchema.parse(request)
+      )
+    ),
+    openRevisionHistory: async (
+      request: NoteRevisionHistoryOpenRequest
+    ): Promise<NoteRevisionHistoryOpenResult> => NoteRevisionHistoryOpenResultSchema.parse(
+      await ipcRenderer.invoke(
+        NOTE_REVISION_HISTORY_OPEN_CHANNEL,
+        NoteRevisionHistoryOpenRequestSchema.parse(request)
+      )
+    ),
+    restoreRevisionHistory: async (
+      request: NoteRevisionHistoryRestoreRequest
+    ): Promise<NoteRevisionHistoryRestoreResult> => NoteRevisionHistoryRestoreResultSchema.parse(
+      await ipcRenderer.invoke(
+        NOTE_REVISION_HISTORY_RESTORE_CHANNEL,
+        NoteRevisionHistoryRestoreRequestSchema.parse(request)
+      )
+    ),
     resolveInlineReference: async (
       request: NoteResolveInlineReferenceRequest
     ): Promise<NoteResolveInlineReferenceResult> =>

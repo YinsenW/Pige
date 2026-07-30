@@ -1496,6 +1496,8 @@ export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[
 export const NoteTrashListRequestIdSchema = z.string().regex(/^notetrashlistreq_[a-z0-9]{16,64}$/);
 export const NoteTrashRestoreRequestIdSchema = z.string().regex(/^notetrashrestorereq_[a-z0-9]{16,64}$/);
 export const NoteTrashRevisionSchema = z.string().regex(/^notetrashrev_[a-f0-9]{64}$/);
+export const NoteRevisionHistoryRequestIdSchema = z.string().regex(/^notehistoryreq_[a-z0-9]{16,64}$/);
+export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistoryrev_[a-f0-9]{64}$/);
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
@@ -1519,6 +1521,10 @@ export const NoteRestoreEligibilitySchema = z.object({
 export const NoteTaggingSummarySchema = z.object({
   tags: z.array(NoteCanonicalTagSchema).max(12).readonly(),
   canAdd: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
+export const NoteRevisionHistoryEligibilitySchema = z.object({
+  canBrowse: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
 export const NoteEditorPortableMarkdownSchema = z.string()
@@ -1553,6 +1559,7 @@ export const NoteRenderResultSchema = z.object({
   trashEligibility: NoteTrashEligibilitySchema.optional(),
   archiveEligibility: NoteArchiveEligibilitySchema.optional(),
   restoreEligibility: NoteRestoreEligibilitySchema.optional(),
+  historyEligibility: NoteRevisionHistoryEligibilitySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional()
 }).strict();
@@ -1806,6 +1813,63 @@ export const NoteTrashRestoreResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "failed"] as const).map((status) =>
     NoteTrashRestoreResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+
+export const NOTE_REVISION_HISTORY_LIST_CHANNEL = "notes.listRevisionHistory" as const;
+export const NOTE_REVISION_HISTORY_OPEN_CHANNEL = "notes.openRevisionHistory" as const;
+export const NOTE_REVISION_HISTORY_RESTORE_CHANNEL = "notes.restoreRevisionHistory" as const;
+export const NoteRevisionHistorySummarySchema = z.object({
+  revisionId: NoteRevisionHistoryRevisionIdSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  origin: z.enum(["current", "user", "agent", "restore"]),
+  isCurrent: z.boolean(),
+  canOpen: z.literal(true)
+}).strict();
+const NoteRevisionHistoryIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteRevisionHistoryRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteRevisionHistoryListRequestSchema = NoteRevisionHistoryIdentitySchema;
+export const NoteRevisionHistoryListResultSchema = z.discriminatedUnion("status", [
+  NoteRevisionHistoryIdentitySchema.extend({
+    status: z.literal("ready"),
+    currentRevision: NoteEditorRevisionSchema,
+    revisions: z.array(NoteRevisionHistorySummarySchema).max(100).readonly()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRevisionHistoryIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteRevisionHistoryOpenRequestSchema = NoteRevisionHistoryIdentitySchema.extend({
+  revisionId: NoteRevisionHistoryRevisionIdSchema
+}).strict();
+export const NoteRevisionHistoryOpenResultSchema = z.discriminatedUnion("status", [
+  NoteRevisionHistoryOpenRequestSchema.extend({
+    status: z.literal("opened"),
+    revision: NoteRevisionHistorySummarySchema,
+    currentRevision: NoteEditorRevisionSchema,
+    html: NoteRenderedHtmlSchema,
+    byteSize: z.number().int().nonnegative().max(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRevisionHistoryOpenRequestSchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteRevisionHistoryRestoreRequestSchema = NoteRevisionHistoryOpenRequestSchema;
+export const NoteRevisionHistoryRestoreResultSchema = z.discriminatedUnion("status", [
+  NoteRevisionHistoryRestoreRequestSchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    revision: NoteEditorRevisionSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRevisionHistoryRestoreRequestSchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 
@@ -9719,6 +9783,16 @@ export type NoteTrashListRequest = z.infer<typeof NoteTrashListRequestSchema>;
 export type NoteTrashListResult = z.infer<typeof NoteTrashListResultSchema>;
 export type NoteTrashRestoreRequest = z.infer<typeof NoteTrashRestoreRequestSchema>;
 export type NoteTrashRestoreResult = z.infer<typeof NoteTrashRestoreResultSchema>;
+export type NoteRevisionHistoryRequestId = z.infer<typeof NoteRevisionHistoryRequestIdSchema>;
+export type NoteRevisionHistoryRevisionId = z.infer<typeof NoteRevisionHistoryRevisionIdSchema>;
+export type NoteRevisionHistoryEligibility = z.infer<typeof NoteRevisionHistoryEligibilitySchema>;
+export type NoteRevisionHistorySummary = z.infer<typeof NoteRevisionHistorySummarySchema>;
+export type NoteRevisionHistoryListRequest = z.infer<typeof NoteRevisionHistoryListRequestSchema>;
+export type NoteRevisionHistoryListResult = z.infer<typeof NoteRevisionHistoryListResultSchema>;
+export type NoteRevisionHistoryOpenRequest = z.infer<typeof NoteRevisionHistoryOpenRequestSchema>;
+export type NoteRevisionHistoryOpenResult = z.infer<typeof NoteRevisionHistoryOpenResultSchema>;
+export type NoteRevisionHistoryRestoreRequest = z.infer<typeof NoteRevisionHistoryRestoreRequestSchema>;
+export type NoteRevisionHistoryRestoreResult = z.infer<typeof NoteRevisionHistoryRestoreResultSchema>;
 export type NoteMergeRequestId = z.infer<typeof NoteMergeRequestIdSchema>;
 export type NoteMergeRequest = z.infer<typeof NoteMergeRequestSchema>;
 export type NoteMergeResult = z.infer<typeof NoteMergeResultSchema>;

@@ -588,14 +588,13 @@ Reading mode:
 
 Editing mode:
 
-- Eligible notes have one plain-Markdown Edit action; source pages and rich text stay read-only.
-- Save validates draft/frontmatter/IDs/links/citations and adopts Main's render. Stale retains the
-  draft with Reload; Cancel restores focus and Cmd/Ctrl+Enter excludes IME.
-- An ordinary note may merge one eligible note into itself after confirming its safe summary.
-  Failure/stale retains Reader/selection/focus; commit adopts Main's survivor and Undo restores both.
-- Trash and merge are recoverable; source/permanent deletion, restyle and raw reveal stay absent.
-- Settings Trash lists safe recoverable notes; one-flight Restore opens only Main's matching
-  authoritative page, while stale/failure retains the row and focus.
+- Eligible notes offer plain-Markdown Edit, merge, trash and bounded history; source/rich text stays
+  read-only. Save validates Markdown identity/links/citations and adopts Main's render; stale keeps
+  draft, Reload and focus, while Cmd/Ctrl+Enter excludes IME.
+- Merge confirms a safe target and Undo restores both. Historical preview is read-only; explicit
+  restore adopts the current render. Closed states retain Reader/dialog/focus.
+- Settings Trash lists safe notes and opens only Main's restored page. All mutations are recoverable;
+  permanent/source deletion and restyle stay absent.
 
 Reader foundation:
 

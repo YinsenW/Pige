@@ -72,6 +72,7 @@ import {
 import { WindowModeToggle } from "./components/WindowModeToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions, readerDocumentArchiveLabels, readerDocumentRestoreLabels, submitReaderNoteArchive, submitReaderNoteRestore, type ReaderNoteArchiveSubmit, type ReaderNoteRestoreSubmit } from "./components/ReaderDocumentActions"; import { readerNoteTagLabels, submitReaderNoteTag, type ReaderNoteTagSubmit } from "./components/ReaderNoteTagDialog";
+import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialog";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
 import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
@@ -3551,6 +3552,12 @@ export function LibraryPanel(props: {
             >
               <PigeIcon name="copy" size={16} />
             </button>
+            <NoteRevisionHistoryDialog
+              note={props.selectedNote}
+              activeVaultId={props.activeVaultId}
+              t={props.t}
+              onCommitted={props.onCurrentNoteMerged}
+            />
             <ReaderDocumentActions
               ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}:${props.selectedNote.archiveEligibility?.revision ?? ""}:${props.selectedNote.restoreEligibility?.revision ?? ""}:${props.selectedNote.tagging?.revision ?? ""}`}
               canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
@@ -6541,6 +6548,12 @@ function HomeComposer(props: {
                     {props.t("note.edit")}
                   </button>
                 ) : null}
+                <NoteRevisionHistoryDialog
+                  note={selectedNote}
+                  activeVaultId={props.activeVault?.vaultId}
+                  t={props.t}
+                  onCommitted={adoptMergedHomeNote}
+                />
                 <ReaderDocumentActions
                   ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}:${selectedNote.archiveEligibility?.revision ?? ""}:${selectedNote.restoreEligibility?.revision ?? ""}:${selectedNote.tagging?.revision ?? ""}`}
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}

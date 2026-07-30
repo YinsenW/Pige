@@ -600,14 +600,12 @@ Lifecycle coverage:
 | Index/job maintenance | update index, compact job, repair record |
 | Backup/restore/migration | backup created, restore applied, migration applied |
 
-Reader save writes one `update_page` with private before/after bytes; Undo checks its after revision
-and writes forward. Merge uses one two-page receipt/Operation; replay/Undo restore exact originals.
-Drift preserves live bytes. Memory mutations likewise commit revision-bound private receipts before
-`update_memory`/`trash_memory`; Undo writes `restore_memory`, and restart adopts exact pairs.
-Conversation trash/restore binds exact JSONL hash/revision/private receipt; startup adopts one
-Operation, while conflicts preserve current history and never replay Provider work.
-Knowledge Health unlink/retarget reuses reversible `update_page`; its receipt binds report,
-index, source/target revision and exact occurrence, so restart adopts once and drift is inert.
+Reader save writes reversible `update_page`; merge binds one two-page receipt. Revision restore uses
+an integrity-checked private image and deterministic `restore_page`; retry/restart adopts once and
+Undo restores the displaced note. Drift preserves live bytes. Memory commits private receipts before
+`update_memory`/`trash_memory`; Undo/restart uses exact `restore_memory`. Conversation trash/restore
+binds JSONL hash/revision/receipt without Provider replay. Knowledge Health repair uses reversible
+`update_page` bound to report/index/source/target/occurrence; restart adopts once.
 
 Rules:
 

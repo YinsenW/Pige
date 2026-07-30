@@ -28,6 +28,12 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteRevisionHistoryListRequest,
+  NoteRevisionHistoryListResult,
+  NoteRevisionHistoryOpenRequest,
+  NoteRevisionHistoryOpenResult,
+  NoteRevisionHistoryRestoreRequest,
+  NoteRevisionHistoryRestoreResult,
   NoteResolveInlineReferenceRequest,
   ReaderSelectionActionRequest,
   ReaderSelectionCreateNoteRequest,
@@ -77,6 +83,15 @@ import {
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  NOTE_REVISION_HISTORY_LIST_CHANNEL,
+  NOTE_REVISION_HISTORY_OPEN_CHANNEL,
+  NOTE_REVISION_HISTORY_RESTORE_CHANNEL,
+  NoteRevisionHistoryListRequestSchema,
+  NoteRevisionHistoryListResultSchema,
+  NoteRevisionHistoryOpenRequestSchema,
+  NoteRevisionHistoryOpenResultSchema,
+  NoteRevisionHistoryRestoreRequestSchema,
+  NoteRevisionHistoryRestoreResultSchema,
   ReaderSelectionActionRequestSchema,
   ReaderSelectionActionResultSchema,
   ReaderSelectionCreateNoteRequestSchema,
@@ -105,6 +120,7 @@ import type { NoteTagService } from "./services/note-tag-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
+import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -125,6 +141,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteMergeService: () => NoteMergeService;
   readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
+  readonly getNoteRevisionHistoryService: () => NoteRevisionHistoryService;
   readonly onNoteTrashCommitted: () => void;
   readonly onNoteArchiveCommitted: () => void;
   readonly onNoteRelated: () => void;
@@ -233,6 +250,52 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result
       : failedEditorSave(parsed);
+  });
+  options.ipcMain.handle(NOTE_REVISION_HISTORY_LIST_CHANNEL, (event, request: unknown): NoteRevisionHistoryListResult => {
+    const parsed = NoteRevisionHistoryListRequestSchema.parse(request) as NoteRevisionHistoryListRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (!ownerId || event.sender.isDestroyed()) return NoteRevisionHistoryListResultSchema.parse({ ...parsed, status: "stale" });
+    try {
+      const result = NoteRevisionHistoryListResultSchema.parse(
+        options.getNoteRevisionHistoryService().listForRenderer(ownerId, parsed)
+      );
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result
+        : NoteRevisionHistoryListResultSchema.parse({ ...parsed, status: "stale" });
+    } catch {
+      return NoteRevisionHistoryListResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_REVISION_HISTORY_OPEN_CHANNEL, async (event, request: unknown): Promise<NoteRevisionHistoryOpenResult> => {
+    const parsed = NoteRevisionHistoryOpenRequestSchema.parse(request) as NoteRevisionHistoryOpenRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (!ownerId || event.sender.isDestroyed()) return NoteRevisionHistoryOpenResultSchema.parse({ ...parsed, status: "stale" });
+    try {
+      const result = NoteRevisionHistoryOpenResultSchema.parse(
+        await options.getNoteRevisionHistoryService().openForRenderer(ownerId, parsed)
+      );
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result
+        : NoteRevisionHistoryOpenResultSchema.parse({ ...parsed, status: "stale" });
+    } catch {
+      return NoteRevisionHistoryOpenResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_REVISION_HISTORY_RESTORE_CHANNEL, async (event, request: unknown): Promise<NoteRevisionHistoryRestoreResult> => {
+    const parsed = NoteRevisionHistoryRestoreRequestSchema.parse(request) as NoteRevisionHistoryRestoreRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (!ownerId || event.sender.isDestroyed()) return NoteRevisionHistoryRestoreResultSchema.parse({ ...parsed, status: "stale" });
+    try {
+      const result = NoteRevisionHistoryRestoreResultSchema.parse(
+        await options.getNoteRevisionHistoryService().restoreForRenderer(ownerId, parsed)
+      );
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result
+        : NoteRevisionHistoryRestoreResultSchema.parse({ ...parsed, status: "stale" });
+    } catch {
+      return NoteRevisionHistoryRestoreResultSchema.parse({ ...parsed, status: "failed" });
+    }
   });
   options.ipcMain.handle("notes.trashCurrent", (event, request: unknown) => {
     const parsed = NoteTrashCurrentRequestSchema.parse(request);

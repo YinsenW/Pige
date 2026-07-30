@@ -304,6 +304,7 @@ import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService
 } from "./services/note-markdown-editor-service";
+import { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import { OcrService } from "./services/ocr-service";
 import {
   LocalSettingsOcrLanguagePreferenceStore,
@@ -415,6 +416,7 @@ let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
+let noteRevisionHistoryService: NoteRevisionHistoryService | undefined;
 let readerSelectionActionService: ReaderSelectionActionService | undefined;
 let readerSelectionProposalService: ReaderSelectionProposalService | undefined;
 let readerSelectionCreateNoteProposalService: ReaderSelectionCreateNoteProposalService | undefined;
@@ -1626,6 +1628,15 @@ const getNotesService = (): NotesService => {
     );
   }
   return notesService;
+};
+
+const getNoteRevisionHistoryService = (): NoteRevisionHistoryService => {
+  noteRevisionHistoryService ??= new NoteRevisionHistoryService(
+    getVaultService(),
+    getNoteMarkdownEditorService(),
+    getNotesService()
+  );
+  return noteRevisionHistoryService;
 };
 
 const getNoteTrashService = (): NoteTrashService => {
@@ -2840,6 +2851,7 @@ registerReaderIpc({
   getNoteMergeService,
   getNoteRelateService,
   getNoteMarkdownImportService,
+  getNoteRevisionHistoryService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
   onNoteArchiveCommitted: scheduleActivityIndexRebuild,
   onNoteRelated: scheduleActivityIndexRebuild,
@@ -3253,6 +3265,12 @@ app.whenReady().then(async () => {
   noteMarkdownEditorService = new NoteMarkdownEditorService(
     getVaultService(),
     noteMarkdownEditorActivityAdapter
+  );
+  notesService = undefined;
+  noteRevisionHistoryService = new NoteRevisionHistoryService(
+    getVaultService(),
+    noteMarkdownEditorService,
+    getNotesService()
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
