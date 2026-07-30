@@ -113,6 +113,14 @@ import type {
 } from "./home-agent-url-service";
 import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
 import {
+  createCurrentNoteReplaceTool,
+  hasExplicitCurrentNoteReplaceIntent,
+  hasHomeCurrentNotePublicationRef,
+  homeCurrentNotePublicationFacts,
+  publishHomeCurrentNoteReplacement,
+  type HomeAgentCurrentNoteMutationPort
+} from "./home-current-note-replace";
+import {
   HOME_STAGE_SUBMITTED_SKILL_URL_TOOL_NAME,
   type HomeSkillStagingToolService
 } from "./home-skill-staging-tool";
@@ -188,22 +196,6 @@ export interface HomeAgentRetrievalPort {
 
 export interface HomeAgentRuntimePort {
   run(request: PiAgentRunRequest): Promise<PiAgentRunResult>;
-}
-
-export interface HomeAgentCurrentNoteAppendPort extends HomeAgentCurrentNoteAppendPublicationPort {
-  publish(input: {
-    readonly vaultPath: string;
-    readonly activeVaultId: string;
-    readonly job: JobRecord;
-    readonly inspection: {
-      readonly pageId: string;
-      readonly contentHash: string;
-      readonly bindingHash: string;
-      readonly evidenceRefs: readonly ["citation_1"];
-    };
-    readonly modelProfileId: string;
-    readonly markdown: string;
-  }): HomeAgentCurrentNoteAppendPublication;
 }
 
 export interface HomeAgentDatasetQueryPort {
@@ -363,7 +355,7 @@ export class HomeAgentService {
   readonly #readerSelectionMutations: HomeAgentReaderSelectionMutationPort | undefined;
   readonly #reviewedTaskPlans: HomeAgentReviewedTaskPlanPort | undefined;
   readonly #memory: HomeAgentMemoryPort | undefined;
-  readonly #currentNoteAppends: HomeAgentCurrentNoteAppendPort | undefined;
+  readonly #currentNoteAppends: HomeAgentCurrentNoteMutationPort | undefined;
   readonly #skillStaging: HomeSkillStagingToolService | undefined;
   readonly #externalWebSkills: HomeAgentExternalWebSkillPort | undefined; readonly #authoredTextCapture: HomeAuthoredTextCaptureService | undefined;
 
@@ -381,7 +373,7 @@ export class HomeAgentService {
     readerSelectionMutations?: HomeAgentReaderSelectionMutationPort,
     reviewedTaskPlans?: HomeAgentReviewedTaskPlanPort,
     memory?: HomeAgentMemoryPort,
-    currentNoteAppends?: HomeAgentCurrentNoteAppendPort,
+    currentNoteAppends?: HomeAgentCurrentNoteMutationPort,
     skillStaging?: HomeSkillStagingToolService,
     externalWebSkills?: HomeAgentExternalWebSkillPort,
     conversationHistory: AgentConversationHistory = new AgentConversationHistory(), authoredTextCapture?: HomeAuthoredTextCaptureService
@@ -1289,7 +1281,14 @@ export class HomeAgentService {
     const readerSelectionLink = readReaderSelectionLinkBinding(session.current);
     const readerSelectionCreateNote = readReaderSelectionCreateNoteBinding(session.current);
     const readerSelectionMutations = this.#readerSelectionMutations;
+    const currentNoteReplaceRegistered = currentNoteScope !== undefined &&
+      hasExplicitCurrentNoteReplaceIntent(request.text, request.locale) &&
+      readerSelectionTransform === undefined &&
+      readerSelectionLink === undefined &&
+      readerSelectionCreateNote === undefined &&
+      this.#currentNoteAppends?.publishReplace !== undefined;
     const currentNoteAppendRegistered = currentNoteScope !== undefined &&
+      !currentNoteReplaceRegistered &&
       readerSelectionTransform === undefined &&
       readerSelectionLink === undefined &&
       readerSelectionCreateNote === undefined &&
@@ -1460,7 +1459,7 @@ export class HomeAgentService {
           job: session.current
         });
         if (JSON.stringify(durable) !== JSON.stringify(currentNoteAppendPublication)) {
-          throw new PigeDomainError("agent_runtime.turn_conflict", "The current-note append publication changed before assistant commit.");
+          throw new PigeDomainError("agent_runtime.turn_conflict", "The current-note mutation publication changed before assistant commit.");
         }
         return;
       }
@@ -1779,17 +1778,44 @@ export class HomeAgentService {
             throw new PigeDomainError("agent_runtime.tool_input_invalid", "One current-note turn cannot publish two append intents.");
           }
           currentNoteAppendPublication = publication;
-          if (!hasCurrentNoteAppendPublicationRef(session.current, publication)) {
+          if (!hasHomeCurrentNotePublicationRef(session.current, publication)) {
             try {
               session.current = this.#jobs.patchAgentTurnJob(
                 session.current,
-                currentNoteAppendPublicationFacts(session.current, publication)
+                homeCurrentNotePublicationFacts(session.current, publication)
               );
             } catch (caught) {
               session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
-              if (!hasCurrentNoteAppendPublicationRef(session.current, publication)) throw caught;
+              if (!hasHomeCurrentNotePublicationRef(session.current, publication)) throw caught;
             }
           }
+          return publication;
+        }
+      })] : []), ...(currentNoteReplaceRegistered ? [createCurrentNoteReplaceTool({
+        authorize: () => {
+          assertCurrentBindingAndVault();
+          evidenceLedger.assertVisible("current_note", modelTurnSequence);
+        },
+        publish: (markdown) => {
+          if (!currentNoteEvidence || !currentNoteScope || !this.#currentNoteAppends?.publishReplace) {
+            throw new PigeDomainError("agent_runtime.tool_input_invalid", "Read the exact current note before replacing it.");
+          }
+          const publication = publishHomeCurrentNoteReplacement({
+            port: { publishReplace: this.#currentNoteAppends.publishReplace.bind(this.#currentNoteAppends) },
+            jobs: this.#jobs,
+            session,
+            vaultPath,
+            activeVaultId: activeVault.vaultId,
+            jobId,
+            pageId: currentNoteScope.pageId,
+            contentHash: currentNoteEvidence.contentHash,
+            bindingHash: currentNoteEvidence.bindingHash,
+            modelProfileId: defaultModel.id,
+            markdown,
+            ...(signal ? { signal } : {}),
+            ...(currentNoteAppendPublication ? { priorPublication: currentNoteAppendPublication } : {})
+          });
+          currentNoteAppendPublication = publication;
           return publication;
         }
       })] : []), ...(readerSelectionTransform && readerSelectionMutations ? [createReaderSelectionMutationTool({
@@ -2249,42 +2275,10 @@ function singleReviewProposalId(job: JobRecord): string | undefined {
   return job.proposalIds?.length === 1 ? job.proposalIds[0] : undefined;
 }
 
-function hasCurrentNoteAppendPublicationRef(
-  job: JobRecord,
-  publication: HomeAgentCurrentNoteAppendPublication
-): boolean {
-  return publication.status === "applied"
-    ? job.operationIds?.includes(publication.operationId) === true
-    : job.proposalIds?.includes(publication.proposalId) === true;
-}
-
 function hasCurrentNoteAppendOperation(job: JobRecord): boolean {
   return job.outputRefs?.some((ref) =>
     ref.kind === "operation" && ref.role === "current_note_append_operation"
   ) === true;
-}
-
-function currentNoteAppendPublicationFacts(
-  job: JobRecord,
-  publication: HomeAgentCurrentNoteAppendPublication
-): JobExecutionFactsPatch {
-  const outputRefs = [...(job.outputRefs ?? [])];
-  if (publication.status === "applied") {
-    if (!outputRefs.some((ref) => ref.kind === "operation" && ref.id === publication.operationId)) {
-      outputRefs.push({ kind: "operation", id: publication.operationId, role: "current_note_append_operation" });
-    }
-    return {
-      outputRefs,
-      operationIds: Array.from(new Set([...(job.operationIds ?? []), publication.operationId]))
-    };
-  }
-  if (!outputRefs.some((ref) => ref.kind === "proposal" && ref.id === publication.proposalId)) {
-    outputRefs.push({ kind: "proposal", id: publication.proposalId, role: "awaiting_review" });
-  }
-  return {
-    outputRefs,
-    proposalIds: Array.from(new Set([...(job.proposalIds ?? []), publication.proposalId]))
-  };
 }
 
 function readerSelectionPublicationFacts(

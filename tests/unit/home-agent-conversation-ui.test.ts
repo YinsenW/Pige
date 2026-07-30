@@ -12,6 +12,10 @@ import type {
   AgentConversationInitialTimeline,
   AgentConversationTimeline,
   AppearanceSettingsSummary,
+  CurrentNoteReplaceProposalDecisionRequest,
+  CurrentNoteReplaceProposalDecisionResult,
+  CurrentNoteReplaceProposalGetRequest,
+  CurrentNoteReplaceProposalGetResult,
   AgentRuntimeStatus,
   AgentSubmitTurnRequest,
   AgentSubmitTurnResult,
@@ -364,6 +368,7 @@ describe("Home durable Agent conversation UI", () => {
     harness.sidebarOpen = true;
     harness.windowMode = "expanded";
     harness.windowLayoutWidth = 1200;
+    harness.startupDestination = "failed";
     const renderNote = harness.renderNote;
     harness.renderNote = async (pageId) => {
       const note = await renderNote(pageId);
@@ -1468,6 +1473,184 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.readerSelectionTransformRequests.map((request) => request.action)).toEqual([
       "translate", "polish", "expand"
     ]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("refreshes the authoritative Home Reader after an applied current-note replacement", async () => {
+    const dom = createDom(1200);
+    const harness = createHarness(completedGroundedTimeline());
+    harness.sidebarOpen = true;
+    harness.windowMode = "expanded";
+    harness.windowLayoutWidth = 1200;
+    harness.startupDestination = "failed";
+    const pageId = "page_20260715_note0001";
+    const jobId = "job_20260730_homereplace";
+    const proposalId = "proposal_20260730_homereplace";
+    let renderCount = 0;
+    harness.renderNote = async (requestedPageId) => {
+      renderCount += 1;
+      return {
+        ...testRenderedNote(requestedPageId),
+        html: `<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Home replacement ${renderCount}.</span></p>`
+      };
+    };
+    const homeTimeline = harness.timeline;
+    let currentNoteReads = 0;
+    let replaceApplied = false;
+    harness.loadConversation = async (request) => {
+      harness.conversationRequests.push(request);
+      if (request.scope?.kind !== "current_note") return homeTimeline;
+      currentNoteReads += 1;
+      return !replaceApplied
+        ? {
+            kind: "initial",
+            conversationId: "conv_20260730_homereplace",
+            snapshotTailEventId: "evt_20260730_homereplace_user",
+            tailEventId: "evt_20260730_homereplace_user",
+            canFollowUp: false,
+            messages: [{
+              id: "evt_20260730_homereplace_user",
+              role: "user",
+              createdAt: "2026-07-30T08:00:00.000Z",
+              text: "Replace this note.",
+              jobId
+            }],
+            latestTurn: {
+              jobId,
+              userEventId: "evt_20260730_homereplace_user",
+              state: "awaiting_review",
+              proposalId,
+              error: {
+                code: "agent_runtime.review_required",
+                domain: "agent_runtime",
+                messageKey: "errors.agent_runtime.review_required",
+                retryable: false,
+                severity: "warning",
+                userAction: "review_proposal"
+              }
+            }
+          }
+        : {
+            kind: "initial",
+            conversationId: "conv_20260730_homereplace",
+            snapshotTailEventId: "evt_20260730_homereplace_assistant",
+            tailEventId: "evt_20260730_homereplace_assistant",
+            canFollowUp: true,
+            messages: [{
+              id: "evt_20260730_homereplace_assistant",
+              role: "assistant",
+              createdAt: "2026-07-30T08:00:01.000Z",
+              text: "Replacement applied."
+            }],
+            latestTurn: {
+              jobId,
+              userEventId: "evt_20260730_homereplace_user",
+              state: "completed"
+            }
+          };
+    };
+    harness.readerSelectionTransform = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "waiting",
+      jobId,
+      conversationEventId: "evt_20260730_homereplace_user",
+      conversationId: "conv_20260730_homereplace",
+      tailEventId: "evt_20260730_homereplace_user",
+      error: {
+        code: "agent_runtime.review_required",
+        domain: "agent_runtime",
+        messageKey: "errors.agent_runtime.review_required",
+        retryable: false,
+        severity: "warning",
+        userAction: "review_proposal"
+      }
+    });
+    harness.currentNoteReplaceProposal = async (request) => ({
+      apiVersion: 1,
+      status: "available",
+      proposal: {
+        proposalId: request.proposalId,
+        kind: "replace_current_note",
+        state: "ready",
+        revision: 1,
+        activeVaultId: request.activeVaultId,
+        jobId: request.jobId,
+        lines: [
+          { kind: "removed", text: "Home replacement 1." },
+          { kind: "added", text: "Home replacement 2." }
+        ]
+      }
+    });
+    harness.decideCurrentNoteReplaceProposal = async (request) => {
+      replaceApplied = true;
+      return {
+        apiVersion: 1,
+        status: "applied",
+        proposal: {
+          proposalId: request.proposalId,
+          kind: "replace_current_note",
+          state: "applied",
+          revision: request.expectedRevision,
+          activeVaultId: request.activeVaultId,
+          jobId: request.jobId,
+          lines: [{ kind: "added", text: "Home replacement 2." }]
+        },
+        operationId: "operation_20260730_homereplace"
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
+    await waitFor(dom, () => container.querySelector(".note-reader h1")?.textContent === "Note A");
+
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false,
+      rangeCount: 1,
+      anchorNode: selectionNode,
+      anchorOffset: 0,
+      focusNode: selectionNode,
+      focusOffset: 8,
+      toString: () => "private selected body",
+      getRangeAt: () => ({
+        commonAncestorContainer: paragraph,
+        startContainer: selectionNode,
+        startOffset: 0,
+        endContainer: selectionNode,
+        endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 })
+      })
+    }) });
+    await act(async () => {
+      dom.window.document.dispatchEvent(new dom.window.Event("selectionchange"));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="polish"]')));
+    await waitFor(dom, () => currentNoteReads === 1);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["note.proposal.action.replace_current_note"]) === true);
+
+    await clickButton(dom, container, enMessages["note.proposal.apply"]);
+    await waitFor(dom, () => renderCount === 2);
+    expect(container.querySelector(".markdown-body")?.textContent).toContain("Home replacement 2.");
+    expect(harness.currentNoteReplaceProposalRequests).toEqual([{
+      apiVersion: 1,
+      activeVaultId: "vault_home_conversation",
+      jobId,
+      proposalId
+    }]);
+    expect(harness.currentNoteReplaceDecisionRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      jobId,
+      proposalId,
+      expectedRevision: 1,
+      decision: "approve"
+    });
+    expect(harness.noteRenderRequests).toEqual([pageId, pageId]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -5295,6 +5478,12 @@ interface ConversationHarness {
   readerSelectionTransform: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly readerProposalDecisionRequests: ReaderSelectionProposalDecisionRequest[];
   readerProposalDecisionMode: "applied" | "rejected" | "stale";
+  readonly currentNoteReplaceProposalRequests: CurrentNoteReplaceProposalGetRequest[];
+  readonly currentNoteReplaceDecisionRequests: CurrentNoteReplaceProposalDecisionRequest[];
+  currentNoteReplaceProposal: (request: CurrentNoteReplaceProposalGetRequest) => Promise<CurrentNoteReplaceProposalGetResult>;
+  decideCurrentNoteReplaceProposal: (
+    request: CurrentNoteReplaceProposalDecisionRequest
+  ) => Promise<CurrentNoteReplaceProposalDecisionResult>;
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
   windowMode: "compact" | "expanded";
   readonly windowModeRequests: ("compact" | "expanded")[];
@@ -5399,6 +5588,10 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     }),
     readerProposalDecisionRequests: [],
     readerProposalDecisionMode: "applied",
+    currentNoteReplaceProposalRequests: [],
+    currentNoteReplaceDecisionRequests: [],
+    currentNoteReplaceProposal: async () => ({ apiVersion: 1, status: "not_found" }),
+    decideCurrentNoteReplaceProposal: async () => ({ apiVersion: 1, status: "not_found" }),
     locale: "en",
     windowMode: "compact",
     windowModeRequests: [],
@@ -5785,6 +5978,19 @@ function makePigeApi(harness: ConversationHarness): object {
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);
+      },
+      currentNoteAppendProposal: async () => ({
+        apiVersion: 1 as const,
+        status: "unavailable" as const,
+        reason: "not_found" as const
+      }),
+      currentNoteReplaceProposal: (request: CurrentNoteReplaceProposalGetRequest) => {
+        harness.currentNoteReplaceProposalRequests.push(request);
+        return harness.currentNoteReplaceProposal(request);
+      },
+      decideCurrentNoteReplaceProposal: (request: CurrentNoteReplaceProposalDecisionRequest) => {
+        harness.currentNoteReplaceDecisionRequests.push(request);
+        return harness.decideCurrentNoteReplaceProposal(request);
       },
       onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => {
         harness.draftListeners.add(listener);

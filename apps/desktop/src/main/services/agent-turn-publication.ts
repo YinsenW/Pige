@@ -60,9 +60,9 @@ export type HomeAgentReaderSelectionPublication =
   | { readonly status: "resolved"; readonly proposalId: string };
 
 export type HomeAgentCurrentNoteAppendPublication =
-  | { readonly status: "applied"; readonly operationId: string }
-  | { readonly status: "review_required"; readonly proposalId: string }
-  | { readonly status: "resolved"; readonly proposalId: string };
+  | { readonly status: "applied"; readonly operationId: string; readonly kind?: "append" | "replace" }
+  | { readonly status: "review_required"; readonly proposalId: string; readonly kind?: "append" | "replace" }
+  | { readonly status: "resolved"; readonly proposalId: string; readonly kind?: "append" | "replace" };
 
 export interface HomeAgentCurrentNoteAppendPublicationPort {
   readPublication(input: {
@@ -365,7 +365,7 @@ export function settleJobAfterAssistant(input: {
       reason: "review",
       proposalId: publication.proposalId,
       message: appendPublication
-        ? "The current-note append requires bounded review before any note bytes are changed."
+        ? `The current-note ${appendPublication.kind === "replace" ? "replacement" : "append"} requires bounded review before any note bytes are changed.`
         : "The Reader selection mutation requires bounded review before any note bytes are changed.",
       facts: {
         stage: "planning",
@@ -390,7 +390,9 @@ export function settleJobAfterAssistant(input: {
     ...input,
     operationRefs: publication?.status === "applied" ? [{
       id: publication.operationId,
-      role: appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
+      role: appendPublication?.kind === "replace"
+        ? "current_note_replace_operation"
+        : appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
     }] : []
   });
   return false;
@@ -563,7 +565,7 @@ export function recoverDurableAssistantPublication(input: {
       reason: "review",
       proposalId: publication.proposalId,
       message: appendPublication
-        ? "Recovered the durable assistant result and its bounded current-note append review."
+        ? `Recovered the durable assistant result and its bounded current-note ${appendPublication.kind === "replace" ? "replacement" : "append"} review.`
         : "Recovered the durable assistant result and its bounded Reader review.",
       facts: {
         stage: "planning",
@@ -586,7 +588,9 @@ export function recoverDurableAssistantPublication(input: {
   }
   const operationRefs = publication?.status === "applied" ? [{
     id: publication.operationId,
-    role: appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
+    role: appendPublication?.kind === "replace"
+      ? "current_note_replace_operation"
+      : appendPublication ? "current_note_append_operation" : "reader_selection_transform_operation"
   }] : [];
   const operationIds = operationRefs.map(({ id }) => id);
   input.session.current = input.jobs.adoptAgentTurnCompletion(input.session.current, {

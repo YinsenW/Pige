@@ -200,6 +200,103 @@ describe("Note Agent production UI", () => {
     await unmount(dom, root);
   });
 
+  it("reviews an exact current-note replacement, retains stale review focus, and refreshes only after apply", async () => {
+    const dom = createDom();
+    const vaultId = "vault_current_note_replace";
+    const pageId = "page_current_note_replace";
+    const jobId = "job_current_note_replace";
+    const proposalId = "proposal_20260730_currentnotereplace";
+    const preview = {
+      proposalId,
+      kind: "replace_current_note" as const,
+      state: "ready" as const,
+      revision: 3,
+      activeVaultId: vaultId,
+      jobId,
+      lines: [
+        { kind: "removed" as const, text: "Previous reviewed note" },
+        { kind: "added" as const, text: "Grounded replacement note" }
+      ]
+    };
+    const conversation = vi.fn()
+      .mockResolvedValueOnce(noteAppendReviewTimeline(pageId, jobId, proposalId))
+      .mockResolvedValue(notePageTimeline(pageId, "The reviewed replacement was applied.", jobId));
+    const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "not_found" });
+    const currentNoteReplaceProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
+    const decideCurrentNoteReplaceProposal = vi.fn()
+      .mockResolvedValueOnce({
+        apiVersion: 1,
+        status: "stale",
+        proposal: { ...preview, revision: 4 }
+      })
+      .mockResolvedValueOnce({
+        apiVersion: 1,
+        status: "applied",
+        proposal: { ...preview, revision: 4, state: "applied" },
+        operationId: "op_20260730_currentnotereplace"
+      });
+    const completed: Array<{ vaultId: string; pageId: string; jobId: string }> = [];
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        ...noteAgentApi(conversation),
+        agent: {
+          conversation,
+          submitTurn: vi.fn(),
+          currentNoteAppendProposal,
+          currentNoteReplaceProposal,
+          decideCurrentNoteReplaceProposal,
+          onTurnDraft: () => () => undefined
+        }
+      }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, {
+        ...currentNoteAgentProps(pageId, vaultId),
+        onDurableTurnCompleted: (identity) => completed.push(identity)
+      }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.action.replace_current_note")) === true);
+    expect(currentNoteReplaceProposal).toHaveBeenCalledWith({ apiVersion: 1, activeVaultId: vaultId, jobId, proposalId });
+    expect(container.textContent).not.toContain(jobId);
+    const apply = required(buttonNamed(container, t("note.proposal.apply")));
+    apply.focus();
+    await click(dom, apply);
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.stale")) === true);
+    expect(decideCurrentNoteReplaceProposal).toHaveBeenNthCalledWith(1, {
+      apiVersion: 1,
+      activeVaultId: vaultId,
+      jobId,
+      proposalId,
+      expectedRevision: 3,
+      decision: "approve"
+    });
+    expect(completed).toEqual([]);
+    expect(container.querySelector('[data-kind="removed"]')?.textContent).toContain("Previous reviewed note");
+    expect(container.querySelector('[data-kind="added"]')?.textContent).toContain("Grounded replacement note");
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(container, t("note.proposal.apply")));
+
+    await click(dom, required(buttonNamed(container, t("note.proposal.apply"))));
+    await waitFor(dom, () => completed.length === 1);
+    expect(decideCurrentNoteReplaceProposal).toHaveBeenNthCalledWith(2, {
+      apiVersion: 1,
+      activeVaultId: vaultId,
+      jobId,
+      proposalId,
+      expectedRevision: 4,
+      decision: "approve"
+    });
+    expect(completed).toEqual([{ vaultId, pageId, jobId }]);
+    expect(conversation).toHaveBeenCalledTimes(2);
+    await unmount(dom, root);
+  });
+
   it("does not report an ordinary completed current-note turn as a durable append", async () => {
     const dom = createDom();
     const pageId = "page_current_note_read_only";

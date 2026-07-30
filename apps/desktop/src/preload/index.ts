@@ -15,6 +15,10 @@ import type {
   CurrentNoteAppendProposalDecisionResult,
   CurrentNoteAppendProposalGetRequest,
   CurrentNoteAppendProposalGetResult,
+  CurrentNoteReplaceProposalDecisionRequest,
+  CurrentNoteReplaceProposalDecisionResult,
+  CurrentNoteReplaceProposalGetRequest,
+  CurrentNoteReplaceProposalGetResult,
   AppHealth,
   BackupManifestSummary,
   BackupCreateResult,
@@ -268,6 +272,10 @@ import {
   CurrentNoteAppendProposalDecisionResultSchema,
   CurrentNoteAppendProposalGetRequestSchema,
   CurrentNoteAppendProposalGetResultSchema,
+  CurrentNoteReplaceProposalDecisionRequestSchema,
+  CurrentNoteReplaceProposalDecisionResultSchema,
+  CurrentNoteReplaceProposalGetRequestSchema,
+  CurrentNoteReplaceProposalGetResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
   KnowledgeLanguageMutationResultSchema,
@@ -1128,6 +1136,20 @@ const api: PigeDesktopApi = {
       CurrentNoteAppendProposalDecisionResultSchema.parse(await ipcRenderer.invoke(
         "agent.decideCurrentNoteAppendProposal",
         CurrentNoteAppendProposalDecisionRequestSchema.parse(request)
+      )),
+    currentNoteReplaceProposal: async (
+      request: CurrentNoteReplaceProposalGetRequest
+    ): Promise<CurrentNoteReplaceProposalGetResult> =>
+      CurrentNoteReplaceProposalGetResultSchema.parse(await ipcRenderer.invoke(
+        "agent.currentNoteReplaceProposal",
+        CurrentNoteReplaceProposalGetRequestSchema.parse(request)
+      )),
+    decideCurrentNoteReplaceProposal: async (
+      request: CurrentNoteReplaceProposalDecisionRequest
+    ): Promise<CurrentNoteReplaceProposalDecisionResult> =>
+      CurrentNoteReplaceProposalDecisionResultSchema.parse(await ipcRenderer.invoke(
+        "agent.decideCurrentNoteReplaceProposal",
+        CurrentNoteReplaceProposalDecisionRequestSchema.parse(request)
       ))
   },
   jobs: {

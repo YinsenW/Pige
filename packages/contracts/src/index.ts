@@ -70,6 +70,11 @@ import type {
   CurrentNoteAppendProposalGetRequest,
   CurrentNoteAppendProposalGetResult,
   CurrentNoteAppendProposalPreview,
+  CurrentNoteReplaceProposalDecisionRequest,
+  CurrentNoteReplaceProposalDecisionResult,
+  CurrentNoteReplaceProposalGetRequest,
+  CurrentNoteReplaceProposalGetResult,
+  CurrentNoteReplaceProposalPreview,
   DatasetLogicalType,
   EffectiveAppearanceTheme,
   ExternalWebSkillHttpsOrigin,
@@ -381,6 +386,11 @@ export type {
   CurrentNoteAppendProposalGetRequest,
   CurrentNoteAppendProposalGetResult,
   CurrentNoteAppendProposalPreview,
+  CurrentNoteReplaceProposalDecisionRequest,
+  CurrentNoteReplaceProposalDecisionResult,
+  CurrentNoteReplaceProposalGetRequest,
+  CurrentNoteReplaceProposalGetResult,
+  CurrentNoteReplaceProposalPreview,
   PiPackageInstallRequest,
   PiPackageInstallRequestId,
   PiPackageInstallResult,
@@ -1831,6 +1841,12 @@ export interface PigeDesktopApi {
     readonly decideCurrentNoteAppendProposal: (
       request: CurrentNoteAppendProposalDecisionRequest
     ) => Promise<CurrentNoteAppendProposalDecisionResult>;
+    readonly currentNoteReplaceProposal: (
+      request: CurrentNoteReplaceProposalGetRequest
+    ) => Promise<CurrentNoteReplaceProposalGetResult>;
+    readonly decideCurrentNoteReplaceProposal: (
+      request: CurrentNoteReplaceProposalDecisionRequest
+    ) => Promise<CurrentNoteReplaceProposalDecisionResult>;
     readonly onTurnDraft: (listener: (event: AgentTurnDraftEvent) => void) => () => void;
   };
   readonly jobs: {

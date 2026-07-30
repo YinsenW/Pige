@@ -139,6 +139,10 @@ opaque selected-target checkpoint, then fences both current notes and publishes 
 replays model/effect work or duplicates an edge. Missing, ambiguous, self, existing, corrupt
 or drifted evidence fails body-free; assistant prose supplies neither replacement nor target.
 
+Authored current-note replace requires same-turn read. Main binds private inspection/revision plus
+Job/tool/model/policy to <=16 KiB Markdown and always proposes. Approval CAS-writes one reversible
+`update_page`; reject/drift writes none, retry/restart adopts once, and Undo uses its before-image.
+
 Home `draft_replace` remains temporary UI state, never recovery or assistant truth;
 cancellation/failure cannot promote it.
 
