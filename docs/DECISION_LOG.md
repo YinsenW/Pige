@@ -870,7 +870,8 @@ Finish one trusted platform lane before making another support claim.
 
 Consequences:
 
-- macOS signing/notarization, update and packaged evidence block Phase 1.
+- macOS downloaded ad-hoc ZIP integrity, quarantine, runtime/UI/RSS and packaged evidence
+  block Phase 1; trusted signing and automatic update do not.
 - Windows acceptance stays open and unverified.
 - Linux-specific packaging should not block v0.1.
 
@@ -881,9 +882,10 @@ References:
 
 ### D-20260709-Auto-Update-v0-1
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-09
 Revised: 2026-07-29
+Superseded by: D-20260730-Personal-Ad-Hoc-Alpha
 
 Decision:
 
@@ -906,8 +908,9 @@ References:
 
 ### D-20260718-Protected-Signed-Alpha-Publication
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-18
+Superseded by: D-20260730-Personal-Ad-Hoc-Alpha
 
 Decision:
 
@@ -934,6 +937,43 @@ References:
 - `docs/SECURITY_THREAT_MODEL.md`
 - `.github/workflows/release.yml`
 - `tests/unit/release-publication.test.ts`
+
+### D-20260730-Personal-Ad-Hoc-Alpha
+
+Status: Accepted
+Date: 2026-07-30
+Supersedes: D-20260709-Auto-Update-v0-1, D-20260718-Protected-Signed-Alpha-Publication
+
+Decision:
+
+Pige is a personal project and v0.1 will not obtain Apple Developer Program, Developer ID
+or notarization credentials. Phase 1 publishes only a versioned macOS 26+ arm64 ZIP from a
+protected tag. Nested executables and the final app are sealed ad hoc after all bundle writes;
+strict deep codesign, immutable checksums/manifests and independent downloaded qualification
+must prove the quarantined app is expected-untrusted but never damaged, invalid, modified or
+malformed. Release notes disclose System Settings > Privacy & Security > Open Anyway.
+
+Automatic update is unavailable because the packaged app lacks a trusted signing identity.
+`NoNetworkUpdateCheckAdapter` owns the packaged v0.1 boundary; users manually download a newer
+canonical GitHub prerelease. Trusted alpha-to-alpha update remains deferred.
+
+Rationale:
+
+Integrity and honest user guidance are achievable without misrepresenting Apple trust.
+Automatic macOS updates require a signing identity that this project does not possess.
+
+Consequences:
+
+- No Apple secrets, Developer ID, notarization, staple, DMG or update metadata enter v0.1.
+- Downloaded runtime/UI/process-tree/RSS, backup/fresh restore, SBOM/legal and qualification
+  digests remain release gates; source tests alone do not complete release acceptance.
+- Windows qualification is outside Phase 1 and does not block the macOS v0.1 release.
+
+References:
+
+- `docs/PRD.md`
+- `docs/RELEASE_ENGINEERING.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
 
 ### D-20260709-Scale-Target
 

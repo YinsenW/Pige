@@ -175,7 +175,9 @@ Acceptance:
 
 - The Public Alpha usability scenario proves that a real user can capture at least 25 mixed sources over several sessions, recover from common failures, back up the vault, restore it, search again, and continue working.
 - Release evidence includes six-locale workflow smoke results and the v0.1 accessibility baseline.
-- Release evidence records the installer-size, 10,000-page/100,000-chunk scale, idle/active-memory thresholds, release notes, dependency/license attribution, and signing/notarization result when credentials are available.
+- Release evidence records ZIP size, 10,000-page/100,000-chunk scale, idle/active-memory
+  thresholds, release notes, dependency/license attribution, strict ad-hoc seal verification,
+  and the downloaded app's expected-untrusted but intact quarantine result.
 
 ## 5. Deferred From v0.1
 

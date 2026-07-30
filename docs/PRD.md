@@ -825,8 +825,10 @@ Backup:
 Release:
 
 - Reproducible public-alpha release pipeline on the repository's supported release infrastructure.
-- Automatic update support from one compatible public-alpha build to the next.
-- Signed/notarized artifacts where release credentials are available.
+- Versioned macOS 26+ arm64 ZIP with inside-out/final ad-hoc seals, immutable checksums and
+  an independently downloaded quarantine report proving expected-untrusted but intact bytes.
+- Manual download from the canonical protected-tag GitHub prerelease; automatic update is
+  unavailable until a trusted Apple signing identity exists.
 - Release notes, dependency manifest, and license notices for every release.
 
 Safety and trust:

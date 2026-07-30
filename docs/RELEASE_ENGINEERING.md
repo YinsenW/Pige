@@ -14,7 +14,7 @@ This document defines:
 - Installer and artifact strategy.
 - GitHub Actions release pipeline.
 - Auto-update strategy.
-- Code signing and notarization.
+- Ad-hoc bundle sealing and downloaded-artifact integrity qualification.
 - Model/tool distribution.
 - Dependency update workflow.
 - Release gates.
@@ -101,70 +101,63 @@ under its fixed Linux CI guard and emits a body-free report.
 
 Public alpha publication accepts only a protected canonical-repository
 `vMAJOR.MINOR.PATCH-alpha[.N]` push. Commit-pinned checkout/setup actions precede pinned
-install, tests and bundles. `production-release` then gates Developer ID/hardened/notarized/
-stapled macOS arm64 (including nested helpers) and Authenticode Windows x64 builds. Exact
-`alpha-mac.yml`/`alpha.yml` plus tag/version/commit/platform/file-set SHA-256/SHA-512
-manifests are downloaded and reverified on independent platform runners, then reverified by
-the publisher before one GitHub prerelease with generated notes. Missing authority,
-credentials or proof blocks publication; unsigned/ad-hoc packageability never falls back.
+install, tests and the versioned macOS 26+ arm64 ZIP. Pige is a personal project and v0.1
+has no Apple Developer Program, Developer ID or notarization credentials. The release job
+therefore removes signing authority, seals nested executables and the final app ad hoc,
+requires `codesign --verify --deep --strict`, independently downloads and checksum-verifies
+the ZIP, and publishes one GitHub prerelease with generated notes. The downloaded app must
+be intact while Gatekeeper classifies it as expected-untrusted; damaged, invalid, modified
+or malformed diagnostics block publication. Windows hooks remain nonblocking and later.
 
 macOS native OCR build order:
 
 - Compile `PigeVisionOCR.swift` per architecture with macOS 26; generate/embed its exact
   source/compiler/target/size/SHA-256 manifest at the adapter-owned resource path.
-- Sign helper before app/notary/staple; packaged probe, valid/invalid recognition and
+- Seal the helper before the final app seal; packaged probe, valid/invalid recognition and
   app OCR Job/Artifact smoke are required beyond source-tree smoke.
 
 macOS native speech build order:
 
 - Compile `PigeSpeech.swift` with macOS 26; embed architecture/version/size/SHA-256 and
   `NSMicrophoneUsageDescription` (not Speech Recognition usage without a new API).
-- Sign helpers inside-out; verify bounded session/install protocol, deep seal, staging/ZIP
+- Seal helpers inside-out; verify bounded session/install protocol, deep seal, staging/ZIP
   equality and fresh distribution. Availability/start never download; success still needs Start.
 
-Apple signing/notarization and Windows signing credentials live only in GitHub secrets or a
-maintainer signing environment. Secret-consuming/write-authorized jobs require
-`production-release`; credentials never enter the repository or fork PRs.
+v0.1 uses no Apple or Windows signing credentials. Future trusted-signing jobs, if added,
+must keep credentials in GitHub secrets or a maintainer signing environment and must never
+expose them to the repository or fork PRs.
 
 ## 6. Packaging And Update Dependencies
 
 v0.1 default choices:
 
-- `electron-builder@26.15.3` for packaging, signing integration, and update metadata.
+- `electron-builder@26.15.3` for deterministic packaging and ad-hoc macOS sealing.
 - `@electron/asar@4.2.0` only for bounded build-time ASAR inspection/extraction in
   packageability verification; it is not a packaged runtime dependency.
-- `electron-updater@6.8.9` (`sha512-ZhVxM9iGONUpZGI1FxdMRgJjUFXi7AYGVa5PwKlO1tV1/4zDxQmfKpXOHVztKrd6L9rLcFjERvi1Mf2vxyTkig==`) for signed macOS GitHub Releases updates.
-- GitHub Releases as v0.1 update host.
-- Native Electron `autoUpdater` remains a fallback only if the packaging stack changes.
+- GitHub Releases for protected-tag v0.1 prerelease ZIP publication and manual download.
+- `electron-updater@6.8.9` remains unavailable in packaged v0.1; trusted automatic update
+  is deferred until a compatible Apple signing identity exists.
 
 Implementation must pin exact versions and update the Technical Architecture external dependency registry before release.
 
-## 7. Auto-Update Strategy
+## 7. Manual Update Strategy
 
-Phase 1 supports an explicit signed macOS alpha update lifecycle.
-
-Update flow:
-
-1. User checks the Main-owned immutable GitHub alpha channel.
-2. User explicitly downloads; Main verifies metadata, checksum and Developer ID identity.
-3. Ready state survives restart without duplicate download/apply.
-4. User explicitly applies; Main rechecks no authoritative risky/nonterminal Job, then relaunches.
-
-Rules:
-
-- One check/download/apply runs at a time; active capture, review, backup, restore, parsing,
-  OCR, migration, index rebuild, high-risk effect or other nonterminal durable Job blocks apply.
-- Machine-local version/revision state adopts exact updater cache state after restart.
-- Failure leaves the current app/vault usable. Renderer never sets feed/channel or sees paths.
+Phase 1 has no automatic update authority. Users obtain a newer protected-tag ZIP from the
+canonical GitHub prerelease, verify its published checksum, replace the application manually,
+and keep the Vault unchanged. Main composes `NoNetworkUpdateCheckAdapter`; renderer update
+download/apply controls remain unavailable and cannot select a feed or artifact. Automatic
+check/download/apply and alpha-to-alpha evidence are deferred until trusted signing exists.
 
 ## 8. Code Signing And Notarization
 
 macOS:
 
-- Public macOS arm64 requires Developer ID, hardened runtime, minimal entitlements,
-  inside-out helper/app signing, notarization and staple; checksums do not replace trust.
-- Internal identity `-` packageability seals only after bundle writes and proves
-  loadability/integrity, never Team ID, public trust, notarization, staple or hardened runtime.
+- v0.1 arm64 seals every nested executable and the final app inside-out with ad-hoc identity
+  `-` after all bundle writes, then requires strict deep verification and exact Bundle hashes.
+- Independent download qualification applies quarantine and requires Gatekeeper's expected
+  untrusted/unknown-developer rejection with no damaged, invalid, modified or malformed
+  diagnostic. Users may choose System Settings > Privacy & Security > Open Anyway.
+- This proves integrity and loadability, not Apple identity, notarization, staple or trust.
 
 Windows:
 
@@ -172,15 +165,15 @@ Windows:
 
 Rules:
 
-- Public assets and updates are signed-only; release notes record verified trust state and
-  cannot promote an unsigned preflight.
+- Release notes state that the app is ad-hoc signed, Gatekeeper-untrusted, manually installed
+  and manually updated. They must not claim Developer ID, notarization or automatic update.
 
 ## 9. Update Security
 
-Tampered binaries/metadata, wrong channels, downgrades and dependency compromise are bounded by
-signed artifacts, protected tag/environment authority, exact identity/file-set manifests,
-SHA-256 checksums, update-metadata SHA-512/size, monotonic channel checks, lockfiles,
-independent downloaded-byte verification and manual review of release-sensitive upgrades.
+Tampered binaries/metadata and dependency compromise are bounded by protected tag/environment
+authority, exact identity/file-set manifests, SHA-256 checksums, strict deep ad-hoc seal
+verification, independent downloaded-byte verification and manual review of release-sensitive
+upgrades. v0.1 makes no automatic-update channel, downgrade or signed-feed claim.
 
 ## 10. Versioning
 
@@ -238,7 +231,8 @@ CI/release checks should fail if:
 
 Special cases:
 
-- Electron update requires app startup, renderer isolation, native module, packaging, and auto-update tests.
+- Future trusted automatic update requires app startup, renderer isolation, native module,
+  packaging, signing and alpha-to-alpha tests; it is not a v0.1 gate.
 - better-sqlite3 update requires Electron ABI packaging tests.
 - B6.06 native updates require lock/notices, no-build/download, prebuilt ABI/backend,
   extension/vector/100k fallback and package checks.
@@ -246,7 +240,10 @@ Special cases:
 - `pdfjs-dist` or `@napi-rs/canvas` updates require malformed/encrypted/multilingual/image-only PDF fixtures, worker timeout/heap checks, source-page crash recovery, and packaged native-module startup on each supported macOS/Windows architecture.
 - `mammoth`, `fast-xml-parser`, or `yauzl` updates require real semantic DOCX fixtures; relationship-ordered PPTX/notes/media fixtures; malformed ZIP/XML, DOCTYPE, duplicate/traversal, expansion-ratio, external-target, output-bound, timeout/heap, artifact-integrity, restart-recovery, and packaged Office-worker startup checks on supported macOS/Windows targets.
 - `@mozilla/readability`, `jsdom`, or `undici` updates require representative and malformed article fixtures; inert script/subresource evidence; private/non-public/mapped-IP and redirect SSRF tests; validated-address pinning; charset, declared/streamed/decompressed size, body-deadline, element/output/image bounds; fallback quality propagation; and packaged web-worker startup checks on supported macOS/Windows targets.
-- Apple Vision/ImageIO or Swift/Xcode updates require rebuilding each macOS architecture, protocol and helper-manifest checks, valid/invalid/oversized/multi-frame image fixtures, geometry/output bounds, source and Artifact integrity/recovery tests, packaged helper discovery, nested signing, and notarized-app startup smoke.
+- Apple Vision/ImageIO or Swift/Xcode updates require rebuilding each macOS architecture,
+  protocol and helper-manifest checks, valid/invalid/oversized/multi-frame image fixtures,
+  geometry/output bounds, source and Artifact integrity/recovery tests, packaged helper
+  discovery, nested ad-hoc sealing and downloaded-app startup smoke.
 - PaddleOCR/Qwen model updates require model manifest and index rebuild tests.
 - Pi Agent/AI provider update requires BYOK and Agent compatibility tests.
 
@@ -338,8 +335,8 @@ Test categories:
 - SQLite migration and FTS.
 - Local RAG model manifest without model installed.
 - Backup/restore.
-- Auto-update metadata generation.
-- Signing/notarization validation where credentials exist.
+- No automatic-update metadata in v0.1.
+- Ad-hoc nested/final seal, quarantine, expected-untrusted Gatekeeper and intact-app validation.
 - Public Alpha usability scenario report with at least 25 mixed sources and post-restore retrieval.
 
 Release evidence layout:
@@ -351,26 +348,28 @@ Release evidence layout:
 - Release evidence must reference fixture manifest versions, app build ID, platform, installer artifact IDs, backup manifest summary, restore result, and unresolved blockers.
 - Release evidence must not include private vault content, source bodies, raw prompts, raw model responses, secrets, tokens, or unredacted private paths.
 
-Current evidence: unsigned macOS/Windows packageability and fail-closed protected-publication
-identity/trust/metadata checks exist. They have not run with production credentials, so no
-signed artifact, release, notes or update is claimed; macOS Phase 1 signing, installed update,
-scale/recovery and publication remain open, with Windows qualification following later.
+Current evidence: source tests freeze protected-tag publication, versioned ad-hoc macOS arm64
+ZIP identity, strict seal checks, expected-untrusted quarantine classification, downloaded
+runtime/UI/process-tree qualification and release legal/SBOM digest publication. No release or
+status completion is claimed until the generated downloaded-distribution reports pass; Windows
+qualification follows later.
 
 ## 17. v0.1 Release Gates
 
-Phase 1 Public Alpha requires: exact protected-tag/`production-release` authority; independently
-reverified Developer ID/hardened/notarized/stapled macOS arm64;
-exact final metadata/manifests; GitHub update check plus alpha-to-alpha risky-job-safe update;
+Phase 1 Public Alpha requires: exact protected-tag authority; independently downloaded,
+checksum-matched, strictly ad-hoc-sealed macOS arm64 ZIP whose quarantined app is expected-
+untrusted and never damaged/invalid/modified/malformed; exact final metadata/manifests;
 distributables at or below 330,000,000 bytes (300,000,000 target); packaged memory/scale/
 recovery budgets with no hidden waiver; notices, current dependency registry, smokes,
-backup/restore across update, and the 25-source scenario on macOS. Windows retains the same
-trust and installed-distribution gates in the next platform phase and is not claimed here.
+backup/fresh restore, downloaded runtime/UI evidence, and the 25-source scenario on macOS.
+Manual GitHub ZIP download is the only v0.1 update path. Windows retains its qualification
+gates in the next platform phase and is not claimed here.
 
 ### macOS release-freeze qualification
 
 Active-development PRs and `main` do not repeat packaging. Explicit release-freeze
-dispatch owns macOS package, downloaded-distribution, install, signing/notarization,
-update and backup/restore evidence. Windows/Linux qualification is batched later.
+dispatch owns macOS package, downloaded-distribution, ad-hoc integrity/quarantine,
+runtime/UI/RSS and backup/restore evidence. Windows/Linux qualification is batched later.
 Portable contracts and platform adapters remain required, and no Windows/Linux support
 claim is made until that explicit qualification succeeds.
 No critical security issue may remain; current security/private-reporting, privacy,
@@ -380,7 +379,8 @@ support/redaction, conduct and issue/PR policies must match the released behavio
 
 Before shipping, confirm: pinned/schema-valid dependencies and current architecture registry;
 valid waivers, notices/checksums and no bundled optional models; exact protected tag/environment;
-required signatures/notarization; independent manifest/SHA-256/SHA-512/metadata identity;
+inside-out/final ad-hoc seals and expected-untrusted intact quarantine report; independent
+manifest/SHA-256/SHA-512/metadata identity;
 documented app/vault schemas and tested migrations/recovery; complete notes and Public Alpha
 scenario report; and current security/private-reporting, privacy, support and collaboration copy.
 

@@ -31,7 +31,7 @@ This document defines the test strategy future AI agents should follow while imp
 | Inner implementation loop | Affected tests; typecheck; build when renderer/runtime output changes | Full trace, independent snapshot, package/distribution |
 | Ordinary PR | Affected tests, typecheck, applicable build, `verify:change`, changed-owner contract/docs checks | Full test/governance/package/download/CodeQL |
 | Risk-specific PR | Only the owning full/adversarial/governance checks required by that risk | Unrelated full gates and platform qualification |
-| Release freeze | Full macOS package/install/sign/notary/update/backup-recovery and release gates | Windows/Linux qualification |
+| Release freeze | Full macOS ad-hoc ZIP/download/quarantine/runtime/UI/RSS/backup-recovery and release gates | Windows/Linux qualification; trusted automatic update |
 
 An evidence-only or semantics-preserving test repair does not refresh trace, semantic
 lock, or independent review. Full gates remain available; they are scheduled at the node
@@ -641,9 +641,10 @@ Before alpha release:
 - Support policy exists, is linked from README/CONTRIBUTING, and public issue/support guidance forbids private vaults, raw source files, secrets, raw prompts/responses, and unreviewed support bundles.
 - Code of conduct exists; issue and PR templates exist and require redacted reproductions, requirement sources, tests, docs updates, and privacy/security/support checks.
 - Installer size report is generated.
-- Auto-update metadata is generated and tested in alpha channel.
-- The upgrade scenario creates a backup before update and validates restoration after it.
-- Public Alpha usability scenario report passes on macOS and at least one supported Windows target, or any platform gap is explicitly listed as a release blocker/known limitation.
+- No automatic-update metadata or A-to-B claim is emitted; the packaged runtime exposes no
+  update download/apply authority without a trusted signing identity.
+- Backup and fresh-folder restore pass against the exact downloaded macOS ZIP candidate.
+- Public Alpha usability scenario report passes on macOS; Windows is explicitly deferred.
 - No critical security or data-loss issue remains open.
 
 Supply-chain test gates:
