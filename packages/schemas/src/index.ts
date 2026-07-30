@@ -7700,6 +7700,7 @@ export const AgentConversationCursorSchema = z.string()
   .max(80);
 export const AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX = 50;
 export const AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS = 240;
+export const AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS = 120;
 export const AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS = 120;
 export const AgentConversationHistoryCursorSchema = z.string()
   .regex(/^conversation_history_[a-f0-9]{64}$/)
@@ -7707,11 +7708,24 @@ export const AgentConversationHistoryCursorSchema = z.string()
 export const ConversationRevisionSchema = z.string().regex(/^conversationrev_[a-f0-9]{64}$/);
 export const ConversationTrashRequestIdSchema = z.string().regex(/^conversationtrashreq_[a-z0-9]{16,64}$/);
 export const ConversationTrashEntryIdSchema = z.string().regex(/^conversationtrash_[a-f0-9]{32}$/);
+export const AgentConversationHistoryQuerySchema = z.string()
+  .min(1)
+  .max(480)
+  .refine((value) => value === value.trim(), "Conversation history queries must not have surrounding whitespace.")
+  .refine(
+    (value) => [...value].length <= AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS,
+    "Conversation history query exceeds the code-point limit."
+  )
+  .refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Conversation history queries must be one safe display line."
+  );
 export const AgentConversationHistoryListRequestSchema = z.object({
   apiVersion: z.literal(1),
   activeVaultId: VaultIdSchema,
   limit: z.number().int().min(1).max(AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX).optional(),
-  cursor: AgentConversationHistoryCursorSchema.optional()
+  cursor: AgentConversationHistoryCursorSchema.optional(),
+  query: AgentConversationHistoryQuerySchema.optional()
 }).strict();
 const AgentConversationHistoryPreviewSchema = z.string()
   .min(1)
@@ -7750,7 +7764,8 @@ export const AgentConversationHistorySummarySchema = AgentConversationHistorySum
 });
 const AgentConversationHistoryResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
-  activeVaultId: VaultIdSchema
+  activeVaultId: VaultIdSchema,
+  query: AgentConversationHistoryQuerySchema.optional()
 });
 export const AgentConversationHistoryReadyResultSchema = AgentConversationHistoryResultIdentitySchema.extend({
   status: z.literal("ready"),
@@ -7768,7 +7783,8 @@ export const AgentConversationHistoryReadyResultSchema = AgentConversationHistor
       message: "Conversation history pagination truth is inconsistent."
     });
   }
-  if ((result.conversations.length === 0) !== (result.currentConversationId === undefined)) {
+  if ((result.conversations.length > 0 && result.currentConversationId === undefined) ||
+    (result.query === undefined && result.conversations.length === 0 && result.currentConversationId !== undefined)) {
     context.addIssue({
       code: "custom",
       path: ["currentConversationId"],
@@ -9694,6 +9710,7 @@ export type ProposalReviewDecisionResult = z.infer<typeof ProposalReviewDecision
 export type ConversationEvent = z.infer<typeof ConversationEventSchema>;
 export type AgentConversationInputPresentation = z.output<typeof AgentConversationInputPresentationSchema>;
 export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHistoryCursorSchema>;
+export type AgentConversationHistoryQuery = z.output<typeof AgentConversationHistoryQuerySchema>;
 export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
 export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
 export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;

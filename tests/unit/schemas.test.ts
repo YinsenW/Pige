@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX,
   AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
+  AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS,
   AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
@@ -10,6 +11,7 @@ import {
   ConversationTrashListResultSchema,
   ConversationTrashRequestSchema,
   ConversationTrashResultSchema,
+  AgentConversationHistoryQuerySchema,
   AgentConversationSetTitleRequestSchema,
   AgentConversationSetTitleResultSchema,
   AgentConversationTitleSchema,
@@ -515,6 +517,44 @@ describe("schemas", () => {
       status: "stale",
       summary: { ...summary, titleRevision: undefined }
     })).toThrow();
+  });
+
+  it("strictly bounds renderer-safe conversation history queries and echoes their identity", () => {
+    const query = "Launch project";
+    const request = {
+      apiVersion: 1 as const,
+      activeVaultId: "vault_20260731_search01",
+      limit: 50,
+      query
+    };
+    expect(AgentConversationHistoryListRequestSchema.parse(request)).toEqual(request);
+    expect(AgentConversationHistoryQuerySchema.parse("😀".repeat(
+      AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS
+    ))).toBe("😀".repeat(AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS));
+    expect(() => AgentConversationHistoryQuerySchema.parse("😀".repeat(
+      AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS + 1
+    ))).toThrow();
+    for (const unsafe of [" search", "search ", "search\nbody", "search\u202e", ""]) {
+      expect(() => AgentConversationHistoryQuerySchema.parse(unsafe)).toThrow();
+    }
+    for (const privateField of ["path", "body", "providerId", "modelId", "jobId", "toolPayload", "secret"]) {
+      expect(() => AgentConversationHistoryListRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
+    }
+    expect(AgentConversationHistoryListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId: request.activeVaultId,
+      query,
+      status: "ready",
+      currentConversationId: "conv_20260731_current01",
+      conversations: [],
+      hasMore: false
+    })).toMatchObject({ query, status: "ready", conversations: [] });
+    expect(AgentConversationHistoryListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId: request.activeVaultId,
+      query,
+      status: "failed"
+    })).toEqual({ apiVersion: 1, activeVaultId: request.activeVaultId, query, status: "failed" });
   });
 
   it("fences current-note append review and completion projections to exact states", () => {

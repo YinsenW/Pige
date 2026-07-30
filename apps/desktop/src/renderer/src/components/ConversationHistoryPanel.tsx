@@ -5,6 +5,7 @@ import type {
   AgentConversationExportRequest,
   ConversationTrashSummary
 } from "@pige/contracts";
+import { AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS } from "@pige/schemas";
 import { PigeIcon } from "./PigeIcon";
 
 type HistoryState = {
@@ -48,6 +49,8 @@ export function ConversationHistoryPanel(props: {
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<{ readonly conversationId: string; readonly status: "exported" | "stale" | "not_found" | "failed" } | null>(null);
   const [titleEditor, setTitleEditor] = useState<TitleEditorState | null>(null);
+  const [queryDraft, setQueryDraft] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState<string | undefined>();
   const requestSequenceRef = useRef(0);
   const operationRef = useRef(false);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -70,9 +73,14 @@ export function ConversationHistoryPanel(props: {
     setExportingId(null);
     setExportNotice(null);
     setTitleEditor(null);
+    setQueryDraft("");
+    setAppliedQuery(undefined);
   }, [props.activeVaultId]);
 
-  const loadHistory = async (cursor?: AgentConversationHistoryCursor): Promise<HistoryState | null> => {
+  const loadHistory = async (
+    cursor?: AgentConversationHistoryCursor,
+    query: string | undefined = appliedQuery
+  ): Promise<HistoryState | null> => {
     if (operationRef.current) return null;
     operationRef.current = true;
     setLoading(true);
@@ -84,7 +92,8 @@ export function ConversationHistoryPanel(props: {
         apiVersion: 1,
         activeVaultId: vaultId,
         limit: 50,
-        ...(cursor ? { cursor } : {})
+        ...(cursor ? { cursor } : {}),
+        ...(query ? { query } : {})
       });
       if (sequence !== requestSequenceRef.current || activeVaultIdRef.current !== vaultId) return null;
       if (result.status !== "ready") {
@@ -100,6 +109,7 @@ export function ConversationHistoryPanel(props: {
         ...(result.nextCursor ? { nextCursor: result.nextCursor } : {})
       };
       setHistory(next);
+      setAppliedQuery(query);
       return next;
     } catch {
       if (sequence === requestSequenceRef.current) setFailed(true);
@@ -141,6 +151,13 @@ export function ConversationHistoryPanel(props: {
         target?.focus({ preventScroll: true });
       });
     }
+  };
+
+  const search = async (query: string | undefined): Promise<void> => {
+    if (titleEditor || props.disabled) return;
+    const normalized = query?.trim() || undefined;
+    const next = await loadHistory(undefined, normalized);
+    if (next) setQueryDraft(normalized ?? "");
   };
 
   const openCurrent = async (trigger: HTMLButtonElement): Promise<void> => {
@@ -326,15 +343,21 @@ export function ConversationHistoryPanel(props: {
       if (result.status === "committed" || result.status === "stale") {
         setHistory((current) => ({
           ...current,
-          conversations: current.conversations.map((conversation) =>
-            conversation.conversationId === result.summary.conversationId ? result.summary : conversation)
+          conversations: current.conversations
+            .map((conversation) =>
+              conversation.conversationId === result.summary.conversationId ? result.summary : conversation)
+            .filter((conversation) => result.status === "stale" || !appliedQuery ||
+              matchesConversationQuery(conversation, appliedQuery))
         }));
       }
       if (result.status === "committed") {
         setTitleEditor(null);
-        window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(
-          `[data-conversation-title-edit="${editor.conversationId}"]`
-        )?.focus({ preventScroll: true }));
+        window.requestAnimationFrame(() => {
+          const target = document.querySelector<HTMLButtonElement>(
+            `[data-conversation-title-edit="${editor.conversationId}"]`
+          ) ?? document.querySelector<HTMLInputElement>(".conversation-search-form input") ?? historyTriggerRef.current;
+          target?.focus({ preventScroll: true });
+        });
       } else if (result.status === "stale") {
         setTitleEditor({
           ...editor,
@@ -383,6 +406,37 @@ export function ConversationHistoryPanel(props: {
       </div>
       {expanded ? (
         <div className="settings-card" aria-label={props.t("conversation.history")}>
+          <form className="conversation-search-form" role="search" onSubmit={(event) => {
+            event.preventDefault();
+            void search(queryDraft);
+          }}>
+            <label>
+              <span>{props.t("conversation.search")}</span>
+              <input
+                type="search"
+                className="settings-input"
+                maxLength={480}
+                value={queryDraft}
+                placeholder={props.t("conversation.searchPlaceholder")}
+                disabled={props.disabled || loading || titleEditor !== null}
+                onChange={(event) => {
+                  setQueryDraft(event.currentTarget.value);
+                  setFailed(false);
+                }}
+              />
+            </label>
+            <div className="settings-inline-actions">
+              <button className="quiet-button" type="submit" disabled={props.disabled || loading ||
+                titleEditor !== null || [...queryDraft.trim()].length > AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS ||
+                (queryDraft.trim() || undefined) === appliedQuery}>
+                {props.t("conversation.searchAction")}
+              </button>
+              {appliedQuery ? (
+                <button className="quiet-button" type="button" disabled={props.disabled || loading || titleEditor !== null}
+                  onClick={() => void search(undefined)}>{props.t("conversation.searchClear")}</button>
+              ) : null}
+            </div>
+          </form>
           {history.conversations.map((conversation) => (
             <div className="settings-row conversation-history-row conversation-history-entry" key={conversation.conversationId}>
               <button
@@ -459,7 +513,7 @@ export function ConversationHistoryPanel(props: {
             {props.t(`conversation.export_${exportNotice.status}`)}
           </p> : null}
           {!loading && history.conversations.length === 0 && !failed ? (
-            <p className="settings-note">{props.t("conversation.historyEmpty")}</p>
+            <p className="settings-note">{props.t(appliedQuery ? "conversation.searchEmpty" : "conversation.historyEmpty")}</p>
           ) : null}
           {loading ? <p className="settings-note" role="status">{props.t("conversation.historyLoading")}</p> : null}
           {failed ? <p className="error" role="alert">{props.t("conversation.historyFailed")}</p> : null}
@@ -469,7 +523,7 @@ export function ConversationHistoryPanel(props: {
                 type="button"
                 className="quiet-button"
                 disabled={loading}
-                onClick={() => void loadHistory(history.nextCursor)}
+                onClick={() => void loadHistory(history.nextCursor, appliedQuery)}
               >
                 {props.t("conversation.historyMore")}
               </button>
@@ -503,6 +557,16 @@ function appendUnique(
 ): readonly AgentConversationHistorySummary[] {
   const ids = new Set(current.map((conversation) => conversation.conversationId));
   return [...current, ...next.filter((conversation) => !ids.has(conversation.conversationId))];
+}
+
+function matchesConversationQuery(conversation: AgentConversationHistorySummary, query: string): boolean {
+  const needle = normalizeSearchText(query);
+  return normalizeSearchText(conversation.title ?? "").includes(needle) ||
+    normalizeSearchText(conversation.safePreview).includes(needle);
+}
+
+function normalizeSearchText(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ").trim();
 }
 
 function formatUpdatedAt(updatedAt: string, locale: string): string {

@@ -3965,7 +3965,7 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, container, enMessages["conversation.history"]);
     await waitFor(dom, () => container.textContent?.includes("Show the older plan.") === true);
     const historicalTrigger = Array.from(container.querySelectorAll<HTMLButtonElement>(
-      "[data-conversation-history-panel] .settings-row > button:first-child"
+      "[data-conversation-history-panel] .conversation-history-open"
     ))
       .find((button) => button.textContent?.includes("Show the older plan."));
     if (!historicalTrigger) throw new Error("Historical conversation trigger not found.");
@@ -4167,6 +4167,102 @@ describe("Home durable Agent conversation UI", () => {
       title: "My retained draft"
     });
     expect(harness.conversationRequests).toHaveLength(conversationReadCount);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("searches durable title and preview summaries while preserving timeline selection on failure", async () => {
+    const dom = createDom();
+    const current = paginatedHomeTimeline();
+    const historical: AgentConversationInitialTimeline = {
+      kind: "initial",
+      conversationId: "conv_20260711_searchhistory01",
+      snapshotTailEventId: "event_20260711_searchassistant01",
+      tailEventId: "event_20260711_searchassistant01",
+      canFollowUp: false,
+      messages: [{
+        id: "event_20260711_searchassistant01",
+        role: "assistant",
+        createdAt: "2026-07-11T08:00:01.000Z",
+        text: "Selected durable search result."
+      }],
+      hasEarlier: false
+    };
+    const harness = createHarness(current);
+    harness.loadConversation = async (request) => {
+      harness.conversationRequests.push(request);
+      return request.conversationId === historical.conversationId ? historical : current;
+    };
+    harness.loadConversationHistory = async (request) => {
+      harness.conversationHistoryRequests.push(request);
+      if (request.query === "broken") {
+        return {
+          apiVersion: 1,
+          activeVaultId: request.activeVaultId,
+          query: request.query,
+          status: "failed"
+        };
+      }
+      const conversations = request.query === "launch" ? [{
+        conversationId: historical.conversationId,
+        updatedAt: "2026-07-11T08:00:01.000Z",
+        safePreview: "Preview does not contain the query",
+        tailEventId: historical.tailEventId,
+        title: "Launch plan",
+        titleRevision: 1
+      }] : [{
+        conversationId: current.conversationId,
+        updatedAt: "2026-07-12T08:00:01.000Z",
+        safePreview: "What should I remember?",
+        tailEventId: current.tailEventId,
+        titleRevision: 0
+      }];
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        ...(request.query ? { query: request.query } : {}),
+        status: "ready",
+        currentConversationId: current.conversationId,
+        conversations,
+        hasMore: false
+      };
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await clickButton(dom, container, enMessages["conversation.history"]);
+    await setConversationSearchInputValue(dom, container, "launch");
+    await clickButton(dom, container, enMessages["conversation.searchAction"]);
+    await waitFor(dom, () => container.textContent?.includes("Launch plan") === true);
+    expect(harness.conversationHistoryRequests.at(-1)).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      query: "launch",
+      limit: 50
+    });
+
+    const resultRow = Array.from(container.querySelectorAll<HTMLButtonElement>(
+      "[data-conversation-history-panel] .conversation-history-open"
+    )).find((button) => button.textContent?.includes("Launch plan"));
+    if (!resultRow) throw new Error("Search result row not found.");
+    await clickElement(dom, resultRow);
+    await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
+      ?.includes("Selected durable search result.") === true);
+    const conversationReadCount = harness.conversationRequests.length;
+    const submitCount = harness.submitRequests.length;
+
+    await setConversationSearchInputValue(dom, container, "broken");
+    await clickButton(dom, container, enMessages["conversation.searchAction"]);
+    await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.historyFailed"]) === true);
+    expect(container.querySelector(".conversation-timeline-content")?.textContent)
+      .toContain("Selected durable search result.");
+    expect(container.textContent).toContain("Launch plan");
+    expect(harness.conversationRequests).toHaveLength(conversationReadCount);
+    expect(harness.submitRequests).toHaveLength(submitCount);
+
+    await clickButton(dom, container, enMessages["conversation.current"]);
+    await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
+      ?.includes("Remember the durable boundary.") === true);
+    expect(harness.conversationHistoryRequests.at(-1)?.query).toBe("launch");
+    expect(harness.conversationRequests.at(-1)).toEqual({ conversationId: current.conversationId, limit: 100 });
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -7598,6 +7694,19 @@ async function setTextareaValue(dom: JSDOM, container: HTMLElement, value: strin
 async function setConversationTitleInputValue(dom: JSDOM, container: HTMLElement, value: string): Promise<void> {
   const input = container.querySelector<HTMLInputElement>(".conversation-title-form input");
   if (!input) throw new Error("Conversation title input not found.");
+  const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
+  if (!setter) throw new Error("Input setter not found.");
+  await act(async () => {
+    setter.call(input, value);
+    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await settle(dom);
+  });
+}
+
+async function setConversationSearchInputValue(dom: JSDOM, container: HTMLElement, value: string): Promise<void> {
+  const input = container.querySelector<HTMLInputElement>(".conversation-search-form input");
+  if (!input) throw new Error("Conversation search input not found.");
   const setter = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set;
   if (!setter) throw new Error("Input setter not found.");
   await act(async () => {
