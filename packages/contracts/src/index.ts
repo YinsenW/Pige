@@ -370,6 +370,10 @@ import type {
   VaultMigrationApplyResult,
   VaultMigrationPreview,
   VaultOpenInvalidReason,
+  VaultStorageRelocationRequest,
+  VaultStorageRelocationRevision,
+  VaultStorageRelocationResult,
+  VaultStorageRelocationStatus,
   VaultRevealResult,
   VaultRevealTarget,
   WindowLayoutMode,
@@ -785,6 +789,10 @@ export type {
   VaultMigrationApplyResult,
   VaultMigrationPreview,
   VaultOpenInvalidReason,
+  VaultStorageRelocationRequest,
+  VaultStorageRelocationRevision,
+  VaultStorageRelocationResult,
+  VaultStorageRelocationStatus,
   WindowLayoutRequest,
   WindowLayoutState
 } from "@pige/schemas";
@@ -2281,6 +2289,10 @@ export interface PigeDesktopApi {
     readonly configureManagedCopyRoot: (
       request: ManagedCopyRootConfigureRequest
     ) => Promise<ManagedCopyRootConfigureResult>;
+    readonly storageRelocationStatus: () => Promise<VaultStorageRelocationStatus>;
+    readonly relocateStorage: (
+      request: VaultStorageRelocationRequest
+    ) => Promise<VaultStorageRelocationResult>;
     readonly removeRecent: (vaultId: string) => Promise<readonly RecentVaultSummary[]>;
   };
   readonly maintenance: {

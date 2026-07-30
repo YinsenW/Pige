@@ -14,6 +14,7 @@ import {
   BackupDestinationReconnectAction,
   type BackupDestinationReconnectOutcome
 } from "./BackupDestinationReconnectAction";
+import { VaultStorageRelocationAction } from "./VaultStorageRelocationAction";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -579,6 +580,7 @@ export interface VaultBackupSettingsPanelProps {
 export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): React.JSX.Element {
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [relocationBusy, setRelocationBusy] = useState(false);
   const [reconnectNotice, setReconnectNotice] = useState<ReconnectNotice | null>(null);
   const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
   const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
@@ -615,6 +617,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     reconnectRequestActiveRef.current = false;
     setReconnectNotice(null);
     setBackupBusy(false);
+    setRelocationBusy(false);
   }, [props.vault.vaultId, activeBackupJob?.id]);
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
@@ -657,7 +660,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   });
 
   const reconnectDependency = async (): Promise<void> => {
-    if (props.busy || backupBusy || reconnectRequestActiveRef.current || activeBackupJob?.canReconnectDependency !== true) return;
+    if (props.busy || backupBusy || relocationBusy || reconnectRequestActiveRef.current || activeBackupJob?.canReconnectDependency !== true) return;
     const identity = { vaultId: props.vault.vaultId, jobId: activeBackupJob.id };
     const sequence = ++reconnectRequestSequence.current;
     reconnectRequestActiveRef.current = true;
@@ -786,13 +789,14 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     </div>
     <section className="settings-section" aria-labelledby="vault-current-title">
       <h2 className="settings-section-title" id="vault-current-title">{props.t("vaultSettings.currentVault")}</h2>
-      <div className="settings-card" aria-busy={revealTarget ? "true" : undefined}>
+      <div className="settings-card" aria-busy={relocationBusy || revealTarget ? "true" : undefined}>
         <div className="settings-row tall"><div className="settings-row-copy"><strong>{props.vault.name}</strong><span>{props.vault.activeVaultPathDisplay}</span></div><span className="settings-status">{props.t("vaultSettings.connected")}</span></div>
-        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.noteStorage")}</strong><span>{props.vault.knowledgeRootDisplay}</span></div><button ref={knowledgeRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("knowledge_root")}>{props.t("vaultSettings.openInFinder")}</button></div>
-        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.sourceAssets")}</strong><span>{props.vault.sourceAssetRootDisplay}</span><span>{props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.external" : "vaultSettings.managedCopyRoot.insideVault")} · {props.t(`vaultSettings.managedCopyRoot.${props.vault.managedCopyRoot.availability}`)}</span><span>{props.t("vaultSettings.managedCopyRoot.futureOnly")}</span></div><div className="settings-row-control"><button ref={sourceAssetRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("source_asset_root")}>{props.t("vaultSettings.openSourceAssets")}</button><ManagedCopyRootSelectionAction
+        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("vaultSettings.relocate")}</strong><span>{props.t("vaultSettings.relocateDescription")}</span></div><VaultStorageRelocationAction activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || Boolean(revealTarget)} labels={{ action: props.t("vaultSettings.relocateAction"), pending: props.t("vaultSettings.relocating"), relocated: props.t("vaultSettings.relocated"), stale: props.t("vaultSettings.relocateStale"), blocked: props.t("vaultSettings.relocateBlocked"), destinationExists: props.t("vaultSettings.relocateDestinationExists"), failed: props.t("vaultSettings.relocateFailed") }} onPendingChange={setRelocationBusy} onRelocated={props.onRefresh} /></div>
+        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.noteStorage")}</strong><span>{props.vault.knowledgeRootDisplay}</span></div><button ref={knowledgeRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || relocationBusy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("knowledge_root")}>{props.t("vaultSettings.openInFinder")}</button></div>
+        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("field.sourceAssets")}</strong><span>{props.vault.sourceAssetRootDisplay}</span><span>{props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.external" : "vaultSettings.managedCopyRoot.insideVault")} · {props.t(`vaultSettings.managedCopyRoot.${props.vault.managedCopyRoot.availability}`)}</span><span>{props.t("vaultSettings.managedCopyRoot.futureOnly")}</span></div><div className="settings-row-control"><button ref={sourceAssetRootButtonRef} className="settings-button settings-action" type="button" disabled={props.busy || relocationBusy || Boolean(revealTarget)} onClick={() => void revealStorageRoot("source_asset_root")}>{props.t("vaultSettings.openSourceAssets")}</button><ManagedCopyRootSelectionAction
           identityKey={`${props.vault.vaultId}:${props.vault.managedCopyRoot.sourceStorageRevision}`}
           eligible={props.vault.managedCopyRoot.canConfigure === true}
-          disabled={props.busy || Boolean(revealTarget)}
+          disabled={props.busy || relocationBusy || Boolean(revealTarget)}
           labels={{
             action: props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.change" : "vaultSettings.managedCopyRoot.choose"),
             pending: props.t("vaultSettings.managedCopyRoot.choosing"),
@@ -804,9 +808,9 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           onSelected={props.onRefresh}
           returnFocusRef={sourceAssetRootButtonRef}
         /></div></div>
-        <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={props.vault.defaultSourceStorageStrategy} disabled={props.busy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
+        <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={props.vault.defaultSourceStorageStrategy} disabled={props.busy || relocationBusy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
       </div>
-      <div className="settings-inline-actions"><button type="button" className="settings-button" onClick={props.onOpen} disabled={props.busy || Boolean(revealTarget)}>{props.t("vaultSettings.openAnother")}</button><button type="button" className="settings-button" onClick={props.onCreate} disabled={props.busy || Boolean(revealTarget)}>{props.t("vaultSettings.createNew")}</button></div>
+      <div className="settings-inline-actions"><button type="button" className="settings-button" onClick={props.onOpen} disabled={props.busy || relocationBusy || Boolean(revealTarget)}>{props.t("vaultSettings.openAnother")}</button><button type="button" className="settings-button" onClick={props.onCreate} disabled={props.busy || relocationBusy || Boolean(revealTarget)}>{props.t("vaultSettings.createNew")}</button></div>
       {revealNotice ? <p className={revealNotice.kind === "error" ? "error" : "settings-note"} role="status" aria-live="polite">{revealNotice.message}</p> : null}
     </section>
     <section ref={backupSectionRef} tabIndex={-1} className="settings-section" aria-labelledby="vault-backup-title">
@@ -814,15 +818,15 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
       <div className="settings-card">
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.lastBackup")}</strong><span>{lastBackupDisplay} · {props.t("backup.excludesSecrets")}</span></div></div>
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.contents")}</strong><span>{props.backupStatus?.messageKey ? props.t(props.backupStatus.messageKey) : props.t("backup.loading")}</span></div><button className="settings-button" type="button" onClick={props.onOpenMemory}>{props.t("backup.viewMemory")}</button></div>
-        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.protectKnowledge")}</strong><span>{props.t("backup.protectKnowledgeDescription")}</span></div><div className="settings-row-control"><button className="settings-button primary" type="button" disabled={backupBusy || !props.backupStatus?.createAvailable} onClick={() => void createBackup()}>{props.t("backup.create")}</button><button ref={restore.previewButtonRef} className="settings-button" type="button" disabled={backupBusy || restore.restorePhase !== "idle" || !props.backupStatus?.restoreAvailable} onClick={() => void restore.previewRestore()}>{props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}</button></div></div>
+        <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.protectKnowledge")}</strong><span>{props.t("backup.protectKnowledgeDescription")}</span></div><div className="settings-row-control"><button className="settings-button primary" type="button" disabled={backupBusy || relocationBusy || !props.backupStatus?.createAvailable} onClick={() => void createBackup()}>{props.t("backup.create")}</button><button ref={restore.previewButtonRef} className="settings-button" type="button" disabled={backupBusy || relocationBusy || restore.restorePhase !== "idle" || !props.backupStatus?.restoreAvailable} onClick={() => void restore.previewRestore()}>{props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}</button></div></div>
         {activeBackupJob ? <div className="settings-row tall backup-job-status" role="status" aria-live="polite"><div className="settings-row-copy"><strong>{props.t("backup.currentJob")}</strong><span>{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
-          {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
-            : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>
-              : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button>
+          {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
+            : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>
+              : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy || relocationBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button>
                 : activeBackupJob.canReconnectBackupDestination === true ? <BackupDestinationReconnectAction
                   identityKey={`${props.vault.vaultId}:${activeBackupJob.id}:${activeBackupJob.updatedAt}`}
                   eligible={activeBackupJob.canReconnectBackupDestination === true}
-                  disabled={props.busy || backupBusy}
+                  disabled={props.busy || backupBusy || relocationBusy}
                   labels={{
                     action: props.t("backup.reconnectDestination"),
                     pending: props.t("backup.reconnectDestinationChecking"),
@@ -838,7 +842,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
                 : <BackupContinueIncompleteAction
                   identityKey={`${props.vault.vaultId}:${activeBackupJob.id}:${activeBackupJob.updatedAt}`}
                   eligible={activeBackupJob.canContinueIncomplete === true}
-                  disabled={props.busy || backupBusy}
+                  disabled={props.busy || backupBusy || relocationBusy}
                   labels={{
                     action: props.t("backup.continueIncomplete"),
                     confirmation: props.t("backup.continueIncompleteConfirmation"),

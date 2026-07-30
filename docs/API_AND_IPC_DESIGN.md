@@ -192,7 +192,8 @@ Rules:
 ### 6.1 Vault
 
 Current renderer/preload commands include `onboarding.dismissFirstHome`,
-`vault.revealKnowledgeRoot`, and `vault.revealSourceAssetRoot`.
+`vault.revealKnowledgeRoot`, `vault.revealSourceAssetRoot`,
+`vault.storageRelocationStatus`, and `vault.relocateStorage`.
 
 Commands: `vault.create`, `vault.open`, `vault.applyMigration`, `onboarding.complete`,
 `vault.updateSourceStoragePolicy`, `vault.removeRecent`, `maintenance.rebuildLocalDatabase`,
@@ -220,6 +221,13 @@ type VaultRevealResult =
 `sourceAssetRootDisplay`/`sourceAssetRootKind` are schema-v1 compatibility names for the managed-copy root, not the `<knowledgeRoot>/artifacts` root. Renaming must be versioned; renderer code cannot infer path relationships from display text.
 
 Storage reveal is main-owned and pathless: main resolves the root from the active-vault lease and bounded no-follow config; preload admits exact target/result keys. Unavailable external bindings never fall back to the vault. Identity checks fail to `vault.reveal_failed`; final check-to-shell TOCTOU remains.
+
+Storage relocation is also Main-owned and pathless. Status returns only active Vault ID and
+an opaque binding revision; relocate submits that exact identity, while Main owns picker and
+explicit confirmation. Active Jobs/writes, binding drift, existing destinations, copy or
+checksum/identity failure close without switching. Success follows verified full copy then
+one atomic machine-local binding switch, retains the original Vault, and restart reconciles
+the machine-local receipt without copying again.
 
 Onboarding DTO:
 

@@ -313,6 +313,9 @@ import type {
   VaultActionResult,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
+  VaultStorageRelocationRequest,
+  VaultStorageRelocationResult,
+  VaultStorageRelocationStatus,
   VaultRevealResult,
   VaultRevealTarget,
   VaultSummary
@@ -447,6 +450,11 @@ import {
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
   ManagedCopyRootSummarySchema,
+  VAULT_STORAGE_RELOCATE_CHANNEL,
+  VAULT_STORAGE_RELOCATION_STATUS_CHANNEL,
+  VaultStorageRelocationRequestSchema,
+  VaultStorageRelocationResultSchema,
+  VaultStorageRelocationStatusSchema,
   HighRiskConfirmationChangedEventSchema,
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
@@ -2110,6 +2118,24 @@ const api: PigeDesktopApi = {
         ("summary" in result && result.summary.activeVaultId !== parsedRequest.activeVaultId)
       ) {
         throw new Error("Invalid managed-copy root configuration response identity.");
+      }
+      return result;
+    },
+    storageRelocationStatus: async (): Promise<VaultStorageRelocationStatus> =>
+      VaultStorageRelocationStatusSchema.parse(
+        await ipcRenderer.invoke(VAULT_STORAGE_RELOCATION_STATUS_CHANNEL)
+      ),
+    relocateStorage: async (
+      request: VaultStorageRelocationRequest
+    ): Promise<VaultStorageRelocationResult> => {
+      const parsedRequest = VaultStorageRelocationRequestSchema.parse(request);
+      const result = VaultStorageRelocationResultSchema.parse(
+        await ipcRenderer.invoke(VAULT_STORAGE_RELOCATE_CHANNEL, parsedRequest)
+      );
+      if (result.requestId !== parsedRequest.requestId ||
+          result.activeVaultId !== parsedRequest.activeVaultId ||
+          result.expectedRevision !== parsedRequest.expectedRevision) {
+        throw new Error("Invalid Vault storage relocation response identity.");
       }
       return result;
     },

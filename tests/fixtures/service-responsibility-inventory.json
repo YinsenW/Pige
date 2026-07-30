@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 222,
-  "baselineLines": 112186,
+  "baselineFileCount": 223,
+  "baselineLines": 112999,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -103,6 +103,7 @@
       ["task-execution-plan-service.ts", 863, "jpr"],
       ["task-process-session-service.ts", 611, "jpr"],
       ["toolchain-repair-service.ts", 72, "p"],
+      ["vault-storage-relocation-service.ts", 813, "rd"],
       ["vault-writer-lease.ts", 894, "rd"],
       ["verified-file-snapshot.ts", 152, "rd"]
     ],
@@ -255,7 +256,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 222,
+    "serviceOwnerCount": 223,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation and machine-local startup destination.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination and recoverable active-Vault relocation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "26905d7356d88b421225234c8ea3fe8aa4d76f2d35a88073dbec542f153d5c1c"
+    "reviewedSha256": "c31e023f7d5505a2a9fe4d2b36e990cc11b620fd1584493a07aee3b3793c27a6"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages and startup destination",
+    "task": "Vault v2, Alpha convergence, public governance, localized release states, Job compaction, grounded knowledge pages, startup destination and active-Vault relocation",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,14 +67,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page and startup-destination claims; Development/UI supplied executable evidence."
+    "independence": "Planning reviewed durable migration, language, platform, ledger, public governance, localized-state, grounded knowledge-page, startup-destination and Vault-relocation claims; Development/UI supplied executable evidence, with UI Design P0/P1 clear."
   }],
   "dimensions": [
     {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Migration preview is pathless, warning-complete and focus-owned."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, settings, UI, migration, release, Job-compaction and grounded knowledge-page owners share exact startup-destination truth."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; startup destination adds evidence without promoting broader Settings requirements."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Vault/storage, API, Settings and UI owners agree on pathless confirmed relocation, verified-copy binding switch, original preservation and receipt recovery."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"All 102 statuses distinguish shipped slices from verified exits; Vault relocation adds exact evidence without promoting broader Settings requirements."},
     {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Public governance and localized error/empty-state recovery boundaries are executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the delta; the Markdown byte cap ratchets narrowly to 1,217,100."}
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owners absorb the delta; the Markdown byte cap ratchets narrowly to 1,218,800."}
   ],
   "verification": [
     {"command":"npm run verify:traceability","status":"passed","evidence":"The 102-item ledger and phase states are claim-bound."},
@@ -82,13 +82,13 @@
     {"command":"npm run verify:public-issue-templates && npm run verify:public-privacy-surface && npm run verify:localized-error-empty-states && npm run verify:independent-documentation-review","status":"passed","evidence":"Reviewed public governance and localized release-state surfaces are fail-closed."}
   ],
   "coordination": {
-    "taskId": "startup-destination-bind-20260730",
-    "taskTitle": "Machine-local startup destination bind",
+    "taskId": "vault-storage-relocation-bind-20260731",
+    "taskTitle": "Recoverable active-Vault relocation bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing vault restoration and current-session navigation remain authoritative; no OS login behavior is introduced.",
-    "acknowledgement": "Planning binds the next-launch Home/Library setting while PIGE-SETTINGS-001, PIGE-SETTINGS-002 and E1.05 remain partial."
+    "compatibility": "The machine-local binding changes only after verified copy and explicit confirmation; the original Vault remains intact and renderer IPC remains pathless.",
+    "acknowledgement": "Planning binds the Vault relocation slice while PIGE-VAULT-005 and E1.04 remain partial for external managed-copy binding setup and broader acceptance. UI Design P0/P1 is clear."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
