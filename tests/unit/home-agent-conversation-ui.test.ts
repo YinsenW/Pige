@@ -33,6 +33,8 @@ import type {
   ModelProviderSettingsSummary,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
+  NoteRestoreArchivedRequest,
+  NoteRestoreArchivedResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -4603,6 +4605,59 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("restores an eligible archived Home-opened note in place and adopts the authoritative active render", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedGroundedTimeline());
+    const revision = `noteeditrev_${"d".repeat(32)}`;
+    let mode: "stale" | "committed" = "stale";
+    harness.renderNote = async (pageId) => ({
+      ...testRenderedNote(pageId),
+      summary: { ...testRenderedNote(pageId).summary, status: "archived" },
+      restoreEligibility: { canRestore: true, revision }
+    });
+    harness.restoreArchived = async (request) => mode === "stale"
+      ? { ...request, status: "stale" }
+      : {
+          ...request,
+          status: "committed",
+          operationId: "operation_home_note_restore",
+          render: {
+            ...testRenderedNote(request.currentPageId),
+            html: "<p>Restored Home note.</p>",
+            renderContextId: `notectx_${"e".repeat(32)}`,
+            restoreEligibility: { canRestore: false, revision: `noteeditrev_${"e".repeat(32)}` }
+          }
+        };
+    const mount = await mountHome(dom, makePigeApi(harness));
+    const citation = requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row"));
+    await clickElement(dom, citation);
+    await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
+
+    await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]);
+    await clickButton(dom, mount.container, enMessages["note.document.restore"]);
+    await clickButton(dom, mount.container, enMessages["note.document.restoreConfirm"]);
+    await waitFor(dom, () => harness.noteRestoreRequests.length === 1);
+    expect(harness.noteRestoreRequests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      currentPageId: "page_20260715_note0001",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      expectedRevision: revision
+    });
+    expect(mount.container.querySelector(".note-reader")).not.toBeNull();
+    expect(mount.container.textContent).toContain(enMessages["note.document.restoreFailed"]);
+    expect(dom.window.document.activeElement).toBe(buttons(mount.container, enMessages["note.document.restoreCancel"])[0]);
+
+    mode = "committed";
+    await clickButton(dom, mount.container, enMessages["note.document.restoreConfirm"]);
+    await waitFor(dom, () => mount.container.textContent?.includes("Restored Home note.") === true);
+    expect(harness.noteRestoreRequests).toHaveLength(2);
+    expect(mount.container.querySelector(".note-reader")).not.toBeNull();
+    await waitFor(dom, () => dom.window.document.activeElement === mount.container.querySelector(".note-reader"));
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("merges a selected note into the Home-opened Reader and adopts the authoritative survivor", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());
@@ -5705,6 +5760,7 @@ interface ConversationHarness {
   readonly editorSaveRequests: NoteEditorSaveRequest[];
   readonly noteTrashRequests: NoteTrashCurrentRequest[];
   readonly noteArchiveRequests: NoteArchiveCurrentRequest[];
+  readonly noteRestoreRequests: NoteRestoreArchivedRequest[];
   readonly noteMergeRequests: NoteMergeRequest[];
   readonly noteRelateRequests: NoteRelateRequest[];
   renderNote: (pageId: string) => Promise<NoteRenderResult>;
@@ -5712,6 +5768,7 @@ interface ConversationHarness {
   saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   trashCurrent: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   archiveCurrent: (request: NoteArchiveCurrentRequest) => Promise<NoteArchiveCurrentResult>;
+  restoreArchived: (request: NoteRestoreArchivedRequest) => Promise<NoteRestoreArchivedResult>;
   mergeCurrent: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   relateCurrent: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
   openSourceReference: (request: NoteOpenSourceReferenceRequest) => Promise<NoteOpenSourceReferenceResult>;
@@ -5828,6 +5885,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     editorSaveRequests: [],
     noteTrashRequests: [],
     noteArchiveRequests: [],
+    noteRestoreRequests: [],
     noteMergeRequests: [],
     noteRelateRequests: [],
     renderNote: async (pageId) => testRenderedNote(pageId),
@@ -5850,6 +5908,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     }),
     trashCurrent: async (request) => ({ ...request, status: "failed" }),
     archiveCurrent: async (request) => ({ ...request, status: "failed" }),
+    restoreArchived: async (request) => ({ ...request, status: "failed" }),
     mergeCurrent: async (request) => ({ ...request, status: "failed" }),
     relateCurrent: async (request) => ({ ...request, status: "failed" }),
     reconnectOriginalSource: async (request) => ({ ...request, status: "cancelled" }),
@@ -6499,6 +6558,10 @@ function makePigeApi(harness: ConversationHarness): object {
       archiveCurrent: async (request: NoteArchiveCurrentRequest) => {
         harness.noteArchiveRequests.push(request);
         return harness.archiveCurrent(request);
+      },
+      restoreArchived: async (request: NoteRestoreArchivedRequest) => {
+        harness.noteRestoreRequests.push(request);
+        return harness.restoreArchived(request);
       },
       merge: async (request: NoteMergeRequest) => {
         harness.noteMergeRequests.push(request);
