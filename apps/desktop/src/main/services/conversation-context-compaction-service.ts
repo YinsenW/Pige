@@ -39,15 +39,14 @@ function createCompactionSummary(
   events: readonly ConversationEvent[],
   omittedMessages: readonly ConversationEvent[]
 ): AgentTurnConversationContextMessage {
-  const lastOmittedId = omittedMessages.at(-1)!.id;
-  const lastOmittedIndex = events.findIndex(({ id }) => id === lastOmittedId);
-  if (lastOmittedIndex < 0) throw historyTooLarge();
-  const boundary = events.slice(0, lastOmittedIndex + 1);
-  const refs = collectRefs(boundary);
+  const firstEvent = events[0], lastEvent = events.at(-1);
+  if (!firstEvent || !lastEvent) throw historyTooLarge();
+  const refs = collectRefs(events);
   const lines = [
     SUMMARY_HEADER,
     `Omitted ${omittedMessages.length} earlier user/assistant messages from ${omittedMessages[0]!.createdAt} through ${omittedMessages.at(-1)!.createdAt}.`,
-    `Content digest: sha256:${createHash("sha256").update(JSON.stringify(boundary)).digest("hex")}.`,
+    `Durable history snapshot: ${events.length} events from ${firstEvent.id} through ${lastEvent.id}.`,
+    `Content digest: sha256:${createHash("sha256").update(JSON.stringify(events)).digest("hex")}.`,
     "The complete durable conversation remains available in History; omitted message bodies are not authority.",
     ...refs.map(([label, values]) => `${label}: ${values.join(", ")}.`)
   ];
@@ -56,13 +55,17 @@ function createCompactionSummary(
 
 function collectRefs(events: readonly ConversationEvent[]): ReadonlyArray<readonly [string, readonly string[]]> {
   const groups = new Map<string, Set<string>>([
-    ["Event refs", new Set()], ["Source refs", new Set()], ["Page refs", new Set()],
+    ["Source refs", new Set()], ["Page refs", new Set()],
     ["Job refs", new Set()], ["Proposal refs", new Set()], ["Operation refs", new Set()],
-    ["Capture refs", new Set()], ["Citation refs", new Set()], ["Policy hashes", new Set()]
+    ["Capture refs", new Set()], ["Citation refs", new Set()], ["Dataset refs", new Set()],
+    ["Dataset revision refs", new Set()], ["Dataset table refs", new Set()],
+    ["Dataset schema hashes", new Set()], ["Dataset query hashes", new Set()],
+    ["Dataset result hashes", new Set()], ["Source revision hashes", new Set()],
+    ["Policy hashes", new Set()]
   ]);
   for (const event of events) {
-    groups.get("Event refs")!.add(event.id);
     add(groups, "Source refs", event.sourceId);
+    add(groups, "Page refs", event.scope?.pageId);
     add(groups, "Job refs", event.jobId);
     add(groups, "Proposal refs", event.proposalId);
     add(groups, "Operation refs", event.operationId);
@@ -73,8 +76,25 @@ function collectRefs(events: readonly ConversationEvent[]): ReadonlyArray<readon
       add(groups, "Citation refs", citation.refId);
       if ("pageId" in citation) add(groups, "Page refs", citation.pageId);
       if ("evidence" in citation) {
-        add(groups, "Source refs", citation.evidence.sourceId);
+        const evidence = citation.evidence;
+        add(groups, "Source refs", evidence.sourceId);
+        add(groups, "Dataset refs", evidence.datasetId);
+        add(groups, "Dataset revision refs", evidence.revisionId);
+        add(groups, "Dataset table refs", evidence.tableId);
+        add(groups, "Dataset schema hashes", evidence.schemaId);
+        add(groups, "Dataset query hashes", evidence.queryPlanHash);
+        add(groups, "Dataset result hashes", evidence.resultHash);
+        add(groups, "Source revision hashes", evidence.sourceRevisionHash);
       }
+    }
+    const datasetResult = event.answerDatasetResult;
+    if (datasetResult) {
+      add(groups, "Dataset refs", datasetResult.datasetId);
+      add(groups, "Dataset revision refs", datasetResult.revisionId);
+      add(groups, "Dataset table refs", datasetResult.tableId);
+      add(groups, "Dataset query hashes", datasetResult.planHash);
+      add(groups, "Dataset result hashes", datasetResult.resultHash);
+      for (const citationRef of datasetResult.citationRefs) add(groups, "Citation refs", citationRef);
     }
   }
   return [...groups.entries()]
