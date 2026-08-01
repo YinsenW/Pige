@@ -460,7 +460,7 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("filters real page summaries by title and durable page type", async () => {
+  it("filters every typed Knowledge family by durable page type", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     await act(async () => {
@@ -489,14 +489,27 @@ describe("full UI Library", () => {
     const container = dom.window.document.querySelector("#root")!;
     expect(container.textContent).toContain("Alpha plan");
     expect(container.textContent).toContain("Interface design");
+    expect(container.textContent).toContain("Navigation concept");
+    expect(container.textContent).toContain("Ada Lovelace");
+    expect(container.textContent).toContain("Local-first claim");
+    expect(container.textContent).toContain("Open question");
 
-    await act(async () => {
-      buttonNamed(container, "Topics").click();
-      await settle(dom);
-    });
-    expect(buttonNamed(container, "Topics").getAttribute("aria-selected")).toBe("true");
-    expect(container.textContent).not.toContain("Alpha plan");
-    expect(container.textContent).toContain("Interface design");
+    for (const [label, visible, hidden] of [
+      ["Topics", "Interface design", "Navigation concept"],
+      ["Concepts", "Navigation concept", "Ada Lovelace"],
+      ["Entities", "Ada Lovelace", "Local-first claim"],
+      ["Claims", "Local-first claim", "Open question"],
+      ["Questions", "Open question", "Interface design"]
+    ] as const) {
+      await act(async () => {
+        buttonNamed(container, label).click();
+        await settle(dom);
+      });
+      expect(buttonNamed(container, label).getAttribute("aria-selected")).toBe("true");
+      expect(container.textContent).toContain(visible);
+      expect(container.textContent).not.toContain(hidden);
+      expect(container.textContent).not.toContain("Alpha plan");
+    }
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -659,6 +672,19 @@ describe("full UI Library", () => {
     });
     expect(opened).toEqual([]);
     expect(focused).toEqual([{ pageId: "page_20260715_beta2222", query: "beta" }]);
+
+    await act(async () => {
+      buttonNamed(container, "Claims").click();
+      await settle(dom);
+    });
+    await inputText(dom, search, "grounded");
+    await act(async () => { await delay(dom, 150); });
+    expect(requests.at(-1)).toEqual({
+      query: "grounded",
+      limit: 20,
+      pageTypes: ["claim"],
+      scope: { kind: "active_vault", vaultId: "vault_20260715_fullui01" }
+    });
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3800,7 +3826,7 @@ function libraryList(): LibraryListResult {
   return {
     scannedAt: "2026-07-15T10:00:00.000Z",
     activeVaultId: "vault_20260715_fullui01",
-    total: 2,
+    total: 6,
     invalidPageCount: 0,
     pages: [{
       pageId: "page_20260715_aaaa1111",
@@ -3822,7 +3848,28 @@ function libraryList(): LibraryListResult {
       updatedAt: "2026-07-15T10:00:00.000Z",
       language: "en",
       sourceIds: []
-    }]
+    }, typedLibraryPage("page_20260802_concept01", "Navigation concept", "concept"),
+    typedLibraryPage("page_20260802_entity001", "Ada Lovelace", "entity"),
+    typedLibraryPage("page_20260802_claim0001", "Local-first claim", "claim"),
+    typedLibraryPage("page_20260802_question1", "Open question", "question")]
+  };
+}
+
+function typedLibraryPage(
+  pageId: string,
+  title: string,
+  pageType: "concept" | "entity" | "claim" | "question"
+): LibraryListResult["pages"][number] {
+  return {
+    pageId,
+    title,
+    pageType,
+    status: "active",
+    pagePath: `wiki/${pageType}/${pageId}.md`,
+    createdAt: "2026-08-02T00:00:00.000Z",
+    updatedAt: "2026-08-02T00:00:00.000Z",
+    language: "en",
+    sourceIds: []
   };
 }
 

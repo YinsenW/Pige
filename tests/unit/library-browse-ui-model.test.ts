@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryBrowseResult, LibraryListResult, LibraryPageSummary } from "@pige/contracts";
-import { appendLibraryBrowsePage } from "../../apps/desktop/src/renderer/src/components/library-panel-model";
+import {
+  appendLibraryBrowsePage,
+  groupLibrarySearchItems,
+  libraryBrowseItems,
+  libraryFamilyPageTypes
+} from "../../apps/desktop/src/renderer/src/components/library-panel-model";
 
 function page(id: string, pagePath: string, updatedAt: string): LibraryPageSummary {
   return {
@@ -45,5 +50,27 @@ describe("Library browse UI model", () => {
     expect(appendLibraryBrowsePage(current, {
       ...continuation([]), activeVaultId: "vault_20260731_other0001"
     })).toBeUndefined();
+  });
+
+  it("keeps every typed Knowledge family exact in browse and search", () => {
+    const typed = (["topic", "concept", "entity", "claim", "question"] as const).map((pageType, index) => ({
+      ...page(`page_20260802_typed000${index}`, `wiki/${pageType}.md`, `2026-08-02T0${index}:00:00.000Z`),
+      pageType
+    }));
+    const pages = [...current.pages, ...typed];
+    const expected = [
+      ["topics", "topic"], ["concepts", "concept"], ["entities", "entity"],
+      ["claims", "claim"], ["questions", "question"]
+    ] as const;
+    for (const [family, pageType] of expected) {
+      expect(libraryFamilyPageTypes(family)).toEqual([pageType]);
+      expect(libraryBrowseItems(pages, family).map((item) => item.summary.pageType)).toEqual([pageType]);
+    }
+    const grouped = groupLibrarySearchItems(pages.map((summary) => ({
+      summary, score: 0, snippets: [], matchReasons: []
+    })));
+    for (const [family, pageType] of expected) {
+      expect(grouped[family].map((item) => item.summary.pageType)).toEqual([pageType]);
+    }
   });
 });

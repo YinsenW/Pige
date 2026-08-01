@@ -5102,6 +5102,35 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260802-Library-Typed-Knowledge-Browse
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Library exposes Topic, Concept, Entity, Claim and Question as separate exact durable page-type
+families for both empty-query browsing and bounded local search.
+
+Rationale:
+
+Grouping every managed knowledge type behind Topics hid durable distinctions that already exist in
+Markdown and the local retrieval contract. Reusing the existing page-type filter makes the content
+discoverable without adding a new backend, index, visible taxonomy or renderer authority.
+
+Consequences:
+
+- Stable page IDs remain the only Reader-open authority; no path, body, source identity or score is exposed.
+- Query and selected-family sequencing prevents an old result set from replacing the current view.
+- The horizontally bounded tab strip preserves the existing narrow Library layout.
+- PIGE-KNOW-001 gains typed discovery evidence; PIGE-UI-003 remains partial for unrelated shell and platform breadth.
+
+References:
+
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

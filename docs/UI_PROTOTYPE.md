@@ -722,8 +722,10 @@ Sources is a tab inside Library in v0.1. The sidebar can still expose it as a sh
 Current Library bridge:
 
 - Lists path/body-free summaries; stable page IDs alone open Reader.
-- Search accepts at most 320 Unicode points and filters All/Notes/Sources/Topics. Tags pages
-  canonical facet counts and safe matches; opaque continuation drift fails before append.
+- Search accepts at most 320 Unicode points and filters All, Notes, Sources, Topics, Concepts,
+  Entities, Claims, or Questions by the exact durable page type. Empty-query browsing uses the
+  same typed projection; Tags pages canonical facet counts and safe matches. The tab strip remains
+  horizontally bounded, and opaque continuation or old-family drift fails before append.
 - No vault means no request. Failures retain rows/focus and never show scores, raw errors,
   IDs, or paths.
 - Source evidence and Dataset knowledge stay distinct; editing, reveal, and Agent actions stay open.
@@ -748,7 +750,7 @@ Prototype:
 ```txt
 Library
 
-Notes  Sources  Topics  Tags
+Notes  Sources  Topics  Concepts  Entities  Claims  Questions  Tags
 
 Tree
 
