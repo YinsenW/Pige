@@ -3,7 +3,7 @@ import type { IpcMainInvokeEvent } from "electron";
 import { registerManagedDatasetLifecycleIpc } from "../../apps/desktop/src/main/register-managed-dataset-lifecycle-ipc";
 
 describe("managed Dataset lifecycle IPC", () => {
-  it("keeps list and restore trusted, strict, pathless, and identity-bound", async () => {
+  it("keeps list, restore, and permanent delete trusted, strict, pathless, and identity-bound", async () => {
     const handlers = new Map<string, (event: IpcMainInvokeEvent, request: unknown) => Promise<unknown>>();
     const vaultId = "vault_20260801_datasettrash";
     const datasetId = "dataset_20260801_abcdefghijkl";
