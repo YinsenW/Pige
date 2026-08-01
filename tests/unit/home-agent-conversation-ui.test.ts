@@ -5742,10 +5742,9 @@ describe("Home durable Agent conversation UI", () => {
     expect(harness.editorOpenRequests[1]?.renderContextId).toBe(`notectx_${"e".repeat(32)}`);
     expect(editor.value).toBe("# Note A\n\nEdited Home body\n");
     const currentFile = requireElement(
-      mount.container.querySelector<HTMLTextAreaElement>("#note-markdown-editor-current-file")
-    ) as HTMLTextAreaElement;
-    expect(currentFile.value).toBe("# Note A\n\nAuthoritative body\n");
-    expect(currentFile.readOnly).toBe(true);
+      mount.container.querySelector<HTMLElement>('[aria-label="Current file (read only)"] [data-note-markdown-conflict-preview]')
+    );
+    expect(currentFile.textContent).toContain("Authoritative body");
     expect(buttons(mount.container, enMessages["note.editor.save"])[0]?.disabled).toBe(true);
     await clickButton(dom, mount.container, enMessages["note.editor.conflict.continueDraft"]);
     await clickButton(dom, mount.container, enMessages["note.editor.save"]);

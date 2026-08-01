@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 316,
-  "baselineLines": 132881,
+  "baselineFileCount": 317,
+  "baselineLines": 133187,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -114,6 +114,7 @@
       ["note-alias-service.ts", 93, "rd"],
       ["note-markdown-editor-activity-ids.ts", 18, "r"],
       ["note-markdown-editor-redo-service.ts", 201, "rd"],
+      ["note-markdown-editor-conflict-service.ts", 306, "prdf"],
       ["note-markdown-editor-service.ts", 993, "rd"],
       ["note-markdown-import-service.ts", 353, "prdf"],
       ["note-merge-service.ts", 398, "rd"],
@@ -349,7 +350,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 316,
+    "serviceOwnerCount": 317,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

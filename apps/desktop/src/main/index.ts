@@ -275,6 +275,7 @@ import { LibraryTagRenameService } from "./services/library-tag-rename-service";
 import { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import { LibraryTagsService } from "./services/library-tags-service";
 import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
+import { NoteMarkdownEditorConflictService } from "./services/note-markdown-editor-conflict-service";
 import { AgentPageUpdateRedoService } from "./services/agent-page-update-redo-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
@@ -545,6 +546,7 @@ let noteMergeService: NoteMergeService | undefined;
 let noteRenameService: NoteRenameService | undefined;
 let noteRelateService: NoteRelateService | undefined;
 let noteMarkdownImportService: NoteMarkdownImportService | undefined;
+let noteMarkdownEditorConflictService: NoteMarkdownEditorConflictService | undefined;
 let sourceOriginalReconnectService: SourceOriginalReconnectService | undefined;
 let noteMarkdownEditorActivityAdapter: NoteMarkdownEditorActivityAdapter | undefined;
 let noteMarkdownEditorService: NoteMarkdownEditorService | undefined;
@@ -2131,6 +2133,12 @@ const getNoteMarkdownImportService = (): NoteMarkdownImportService => {
   noteMarkdownImportService ??= new NoteMarkdownImportService(getVaultService(), getNotesService());
   return noteMarkdownImportService;
 };
+const getNoteMarkdownEditorConflictService = (): NoteMarkdownEditorConflictService => {
+  noteMarkdownEditorConflictService ??= new NoteMarkdownEditorConflictService(
+    getVaultService(), getNotesService(), getNoteMarkdownEditorService()
+  );
+  return noteMarkdownEditorConflictService;
+};
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
   const backupConversationPreference = getBackupConversationPreferenceService();
   const pigePolicy = getPigePolicyService();
@@ -2874,6 +2882,21 @@ const resumeBackgroundJobs = async (): Promise<void> => {
       recordBackgroundFailure(
         "note.import_recovery_failed",
         "Interrupted Markdown note imports could not be inspected safely."
+      );
+    }
+    try {
+      const conflictRecovery = getNoteMarkdownEditorConflictService().recoverIncompleteSaves();
+      if (conflictRecovery.recovered > 0) scheduleActivityIndexRebuild();
+      if (conflictRecovery.failed > 0) {
+        recordBackgroundFailure(
+          "note.editor_conflict_recovery_incomplete",
+          "Some interrupted note conflict copies still require repair."
+        );
+      }
+    } catch {
+      recordBackgroundFailure(
+        "note.editor_conflict_recovery_failed",
+        "Interrupted note conflict copies could not be inspected safely."
       );
     }
     try {
@@ -3666,6 +3689,7 @@ registerReaderIpc({
   getNoteRenameService,
   getNoteRelateService,
   getNoteMarkdownImportService,
+  getNoteMarkdownEditorConflictService,
   getNoteRevisionHistoryService,
   getLibraryTopicRenameService,
   onNoteTrashCommitted: scheduleActivityIndexRebuild,
@@ -4260,6 +4284,9 @@ app.whenReady().then(async () => {
     () => getVaultService().activeVaultPath(),
   );
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
+  noteMarkdownEditorConflictService = new NoteMarkdownEditorConflictService(
+    getVaultService(), getNotesService(), getNoteMarkdownEditorService()
+  );
   documentParserService = new DocumentParserService();
   sourceRefreshService = undefined;
   sourceRefreshConflictService = undefined;

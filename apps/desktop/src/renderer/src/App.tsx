@@ -3735,12 +3735,13 @@ export function LibraryPanel(props: {
           labels={noteMarkdownEditorLabels(props.t)}
           returnFocusRef={editorOpenerRef}
           onSave={props.onSaveNoteEditor}
-          onReload={props.onReloadNoteEditor}
+          onReload={props.onReloadNoteEditor} onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
           onCommitted={(result) => { if (result.render.summary.pageId !== props.selectedNote?.summary.pageId || result.render.summary.pageType !== props.selectedNote.summary.pageType) return;
             editorOpenSequence.current += 1;
             setEditorReady(null);
             onNoteEditorCommitted(result);
           }}
+          onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null); props.onNoteImported?.(result.render); }}
           onCancel={() => setEditorReady(null)}
         />
       );
@@ -6757,13 +6758,14 @@ function HomeComposer(props: {
               labels={noteMarkdownEditorLabels(props.t)}
               returnFocusRef={editorOpenerRef}
               onSave={props.onSaveNoteEditor}
-              onReload={props.onReloadNoteEditor}
+              onReload={props.onReloadNoteEditor} onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
               onCommitted={(result) => { if (result.render.summary.pageId !== selectedNote.summary.pageId || result.render.summary.pageType !== selectedNote.summary.pageType) return;
                 editorOpenSequence.current += 1;
                 setEditorReady(null);
                 setSelectedNote(result.render);
                 void props.onHomeStateChanged();
               }}
+              onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null); setSelectedNote(result.render); void props.onHomeStateChanged(); }}
               onCancel={() => setEditorReady(null)}
             />
           ) : (
@@ -7457,6 +7459,8 @@ function noteMarkdownEditorLabels(t: (key: string) => string): NoteMarkdownEdito
     discardDescription: t("note.editor.discard.description"),
     keepEditing: t("note.editor.discard.keepEditing"),
     discardChanges: t("note.editor.discard.confirm"),
+    reloadDiscardTitle: t("note.editor.conflict.reloadDiscardTitle"), reloadDiscardDescription: t("note.editor.conflict.reloadDiscardDescription"),
+    reloadCurrent: t("note.editor.conflict.reloadCurrent"),
     review: t("note.editor.review"),
     reviewing: t("note.editor.reviewing"),
     conflictTitle: t("note.editor.conflict.title"),
@@ -7464,6 +7468,8 @@ function noteMarkdownEditorLabels(t: (key: string) => string): NoteMarkdownEdito
     draft: t("note.editor.conflict.draft"),
     useCurrent: t("note.editor.conflict.useCurrent"),
     continueDraft: t("note.editor.conflict.continueDraft"),
+    saveAsNew: t("note.editor.conflict.saveAsNew"),
+    savingAsNew: t("note.editor.conflict.savingAsNew"),
     stale: t("note.editor.stale"),
     failed: t("note.editor.failed"),
     notFound: t("note.editor.notFound"),

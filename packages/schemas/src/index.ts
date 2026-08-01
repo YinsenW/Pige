@@ -2146,6 +2146,30 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
   NoteEditorResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   NoteEditorResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
+export const NOTE_EDITOR_SAVE_CONFLICT_AS_NEW_CHANNEL = "notes.saveEditorConflictAsNew" as const;
+export const NoteEditorConflictRequestIdSchema = z.string()
+  .regex(/^noteeditconflict_[a-z0-9]{16,64}$/u);
+export const NoteEditorSaveConflictAsNewRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteEditorConflictRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  currentRenderContextId: NoteRenderContextIdSchema,
+  expectedCurrentRevision: NoteEditorRevisionSchema,
+  markdown: NoteEditorPortableMarkdownSchema
+}).strict();
+const NoteEditorSaveConflictAsNewResultIdentitySchema =
+  NoteEditorSaveConflictAsNewRequestSchema.omit({ markdown: true });
+export const NoteEditorSaveConflictAsNewResultSchema = z.discriminatedUnion("status", [
+  NoteEditorSaveConflictAsNewResultIdentitySchema.extend({
+    status: z.literal("saved"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema
+  }).strict(),
+  ...(["stale", "not_found", "invalid", "failed"] as const).map((status) =>
+    NoteEditorSaveConflictAsNewResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
 
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
 export const NOTE_TRASH_LIST_CHANNEL = "notes.listTrash" as const;
@@ -13167,6 +13191,9 @@ export type NoteEditorOpenRequest = z.infer<typeof NoteEditorOpenRequestSchema>;
 export type NoteEditorOpenResult = z.infer<typeof NoteEditorOpenResultSchema>;
 export type NoteEditorSaveRequest = z.infer<typeof NoteEditorSaveRequestSchema>;
 export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
+export type NoteEditorConflictRequestId = z.infer<typeof NoteEditorConflictRequestIdSchema>;
+export type NoteEditorSaveConflictAsNewRequest = z.infer<typeof NoteEditorSaveConflictAsNewRequestSchema>;
+export type NoteEditorSaveConflictAsNewResult = z.infer<typeof NoteEditorSaveConflictAsNewResultSchema>;
 export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestIdSchema>;
 export type NoteTrashListRequestId = z.infer<typeof NoteTrashListRequestIdSchema>;
 export type NoteTrashRestoreRequestId = z.infer<typeof NoteTrashRestoreRequestIdSchema>;

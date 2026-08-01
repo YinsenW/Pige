@@ -11,11 +11,14 @@ import type {
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
-  NoteEditorSaveResult
+  NoteEditorSaveResult,
+  NoteEditorSaveConflictAsNewRequest,
+  NoteEditorSaveConflictAsNewResult
 } from "@pige/contracts";
 
 export type NoteMarkdownEditorReady = Extract<NoteEditorOpenResult, { status: "ready" }>;
 export type NoteMarkdownEditorCommitted = Extract<NoteEditorSaveResult, { status: "committed" }>;
+export type NoteMarkdownEditorConflictSaved = Extract<NoteEditorSaveConflictAsNewResult, { status: "saved" }>;
 
 export type NoteMarkdownEditorLabels = Readonly<{
   title: string;
@@ -31,6 +34,9 @@ export type NoteMarkdownEditorLabels = Readonly<{
   discardDescription: string;
   keepEditing: string;
   discardChanges: string;
+  reloadDiscardTitle: string;
+  reloadDiscardDescription: string;
+  reloadCurrent: string;
   review: string;
   reviewing: string;
   conflictTitle: string;
@@ -38,6 +44,8 @@ export type NoteMarkdownEditorLabels = Readonly<{
   draft: string;
   useCurrent: string;
   continueDraft: string;
+  saveAsNew: string;
+  savingAsNew: string;
   stale: string;
   failed: string;
   notFound: string;
@@ -52,7 +60,11 @@ export type NoteMarkdownEditorProps = Readonly<{
   returnFocusRef: RefObject<HTMLElement | null>;
   onSave: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   onReload: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
+  onSaveConflictAsNew: (
+    request: NoteEditorSaveConflictAsNewRequest
+  ) => Promise<NoteEditorSaveConflictAsNewResult>;
   onCommitted: (result: NoteMarkdownEditorCommitted) => void;
+  onConflictSaved: (result: NoteMarkdownEditorConflictSaved) => void;
   onCancel: () => void;
 }>;
 
@@ -67,6 +79,10 @@ type Notice =
 type RenderedDraft = Readonly<{
   source: string;
   html: string | null;
+}>;
+type ConflictRenders = Readonly<{
+  draft: RenderedDraft;
+  current: RenderedDraft;
 }>;
 
 let markdownRendererPromise: Promise<(
@@ -87,15 +103,16 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   const [draft, setDraft] = useState(props.ready.markdown);
   const [conflictReview, setConflictReview] = useState<NoteMarkdownEditorReady | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [pending, setPending] = useState<"save" | "review" | null>(null);
+  const [pending, setPending] = useState<"save" | "review" | "saveConflict" | null>(null);
   const [mode, setMode] = useState<"source" | "preview">("source");
   const [renderedDraft, setRenderedDraft] = useState<RenderedDraft | null>(null);
-  const [discardConfirm, setDiscardConfirm] = useState(false);
+  const [discardIntent, setDiscardIntent] = useState<"exit" | "reload" | null>(null);
+  const [conflictRenders, setConflictRenders] = useState<ConflictRenders | null>(null);
   const requestSequenceRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewPanelRef = useRef<HTMLElement>(null);
   const pendingScrollRatioRef = useRef(0);
-  const currentFileRef = useRef<HTMLTextAreaElement>(null);
+  const conflictPrimaryRef = useRef<HTMLButtonElement>(null);
   const focusEditorAfterReviewRef = useRef(false);
   const discardReturnFocusRef = useRef<HTMLElement | null>(null);
   const keepEditingRef = useRef<HTMLButtonElement>(null);
@@ -110,7 +127,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setPending(null);
     setMode("source");
     setRenderedDraft(null);
-    setDiscardConfirm(false);
+    setDiscardIntent(null);
+    setConflictRenders(null);
     discardReturnFocusRef.current = null;
     pendingScrollRatioRef.current = 0;
     focusEditorAfterReviewRef.current = false;
@@ -121,9 +139,29 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   }, [propIdentityKey]);
 
   useLayoutEffect(() => {
-    if (!discardConfirm) return;
+    if (!discardIntent) return;
     keepEditingRef.current?.focus();
-  }, [discardConfirm]);
+  }, [discardIntent]);
+
+  useEffect(() => {
+    if (!conflictReview) { setConflictRenders(null); return; }
+    let current = true;
+    setConflictRenders(null);
+    void Promise.all([renderDraftMarkdown(draft), renderDraftMarkdown(conflictReview.markdown)])
+      .then(([draftRender, currentRender]) => {
+        if (current) setConflictRenders({
+          draft: { source: draft, html: draftRender.html },
+          current: { source: conflictReview.markdown, html: currentRender.html }
+        });
+      })
+      .catch(() => {
+        if (current) setConflictRenders({
+          draft: { source: draft, html: null },
+          current: { source: conflictReview.markdown, html: null }
+        });
+      });
+    return () => { current = false; };
+  }, [conflictReview, draft]);
 
   useEffect(() => {
     if (mode !== "preview" || conflictReview) return;
@@ -150,7 +188,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   useEffect(() => {
     if (conflictReview) {
-      currentFileRef.current?.focus();
+      conflictPrimaryRef.current?.focus();
       return;
     }
     if (focusEditorAfterReviewRef.current) {
@@ -242,6 +280,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const useCurrentFile = (): void => {
     if (!conflictReview || pending) return;
+    setDiscardIntent(null);
+    discardReturnFocusRef.current = null;
     setBase(conflictReview);
     setDraft(conflictReview.markdown);
     focusEditorAfterReviewRef.current = true;
@@ -255,6 +295,35 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     focusEditorAfterReviewRef.current = true;
     setConflictReview(null);
     setNotice("mergeReady");
+  };
+
+  const saveConflictAsNew = async (): Promise<void> => {
+    if (!conflictReview || pending) return;
+    const request: NoteEditorSaveConflictAsNewRequest = {
+      apiVersion: 1,
+      requestId: `noteeditconflict_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
+      activeVaultId: conflictReview.activeVaultId,
+      pageId: conflictReview.pageId,
+      currentRenderContextId: conflictReview.renderContextId,
+      expectedCurrentRevision: conflictReview.revision,
+      markdown: draft
+    };
+    const sequence = requestSequenceRef.current + 1;
+    requestSequenceRef.current = sequence;
+    const expectedPropIdentityKey = propIdentityKey;
+    setPending("saveConflict");
+    setNotice(null);
+    try {
+      const result = await props.onSaveConflictAsNew(request);
+      if (!requestIsCurrent(sequence, expectedPropIdentityKey)) return;
+      if (!conflictResultMatchesRequest(request, result)) { setNotice("failed"); return; }
+      if (result.status === "saved") { props.onConflictSaved(result); return; }
+      setNotice(result.status === "not_found" ? "notFound" : result.status === "invalid" ? "invalid_frontmatter" : result.status);
+    } catch {
+      if (requestIsCurrent(sequence, expectedPropIdentityKey)) setNotice("failed");
+    } finally {
+      if (requestIsCurrent(sequence, expectedPropIdentityKey)) setPending(null);
+    }
   };
 
   const showSource = (): void => {
@@ -275,7 +344,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const commitCancel = (): void => {
     requestSequenceRef.current += 1;
-    setDiscardConfirm(false);
+    setDiscardIntent(null);
     discardReturnFocusRef.current = null;
     props.onCancel();
     window.requestAnimationFrame(() => props.returnFocusRef.current?.focus());
@@ -288,13 +357,18 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     }
     discardReturnFocusRef.current = initiator ??
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    setDiscardConfirm(true);
+    setDiscardIntent("exit");
+  };
+
+  const requestReload = (initiator: HTMLElement): void => {
+    discardReturnFocusRef.current = initiator;
+    setDiscardIntent("reload");
   };
 
   const keepEditing = (): void => {
     const returnFocus = discardReturnFocusRef.current;
     discardReturnFocusRef.current = null;
-    setDiscardConfirm(false);
+    setDiscardIntent(null);
     window.requestAnimationFrame(() => {
       if (returnFocus?.isConnected) returnFocus.focus();
       else if (mode === "source") textareaRef.current?.focus();
@@ -306,7 +380,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      if (discardConfirm) keepEditing();
+      if (discardIntent) keepEditing();
       else requestCancel();
       return;
     }
@@ -358,7 +432,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
             </button>
           </div>
         ) : null}
-        {mode === "source" || conflictReview ? (
+        {mode === "source" && !conflictReview ? (
           <div>
             <label htmlFor="note-markdown-editor-input">
               {conflictReview ? props.labels.draft : props.labels.field}
@@ -408,21 +482,23 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
             aria-labelledby="note-markdown-editor-conflict-title"
           >
             <h2 id="note-markdown-editor-conflict-title">{props.labels.conflictTitle}</h2>
-            <label htmlFor="note-markdown-editor-current-file">{props.labels.currentFile}</label>
-            <textarea
-              ref={currentFileRef}
-              id="note-markdown-editor-current-file"
-              value={conflictReview.markdown}
-              rows={12}
-              readOnly
-              spellCheck={false}
-            />
+            <section aria-label={props.labels.currentFile} className="note-markdown-editor-preview-panel">
+              <h3>{props.labels.currentFile}</h3>
+              {renderConflictPreview(conflictRenders?.current, conflictReview.markdown, props.labels)}
+            </section>
+            <section aria-label={props.labels.draft} className="note-markdown-editor-preview-panel">
+              <h3>{props.labels.draft}</h3>
+              {renderConflictPreview(conflictRenders?.draft, draft, props.labels)}
+            </section>
             <div className="settings-actions">
-              <button type="button" className="settings-button" onClick={useCurrentFile}>
-                {props.labels.useCurrent}
-              </button>
-              <button type="button" className="primary" onClick={continueWithDraft}>
+              <button ref={conflictPrimaryRef} type="button" className="primary" onClick={continueWithDraft}>
                 {props.labels.continueDraft}
+              </button>
+              <button type="button" className="settings-button" onClick={(event) => requestReload(event.currentTarget)}>
+                {props.labels.reloadCurrent}
+              </button>
+              <button type="button" className="settings-button" disabled={pending !== null} onClick={() => void saveConflictAsNew()}>
+                {pending === "saveConflict" ? props.labels.savingAsNew : props.labels.saveAsNew}
               </button>
             </div>
           </section>
@@ -459,7 +535,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
             {props.labels.cancel}
           </button>
         </div>
-        {discardConfirm ? (
+        {discardIntent ? (
           <div className="confirmation-backdrop">
             <section
               ref={discardDialogRef}
@@ -490,8 +566,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
             >
               <div className="confirmation-icon" aria-hidden="true">!</div>
               <div className="confirmation-copy">
-                <h2 id="note-markdown-editor-discard-title">{props.labels.discardTitle}</h2>
-                <p id="note-markdown-editor-discard-description">{props.labels.discardDescription}</p>
+                <h2 id="note-markdown-editor-discard-title">{discardIntent === "reload" ? props.labels.reloadDiscardTitle : props.labels.discardTitle}</h2>
+                <p id="note-markdown-editor-discard-description">{discardIntent === "reload" ? props.labels.reloadDiscardDescription : props.labels.discardDescription}</p>
               </div>
               <div className="confirmation-actions">
                 <button
@@ -502,8 +578,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
                 >
                   {props.labels.keepEditing}
                 </button>
-                <button type="button" className="primary danger" onClick={commitCancel}>
-                  {props.labels.discardChanges}
+                <button type="button" className="primary danger" onClick={discardIntent === "reload" ? useCurrentFile : commitCancel}>
+                  {discardIntent === "reload" ? props.labels.reloadCurrent : props.labels.discardChanges}
                 </button>
               </div>
             </section>
@@ -512,6 +588,34 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
       </form>
     </section>
   );
+}
+
+function renderConflictPreview(
+  rendered: RenderedDraft | undefined,
+  source: string,
+  labels: NoteMarkdownEditorLabels
+): React.JSX.Element {
+  if (!rendered) return <p role="status">{labels.previewLoading}</p>;
+  if (rendered.source !== source || rendered.html === null) return <p role="alert">{labels.previewFailed}</p>;
+  return (
+    <div
+      className="reader-markdown"
+      data-note-markdown-conflict-preview
+      onClick={(event) => { if ((event.target as HTMLElement | null)?.closest("a")) event.preventDefault(); }}
+      dangerouslySetInnerHTML={{ __html: rendered.html }}
+    />
+  );
+}
+
+function conflictResultMatchesRequest(
+  request: NoteEditorSaveConflictAsNewRequest,
+  result: NoteEditorSaveConflictAsNewResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.pageId === request.pageId &&
+    result.currentRenderContextId === request.currentRenderContextId &&
+    result.expectedCurrentRevision === request.expectedCurrentRevision;
 }
 
 function readScrollRatio(element: HTMLElement | null): number {
