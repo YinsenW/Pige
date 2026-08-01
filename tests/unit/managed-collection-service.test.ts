@@ -1728,6 +1728,149 @@ describe("ManagedCollectionService", () => {
       ]) })
     ]) } });
   });
+
+  it("propagates relation-backed lookup and rollup values through nested formulas, Undo, and restart", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const nameColumn = required(table.columns.find((column) => column.logicalType === "string"));
+    const numberColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const [targetRowId, sourceRowId] = readRowIds(initial.payloadPath);
+    if (!targetRowId || !sourceRowId) throw new Error("Missing derived propagation rows");
+
+    const relation = await service.addRelationColumn({
+      apiVersion: 1, requestId: "collection_request_derivedrelationadd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Derived person", targetTableId: table.id, targetDisplayColumnId: nameColumn.id
+    });
+    if (relation.status !== "committed") throw new Error("Derived relation was not created");
+    const linked = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_derivedrelationlink", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: relation.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId
+    });
+    if (linked.status !== "committed") throw new Error("Derived relation was not linked");
+    const lookup = await service.addLookupColumn({
+      apiVersion: 1, requestId: "collection_request_derivedlookupadd01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: linked.snapshot.revisionId,
+      label: "Related value", relationColumnId: relation.columnId, targetColumnId: numberColumn.id
+    });
+    if (lookup.status !== "committed") throw new Error("Derived lookup was not created");
+    const rollup = await service.addRollupColumn({
+      apiVersion: 1, requestId: "collection_request_derivedrollupadd01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: lookup.snapshot.revisionId,
+      label: "Related sum", relationColumnId: relation.columnId, aggregation: "sum", targetColumnId: numberColumn.id
+    });
+    if (rollup.status !== "committed") throw new Error("Derived rollup was not created");
+    expect(rollup.snapshot.columns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ columnId: lookup.columnId, logicalType: "integer", canUseAsFormulaOperand: true }),
+      expect.objectContaining({ columnId: rollup.columnId, logicalType: "number", canUseAsFormulaOperand: true })
+    ]));
+
+    const formula = await service.addFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_derivedformulaadd01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: rollup.snapshot.revisionId,
+      label: "Lookup plus rollup", expression: {
+        kind: "binary", operator: "add",
+        left: { kind: "column", columnId: lookup.columnId },
+        right: { kind: "column", columnId: rollup.columnId }
+      }
+    });
+    if (formula.status !== "committed") throw new Error("Derived formula was not created");
+    const nested = await service.addFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_derivednestedadd01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: formula.snapshot.revisionId,
+      label: "Derived doubled", expression: {
+        kind: "binary", operator: "multiply",
+        left: { kind: "column", columnId: formula.columnId },
+        right: { kind: "literal", value: 2 }
+      }
+    });
+    if (nested.status !== "committed") throw new Error("Derived nested formula was not created");
+    expect(required(nested.snapshot.rows.find((row) => row.rowId === sourceRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: lookup.columnId, value: 3, editable: false, readOnlyReason: "lookup" },
+      { columnId: rollup.columnId, value: 3, editable: false, readOnlyReason: "rollup" },
+      { columnId: formula.columnId, value: 6, editable: false, readOnlyReason: "formula" },
+      { columnId: nested.columnId, value: 12, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    const targetEdit = await service.editCell({
+      apiVersion: 1, requestId: "collection_request_derivedtargetedit1", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: nested.snapshot.revisionId,
+      rowId: targetRowId, columnId: numberColumn.id, value: 4
+    });
+    if (targetEdit.status !== "committed") throw new Error("Derived target edit did not commit");
+    const afterTargetEdit = await service.open({
+      apiVersion: 1, requestId: "collection_request_derivedtargetopen1", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    if (afterTargetEdit.status !== "ready") throw new Error("Derived target edit did not reopen");
+    expect(required(afterTargetEdit.snapshot.rows.find((row) => row.rowId === sourceRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: lookup.columnId, value: 4, editable: false, readOnlyReason: "lookup" },
+      { columnId: rollup.columnId, value: 4, editable: false, readOnlyReason: "rollup" },
+      { columnId: formula.columnId, value: 8, editable: false, readOnlyReason: "formula" },
+      { columnId: nested.columnId, value: 16, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    const activity = new KnowledgeActivityService(port, service);
+    const targetEditActivity = required(activity.list({ limit: 40 }).activities.find(
+      (candidate) => candidate.kind === "update_collection_cell" && candidate.target.revisionId === targetEdit.revisionId
+    ));
+    const targetEditUndo = await activity.undo({
+      operationId: targetEditActivity.operationId, expectedRevisionId: targetEdit.revisionId
+    });
+    if (targetEditUndo.status !== "undone") throw new Error("Derived target edit Undo did not commit");
+    const restarted = new ManagedCollectionService(port);
+    const afterRestart = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_derivedrestart001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    if (afterRestart.status !== "ready") throw new Error("Derived restart did not reopen");
+    expect(required(afterRestart.snapshot.rows.find((row) => row.rowId === sourceRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: formula.columnId, value: 6, editable: false, readOnlyReason: "formula" },
+      { columnId: nested.columnId, value: 12, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    const sourceValue = await restarted.editCell({
+      apiVersion: 1, requestId: "collection_request_derivedsourceedit1", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: afterRestart.snapshot.revisionId,
+      rowId: sourceRowId, columnId: numberColumn.id, value: 5
+    });
+    if (sourceValue.status !== "committed") throw new Error("Derived alternate target value did not commit");
+    const relinked = await restarted.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_derivedrelinkself", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: sourceValue.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId: sourceRowId
+    });
+    if (relinked.status !== "committed") throw new Error("Derived relation retarget did not commit");
+    expect(required(relinked.snapshot.rows.find((row) => row.rowId === sourceRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: lookup.columnId, value: 5, editable: false, readOnlyReason: "lookup" },
+      { columnId: rollup.columnId, value: 5, editable: false, readOnlyReason: "rollup" },
+      { columnId: formula.columnId, value: 10, editable: false, readOnlyReason: "formula" },
+      { columnId: nested.columnId, value: 20, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    const relationActivity = required(new KnowledgeActivityService(port, restarted).list({ limit: 40 }).activities.find(
+      (candidate) => candidate.kind === "update_collection_relation_cell" &&
+        candidate.target.revisionId === relinked.snapshot.revisionId
+    ));
+    const relationUndo = await new KnowledgeActivityService(port, restarted).undo({
+      operationId: relationActivity.operationId, expectedRevisionId: relinked.snapshot.revisionId
+    });
+    if (relationUndo.status !== "undone") throw new Error("Derived relation retarget Undo did not commit");
+    const restored = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_derivedrelationundo", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    if (restored.status !== "ready") throw new Error("Derived relation Undo did not reopen");
+    expect(required(restored.snapshot.rows.find((row) => row.rowId === sourceRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: formula.columnId, value: 6, editable: false, readOnlyReason: "formula" },
+      { columnId: nested.columnId, value: 12, editable: false, readOnlyReason: "formula" }
+    ]));
+  }, 30_000);
 });
 
 async function makeCollectionFixture() {

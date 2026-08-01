@@ -352,10 +352,56 @@ describe("ManagedCollectionPanel", () => {
           kind: "binary", operator: "add", left: { kind: "column", columnId: "column_formula00001" },
           right: { kind: "literal", value: 1 }
         } }
+      }, {
+        columnId: "column_numericlookup01",
+        label: "Related amount",
+        logicalType: "integer",
+        canRename: true,
+        canTrash: false,
+        canUseAsFormulaOperand: true,
+        canEditFormula: false,
+        lookup: {
+          kind: "pige_single_lookup",
+          schemaVersion: 1,
+          relationColumnId: "column_relation00001",
+          targetColumnId: "column_targetamount1"
+        }
+      }, {
+        columnId: "column_numericrollup1",
+        label: "Related total",
+        logicalType: "number",
+        canRename: true,
+        canTrash: false,
+        canUseAsFormulaOperand: true,
+        canEditFormula: false,
+        rollup: {
+          kind: "pige_single_rollup",
+          schemaVersion: 1,
+          relationColumnId: "column_relation00001",
+          aggregation: "sum",
+          targetColumnId: "column_targetamount1"
+        }
+      }, {
+        columnId: "column_stringlookup01",
+        label: "Related label",
+        logicalType: "string",
+        canRename: true,
+        canTrash: false,
+        canUseAsFormulaOperand: false,
+        canEditFormula: false,
+        lookup: {
+          kind: "pige_single_lookup",
+          schemaVersion: 1,
+          relationColumnId: "column_relation00001",
+          targetColumnId: "column_targetlabel01"
+        }
       }],
-      rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells, {
-        columnId: "column_formula00002", value: 11.5, editable: false, readOnlyReason: "formula"
-      }] }))
+      rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells,
+        { columnId: "column_formula00002", value: 11.5, editable: false, readOnlyReason: "formula" },
+        { columnId: "column_numericlookup01", value: 5, editable: false, readOnlyReason: "lookup" },
+        { columnId: "column_numericrollup1", value: 5, editable: false, readOnlyReason: "rollup" },
+        { columnId: "column_stringlookup01", value: "Ada", editable: false, readOnlyReason: "lookup" }
+      ] }))
     };
     await act(async () => {
       root.render(createElement(FormulaCollectionHarness, { initialSnapshot: nested }));
@@ -367,6 +413,9 @@ describe("ManagedCollectionPanel", () => {
       "#collection-formula-left option"
     )).map((option) => option.value);
     expect(values).toContain("column_total00001");
+    expect(values).toContain("column_numericlookup01");
+    expect(values).toContain("column_numericrollup1");
+    expect(values).not.toContain("column_stringlookup01");
     expect(values).not.toContain("column_formula00001");
     expect(values).not.toContain("column_formula00002");
 

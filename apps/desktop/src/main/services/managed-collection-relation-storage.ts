@@ -47,6 +47,10 @@ import {
   type BundleBinding,
   type CollectionCellBinding
 } from "./managed-collection-storage";
+import {
+  recomputeFormulaDependenciesForRelationRow,
+  type FormulaProjectionStatsByTable
+} from "./managed-collection-formula-storage";
 
 const MAX_COLLECTION_COLUMNS = 32;
 const RELATION_SOURCE_TYPE = "pige.relation.single";
@@ -415,18 +419,23 @@ function commitRelationEdit(
   const nextStats = beforeState === afterState ? stats : {
     ...stats, [beforeState]: stats[beforeState] - 1, [afterState]: stats[afterState] + 1
   };
+  const baseSchema = DatasetSchemaRecordSchema.parse({
+    ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString(),
+    tables: current.schema.tables.map((candidate) => candidate.id === table.id
+      ? { ...candidate, columns: candidate.columns.map((entry) => entry.id === column.id
+        ? { ...entry, stats: nextStats }
+        : entry) }
+      : candidate)
+  });
+  let formulaStats: FormulaProjectionStatsByTable = new Map();
   return publishMutation({
     current, identity, tableId: table.id, rowId: request.rowId, columnId: column.id,
     change: { kind: "collection_relation_cell_edit", targetTableId: relation.targetTableId, targetRowId: request.targetRowId },
-    mutate: (database) => editRelationCell(database, current, column, request.rowId, cell, identity.revisionId),
-    schema: DatasetSchemaRecordSchema.parse({
-      ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString(),
-      tables: current.schema.tables.map((candidate) => candidate.id === table.id
-        ? { ...candidate, columns: candidate.columns.map((entry) => entry.id === column.id
-          ? { ...entry, stats: nextStats }
-          : entry) }
-        : candidate)
-    }),
+    mutate: (database) => {
+      editRelationCell(database, current, column, request.rowId, cell, identity.revisionId);
+      formulaStats = recomputeFormulaDependenciesForRelationRow(database, current.schema, table.id, request.rowId);
+    },
+    schema: () => applyFormulaStats(baseSchema, formulaStats),
     stats: current.revision.stats
   });
 }
@@ -445,7 +454,7 @@ function publishMutation(input: {
   readonly mutate: (database: DatabaseSync) => void;
   readonly sourcePayload?: string;
   readonly sourceRevisionId?: string;
-  readonly schema: BundleBinding["schema"];
+  readonly schema: BundleBinding["schema"] | (() => BundleBinding["schema"]);
   readonly stats: DatasetRevision["stats"];
 }): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
   const stagedRoot = path.join(input.current.bundlePath, ".staging", `${input.identity.revisionId}.${randomUUID()}`);
@@ -464,7 +473,8 @@ function publishMutation(input: {
       try { input.mutate(database); database.exec("COMMIT"); } catch (caught) { database.exec("ROLLBACK"); throw caught; }
     } finally { database.close(); syncFile(stagedPayload); }
     publishImmutableFile(stagedPayload, resolveBundleRelativePath(input.current.bundlePath, payloadRelativePath));
-    writeJsonImmutable(resolveBundleRelativePath(input.current.bundlePath, schemaRelativePath), input.schema);
+    const schema = typeof input.schema === "function" ? input.schema() : input.schema;
+    writeJsonImmutable(resolveBundleRelativePath(input.current.bundlePath, schemaRelativePath), schema);
     const now = new Date().toISOString();
     const revision = DatasetRevisionSchema.parse({
       ...input.current.revision, id: input.identity.revisionId, parentRevisionId: input.current.revision.id,
@@ -484,6 +494,22 @@ function publishMutation(input: {
     if (!binding || binding.manifest.activeRevision !== revision.id) throw new PigeDomainError("collection.commit_uncertain", "The relation commit could not be adopted.");
     return { binding, revision };
   } finally { fs.rmSync(stagedRoot, { recursive: true, force: true }); }
+}
+
+function applyFormulaStats(
+  schema: BundleBinding["schema"],
+  stats: FormulaProjectionStatsByTable
+): BundleBinding["schema"] {
+  return DatasetSchemaRecordSchema.parse({
+    ...schema,
+    tables: schema.tables.map((table) => ({
+      ...table,
+      columns: table.columns.map((column) => {
+        const next = stats.get(table.id)?.get(column.id);
+        return next ? { ...column, stats: next } : column;
+      })
+    }))
+  });
 }
 
 function readRelationTargetFromRevision(

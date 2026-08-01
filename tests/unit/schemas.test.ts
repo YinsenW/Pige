@@ -2784,6 +2784,46 @@ describe("schemas", () => {
       createdAt: "2026-07-29T00:00:00.000Z"
     } as const;
     expect(DatasetSchemaRecordSchema.parse(schema).tables[0]?.columns[2]?.lookup).toEqual(lookup);
+    const rollupColumn = {
+      id: "column_lookuprollup01", name: "Company total", ordinal: 3,
+      sourceType: "pige.rollup.single", logicalType: "number", nullable: true,
+      rollup: {
+        kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: lookup.relationColumnId,
+        aggregation: "sum", targetColumnId: lookup.targetColumnId
+      }
+    } as const;
+    const formulaColumn = {
+      id: "column_lookupformula1", name: "Derived total", ordinal: 4,
+      sourceType: "pige.formula.number", logicalType: "number", nullable: true,
+      calculation: {
+        kind: "pige_numeric_formula", schemaVersion: 1,
+        expression: {
+          kind: "binary", operator: "add",
+          left: { kind: "column", columnId: lookupColumn.id },
+          right: { kind: "column", columnId: rollupColumn.id }
+        }
+      }
+    } as const;
+    const derivedSchema = {
+      ...schema,
+      tables: [{
+        ...schema.tables[0], columnCount: 5,
+        columns: [sourceColumn, relationColumn, lookupColumn, rollupColumn, formulaColumn]
+      }, schema.tables[1]]
+    } as const;
+    expect(DatasetSchemaRecordSchema.parse(derivedSchema).tables[0]?.columns[4]?.calculation)
+      .toEqual(formulaColumn.calculation);
+    expect(() => DatasetSchemaRecordSchema.parse({
+      ...derivedSchema,
+      tables: [{
+        ...derivedSchema.tables[0],
+        columns: [sourceColumn, relationColumn, {
+          ...lookupColumn,
+          logicalType: "string" as const,
+          lookup: { ...lookup, targetColumnId: targetName.id }
+        }, rollupColumn, formulaColumn]
+      }, schema.tables[1]]
+    })).toThrow("numeric scalar or acyclic Pige formula columns");
     expect(() => DatasetSchemaRecordSchema.parse({
       ...schema,
       tables: [{ ...schema.tables[0], columns: [sourceColumn, relationColumn, {

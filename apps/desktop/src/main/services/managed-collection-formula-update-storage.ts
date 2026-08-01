@@ -191,12 +191,17 @@ function commitRevision(input: {
           ? { ...column, calculation: { kind: "pige_numeric_formula" as const, schemaVersion: 1 as const, expression: input.expression } }
           : column)
       };
+      const schemaWithExpression = {
+        ...input.current.schema,
+        tables: input.current.schema.tables.map((table) => table.id === input.tableId ? tableWithExpression : table)
+      };
       const formulaStats = recomputeFormulaProjectionsInStagedPayload({
         payloadPath: stagedPayload,
         datasetId: input.current.manifest.datasetId,
         beforeRevisionId: input.current.revision.id,
         revisionId: input.identity.revisionId,
-        table: tableWithExpression
+        table: tableWithExpression,
+        schema: schemaWithExpression
       });
       nextTable = {
         ...tableWithExpression,

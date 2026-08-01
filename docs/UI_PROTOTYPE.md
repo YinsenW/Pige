@@ -663,8 +663,8 @@ Action behavior:
 ### 8.4 Structured Knowledge Surface
 
 Datasets stay in Library. Bound paging preserves rows/focus; citations are read-only. Stable-ID
-snapshots have Undo. Dialogs edit representable formulas, including acyclic same-table Pige-formula
-operands while hiding self/downstream cycle candidates, select one relation row, or derive its
+snapshots have Undo. Dialogs edit representable formulas, including numeric lookup/rollup and acyclic
+same-table Pige-formula operands while hiding nonnumeric/self/downstream cycle candidates, select one relation row, or derive its
 scalar lookup/rollup; Pige-owned lookup definitions can switch relation/scalar target and rollups can
 switch relation and count/numeric sum while derived cells stay read-only. Main owns eligibility and
 stale keeps drafts. Pige-owned views edit their optional

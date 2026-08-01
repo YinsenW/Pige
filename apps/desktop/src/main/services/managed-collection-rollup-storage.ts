@@ -52,7 +52,7 @@ export function projectRollupColumns(
     return {
       ...summary,
       canTrash: summary.canTrash && !dependencies.has(column.id),
-      canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !column.rollup,
+      canUseAsFormulaOperand: column.rollup !== undefined ? true : summary.canUseAsFormulaOperand,
       canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.rollup,
       canUseAsLookupTarget: summary.canUseAsLookupTarget && !column.rollup,
       canUseAsRollupTarget: numeric,

@@ -4020,7 +4020,8 @@ Date: 2026-07-29
 Decision:
 
 Persist and revision-update Pige formula/relation/lookup/rollup descriptors on Dataset columns. Pige
-numeric formulas may form only a bounded acyclic same-table dependency graph.
+numeric formulas may form only a bounded acyclic same-table dependency graph whose numeric operands may
+include scalar, derived lookup/rollup, or Pige formula columns.
 
 Rationale:
 
@@ -4028,8 +4029,9 @@ Schema truth preserves empty tables and exact Undo.
 
 Consequences:
 
-- Formulas use numeric scalar or Pige-formula inputs, reject direct/indirect cycles before effect, and
-  recompute in stable topological order; single relations store same-Dataset row IDs. Lookups follow one
+- Formulas use numeric scalar, numeric lookup/rollup or Pige-formula inputs, reject direct/indirect cycles
+  before effect, and recompute in stable topological order after source-cell, relation or descriptor changes;
+  single relations store same-Dataset row IDs. Lookups follow one
   relation to a scalar target, and rollups derive count or numeric sum from one relation. Lookup and
   rollup definitions are revision-editable while their cells remain derived/read-only. Guards and
   Activity own atomic Undo.

@@ -157,7 +157,7 @@ describe("managed collection formula storage", () => {
         columnId: identity.columnId,
         canRename: true,
         canTrash: true,
-        canUseAsFormulaOperand: false,
+        canUseAsFormulaOperand: true,
         calculation: expect.objectContaining({ kind: "pige_numeric_formula" })
       })
     ]));
