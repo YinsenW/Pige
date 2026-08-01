@@ -277,7 +277,11 @@ Internal links:
 
 Pige stores `page_` stable IDs in frontmatter and can resolve wiki links by title, alias, and slug. Retired `pg_` IDs are migration input only and must never be emitted.
 
-Manual active-note rename atomically updates canonical frontmatter title/`updated_at`, retains the prior title as a validated alias, and moves to a deterministic Git-friendly filename without changing `page_id`; body and unrelated frontmatter remain exact. Stale identity, malformed aliases, links/special files, or destination collision fail before mutation.
+Manual active note/claim/question/concept/entity rename atomically updates canonical frontmatter
+title/`updated_at`, retains the prior title as a validated alias, and moves to a deterministic
+Git-friendly filename without changing `page_id` or page type; body and unrelated frontmatter
+remain exact. Stale identity, malformed aliases, links/special files, or destination collision fail
+before mutation. Topic rename remains with its reference-aware lifecycle owner.
 
 Manual active-note alias management adds or removes one exact canonical alias through the atomic
 Markdown editor without changing title, path, stable ID, body, or unrelated frontmatter. Add proves

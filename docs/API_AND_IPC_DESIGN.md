@@ -518,7 +518,12 @@ the requested tag is absent and the remaining tags/topics match the committed Ma
 missing, ineligible or failed outcomes expose no body/path and retain the Reader/tag; retry,
 Activity, restart and Undo reuse the deterministic `update_page` lifecycle.
 
-`notes.rename` binds one active `note` to exact vault/page/render/revision and one canonical title. Main owns the path/filename, atomically preserves the old title as an alias, returns only closed path-free outcomes or the authoritative render, rebuilds indexes after commit, and records recoverable `rename_page`; conflict/stale/ineligible/failure retains the UI draft.
+`notes.rename` binds one active `note | claim | question | concept | entity` to exact
+vault/page/render/revision, immutable page type and one canonical title. Main owns the path/filename,
+atomically preserves the old title as an alias, returns only closed path-free outcomes or the
+authoritative same-type render, rebuilds indexes after commit, and records recoverable
+`rename_page`; conflict/stale/ineligible/failure retains the UI draft. Topic rename remains with its
+reference-aware Library owner, and source/archived pages are ineligible.
 
 `notes.changeAlias` binds one active `note` to exact vault/page/render/revision, `add | remove`, and
 one canonical alias. Main proves governed whole-Vault reference uniqueness, writes only the inline
