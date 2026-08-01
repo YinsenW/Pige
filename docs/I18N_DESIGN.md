@@ -152,8 +152,9 @@ OCR:
 
 Speech:
 
-- Each macOS SpeechAnalyzer session receives an explicit BCP 47 tag, currently defaulted
-  from app locale; persisted dictation-language selection remains open.
+- Each macOS SpeechAnalyzer session receives an explicit BCP 47 tag. Local Capabilities
+  persists either app-locale-following or one of the six supported language choices in
+  machine-local settings; the selection applies to new sessions immediately.
 - Availability never downloads. Missing assets require explicit exact-language Apple
   install; completion is re-probed and still needs Start. UI may show language compactly.
 - Unsupported dictation languages should show a clear disabled or unavailable state.

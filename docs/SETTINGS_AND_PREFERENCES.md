@@ -151,6 +151,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
 | Speech input availability | Local Capabilities | `derived_status` | Speech Service | None | No | `os_permission` on start | Re-probe per language; not persisted |
+| Dictation language | Local Capabilities | `machine_local` | Speech Service, I18N Service | OS app data `settings.json` | No | `none` | New speech sessions; explicit resource install remains separate |
 | Parser/toolchain health | Local Capabilities/System | `derived_status` | Runtime Capability Service, Local Tool Service | `resources/toolchain-manifest/` plus resolved bundled paths | No | `none` | Recomputed/repair job |
 | `PIGE.md` policy | Agent & Memory | `vault_portable` | Vault Service, Agent Orchestrator | `PIGE.md` | Yes | `explicit_confirmation` | Requires validation and proposal |
 | Agent behavior preferences | Agent & Memory | `vault_portable` or `machine_local` by item | Agent Orchestrator | `.pige/config.json` or OS app data | Depends | `none` | Usually new jobs; exceptional boundary changes use their own guarded setting |
@@ -192,6 +193,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
 | `toolchain.health` | `none` | Derived read-only status |
+| `speech.dictationLanguage` | `none` | Strict machine-local CAS; Home availability/install/start resolve the selected language for every new session |
 
 Changing a permission requirement without changing its enforcement path and tests is a contract error. `permission_broker` is fail-closed in `guardSettingAction` until the real broker path supplies an authorization decision.
 
@@ -217,7 +219,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Exceptional intervention compatibility | `confirmation.*` | Yes | Agent Orchestrator, Change Proposal Service | New jobs |
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
-| Speech input availability | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | Per session; defaults to app locale, persisted dictation language open |
+| Speech input availability | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | Per session; machine-local dictation language resolves the exact new-session tag |
 | Vault-scoped Skill enablement | Tool availability and capability scope | Yes, scoped | Skill Registry Service | New Agent runs |
 | Pi package install records | Tool availability and capability scope | Yes, scoped | Pi Package Registry Service | New Agent runs |
 
