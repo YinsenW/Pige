@@ -62,7 +62,7 @@ describe("Reader knowledge-page relationships", () => {
     await act(async () => root.unmount()); dom.window.close();
   });
 
-  it("does not offer related-page mutation authority for derived or typed knowledge edges", async () => {
+  it("renders pathless labels without offering mutation authority for derived or typed knowledge edges", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const derived = {
@@ -82,6 +82,7 @@ describe("Reader knowledge-page relationships", () => {
     expect([...dom.window.document.querySelectorAll("button")].some((entry) => entry.textContent === "Unlink")).toBe(false);
     expect(dom.window.document.body.textContent).toContain("Contradicts this claim");
     expect(dom.window.document.body.textContent).toContain("Answers this question");
+    expect(dom.window.document.body.textContent).not.toContain("wiki/target.md");
     await act(async () => root.unmount()); dom.window.close();
   });
 });
@@ -97,9 +98,9 @@ const note = {
 const related = {
   queriedAt: "2026-07-31T10:00:00.000Z", activeVaultId: "vault_20260731_unlink", pageId: note.summary.pageId,
   totalOutgoing: 1, totalBacklinks: 0, invalidPageCount: 0, degraded: false,
-  outgoing: [{ relation: "outgoing" as const, relationType: "related_to" as const, target: "Target", summary: {
+  outgoing: [{ relation: "outgoing" as const, relationType: "related_to" as const, summary: {
     pageId: "page_20260731_unlinktarget", title: "Target", pageType: "note" as const, status: "active" as const,
-    pagePath: "wiki/target.md", createdAt: "2026-07-31T09:00:00.000Z", updatedAt: "2026-07-31T10:01:00.000Z", sourceIds: [],
+    updatedAt: "2026-07-31T10:01:00.000Z",
   } }], backlinks: [],
 } satisfies LibraryRelatedResult;
 
@@ -110,6 +111,8 @@ function t(key: string): string {
     "note.unlink.cancel": "Cancel", "note.unlink.confirm": "Remove relationship", "note.unlink.pending": "Removing...",
     "note.unlink.failed": "The relationship could not be removed.", "note.relatedLoading": "Loading",
     "note.relatedUnavailable": "Unavailable", "note.relatedEmpty": "Empty",
+    "note.relatedType.links_to": "Wiki link", "note.relatedType.related_to": "Related page",
+    "note.relatedType.mentions_entity": "Entity mention", "note.relatedType.broader_than": "Broader concept",
     "note.relatedType.answers": "Answers this question",
     "note.relatedType.contradicts": "Contradicts this claim" } as Record<string, string>)[key] ?? key;
 }

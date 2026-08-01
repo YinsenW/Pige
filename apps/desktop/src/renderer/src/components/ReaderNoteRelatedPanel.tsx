@@ -125,8 +125,7 @@ function RelatedGroup(props: {
   if (props.pages.length === 0) return null;
   return <section className="related-group"><h3>{props.title}</h3><div className="related-list">{props.pages.map((page) =>
     <article className="related-row" key={`${page.relation}:${page.relationType}:${page.summary.pageId}`}><div><strong>{page.summary.title}</strong>
-      <span>{page.relationType === "contradicts" || page.relationType === "answers"
-        ? props.t(`note.relatedType.${page.relationType}`) : page.target || page.summary.pagePath}</span></div><div className="settings-inline-actions">
+      <span>{props.t(`note.relatedType.${page.relationType}`)}</span></div><div className="settings-inline-actions">
       <button type="button" className="ghost" aria-label={`${props.t("note.open")}: ${page.summary.title}`}
         disabled={props.loadingPageId === page.summary.pageId} onClick={() => void props.onOpen(page.summary.pageId)}>
         {props.loadingPageId === page.summary.pageId ? props.t("note.opening") : props.t("note.open")}</button>

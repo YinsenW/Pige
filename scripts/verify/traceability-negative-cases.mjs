@@ -227,9 +227,9 @@ const cases = [
     name: "rejects an open capability without a controlled delivery destination",
     check: "TRC-005",
     mutate(model) {
-      model.requirementLinks.get("PIGE-VAULT-003").open.targetBuilds = [];
+      model.requirementLinks.get("PIGE-VAULT-005").open.targetBuilds = [];
     },
-    expected: "PIGE-VAULT-003 open gap has no targetBuilds delivery destination"
+    expected: "PIGE-VAULT-005 open gap has no targetBuilds delivery destination"
   }
 ];
 
