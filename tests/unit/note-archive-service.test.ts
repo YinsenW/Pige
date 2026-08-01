@@ -13,7 +13,7 @@ const restoreRequest = {
   ...request,
   requestId: "noterestorereq_abcdefghijklmnop"
 };
-const LIFECYCLE_PAGE_TYPES = ["note", "claim", "question", "concept", "entity"] as const;
+const LIFECYCLE_PAGE_TYPES = ["note", "claim", "question", "concept", "entity", "topic"] as const;
 
 describe("NoteArchiveService", () => {
   it.each(LIFECYCLE_PAGE_TYPES)("archives one exact current Reader %s page and returns its authoritative render", async (pageType) => {

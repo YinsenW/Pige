@@ -1818,7 +1818,7 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("archives only the exact eligible Reader note and adopts the authoritative read-only render", async () => {
+  it("archives only the exact eligible Reader topic and adopts the authoritative read-only render", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: NoteArchiveCurrentRequest[] = [];
@@ -1826,6 +1826,7 @@ describe("full UI Library", () => {
     let mode: "stale" | "committed" = "stale";
     let selected: NoteRenderResult = {
       ...readerNote(),
+      summary: { ...readerNote().summary, pageType: "topic" },
       archiveEligibility: { canArchive: true, revision: `noteeditrev_${"a".repeat(32)}` }
     };
     const onArchiveCurrentNote = async (

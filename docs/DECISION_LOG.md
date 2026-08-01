@@ -1059,6 +1059,38 @@ References:
 
 - `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`
 
+### D-20260802-Complete-Managed-Knowledge-Page-Lifecycle
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Notes, claims, questions, concepts, entities, and topics share the Main-owned recoverable page
+lifecycle: exact-current archive/restore, trash/list/restore, and bounded revision-history
+preview/restore. Restore preserves stable page identity and type, publishes one reversible
+`restore_page`, and adopts the same effect after restart. Source pages remain ineligible.
+
+Rationale:
+
+Topic already had durable creation, reference-aware rename, hierarchy, and trash recovery, but its
+missing archive and history actions made the same user-owned Markdown lifecycle inconsistent across
+the final managed page type.
+
+Consequences:
+
+- PIGE-KNOW-001 is verified across every managed knowledge page type.
+- Renderer authority remains an opaque current Reader context and public revision; Markdown, paths,
+  hashes, and private history images stay in Main.
+- E4.01 and E4.05 remain independently partial for packaged metadata/relationship parity and broad
+  migration/reset coverage.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ### D-20260801-Correlated-Startup-Recovery-History
 
 Status: Accepted

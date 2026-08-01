@@ -7,7 +7,7 @@ import { NoteRevisionHistoryDialog } from "../../apps/desktop/src/renderer/src/c
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "MouseEvent"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
-const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity"] as const;
+const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity", "topic"] as const;
 
 afterEach(() => {
   for (const key of globals) {

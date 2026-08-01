@@ -1890,7 +1890,7 @@ const getNoteRevisionHistoryService = (): NoteRevisionHistoryService => {
   noteRevisionHistoryService ??= new NoteRevisionHistoryService(
     getVaultService(),
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
-      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true, allowTopic: true
     }),
     getNotesService()
   );
@@ -1914,7 +1914,7 @@ const getAssistantAnswerNoteService = (): AssistantAnswerNoteService => {
 const getNoteArchiveService = (): NoteArchiveService => {
   noteArchiveService ??= new NoteArchiveService(getNotesService(), new NoteMarkdownEditorService(
     getVaultService(), getNoteMarkdownEditorActivityAdapter(),
-    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
+    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true, allowTopic: true }
   ));
   return noteArchiveService;
 };
@@ -4011,7 +4011,7 @@ app.whenReady().then(async () => {
   noteRevisionHistoryService = new NoteRevisionHistoryService(
     getVaultService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
-      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true, allowTopic: true
     }),
     getNotesService()
   );
@@ -4021,7 +4021,7 @@ app.whenReady().then(async () => {
   assistantAnswerNoteService = new AssistantAnswerNoteService(getVaultService(), homeConversationHistory);
   noteArchiveService = new NoteArchiveService(getNotesService(), new NoteMarkdownEditorService(
     getVaultService(), noteMarkdownEditorActivityAdapter,
-    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
+    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true, allowTopic: true }
   ));
   questionStateService = new QuestionStateService(
     getNotesService(),

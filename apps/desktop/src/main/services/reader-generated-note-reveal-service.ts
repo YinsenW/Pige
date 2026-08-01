@@ -28,8 +28,12 @@ export function isTrashableKnowledgePage(pageType: string | undefined, status: s
 }
 
 export type TaxonomyKnowledgePageType = "note" | "claim" | "concept" | "entity" | "question";
+export type LifecycleKnowledgePageType = TaxonomyKnowledgePageType | "topic";
 const RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES = new Set<TaxonomyKnowledgePageType>(
   ["note", "claim", "concept", "entity", "question"]
+);
+const LIFECYCLE_KNOWLEDGE_PAGE_TYPES = new Set<LifecycleKnowledgePageType>(
+  ["note", "claim", "concept", "entity", "question", "topic"]
 );
 export function isRenamableKnowledgePage(pageType: string | undefined, status: string | undefined): boolean {
   return Boolean(status === "active" && pageType &&
@@ -45,7 +49,15 @@ export function isTaxonomyKnowledgePage(
 }
 export function isLifecycleKnowledgePage(pageType: string | undefined, status: string | undefined): boolean {
   return Boolean((status === "active" || status === "archived") && pageType &&
-    RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType as TaxonomyKnowledgePageType));
+    LIFECYCLE_KNOWLEDGE_PAGE_TYPES.has(pageType as LifecycleKnowledgePageType));
+}
+
+export function isRevisionHistoryKnowledgePage(
+  pageType: string | undefined,
+  status: string | undefined
+): boolean {
+  return Boolean(status === "active" && pageType &&
+    LIFECYCLE_KNOWLEDGE_PAGE_TYPES.has(pageType as LifecycleKnowledgePageType));
 }
 
 export function resolveGeneratedNoteReveal(request: NoteRevealGeneratedRequest, input: {
