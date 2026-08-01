@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "3005169d95d69ea596ae8b818f0007377ab25a6b",
+  "baseline": "f8fa312f253bb78fd9a97eaf76c061adfdb99c4e",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 281,
-  "baselineLines": 125098,
+  "baselineFileCount": 282,
+  "baselineLines": 125404,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -79,6 +79,7 @@
       ["managed-collection-rollup-storage.ts", 391, "rdf"],
       ["managed-collection-view-service.ts", 986, "rdf"],
       ["managed-dataset-lifecycle-service.ts", 414, "rd"],
+      ["managed-dataset-title-service.ts", 306, "rdf"],
       ["local-tool-manager-service.ts", 1254, "prd"],
       ["paddle-ocr-bundle-materializer.ts", 642, "prd"],
       ["pige-policy-service.ts", 431, "rd"],
@@ -314,7 +315,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 281,
+    "serviceOwnerCount": 282,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
