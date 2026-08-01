@@ -213,6 +213,8 @@ describe("registerReaderIpc", () => {
       "notes.changeQuestionAnswer",
       "notes.searchClaimContradictions",
       "notes.changeClaimContradiction",
+      "notes.searchClaimEvidence",
+      "notes.changeClaimEvidence",
       "notes.searchConceptParents",
       "notes.changeConceptParent",
       "notes.searchTopicParents",
