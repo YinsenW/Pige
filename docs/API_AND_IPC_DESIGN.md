@@ -540,7 +540,8 @@ and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 - `resolve` binds vault/page/render/offsets and returns <=64 KiB plus hashes. Actions bind it and
   locale/client turn; Main owns instructions/CAS/apply.
 - Link has no renderer target: Pi chooses an opaque ref; Main publishes reversible `update_page`.
-- `create_note | create_claim | create_question` share review; navigation requires matching page type.
+- `create_note | create_claim | create_question | create_concept | create_entity | create_topic`
+  share review; navigation requires the matching authoritative page type.
 - Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters; decisions bind
   revision, private details stay Main-only, and Activity owns Undo.
 

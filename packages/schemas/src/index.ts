@@ -9384,7 +9384,10 @@ export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish
 export const ReaderSelectionCreatePageActionSchema = z.enum([
   "create_note",
   "create_claim",
-  "create_question"
+  "create_question",
+  "create_concept",
+  "create_entity",
+  "create_topic"
 ]);
 export const ReaderSelectionProposalActionSchema = z.union([
   ReaderSelectionTransformActionSchema,

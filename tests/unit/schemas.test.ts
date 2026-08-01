@@ -774,6 +774,9 @@ describe("schemas", () => {
       clientTurnId: "turn_20260729_createnote01"
     } as const;
     expect(ReaderSelectionCreateNoteRequestSchema.parse(request)).toEqual(request);
+    for (const action of ["create_concept", "create_entity", "create_topic"] as const) {
+      expect(ReaderSelectionCreateNoteRequestSchema.parse({ ...request, action }).action).toBe(action);
+    }
     expect(() => ReaderSelectionCreateNoteRequestSchema.parse({ ...request, path: "/private/note.md" })).toThrow();
 
     const createNoteProposal = {

@@ -4801,7 +4801,7 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(readReaderSelectionPublicationIntent(fixture.vaultPath, awaitingReview)).toBeUndefined();
   });
 
-  it("stages one Reader Claim proposal through the exact selection-bound create-page tool", async () => {
+  it("stages one Reader Entity proposal through the exact selection-bound create-page tool", async () => {
     const fixture = makeFixture();
     const selected = "CREATE_NOTE_SELECTION";
     writeKnowledgePage(fixture.vaultPath, [], selected);
@@ -4818,10 +4818,10 @@ SYNTHETIC_DISTRACTOR_BODY
     const jobs = new JobsService(fixture.vaults);
     const proposal = {
       proposalId: "proposal_20260729_readercreate12",
-      action: "create_claim" as const,
+      action: "create_entity" as const,
       state: "ready" as const,
       revision: 1,
-      lines: [{ kind: "added" as const, text: "Created claim" }]
+      lines: [{ kind: "added" as const, text: "Created entity" }]
     };
     const publishCreateNote = vi.fn(() => proposal);
     const service = new TestHomeAgentService(
@@ -4837,13 +4837,13 @@ SYNTHETIC_DISTRACTOR_BODY
           const signal = new AbortController().signal;
           await request.beforeModelTurn?.();
           await readTool.execute({}, signal, { toolCallId: "pi_tool_create_note_read", signal });
-          expect(createTool.label).toBe("Create claim from Reader selection");
-          await createTool.execute({ title: "Created claim", body: "A bounded standalone claim." }, signal, {
+          expect(createTool.label).toBe("Create entity from Reader selection");
+          await createTool.execute({ title: "Created entity", body: "A bounded standalone entity." }, signal, {
             toolCallId: "pi_tool_create_note_stage",
             signal
           });
           return makeRuntimeResult(request, [readTool.name, createTool.name], {
-            answer: "The claim is ready for review.",
+            answer: "The entity is ready for review.",
             citationRefs: []
           });
         }
@@ -4864,22 +4864,22 @@ SYNTHETIC_DISTRACTOR_BODY
     );
 
     const result = await service.submitTurn({
-      text: "Create a standalone claim from this selection.",
+      text: "Create a standalone entity from this selection.",
       inputKind: "typed_text",
       scope: { kind: "current_note", pageId: HOME_PAGE_ID },
       locale: "en",
       clientTurnId: "turn_20260729_readercreate12"
     }, {
       currentNoteSelection: selection,
-      currentNoteCreateNoteAction: "create_claim"
+      currentNoteCreateNoteAction: "create_entity"
     });
 
     expect(result).toMatchObject({ state: "waiting", error: { code: "agent_runtime.review_required" } });
     expect(publishCreateNote).toHaveBeenCalledWith(expect.objectContaining({
       selection,
       selectedText: selected,
-      title: "Created claim",
-      body: "A bounded standalone claim."
+      title: "Created entity",
+      body: "A bounded standalone entity."
     }));
     expect(jobs.readAgentTurnJob(result.jobId!)).toMatchObject({
       state: "awaiting_review",

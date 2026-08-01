@@ -22,6 +22,7 @@ import {
   JobRecordSchema,
   OperationRecordSchema,
   PigeErrorSummarySchema,
+  ReaderSelectionCreatePageActionSchema,
   ReaderSelectionIdentitySchema,
   ReaderSelectionProposalIdSchema,
   ReaderSelectionProposalStateSchema,
@@ -86,7 +87,8 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   const scope = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
   const selections = refs.filter((ref) => ref.role === "agent_turn_reader_selection");
   const action = actionRefs[0];
-  const actionMatch = /^reader_selection_(create_note|create_claim|create_question)$/u.exec(action?.id ?? "");
+  const actionMatch = /^reader_selection_(create_[a-z_]+)$/u.exec(action?.id ?? "");
+  const parsedAction = ReaderSelectionCreatePageActionSchema.safeParse(actionMatch?.[1]);
   const selected = selections[0];
   const locator = /^utf8_bytes:(\d+):(\d+)$/u.exec(selected?.locator ?? "");
   const selection = {
@@ -101,7 +103,7 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   };
   if (
     actionRefs.length !== 1 || scope.length !== 1 || selections.length !== 1 ||
-    action?.kind !== "tool" || !actionMatch ||
+    action?.kind !== "tool" || !actionMatch || !parsedAction.success ||
     selected?.kind !== "page" || selected.id !== scope[0]?.id || !locator ||
     !/^page_\d{8}_[a-z0-9]{8,}$/u.test(selection.pageId ?? "") ||
     !/^sha256:[a-f0-9]{64}$/u.test(selection.pageContentHash ?? "") ||
@@ -109,7 +111,7 @@ export function readReaderSelectionCreateNoteBinding(job: JobRecord): {
   ) {
     throw conflict("The durable Reader create-note binding is invalid.");
   }
-  return { selection: selection as ReaderSelectionIdentity, action: actionMatch[1] as ReaderSelectionCreatePageAction };
+  return { selection: selection as ReaderSelectionIdentity, action: parsedAction.data };
 }
 
 export function assertReaderSelectionCreateNoteJobBinding(
@@ -130,7 +132,7 @@ export function createReaderSelectionCreateNoteTool(options: {
   readonly stage: (input: { readonly title: string; readonly body: string }) => ReaderSelectionProposalPreview;
 }): PigeAgentToolDefinition {
   const action = options.action ?? "create_note";
-  const pageKind = action === "create_claim" ? "claim" : action === "create_question" ? "question" : "note";
+  const pageKind = pageTypeForAction(action);
   const InputSchema = z.object({
     title: z.string().min(1).max(MAX_TITLE_CHARACTERS),
     body: z.string().min(1).max(MAX_BODY_BYTES)
@@ -179,7 +181,7 @@ export function createReaderSelectionCreateNoteTool(options: {
       const parsed = InputSchema.safeParse(args);
       if (!parsed.success) throw new PigeDomainError("agent_runtime.tool_input_invalid", "Create-note tool input is invalid.");
       options.stage(parsed.data);
-      return createPigeTextToolResult("The new note was staged for explicit review.", { status: "review_required" });
+      return createPigeTextToolResult(`The new ${pageKind} was staged for explicit review.`, { status: "review_required" });
     }
   };
 }
@@ -300,7 +302,7 @@ const CreateNoteProposalRecordSchema = z.object({
   state: ReaderSelectionProposalStateSchema,
   activeVaultId: VaultIdSchema,
   jobId: z.string().regex(/^job_\d{8}_[a-z0-9]{8,}$/),
-  action: z.enum(["create_note", "create_claim", "create_question"]).default("create_note"),
+  action: ReaderSelectionCreatePageActionSchema.default("create_note"),
   selection: ReaderSelectionIdentitySchema,
   title: z.string().min(1).max(MAX_TITLE_CHARACTERS),
   body: z.string().min(1).max(MAX_BODY_BYTES),
@@ -712,7 +714,10 @@ function requireCurrentSelectionBindingHash(vaultPath: string, selection: Reader
 function createPageInstruction(action: ReaderSelectionCreatePageAction, locale: string): string {
   const pageType = pageTypeForAction(action);
   if (locale.startsWith("zh")) {
-    return `根据当前选中的内容创建一篇独立${pageType === "claim" ? "主张" : pageType === "question" ? "问题" : "笔记"}，并提交给我确认。`;
+    const label: Record<typeof pageType, string> = {
+      note: "笔记", claim: "主张", question: "问题", concept: "概念", entity: "实体", topic: "主题"
+    };
+    return `根据当前选中的内容创建一篇独立${label[pageType]}，并提交给我确认。`;
   }
   return `Create a standalone ${pageType} from the current selection and submit it for my review.`;
 }

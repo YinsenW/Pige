@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T00:00:00Z",
+  "reviewedAt": "2026-08-01T07:49:41Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit and Library tag lifecycle Redo, and explainable Knowledge Tree density.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit and Library tag lifecycle Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "774cf491efa908658fe9d7ef8533846095f63bfa7fcb51acabc7609ba2a7cfbd"
+    "reviewedSha256": "a382c2ffdffc9bd21a16d0ceff6f133a71874be0fb50896f3c145fb7cc064335"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note-title rename/alias management/tag removal/Redo, source refresh, Activity history, Agent memory backup and explainable Knowledge Tree density",
+    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note-title rename/alias management/tag removal/Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed exact user Library tag lifecycle Redo against API, Job, UI and Decision owners while retaining note-title, alias, exact-note Redo and Knowledge Tree density contracts; Development supplied executable service/Main/recovery evidence and the existing Activity UI remains authoritative."
+    "independence": "Planning reviewed exact Reader tag removal and exact-selection create-page semantics across knowledge, Markdown, API, Job, UI and Decision owners; Development supplied schema, durable artifact/service and navigation evidence; UI Design keeps all six actions behind the existing Turn into… disclosure."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias and tag management while Activity exposes exact restart-safe inverse actions; Knowledge Tree density retains exact counts and navigation."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, API, Job, UI and Decision owners agree on matching-Undo authority, exact affected-page reproof and deterministic forward update_page Redo for user Library tag lifecycle actions."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Service, stale/negative, Main routing, restart-recovery and Activity evidence bind the tag Redo slice without promoting broader partial requirements or exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Main ownership, atomic multi-page recovery, deterministic Redo identity, index refresh and existing accessible Activity states are explicit and executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing API, Job, UI and Decision owner sections absorb bounded Library tag Redo semantics without a new document or status promotion."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias and tag management; Knowledge Tree density retains exact counts and navigation; Reader Turn into… reviews six page types and opens only the matching authoritative page."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Knowledge, API, UI and D-20260730-Grounded-Knowledge-Page-Creation agree on exact selected-byte/type binding, explicit review and create_page ownership while existing note corrections retain revision CAS."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader action schema, artifact/service, security and UI tests bind all six types without promoting broader PIGE-KNOW-001/E7.01; existing correction evidence remains scoped."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"One schema-approved action drives Job binding, type-specific frontmatter, create_page/Undo/restart and matching navigation; existing Main ownership and recovery remain executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing grounded-page decision and Reader selection sections absorb the extension; no new owner document or default control is added."}
   ],
   "verification": [
     {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Exact tag-removal semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/library-tag-rename-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run build","status":"passed","evidence":"Exact tag lifecycle Redo, Main routing, replay, stale closure and restart recovery are executable."},
+    {"command":"npm exec -- vitest run tests/unit/{schemas,security-contract-schemas,reader-selection-create-note-service,home-agent-service,full-ui-library,note-agent-ui}.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"All six Reader create-page actions, strict bindings, durable artifacts, review/navigation and localized UI are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "library-tag-redo-bind-20260801",
-    "taskTitle": "Bind exact Library tag lifecycle Redo",
+    "taskId": "reader-selection-knowledge-pages-bind-20260801",
+    "taskTitle": "Bind reviewed Reader selection knowledge-page creation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main alone binds the original or forward Operation to its matching Undo and private receipt, re-proves every affected page and publishes one deterministic pathless update_page Redo; renderer authority and existing tag mutations remain unchanged.",
-    "acknowledgement": "Planning binds the implemented Library tag lifecycle Redo slice while preserving exact-note Redo, taxonomy editing, note-title rename, alias management and Knowledge Tree density; referenced requirements/exits remain partial and no new UI surface is introduced."
+    "compatibility": "Exact current selection and requested type enter one bounded proposal; approval publishes one schema-valid create_page and opens only the matching page type; renderer owns no bytes, path or apply authority.",
+    "acknowledgement": "Planning binds six reviewed Reader create-page actions while PIGE-KNOW-001 and E7.01 remain partial; no default Reader UI expansion."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

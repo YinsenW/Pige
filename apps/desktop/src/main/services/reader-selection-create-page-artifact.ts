@@ -8,8 +8,15 @@ const MAX_PAGE_BYTES = 32 * 1024;
 
 export function readerSelectionPageType(
   action: ReaderSelectionCreatePageAction
-): "note" | "claim" | "question" {
-  return action === "create_claim" ? "claim" : action === "create_question" ? "question" : "note";
+): "note" | "claim" | "question" | "concept" | "entity" | "topic" {
+  switch (action) {
+    case "create_claim": return "claim";
+    case "create_question": return "question";
+    case "create_concept": return "concept";
+    case "create_entity": return "entity";
+    case "create_topic": return "topic";
+    case "create_note": return "note";
+  }
 }
 
 export function createReaderSelectionPageMarkdown(input: {
@@ -26,7 +33,13 @@ export function createReaderSelectionPageMarkdown(input: {
     ? 'claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []'
     : pageType === "question"
       ? 'question:\n  state: "open"\n  answered_by: []'
-      : 'note:\n  note_kind: "summary"\n  review_state: "clean"';
+      : pageType === "concept"
+        ? `concept:\n  canonical_name: ${JSON.stringify(input.title)}\n  parent_concepts: []\n  child_concepts: []`
+        : pageType === "entity"
+          ? `entity:\n  entity_type: "other"\n  canonical_name: ${JSON.stringify(input.title)}\n  identifiers: []`
+          : pageType === "topic"
+            ? ""
+            : 'note:\n  note_kind: "summary"\n  review_state: "clean"';
   const status = pageType === "claim" ? "needs_review" : "active";
   const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: ${JSON.stringify(pageType)}\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: ${JSON.stringify(status)}\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  model_profile_id: ${JSON.stringify(input.modelProfileId)}\n  confidence: "high"\n${typeFields}\n---\n\n# ${escapeHeading(input.title)}\n\n${input.body}\n`;
   if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {

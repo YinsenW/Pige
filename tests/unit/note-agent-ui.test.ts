@@ -1587,8 +1587,8 @@ describe("Note Agent production UI", () => {
     expect(appSource).toContain("window.pige.readerSelection.decideProposal");
     expect(appSource).toContain("window.pige.readerSelection.currentProposal");
     expect(appSource).toContain('decision: action === "apply" ? "approve" : "reject"');
-    expect(appSource).toContain('result.proposal.action === "create_note" && result.createdPageId');
-    expect(appSource).toContain('? await openNoteTarget(result.createdPageId, false, "note")');
+    expect(appSource).toContain("readerSelectionCreatedPageType(result.proposal.action)");
+    expect(appSource).toContain("? await openNoteTarget(result.createdPageId, false, createdPageType)");
     expect(appSource).toContain('result.status !== "waiting" && !(result.status === "failed" && result.conversationId)');
     expect(appSource).toContain("current.vaultId === onboarding?.activeVault?.vaultId");
     expect(appSource).toContain("readerSelectionProposalOwnerMatches(");

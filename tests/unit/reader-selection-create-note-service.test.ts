@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ReaderSelectionIdentity } from "@pige/contracts";
+import type { ReaderSelectionCreatePageAction, ReaderSelectionIdentity } from "@pige/contracts";
 import type { JobRecord } from "@pige/schemas";
 import {
   ReaderSelectionCreateNoteActionService,
@@ -44,10 +44,13 @@ describe("Reader selection create-note service", () => {
     expect(result.operation.after?.id).toBe(`sha256:${createHash("sha256").update(markdown).digest("hex")}`);
   });
 
-  it("creates exact reviewed Claim and Question pages without action drift", () => {
+  it("creates exact reviewed Claim, Question, Concept, Entity, and Topic pages without action drift", () => {
     for (const [action, expectedType, expectedField] of [
       ["create_claim", 'type: "claim"', "claim:\n  confidence: \"medium\""],
-      ["create_question", 'type: "question"', "question:\n  state: \"open\""]
+      ["create_question", 'type: "question"', "question:\n  state: \"open\""],
+      ["create_concept", 'type: "concept"', 'concept:\n  canonical_name: "A bounded Reader note"'],
+      ["create_entity", 'type: "entity"', 'entity:\n  entity_type: "other"'],
+      ["create_topic", 'type: "topic"', "# A bounded Reader note"]
     ] as const) {
       const fixture = makeFixture(action);
       const service = new ReaderSelectionCreateNoteService();
@@ -55,7 +58,7 @@ describe("Reader selection create-note service", () => {
       const markdown = fs.readFileSync(path.join(fixture.vaultPath, result.pagePath), "utf8");
       expect(markdown).toContain(expectedType);
       expect(markdown).toContain(expectedField);
-      expect(result.operation.summary).toContain(action === "create_claim" ? "Created claim" : "Created question");
+      expect(result.operation.summary).toContain(`Created ${expectedType.slice(7, -1)}`);
       expect(() => service.apply({
         ...fixture.input,
         intent: { ...fixture.intent, action: action === "create_claim" ? "create_question" : "create_claim" }
@@ -148,18 +151,18 @@ describe("Reader selection create-note service", () => {
     });
   });
 
-  it("binds a Question request to the exact current selection and durable turn action", async () => {
-    const fixture = makeFixture("create_question");
+  it("binds a Concept request to the exact current selection and durable turn action", async () => {
+    const fixture = makeFixture("create_concept");
     const preview = {
       proposalId: "proposal_20260729_readerquestion1",
-      action: "create_question" as const,
+      action: "create_concept" as const,
       state: "ready" as const,
       revision: 1,
       lines: [{ kind: "added" as const, text: "What remains unknown?" }]
     };
     const submitTurn = vi.fn(async (_request, context) => {
       context.assertCurrent();
-      expect(context.currentNoteCreateNoteAction).toBe("create_question");
+      expect(context.currentNoteCreateNoteAction).toBe("create_concept");
       return {
         state: "waiting" as const,
         jobId: fixture.job.id,
@@ -184,7 +187,7 @@ describe("Reader selection create-note service", () => {
     const result = await service.submit({
       apiVersion: 1,
       requestId: "readerselaction_question123456",
-      action: "create_question",
+      action: "create_concept",
       activeVaultId: fixture.vault.vaultId,
       renderContextId: `notectx_${"a".repeat(32)}`,
       selection: fixture.selection,
@@ -192,14 +195,14 @@ describe("Reader selection create-note service", () => {
       clientTurnId: "turn_20260729_readerquestion1"
     }, { renderContextCurrent: () => true });
 
-    expect(result).toMatchObject({ status: "review_required", proposal: { action: "create_question" } });
+    expect(result).toMatchObject({ status: "review_required", proposal: { action: "create_concept" } });
     expect(submitTurn).toHaveBeenCalledWith(expect.objectContaining({
-      text: "Create a standalone question from the current selection and submit it for my review."
-    }), expect.objectContaining({ currentNoteCreateNoteAction: "create_question" }));
+      text: "Create a standalone concept from the current selection and submit it for my review."
+    }), expect.objectContaining({ currentNoteCreateNoteAction: "create_concept" }));
   });
 });
 
-function makeFixture(action: "create_note" | "create_claim" | "create_question" = "create_note") {
+function makeFixture(action: ReaderSelectionCreatePageAction = "create_note") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-reader-create-note-"));
   roots.push(root);
   createVaultOnDisk({

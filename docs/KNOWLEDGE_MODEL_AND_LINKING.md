@@ -190,6 +190,11 @@ Operation. Retry/restart adopts both. Claims without valid evidence require revi
 output cannot own a `source` page. This does not broaden relationship, merge, edit, trash, or
 import authority; tags remain lightweight facets.
 
+The Reader may also turn one exact current selection into a reviewed `note`, `claim`, `question`,
+`concept`, `entity`, or `topic`. Main binds the selected bytes and requested type to the durable
+turn, and approval publishes the same schema-valid `create_page` and restart-safe identity; the
+renderer never supplies page bytes, paths, or apply authority.
+
 ## 6. Relationship Model
 
 Pige uses typed relationships internally, but Markdown remains readable.

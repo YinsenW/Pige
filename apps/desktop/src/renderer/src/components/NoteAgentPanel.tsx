@@ -13,6 +13,7 @@ import {
   type ConversationPaginationController
 } from "./ConversationPagination";
 import pigeMarkUrl from "../../../../../../resources/brand/pige-icon/master/pige-icon-1024.png";
+import type { ReaderSelectionProposalPreview } from "@pige/contracts";
 
 export type NoteAgentAvailability = "unavailable" | "ready" | "running" | "failed";
 
@@ -30,7 +31,7 @@ export type NoteAgentMessage = {
 
 export type NoteAgentProposal = {
   readonly id: string;
-  readonly action: "translate" | "polish" | "expand" | "shorten" | "append_current_note" | "replace_current_note" | "create_note" | "create_claim" | "create_question";
+  readonly action: ReaderSelectionProposalPreview["action"] | "append_current_note" | "replace_current_note";
   readonly revision: number;
   readonly lines: readonly {
     readonly kind: "context" | "removed" | "added";
