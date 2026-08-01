@@ -628,10 +628,10 @@ function KnowledgeTreeRelatedGroup(props: {
     <section className="related-group">
       <h3>{props.title}</h3>
       <div className="related-list">
-        {props.pages.map(({ relation, summary }) => {
-          const focusKey = `${props.ownerFocusKey}:${relation}:${summary.pageId}`;
+        {props.pages.map(({ relation, relationType, summary }) => {
+          const focusKey = `${props.ownerFocusKey}:${relation}:${relationType}:${summary.pageId}`;
           return (
-            <article className="related-row" key={`${relation}:${summary.pageId}`}>
+            <article className="related-row" key={`${relation}:${relationType}:${summary.pageId}`}>
               <div><strong>{summary.title}</strong></div>
               <button
                 type="button"

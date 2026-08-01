@@ -640,6 +640,7 @@
   "knowledgeTree.invalid": "건너뜀",
   "knowledgeTree.kind.concept": "개념",
   "knowledgeTree.kind.domain": "영역",
+  "knowledgeTree.kind.entity": "엔터티",
   "knowledgeTree.kind.source": "출처",
   "knowledgeTree.kind.topic": "주제",
   "knowledgeTree.leaves": "잎",

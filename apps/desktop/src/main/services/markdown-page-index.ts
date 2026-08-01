@@ -20,24 +20,22 @@ export interface MarkdownPageRecord {
   readonly absolutePath: string;
   readonly knowledge: MarkdownPageKnowledgeFields;
 }
-
 export interface MarkdownPageRecordAtSignature {
   readonly page: MarkdownPageRecord;
   readonly signature: MarkdownFileSignatureRecord;
 }
-
 export interface MarkdownPageKnowledgeFields {
   readonly aliases: readonly string[];
   readonly tags: readonly string[];
   readonly topics: readonly string[];
+  readonly entities: readonly string[];
+  readonly relatedPageIds: readonly string[];
 }
-
 export interface MarkdownPageScanResult {
   readonly pages: readonly MarkdownPageRecord[];
   readonly invalidPageCount: number;
   readonly files: readonly MarkdownFileSignatureRecord[];
 }
-
 export interface MarkdownFileSignatureRecord {
   readonly absolutePath: string;
   readonly pagePath: string;
@@ -312,7 +310,9 @@ function readMarkdownPageRecord(
     knowledge: {
       aliases: sanitizeKnowledgeRefs(parsed.frontmatter.aliases),
       tags: normalizePigeTags(rawTags ?? [], rawTags?.length ?? 12),
-      topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics)
+      topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics),
+      entities: sanitizeKnowledgeRefs(parsed.frontmatter.entities),
+      relatedPageIds: sanitizeKnowledgeRefs(parsed.frontmatter.related_page_ids)
     }
   } : undefined;
 }

@@ -20,7 +20,9 @@ language: "en"
 aliases: ["Captured Evidence", "Imported Source"]
 tags: ["Local First", "Research"]
 topics: ["Local RAG", "page_20260709_topic123"]
+entities: ["Pige", "page_20260709_entity12"]
 source_ids: ["src_20260709_abcd1234"]
+related_page_ids: ["page_20260709_related1"]
 source:
   managed_copy_path: "raw/files/2026/07/source.md"
 ---
@@ -40,7 +42,9 @@ source:
       aliases: ["Captured Evidence", "Imported Source"],
       tags: ["Local First", "Research"],
       topics: ["Local RAG", "page_20260709_topic123"],
-      source_ids: ["src_20260709_abcd1234"]
+      entities: ["Pige", "page_20260709_entity12"],
+      source_ids: ["src_20260709_abcd1234"],
+      related_page_ids: ["page_20260709_related1"]
     });
   });
 

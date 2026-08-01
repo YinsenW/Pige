@@ -124,12 +124,12 @@ function RelatedGroup(props: {
 }): React.JSX.Element | null {
   if (props.pages.length === 0) return null;
   return <section className="related-group"><h3>{props.title}</h3><div className="related-list">{props.pages.map((page) =>
-    <article className="related-row" key={`${page.relation}:${page.summary.pageId}`}><div><strong>{page.summary.title}</strong>
+    <article className="related-row" key={`${page.relation}:${page.relationType}:${page.summary.pageId}`}><div><strong>{page.summary.title}</strong>
       <span>{page.target || page.summary.pagePath}</span></div><div className="settings-inline-actions">
       <button type="button" className="ghost" aria-label={`${props.t("note.open")}: ${page.summary.title}`}
         disabled={props.loadingPageId === page.summary.pageId} onClick={() => void props.onOpen(page.summary.pageId)}>
         {props.loadingPageId === page.summary.pageId ? props.t("note.opening") : props.t("note.open")}</button>
-      {props.onUnlink ? <button ref={(node) => { if (node) props.triggerRefs.set(page.summary.pageId, node); else props.triggerRefs.delete(page.summary.pageId); }}
+      {props.onUnlink && page.relationType === "related_to" ? <button ref={(node) => { if (node) props.triggerRefs.set(page.summary.pageId, node); else props.triggerRefs.delete(page.summary.pageId); }}
         type="button" className="ghost" onClick={() => props.onUnlink?.(page)}>{props.t("note.unlink.action")}</button> : null}
     </div></article>)}</div></section>;
 }

@@ -102,7 +102,7 @@ describe("local database service", () => {
     });
     service.rebuild(vaultPath);
     const revision = service.inlineReferenceRevision(vaultPath);
-    expect(revision).toMatch(/^5:/u);
+    expect(revision).toMatch(/^6:/u);
 
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "shared title",
@@ -122,7 +122,7 @@ describe("local database service", () => {
     })?.map((page) => page.pageId)).toEqual(["page_20260709_first1234"]);
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "collision",
-      expectedRevision: "5:stale"
+      expectedRevision: "6:stale"
     })).toBeUndefined();
 
     writePage(vaultPath, "wiki/third.md", {
@@ -143,7 +143,7 @@ describe("local database service", () => {
 
     new LocalDatabaseService().rebuild(vaultPath);
     const successorRevision = service.inlineReferenceRevision(vaultPath);
-    expect(successorRevision).toMatch(/^5:/u);
+    expect(successorRevision).toMatch(/^6:/u);
     expect(successorRevision).not.toBe(revision);
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "collision",
@@ -356,7 +356,7 @@ Beta conclusion.`
         indexedPageCount: 1,
         chunkCount: rows.length,
         chunkerVersion: "pige-markdown-v1",
-        indexRevision: 5
+        indexRevision: 6
       });
       expect(rows.length).toBeGreaterThan(2);
       expect(columns).not.toContain("body");
@@ -567,7 +567,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 5
+      revision: 6
     });
 
     fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
@@ -578,7 +578,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 5
+      revision: 6
     });
   });
 
@@ -806,6 +806,8 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly sourceIds?: readonly string[];
   readonly aliases?: readonly string[];
   readonly topics?: readonly string[];
+  readonly entities?: readonly string[];
+  readonly relatedPageIds?: readonly string[];
   readonly status?: string;
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
@@ -822,7 +824,9 @@ language: "${input.language ?? "en"}"
 tags: ${JSON.stringify(input.tags ?? [])}
 aliases: ${JSON.stringify(input.aliases ?? [])}
 topics: ${JSON.stringify(input.topics ?? [])}
+entities: ${JSON.stringify(input.entities ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
+related_page_ids: ${JSON.stringify(input.relatedPageIds ?? [])}
 ---
 
 ${input.body}

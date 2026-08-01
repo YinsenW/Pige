@@ -1541,7 +1541,7 @@ export interface LibraryListResult {
   readonly pages: readonly LibraryPageSummary[];
 }
 
-export type KnowledgeTreeNodeKind = "domain" | "topic" | "concept" | "source";
+export type KnowledgeTreeNodeKind = "domain" | "topic" | "concept" | "entity" | "source";
 
 export interface KnowledgeTreeNavigation {
   readonly pageId: string;
@@ -1587,6 +1587,7 @@ export interface KnowledgeTreeSnapshot {
     readonly pageCount: number;
     readonly topicCount: number;
     readonly conceptCount: number;
+    readonly entityCount: number;
     readonly fragmentPageCount: number;
     readonly sourceCount: number;
     readonly leafCount: number;
@@ -1609,6 +1610,7 @@ export interface LibraryRelatedRequest {
 export interface LibraryRelatedPage {
   readonly summary: LibraryPageSummary;
   readonly relation: "outgoing" | "backlink";
+  readonly relationType: "links_to" | "related_to" | "mentions_entity";
   readonly target: string;
 }
 

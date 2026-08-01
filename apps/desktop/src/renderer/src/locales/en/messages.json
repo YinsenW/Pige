@@ -640,6 +640,7 @@
   "knowledgeTree.invalid": "Skipped",
   "knowledgeTree.kind.concept": "Concept",
   "knowledgeTree.kind.domain": "Domain",
+  "knowledgeTree.kind.entity": "Entity",
   "knowledgeTree.kind.source": "Source",
   "knowledgeTree.kind.topic": "Topic",
   "knowledgeTree.leaves": "Leaves",

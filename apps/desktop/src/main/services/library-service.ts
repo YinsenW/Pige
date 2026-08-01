@@ -261,6 +261,7 @@ function emptyKnowledgeTreeSnapshot(): KnowledgeTreeSnapshot {
       pageCount: 0,
       topicCount: 0,
       conceptCount: 0,
+      entityCount: 0,
       fragmentPageCount: 0,
       sourceCount: 0,
       leafCount: 0

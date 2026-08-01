@@ -235,7 +235,7 @@ describe("Knowledge Tree renderer", () => {
     await click(dom, relatedOpen);
     expect(opened).toEqual([{
       pageId: "page_20260713_related01",
-      focusKey: "root-0-child-0-child-0-node:outgoing:page_20260713_related01"
+      focusKey: "root-0-child-0-child-0-node:outgoing:links_to:page_20260713_related01"
     }]);
 
     const rankingNote = treeItemNamed(mount.container, "Ranking note");
@@ -356,6 +356,7 @@ function readyTree(): KnowledgeTreeResult {
       pageCount: 5,
       topicCount: 2,
       conceptCount: 1,
+      entityCount: 0,
       fragmentPageCount: 2,
       sourceCount: 3,
       leafCount: 5
@@ -462,6 +463,7 @@ function emptyTree(): KnowledgeTreeResult {
       pageCount: 0,
       topicCount: 0,
       conceptCount: 0,
+      entityCount: 0,
       fragmentPageCount: 0,
       sourceCount: 0,
       leafCount: 0
@@ -522,6 +524,7 @@ function relatedResult(pageId: string, title: string): LibraryRelatedResult {
     totalBacklinks: 1,
     outgoing: [{
       relation: "outgoing",
+      relationType: "links_to",
       target: "heading:private",
       summary: {
         pageId: "page_20260713_related01",
@@ -536,6 +539,7 @@ function relatedResult(pageId: string, title: string): LibraryRelatedResult {
     }],
     backlinks: [{
       relation: "backlink",
+      relationType: "links_to",
       target: "heading:private-backlink",
       summary: {
         pageId: "page_20260713_backlink01",
