@@ -297,6 +297,79 @@ describe("Note Agent production UI", () => {
     await unmount(dom, root);
   });
 
+  it("shows an exact conflict diff and durably keeps the current note", async () => {
+    const dom = createDom();
+    const vaultId = "vault_current_note_conflict";
+    const pageId = "page_current_note_conflict";
+    const jobId = "job_current_note_conflict";
+    const proposalId = "proposal_20260801_currentnoteconflict";
+    const currentRevision = `noteeditrev_${"c".repeat(64)}`;
+    const preview = {
+      proposalId,
+      kind: "append_current_note" as const,
+      state: "conflicted" as const,
+      revision: 3,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      currentRevision,
+      lines: [
+        { kind: "removed" as const, text: "Reviewed base line" },
+        { kind: "context" as const, text: "Current live line" },
+        { kind: "added" as const, text: "Proposed appended line" }
+      ]
+    };
+    const conversation = vi.fn().mockResolvedValue(noteAppendReviewTimeline(pageId, jobId, proposalId));
+    const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
+    const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
+      apiVersion: 1,
+      status: "rejected",
+      proposal: { ...preview, state: "rejected", revision: 4, currentRevision: undefined }
+    });
+    const onClose = vi.fn();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        ...noteAgentApi(conversation),
+        agent: {
+          conversation,
+          submitTurn: vi.fn(),
+          currentNoteAppendProposal,
+          decideCurrentNoteAppendProposal,
+          onTurnDraft: () => () => undefined
+        }
+      }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, { ...currentNoteAgentProps(pageId, vaultId), onClose }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => container.textContent?.includes("Current live line") === true);
+    expect(container.querySelector('[data-kind="removed"]')?.textContent).toContain("Reviewed base line");
+    expect(buttonNamed(container, t("note.proposal.manual_edit"))).toBeTruthy();
+    expect(buttonNamed(container, t("note.proposal.keep_current"))).toBeTruthy();
+    await click(dom, required(buttonNamed(container, t("note.proposal.manual_edit"))));
+    expect(onClose).toHaveBeenCalledOnce();
+    await click(dom, required(buttonNamed(container, t("note.proposal.keep_current"))));
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.status.rejected")) === true);
+    expect(decideCurrentNoteAppendProposal).toHaveBeenCalledWith({
+      apiVersion: 1,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      proposalId,
+      expectedRevision: 3,
+      decision: "keep_current",
+      expectedCurrentRevision: currentRevision
+    });
+    await unmount(dom, root);
+  });
+
   it("does not report an ordinary completed current-note turn as a durable append", async () => {
     const dom = createDom();
     const pageId = "page_current_note_read_only";

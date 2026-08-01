@@ -24,12 +24,18 @@ import {
 } from "./generated-note-file";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { readCurrentNotePageForMutation } from "./retrieval-evidence-boundary";
+import {
+  CurrentNoteConflictReviewService,
+  currentNoteConflictRevision,
+  projectCurrentNoteConflictLines
+} from "./current-note-conflict-review-service";
 
 const MAX_APPEND_TEXT_BYTES = 16 * 1024;
 const MAX_PAGE_BYTES = 1024 * 1024;
 const MAX_RECORD_BYTES = 256 * 1024;
 const APPEND_TOOL_ID = "pige_append_current_note";
 const APPEND_TOOL_VERSION = "1";
+const conflictReviews = new CurrentNoteConflictReviewService();
 
 export interface CurrentNoteAppendInspection {
   readonly pageId: string;
@@ -55,8 +61,9 @@ export interface CurrentNoteAppendProposalPreview {
   readonly activeVaultId: string;
   readonly pageId: string;
   readonly jobId: string;
+  readonly currentRevision?: `noteeditrev_${string}`;
   readonly lines: readonly {
-    readonly kind: "context" | "added";
+    readonly kind: "context" | "removed" | "added";
     readonly text: string;
   }[];
 }
@@ -252,7 +259,8 @@ export class CurrentNoteAppendService {
     readonly jobId: string;
     readonly proposalId: string;
     readonly expectedRevision: number;
-    readonly decision: "approve" | "reject";
+    readonly decision: "approve" | "reject" | "keep_current";
+    readonly expectedCurrentRevision?: string;
   }): CurrentNoteAppendProposalDecisionResult {
     const proposal = readProposal(input.vaultPath, input.proposalId);
     if (!proposal || proposal.activeVaultId !== input.activeVaultId || proposal.pageId !== input.pageId || proposal.jobId !== input.jobId) return { status: "not_found" };
@@ -271,8 +279,32 @@ export class CurrentNoteAppendService {
     }
     const existingDecision = readDecision(input.vaultPath, proposal.proposalId);
     const existingOutcome = readOutcome(input.vaultPath, proposal.proposalId);
+    if (existingOutcome) {
+      if (existingOutcome.outcome !== "conflicted" || input.decision !== "keep_current") {
+        if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) {
+          throw turnConflict("The current-note append proposal already has another durable decision.");
+        }
+        return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+      }
+      const currentPreview = this.#preview(input.vaultPath, proposal, intent, existingOutcome);
+      if (currentPreview.state === "rejected") return { status: "rejected", proposal: currentPreview };
+      if (
+        currentPreview.state !== "conflicted" || !currentPreview.currentRevision ||
+        currentPreview.revision !== input.expectedRevision ||
+        currentPreview.currentRevision !== input.expectedCurrentRevision
+      ) return { status: "stale", proposal: currentPreview };
+      conflictReviews.keepCurrent({
+        vaultPath: input.vaultPath,
+        mutationKind: "append",
+        proposalId: proposal.proposalId,
+        intentHash,
+        currentRevision: currentPreview.currentRevision,
+        lines: currentPreview.lines
+      });
+      return { status: "rejected", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+    }
+    if (input.decision === "keep_current") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
     if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) throw turnConflict("The current-note append proposal already has another durable decision.");
-    if (existingOutcome) return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
     if (!existingDecision) {
       const currentPreview = this.#preview(input.vaultPath, proposal, intent);
       if (currentPreview.revision !== input.expectedRevision || currentPreview.state !== "ready") {
@@ -396,6 +428,22 @@ export class CurrentNoteAppendService {
   #preview(vaultPath: string, proposal: AppendProposalRecord, intent: AppendIntentRecord, knownOutcome?: ProposalOutcomeRecord): CurrentNoteAppendProposalPreview {
     const outcome = knownOutcome ?? readOutcome(vaultPath, proposal.proposalId);
     const decision = readDecision(vaultPath, proposal.proposalId);
+    const resolution = outcome?.outcome === "conflicted"
+      ? conflictReviews.read({ vaultPath, mutationKind: "append", proposalId: proposal.proposalId, intentHash: proposal.intentHash })
+      : undefined;
+    if (resolution) {
+      return {
+        proposalId: proposal.proposalId,
+        kind: "append_current_note",
+        state: "rejected",
+        revision: 4,
+        activeVaultId: intent.activeVaultId,
+        pageId: intent.pageId,
+        jobId: intent.jobId,
+        lines: resolution.lines
+      };
+    }
+    const conflict = outcome?.outcome === "conflicted" ? readCurrentTarget(vaultPath, intent) : undefined;
     return {
       proposalId: proposal.proposalId,
       kind: "append_current_note",
@@ -404,7 +452,8 @@ export class CurrentNoteAppendService {
       activeVaultId: intent.activeVaultId,
       pageId: intent.pageId,
       jobId: intent.jobId,
-      lines: proposal.preview
+      ...(conflict ? { currentRevision: currentNoteConflictRevision(conflict.markdown) } : {}),
+      lines: conflict ? projectCurrentNoteConflictLines(proposal.preview, conflict.markdown) : proposal.preview
     };
   }
 

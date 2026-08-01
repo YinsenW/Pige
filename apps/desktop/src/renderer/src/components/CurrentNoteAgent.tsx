@@ -369,7 +369,7 @@ export function CurrentNoteAgent(props: {
 
   const decideAppendProposal = async (
     proposalId: string,
-    action: "reject" | "later" | "apply"
+    action: "reject" | "later" | "apply" | "keep_current" | "manual_edit"
   ): Promise<void> => {
     const current = appendProposal;
     if (!current || current.preview.proposalId !== proposalId) return;
@@ -379,7 +379,12 @@ export function CurrentNoteAgent(props: {
       setAppendProposal(null);
       return;
     }
-    if (appendProposalDecisionInFlightRef.current || current.preview.state !== "ready") return;
+    if (action === "manual_edit") {
+      props.onClose();
+      return;
+    }
+    const resolvingConflict = action === "keep_current" && current.preview.state === "conflicted" && current.preview.currentRevision;
+    if (appendProposalDecisionInFlightRef.current || (current.preview.state !== "ready" && !resolvingConflict)) return;
     const vaultId = props.vaultId;
     const pageId = props.pageId;
     if (
@@ -394,7 +399,7 @@ export function CurrentNoteAgent(props: {
     setAppendProposal({ preview: { ...current.preview, state: "resolving" } });
     let result: CurrentNoteMutationProposalDecisionResult;
     try {
-      const decision = action === "apply" ? "approve" as const : "reject" as const;
+      const decision = action === "apply" ? "approve" as const : action === "keep_current" ? "keep_current" as const : "reject" as const;
       result = current.preview.kind === "append_current_note"
         ? await window.pige.agent.decideCurrentNoteAppendProposal({
             apiVersion: 1,
@@ -403,7 +408,8 @@ export function CurrentNoteAgent(props: {
             jobId: current.preview.jobId,
             proposalId,
             expectedRevision: current.preview.revision,
-            decision
+            decision,
+            ...(decision === "keep_current" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           })
         : await window.pige.agent.decideCurrentNoteReplaceProposal({
             apiVersion: 1,
@@ -411,7 +417,8 @@ export function CurrentNoteAgent(props: {
             jobId: current.preview.jobId,
             proposalId,
             expectedRevision: current.preview.revision,
-            decision
+            decision,
+            ...(decision === "keep_current" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           });
     } catch {
       if (sequence === appendProposalSequenceRef.current) {
@@ -450,6 +457,9 @@ export function CurrentNoteAgent(props: {
         id: visibleProposal.proposalId,
         action: "kind" in visibleProposal ? visibleProposal.kind : visibleProposal.action,
         revision: visibleProposal.revision,
+        ...("currentRevision" in visibleProposal && visibleProposal.currentRevision
+          ? { currentRevision: visibleProposal.currentRevision }
+          : {}),
         lines: visibleProposal.lines,
         state: visibleProposal.state,
         ...(visibleProposalError ? { errorMessageKey: visibleProposalError } : {})
@@ -469,7 +479,7 @@ export function CurrentNoteAgent(props: {
       onSelectModel={selectModel}
       onProposalAction={(proposalId, action) => {
         if (appendProposal?.preview.proposalId === proposalId) void decideAppendProposal(proposalId, action);
-        else props.onProposalAction?.(proposalId, action);
+        else if (action === "reject" || action === "later" || action === "apply") props.onProposalAction?.(proposalId, action);
       }}
       onOpenCitation={props.onOpenCitation}
       onCopyMessage={async (messageId) => {

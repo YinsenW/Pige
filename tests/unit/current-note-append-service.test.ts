@@ -224,8 +224,55 @@ describe("CurrentNoteAppendService", () => {
       expectedRevision: staged.proposal.revision,
       decision: "approve"
     });
-    expect(decision).toMatchObject({ status: "conflicted", proposal: { state: "conflicted", revision: 3 } });
+    expect(decision).toMatchObject({
+      status: "conflicted",
+      proposal: {
+        state: "conflicted",
+        revision: 3,
+        currentRevision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u),
+        lines: [
+          expect.objectContaining({ kind: "removed", text: expect.stringContaining("First drift") }),
+          expect.objectContaining({ kind: "context", text: expect.stringContaining("Second drift") }),
+          expect.objectContaining({ kind: "added", text: expect.stringContaining("concise durable conclusion") })
+        ]
+      }
+    });
     expect(fs.readFileSync(conflicted.pagePath, "utf8")).toBe(secondDrift);
+    expect(listOperationFiles(conflicted.vaultPath)).toEqual([]);
+
+    const thirdDrift = conflicted.initialMarkdown.replace("Initial durable body.", "Third drift.");
+    fs.writeFileSync(conflicted.pagePath, thirdDrift, "utf8");
+    const stale = conflicted.service.decideProposal({
+      vaultPath: conflicted.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId,
+      expectedRevision: decision.proposal.revision,
+      decision: "keep_current",
+      expectedCurrentRevision: decision.proposal.currentRevision
+    });
+    expect(stale).toMatchObject({ status: "stale", proposal: { state: "conflicted", revision: 3 } });
+    if (stale.status !== "stale" || !stale.proposal?.currentRevision) throw new Error("Expected a refreshed exact conflict review.");
+    const kept = conflicted.service.decideProposal({
+      vaultPath: conflicted.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId,
+      expectedRevision: stale.proposal.revision,
+      decision: "keep_current",
+      expectedCurrentRevision: stale.proposal.currentRevision
+    });
+    expect(kept).toMatchObject({ status: "rejected", proposal: { state: "rejected", revision: 4 } });
+    expect(new CurrentNoteAppendService().getProposal({
+      vaultPath: conflicted.vaultPath,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId
+    })).toMatchObject({ state: "rejected", revision: 4 });
+    expect(fs.readFileSync(conflicted.pagePath, "utf8")).toBe(thirdDrift);
     expect(listOperationFiles(conflicted.vaultPath)).toEqual([]);
 
     const rejected = createFixture({ jobId: "job_20260728_noteappend02" });

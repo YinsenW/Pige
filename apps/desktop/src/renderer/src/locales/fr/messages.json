@@ -1235,6 +1235,8 @@
   "note.proposal.description": "Cette modification exceptionnelle doit être vérifiée avant de mettre à jour la note. L’original reste récupérable depuis Activité et Annuler.",
   "note.proposal.decisionFailed": "La décision d’examen n’a pas pu être enregistrée. Aucune modification n’a été effectuée.",
   "note.proposal.later": "Plus tard",
+  "note.proposal.keep_current": "Conserver la note actuelle",
+  "note.proposal.manual_edit": "Modifier manuellement",
   "note.proposal.line.added": "Texte ajouté",
   "note.proposal.line.context": "Contexte inchangé",
   "note.proposal.line.removed": "Texte supprimé",

@@ -9930,7 +9930,7 @@ export const CurrentNoteAppendProposalStateSchema = z.enum([
   "conflicted"
 ]);
 export const CurrentNoteAppendProposalLineSchema = z.object({
-  kind: z.enum(["context", "added"]),
+  kind: z.enum(["context", "removed", "added"]),
   text: z.string().min(1).max(160)
 }).strict();
 export const CurrentNoteAppendProposalPreviewSchema = z.object({
@@ -9941,6 +9941,7 @@ export const CurrentNoteAppendProposalPreviewSchema = z.object({
   activeVaultId: VaultIdSchema,
   pageId: PageIdSchema,
   jobId: JobIdSchema,
+  currentRevision: NoteEditorRevisionSchema.optional(),
   lines: z.array(CurrentNoteAppendProposalLineSchema).max(8)
 }).strict();
 export const CurrentNoteAppendProposalGetRequestSchema = z.object({
@@ -9964,8 +9965,13 @@ export const CurrentNoteAppendProposalGetResultSchema = z.discriminatedUnion("st
 ]);
 export const CurrentNoteAppendProposalDecisionRequestSchema = CurrentNoteAppendProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject"])
-}).strict();
+  decision: z.enum(["approve", "reject", "keep_current"]),
+  expectedCurrentRevision: NoteEditorRevisionSchema.optional()
+}).strict().superRefine((value, context) => {
+  if ((value.decision === "keep_current") !== (value.expectedCurrentRevision !== undefined)) {
+    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Keeping current requires the exact reviewed note revision." });
+  }
+});
 export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),
@@ -10014,6 +10020,7 @@ export const CurrentNoteReplaceProposalPreviewSchema = z.object({
   revision: z.number().int().min(1),
   activeVaultId: VaultIdSchema,
   jobId: JobIdSchema,
+  currentRevision: NoteEditorRevisionSchema.optional(),
   lines: z.array(CurrentNoteReplaceProposalLineSchema).max(8)
 }).strict();
 export const CurrentNoteReplaceProposalGetRequestSchema = z.object({
@@ -10044,8 +10051,13 @@ export const CurrentNoteReplaceProposalGetResultSchema = z.discriminatedUnion("s
 ]);
 export const CurrentNoteReplaceProposalDecisionRequestSchema = CurrentNoteReplaceProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject"])
-}).strict();
+  decision: z.enum(["approve", "reject", "keep_current"]),
+  expectedCurrentRevision: NoteEditorRevisionSchema.optional()
+}).strict().superRefine((value, context) => {
+  if ((value.decision === "keep_current") !== (value.expectedCurrentRevision !== undefined)) {
+    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Keeping current requires the exact reviewed note revision." });
+  }
+});
 export const CurrentNoteReplaceProposalDecisionResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),

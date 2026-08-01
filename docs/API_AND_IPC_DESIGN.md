@@ -560,7 +560,9 @@ Current-note append/replace stay under `agent.submitTurn`, accept <=16 KiB and c
 Replace needs authored intent plus same-turn read and always enters review.
 `agent.currentNoteReplaceProposal`/`agent.decideCurrentNoteReplaceProposal` expose only
 vault/Job/proposal/revision and <=8 redacted lines; Main owns CAS, one reversible `update_page`
-and restart convergence.
+and restart convergence. Append/replace conflicts additionally expose only an opaque current-note
+revision and bounded base/current/proposed lines. Exact `keep_current` records a durable no-write
+resolution; revision drift returns the refreshed conflict, while manual edit remains renderer-local.
 
 Dataset boundary:
 

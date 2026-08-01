@@ -1235,6 +1235,8 @@
   "note.proposal.description": "This exceptional change needs review before it updates the note. The original remains recoverable through Activity and Undo.",
   "note.proposal.decisionFailed": "The review decision could not be saved. Nothing was changed.",
   "note.proposal.later": "Later",
+  "note.proposal.keep_current": "Keep current note",
+  "note.proposal.manual_edit": "Edit manually",
   "note.proposal.line.added": "Added text",
   "note.proposal.line.context": "Unchanged context",
   "note.proposal.line.removed": "Removed text",
