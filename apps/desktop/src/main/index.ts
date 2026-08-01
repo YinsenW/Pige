@@ -146,6 +146,8 @@ import {
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
+  UpdateSourceStoragePolicyRequestSchema,
+  UpdateSourceStoragePolicyResultSchema,
   LIBRARY_BROWSE_CHANNEL,
   LibraryBrowseRequestSchema,
   LibraryBrowseResultSchema,
@@ -222,6 +224,7 @@ import { BackupCoordinatorService } from "./services/backup-coordinator-service"
 import { BackupRestoreService } from "./services/backup-service";
 import { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
 import { BackupConversationPreferenceService } from "./services/backup-conversation-preference-service";
+import { SourceStoragePreferenceService } from "./services/source-storage-preference-service";
 import { PigePolicyService } from "./services/pige-policy-service";
 import { BackupTrashPreferenceService } from "./services/backup-trash-preference-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
@@ -479,6 +482,7 @@ let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
 let backupMemoryPreferenceService: BackupMemoryPreferenceService | undefined;
 let backupConversationPreferenceService: BackupConversationPreferenceService | undefined;
+let sourceStoragePreferenceService: SourceStoragePreferenceService | undefined;
 let pigePolicyService: PigePolicyService | undefined;
 let backupTrashPreferenceService: BackupTrashPreferenceService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
@@ -1014,6 +1018,11 @@ const getBackupConversationPreferenceService = (): BackupConversationPreferenceS
     }).jobs.length > 0
   });
   return backupConversationPreferenceService;
+};
+
+const getSourceStoragePreferenceService = (): SourceStoragePreferenceService => {
+  sourceStoragePreferenceService ??= new SourceStoragePreferenceService(getVaultService());
+  return sourceStoragePreferenceService;
 };
 
 const getPigePolicyService = (): PigePolicyService => {
@@ -2152,6 +2161,7 @@ const getNoteMarkdownEditorConflictService = (): NoteMarkdownEditorConflictServi
 };
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
   const backupConversationPreference = getBackupConversationPreferenceService();
+  const sourceStoragePreference = getSourceStoragePreferenceService();
   const pigePolicy = getPigePolicyService();
   const trash = getNoteTrashService();
   const merge = getNoteMergeService();
@@ -2161,12 +2171,12 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   const topicRename = getLibraryTopicRenameService();
   return {
     activitySummary: (operation, undo) => {
-      const summary = pigePolicy.activitySummary(operation, undo) ?? backupConversationPreference.activitySummary(operation, undo) ?? duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
+      const summary = pigePolicy.activitySummary(operation, undo) ?? sourceStoragePreference.activitySummary(operation, undo) ?? backupConversationPreference.activitySummary(operation, undo) ?? duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
       const redo = summary && getNoteTrashRedoService().activityState(operation, undo);
       return summary && redo ? { ...summary, ...redo } : summary;
     },
-    findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
-    undo: (operation) => pigePolicy.activitySummary(operation) ? pigePolicy.undo(operation) : backupConversationPreference.activitySummary(operation) ? backupConversationPreference.undo(operation) : duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? sourceStoragePreference.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => pigePolicy.activitySummary(operation) ? pigePolicy.undo(operation) : sourceStoragePreference.activitySummary(operation) ? sourceStoragePreference.undo(operation) : backupConversationPreference.activitySummary(operation) ? backupConversationPreference.undo(operation) : duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
       const purgeResult = getNoteTrashPurgeService().recoverIncompletePurges();
       const topicRenameResult = topicRename.recoverIncompleteOperations();
@@ -2176,10 +2186,11 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
       const duplicateTopicResult = duplicateTopics.recoverIncompleteOperations();
       const renameResult = rename.recoverIncompleteOperations();
       const backupConversationPreferenceResult = backupConversationPreference.recoverIncompleteOperations();
+      const sourceStoragePreferenceResult = sourceStoragePreference.recoverIncompleteOperations();
       const pigePolicyResult = pigePolicy.recoverIncompleteOperations();
       return {
-        recovered: purgeResult.recovered + pigePolicyResult.recovered + backupConversationPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
-        failed: purgeResult.failed + pigePolicyResult.failed + backupConversationPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
+        recovered: purgeResult.recovered + pigePolicyResult.recovered + sourceStoragePreferenceResult.recovered + backupConversationPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
+        failed: purgeResult.failed + pigePolicyResult.failed + sourceStoragePreferenceResult.failed + backupConversationPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
       };
     }
   };
@@ -3831,7 +3842,17 @@ ipcMain.handle("vault.revealSourceAssetRoot", (event) => {
   requireWindow(event.sender);
   return getVaultService().revealSourceAssetRoot();
 });
-ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) => getVaultService().updateSourceStoragePolicy(request));
+ipcMain.handle("vault.updateSourceStoragePolicy", async (event, request: UpdateSourceStoragePolicyRequest) => {
+  const parsed = UpdateSourceStoragePolicyRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["sourceStorage.defaultStrategy"], {
+    title: "Change how new files are preserved?",
+    message: "This changes only future file captures. Existing source files and managed copies will not be moved or rewritten.",
+    confirmLabel: "Change source storage"
+  });
+  return UpdateSourceStoragePolicyResultSchema.parse(
+    getSourceStoragePreferenceService().update(parsed)
+  );
+});
 registerVaultMetadataIpc({ ipcMain, renameDisplayName: (request) => getVaultService().renameDisplayName(request) });
 registerPigePolicyIpc({
   ipcMain,

@@ -134,7 +134,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | First-Home guide dismissal | Home | `machine_vault_binding` | Vault Runtime Service | OS app data keyed by `vault_id` | No | `none` | Immediate after explicit Connect/continue choice; older settings default to showing it |
 | Vault ID | Vault & Note Storage | `vault_identity` | Vault Runtime Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Immutable after creation unless migration |
 | Vault schema version | Vault & Note Storage | `vault_identity` | Migration Service | `.pige/manifest.json` | Yes | `explicit_confirmation` | Migration controlled |
-| Default source storage strategy | Vault & Note Storage | `vault_portable` | Source Storage Service | `.pige/config.json` | Yes | `none` | New file captures only; text and URL snapshots are necessarily managed copies |
+| Default source storage strategy | Vault & Note Storage | `vault_portable` | Source Storage Preference Service | `.pige/config.json` plus private receipt and pathless Operation | Yes | `explicit_confirmation` | Revision-fenced change for new file captures only; existing source bytes never move; Activity Undo and restart recovery restore the exact prior setting |
 | In-vault managed-copy root (`inVaultSourceAssetRoot` compatibility field) | Vault & Note Storage | `vault_portable` | Source Storage Service | `.pige/config.json` relative path | Yes | `os_permission` | New managed sources; existing sources unchanged |
 | External managed-copy root binding | Vault & Note Storage | `machine_vault_binding` | Source Storage Service | OS app data keyed by `vault_id` and `rootId` | Binding no; backup manifest lists dependency and managed copies are included by default when reachable | `os_permission` | Main-owned directory chooser plus exact dependency validation; atomically repairs the same root ID without renderer path access or a separate confirmation |
 | Backup include/exclude defaults | Vault & Note Storage/Backup flow | mixed | Backup Service | `.pige/config.json` for vault defaults, OS app data for machine choices | Vault defaults yes | `none` | Next backup |
@@ -186,7 +186,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `vault.displayName` | `none` | Strict pathless Main IPC plus manifest metadata-revision CAS; rename and relocation are mutually exclusive while either action is pending |
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
 | `vault.pigePolicy` | `explicit_confirmation` | Pathless `PIGE.md` read plus validation-before-confirmation, vault/revision CAS, atomic write, Activity/Undo and restart recovery; Agent turns bind the exact validated revision and fail closed on drift |
-| `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
+| `sourceStorage.defaultStrategy` | `explicit_confirmation` | Main confirms the exact revision-fenced future-capture change; Source Storage Preference Service commits one pathless `change_setting` Operation, Activity Undo, and restart recovery without moving existing source bytes |
 | `backup.entryPoints` | `none` | Derived read-only status |
 | `memory.includeMemoryInBackup` | `none` | Revision-fenced active-Vault config write; active Backup work blocks mutation and the next Backup reads the durable choice |
 | `models.providerProfiles` | `explicit_confirmation` | Disclosed Settings Connect/Save plus probe before create/edit; native confirmation remains for profile edit and deletion |
@@ -210,7 +210,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 
 | Setting or state | Agent policy effect | Prompt-visible? | Enforced by | Applies to |
 | --- | --- | --- | --- | --- |
-| Default source storage strategy | `sourceStorage.defaultStrategy` | Yes | Source Storage Service | New file captures only; text and URL inputs remain managed snapshots |
+| Default source storage strategy | `sourceStorage.defaultStrategy` | Yes | Source Storage Preference Service | Confirmed, revision-fenced change for new file captures only; text and URL inputs remain managed snapshots; Activity Undo restores the prior strategy |
 | In-vault managed-copy root | `sourceStorage.sourceAssetRootKind` compatibility field | Sometimes | Source Storage Service | New managed sources; existing sources unchanged |
 | External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service | New managed sources and source availability checks; existing sources resolve their recorded root ID |
 | `PIGE.md` policy | `vaultPolicy.revision` plus escaped system context | Yes | Vault Service, Agent Orchestrator | New model Jobs and every later model turn currentness check |

@@ -430,6 +430,7 @@ import type {
   UpdateStatusEvent,
   UpdateSummary,
   UpdateSourceStoragePolicyRequest,
+  UpdateSourceStoragePolicyResult,
   WindowLayoutRequest,
   WindowLayoutState,
   WindowState,
@@ -1020,6 +1021,8 @@ import {
   VaultMigrationApplyResultSchema,
   VaultRenameDisplayNameRequestSchema,
   VaultRenameDisplayNameResultSchema,
+  UpdateSourceStoragePolicyRequestSchema,
+  UpdateSourceStoragePolicyResultSchema,
   RecentVaultForgetRequestSchema,
   RecentVaultForgetResultSchema,
   RecentVaultReconnectRequestSchema,
@@ -3077,8 +3080,18 @@ const api: PigeDesktopApi = {
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealKnowledgeRoot"), "knowledge_root"),
     revealSourceAssetRoot: async (): Promise<VaultRevealResult> =>
       projectVaultRevealResult(await ipcRenderer.invoke("vault.revealSourceAssetRoot"), "source_asset_root"),
-    updateSourceStoragePolicy: async (request: UpdateSourceStoragePolicyRequest): Promise<VaultSummary> =>
-      ipcRenderer.invoke("vault.updateSourceStoragePolicy", request) as Promise<VaultSummary>,
+    updateSourceStoragePolicy: async (request: UpdateSourceStoragePolicyRequest): Promise<UpdateSourceStoragePolicyResult> => {
+      const parsed = UpdateSourceStoragePolicyRequestSchema.parse(request);
+      const result = UpdateSourceStoragePolicyResultSchema.parse(
+        await ipcRenderer.invoke("vault.updateSourceStoragePolicy", parsed)
+      );
+      if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.expectedRevision !== parsed.expectedRevision || result.defaultStrategy !== parsed.defaultStrategy ||
+        ("summary" in result && result.summary.activeVaultId !== parsed.activeVaultId)) {
+        throw new Error("Invalid source storage preference response identity.");
+      }
+      return result;
+    },
     configureManagedCopyRoot: async (
       request: ManagedCopyRootConfigureRequest
     ): Promise<ManagedCopyRootConfigureResult> => {

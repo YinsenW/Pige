@@ -592,6 +592,8 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   const [backupBusy, setBackupBusy] = useState(false);
   const [relocationBusy, setRelocationBusy] = useState(false);
   const [renameBusy, setRenameBusy] = useState(false);
+  const [sourcePolicyBusy, setSourcePolicyBusy] = useState(false);
+  const [sourcePolicyDraft, setSourcePolicyDraft] = useState<SourceStorageStrategy>(props.vault.defaultSourceStorageStrategy);
   const [reconnectNotice, setReconnectNotice] = useState<ReconnectNotice | null>(null);
   const [revealTarget, setRevealTarget] = useState<VaultRevealTarget | null>(null);
   const [revealNotice, setRevealNotice] = useState<{ readonly kind: "success" | "error"; readonly message: string } | null>(null);
@@ -599,6 +601,8 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   const revealRequestActiveRef = useRef(false);
   const reconnectRequestSequence = useRef(0);
   const reconnectRequestActiveRef = useRef(false);
+  const sourcePolicySequenceRef = useRef(0);
+  const preserveSourcePolicyDraftRef = useRef(false);
   const reconnectButtonRef = useRef<HTMLButtonElement>(null);
   const backupSectionRef = useRef<HTMLElement>(null);
   const knowledgeRootButtonRef = useRef<HTMLButtonElement>(null);
@@ -630,6 +634,14 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
     setBackupBusy(false);
     setRelocationBusy(false);
   }, [props.vault.vaultId, activeBackupJob?.id]);
+
+  useEffect(() => {
+    if (preserveSourcePolicyDraftRef.current) {
+      preserveSourcePolicyDraftRef.current = false;
+      return;
+    }
+    setSourcePolicyDraft(props.vault.defaultSourceStorageStrategy);
+  }, [props.vault.vaultId, props.vault.managedCopyRoot.sourceStorageRevision, props.vault.defaultSourceStorageStrategy]);
 
   const runBackupAction = async (action: () => Promise<void>): Promise<void> => {
     props.onError(null);
@@ -761,11 +773,28 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   };
 
   const updatePolicy = async (defaultStrategy: SourceStorageStrategy): Promise<void> => {
+    if (sourcePolicyBusy) return;
+    const sequence = ++sourcePolicySequenceRef.current;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `sourcepolicyreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId: props.vault.vaultId,
+      expectedRevision: props.vault.managedCopyRoot.sourceStorageRevision,
+      defaultStrategy
+    };
     props.onError(null);
+    setSourcePolicyDraft(defaultStrategy);
+    setSourcePolicyBusy(true);
     try {
-      await window.pige.vault.updateSourceStoragePolicy({ defaultStrategy });
+      const result = await window.pige.vault.updateSourceStoragePolicy(request);
+      if (sequence !== sourcePolicySequenceRef.current || result.requestId !== request.requestId ||
+        result.activeVaultId !== request.activeVaultId || result.expectedRevision !== request.expectedRevision ||
+        result.defaultStrategy !== request.defaultStrategy) return;
+      if (result.status === "stale") preserveSourcePolicyDraftRef.current = true;
+      else if (result.status === "not_found" || result.status === "failed") props.onError(props.t("error.generic"));
       await props.onRefresh();
     } catch { props.onError(props.t("error.generic")); }
+    finally { if (sequence === sourcePolicySequenceRef.current) setSourcePolicyBusy(false); }
   };
 
   const revealStorageRoot = async (target: VaultRevealTarget): Promise<void> => {
@@ -830,7 +859,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           onSelected={props.onRefresh}
           returnFocusRef={sourceAssetRootButtonRef}
         /></div></div>
-        <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={props.vault.defaultSourceStorageStrategy} disabled={props.busy || relocationBusy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
+        <label className="settings-row" htmlFor="vault-source-storage-strategy"><span className="settings-row-copy"><strong>{props.t("sourceStorage.title")}</strong><span>{props.t("sourceStorage.description")}</span></span><select className="settings-select" id="vault-source-storage-strategy" value={sourcePolicyDraft} disabled={props.busy || relocationBusy || sourcePolicyBusy || Boolean(revealTarget)} onChange={(event) => void updatePolicy(event.target.value as SourceStorageStrategy)}><option value="copy_to_source_library">{props.t("sourceStorage.copy")}</option><option value="reference_original">{props.t("sourceStorage.reference")}</option></select></label>
         <ReferencedOriginalConnections
           activeVaultId={props.vault.vaultId}
           disabled={props.busy || relocationBusy || Boolean(revealTarget)}

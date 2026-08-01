@@ -24,6 +24,7 @@ import type {
   RestoreCancelRequest,
   RestoreCancelResult,
   RestorePreviewResult,
+  UpdateSourceStoragePolicyRequest,
   VaultActionResult,
   VaultMigrationApplyRequest,
   VaultMigrationApplyResult,
@@ -798,7 +799,9 @@ describe("Restore identity UI", () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
     const api = makePigeApi(harness, true);
-    api.vault.updateSourceStoragePolicy = async () => {
+    let request: UpdateSourceStoragePolicyRequest | undefined;
+    api.vault.updateSourceStoragePolicy = async (input) => {
+      request = input;
       throw new Error("RAW_POLICY_SENTINEL /private/source-root");
     };
     const { container, root } = await mountApp(dom, api);
@@ -808,6 +811,13 @@ describe("Restore identity UI", () => {
     if (!policy) throw new Error("Source storage selector not found.");
     await changeSelect(dom, policy, "reference_original");
     await waitFor(dom, () => container.textContent?.includes("Something went wrong.") ?? false);
+    expect(request).toMatchObject({
+      apiVersion: 1,
+      activeVaultId: harness.onboarding.activeVault?.vaultId,
+      expectedRevision: harness.onboarding.activeVault?.managedCopyRoot.sourceStorageRevision,
+      defaultStrategy: "reference_original"
+    });
+    expect(request?.requestId).toMatch(/^sourcepolicyreq_[a-z0-9]{16,64}$/u);
     expect(container.textContent).not.toContain("RAW_POLICY_SENTINEL");
     expect(container.textContent).not.toContain("/private/source-root");
 
@@ -1531,9 +1541,17 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       revealKnowledgeRoot: async () => harness.revealStorageRoot("knowledge_root"),
       revealSourceAssetRoot: async () => harness.revealStorageRoot("source_asset_root"),
       configureManagedCopyRoot: (request: ManagedCopyRootConfigureRequest) => harness.configureManagedCopyRoot(request),
-      updateSourceStoragePolicy: async () => {
+      updateSourceStoragePolicy: async (request: UpdateSourceStoragePolicyRequest) => {
         if (!harness.onboarding.activeVault) throw new Error("No active vault.");
-        return harness.onboarding.activeVault;
+        return {
+          ...request,
+          status: "current" as const,
+          summary: {
+            activeVaultId: harness.onboarding.activeVault.vaultId,
+            revision: harness.onboarding.activeVault.managedCopyRoot.sourceStorageRevision,
+            defaultStrategy: harness.onboarding.activeVault.defaultSourceStorageStrategy
+          }
+        };
       }
     },
     backup: {

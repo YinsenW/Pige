@@ -6180,6 +6180,37 @@ const VaultCountsProjectionSchema = z.object({
 
 export const SourceStorageRevisionSchema = z.string()
   .regex(/^ssrev_[a-f0-9]{64}$/u);
+export const SourceStoragePolicyRequestIdSchema = z.string()
+  .regex(/^sourcepolicyreq_[a-z0-9]{16,64}$/u);
+export const UpdateSourceStoragePolicyRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceStoragePolicyRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: SourceStorageRevisionSchema,
+  defaultStrategy: SourceStorageStrategySchema
+}).strict();
+export const SourceStoragePolicySummarySchema = z.object({
+  activeVaultId: VaultIdSchema,
+  revision: SourceStorageRevisionSchema,
+  defaultStrategy: SourceStorageStrategySchema
+}).strict();
+export const UpdateSourceStoragePolicyResultSchema = z.discriminatedUnion("status", [
+  UpdateSourceStoragePolicyRequestSchema.extend({
+    status: z.literal("updated"),
+    operationId: OperationIdSchema,
+    summary: SourceStoragePolicySummarySchema
+  }).strict(),
+  UpdateSourceStoragePolicyRequestSchema.extend({
+    status: z.literal("stale"),
+    summary: SourceStoragePolicySummarySchema
+  }).strict(),
+  UpdateSourceStoragePolicyRequestSchema.extend({
+    status: z.literal("current"),
+    summary: SourceStoragePolicySummarySchema
+  }).strict(),
+  UpdateSourceStoragePolicyRequestSchema.extend({ status: z.literal("not_found") }).strict(),
+  UpdateSourceStoragePolicyRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const ManagedCopyRootSummarySchema = z.object({
   activeVaultId: VaultIdSchema,
   sourceStorageRevision: SourceStorageRevisionSchema,
@@ -13687,6 +13718,10 @@ export type SourceAssetRootKind = z.infer<typeof SourceAssetRootKindSchema>;
 export type SourceKind = z.infer<typeof SourceKindSchema>;
 export type SourceRecord = z.infer<typeof SourceRecordSchema>;
 export type SourceStorageStrategy = z.infer<typeof SourceStorageStrategySchema>;
+export type SourceStoragePolicyRequestId = z.infer<typeof SourceStoragePolicyRequestIdSchema>;
+export type UpdateSourceStoragePolicyRequest = z.infer<typeof UpdateSourceStoragePolicyRequestSchema>;
+export type SourceStoragePolicySummary = z.infer<typeof SourceStoragePolicySummarySchema>;
+export type UpdateSourceStoragePolicyResult = z.infer<typeof UpdateSourceStoragePolicyResultSchema>;
 export type ToolchainManifest = z.infer<typeof ToolchainManifestSchema>;
 export type ToolchainToolId = z.infer<typeof ToolchainToolIdSchema>;
 export type ToolchainRepairRequestId = z.infer<typeof ToolchainRepairRequestIdSchema>;

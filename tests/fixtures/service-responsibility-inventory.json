@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 318,
-  "baselineLines": 133377,
+  "baselineFileCount": 319,
+  "baselineLines": 133698,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -168,6 +168,7 @@
       ["source-refresh-identity.ts", 26, ""],
       ["source-refresh-conflict-service.ts", 398, "ard"],
       ["source-refresh-service.ts", 805, "jrd"],
+      ["source-storage-preference-service.ts", 321, "rd"],
       ["web-source-refresh-service.ts", 760, "jprd"],
       ["speech-service.ts", 541, "pr"],
       ["startup-destination-service.ts", 46, "r"],
@@ -351,7 +352,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 318,
+    "serviceOwnerCount": 319,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
