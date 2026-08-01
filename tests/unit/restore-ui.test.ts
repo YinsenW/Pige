@@ -1633,6 +1633,7 @@ function supportBundlePreview(requestId: string) {
     scopeContextId: `diagctx_${"b".repeat(32)}` as const,
     expectedRevision: 1,
     activeVaultId: null,
+    selectedOptionalCategories: [],
     includedCategories: [{ id: "app_runtime", label: "App runtime", included: true,
       reason: "Required runtime diagnostics." }],
     excludedCategories: [{ id: "secrets", label: "Secrets", included: false,
