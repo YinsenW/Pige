@@ -11,6 +11,8 @@ import type {
   AgentConversationHistoryListResult,
   AgentConversationSetTitleRequest,
   AgentConversationSetTitleResult,
+  AgentSaveAnswerAsNoteRequest,
+  AgentSaveAnswerAsNoteResult,
   AgentConversationInitialTimeline,
   AgentConversationTimeline,
   ConversationRestoreRequest,
@@ -4867,6 +4869,51 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("saves only a durable assistant event by identity and retries without renderer answer authority", async () => {
+    const dom = createDom();
+    const harness = createHarness(completedTimeline());
+    let attempt = 0;
+    harness.saveAnswerAsNote = async (request) => {
+      attempt += 1;
+      return attempt === 1
+        ? { ...request, status: "failed" }
+        : {
+            ...request,
+            status: "saved",
+            pageId: "page_20260801_savedanswer01",
+            operationId: "op_20260801_savedanswer01",
+            title: "Remember the durable boundary."
+          };
+    };
+    const mount = await mountHome(dom, makePigeApi(harness));
+    const assistant = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-assistant"));
+    const user = requireElement(mount.container.querySelector<HTMLElement>(".conversation-message.role-user"));
+    expect(user.querySelector('[data-conversation-action="save-answer"]')).toBeNull();
+
+    await clickButtonByAriaLabel(dom, assistant, enMessages["home.saveAnswer"]);
+    await waitFor(dom, () => buttonsByAriaLabel(assistant, enMessages["home.saveAnswerFailed"]).length === 1);
+    await clickButtonByAriaLabel(dom, assistant, enMessages["home.saveAnswerFailed"]);
+    await waitFor(dom, () => buttonsByAriaLabel(assistant, enMessages["home.saveAnswerSaved"]).length === 1);
+
+    expect(harness.saveAnswerRequests).toHaveLength(2);
+    expect(harness.saveAnswerRequests[0]).toEqual(harness.saveAnswerRequests[1]);
+    expect(Object.keys(harness.saveAnswerRequests[0] ?? {}).sort()).toEqual([
+      "activeVaultId",
+      "apiVersion",
+      "assistantEventId",
+      "conversationId",
+      "requestId"
+    ]);
+    expect(harness.saveAnswerRequests[0]).toMatchObject({
+      conversationId: completedTimeline().conversationId,
+      assistantEventId: completedTimeline().tailEventId
+    });
+    expect(JSON.stringify(harness.saveAnswerRequests)).not.toContain("Remember the durable boundary");
+
+    await act(async () => mount.root.unmount());
+    dom.window.close();
+  });
+
   it("keeps clipboard failure body-free and never adds copy to a provisional draft", async () => {
     const dom = createDom();
     Object.defineProperty(dom.window.navigator, "clipboard", {
@@ -6216,6 +6263,7 @@ interface ConversationHarness {
   readonly conversationTrashListRequests: ConversationTrashListRequest[];
   readonly conversationRestoreRequests: ConversationRestoreRequest[];
   readonly conversationTitleRequests: AgentConversationSetTitleRequest[];
+  readonly saveAnswerRequests: AgentSaveAnswerAsNoteRequest[];
   readonly collectionCitationRequests: CollectionOpenCitationRequest[];
   readonly submittedFileNames: string[][];
   readonly retryJobIds: string[];
@@ -6326,6 +6374,7 @@ interface ConversationHarness {
   loadConversationTrash: (request: ConversationTrashListRequest) => Promise<ConversationTrashListResult>;
   restoreConversation: (request: ConversationRestoreRequest) => Promise<ConversationRestoreResult>;
   setConversationTitle: (request: AgentConversationSetTitleRequest) => Promise<AgentConversationSetTitleResult>;
+  saveAnswerAsNote: (request: AgentSaveAnswerAsNoteRequest) => Promise<AgentSaveAnswerAsNoteResult>;
   openCollectionCitation: (request: CollectionOpenCitationRequest) => Promise<CollectionOpenCitationResult>;
   submitTurn: (
     request: AgentSubmitTurnRequest,
@@ -6351,6 +6400,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     conversationTrashListRequests: [],
     conversationRestoreRequests: [],
     conversationTitleRequests: [],
+    saveAnswerRequests: [],
     collectionCitationRequests: [],
     submittedFileNames: [],
     retryJobIds: [],
@@ -6542,6 +6592,13 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
       activeVaultId: request.activeVaultId,
       conversationId: request.conversationId,
       status: "failed"
+    }),
+    saveAnswerAsNote: async (request) => ({
+      ...request,
+      status: "saved",
+      pageId: "page_20260801_savedanswer01",
+      operationId: "op_20260801_savedanswer01",
+      title: "Remember the durable boundary."
     }),
     openCollectionCitation: async (request) => ({ ...request, status: "failed" }),
     submitTurn: async (request) => {
@@ -6822,6 +6879,10 @@ function makePigeApi(harness: ConversationHarness): object {
       conversationTrash: (request: ConversationTrashListRequest) => harness.loadConversationTrash(request),
       restoreConversation: (request: ConversationRestoreRequest) => harness.restoreConversation(request),
       setConversationTitle: (request: AgentConversationSetTitleRequest) => harness.setConversationTitle(request),
+      saveAnswerAsNote: (request: AgentSaveAnswerAsNoteRequest) => {
+        harness.saveAnswerRequests.push(request);
+        return harness.saveAnswerAsNote(request);
+      },
       submitTurn: (request: AgentSubmitTurnRequest, files: readonly File[] = []) => {
         harness.submittedFileNames.push(files.map((file) => file.name));
         return harness.submitTurn(request, files);

@@ -34,6 +34,7 @@ import { useLibraryBrowse } from "./components/useLibraryBrowse";
 export { filterLibraryPages } from "./components/library-panel-model";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
+import { ConversationMessageActions } from "./components/ConversationSaveAnswerAction";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
@@ -291,10 +292,6 @@ export type DevelopmentNotice = {
   readonly state: "development" | "unavailable";
 };
 type HomeAgentUiState = HomeConversationTurnState;
-type ConversationCopyState = {
-  readonly messageId: string;
-  readonly state: "copying" | "copied" | "failed";
-};
 type ActiveAgentDraftBinding = {
   readonly clientTurnId: string;
   requestId?: string;
@@ -4583,7 +4580,6 @@ function HomeComposer(props: {
   } | null>(null);
   const [optimisticConversationTurns, setOptimisticConversationTurns] = useState<readonly OptimisticConversationTurn[]>([]);
   const [liveAnswerEventId, setLiveAnswerEventId] = useState<string | null>(null);
-  const [conversationCopyState, setConversationCopyState] = useState<ConversationCopyState | null>(null);
   const [processingListExpanded, setProcessingListExpanded] = useState(false);
   const sourceReconnect = useHomeSourceReconnect({ activeVaultId: props.activeVault?.vaultId,
     recentJobs: props.recentJobs, onHomeStateChanged: props.onHomeStateChanged, t: props.t });
@@ -4634,8 +4630,6 @@ function HomeComposer(props: {
     initial: conversationTimeline,
     scrollRef: conversationTimelineRef
   });
-  const conversationCopySequenceRef = useRef(0);
-  const conversationCopyResetTimerRef = useRef<number | undefined>(undefined);
   const composerSubmissionRef = useRef<HomeComposerSubmissionBinding | null>(null);
   const composerCompositionActiveRef = useRef(false);
   const composerCompositionRaceRef = useRef(false);
@@ -4698,64 +4692,6 @@ function HomeComposer(props: {
     setEditorOpenState("idle");
   }, [props.activeVault?.vaultId, selectedNote?.summary.pageId, selectedNote?.renderContextId]);
 
-  useEffect(() => () => {
-    if (conversationCopyResetTimerRef.current !== undefined) {
-      window.clearTimeout(conversationCopyResetTimerRef.current);
-    }
-  }, []);
-
-  const copyConversationMessage = async (messageId: string, markdown: string): Promise<void> => {
-    const sequence = conversationCopySequenceRef.current + 1;
-    conversationCopySequenceRef.current = sequence;
-    if (conversationCopyResetTimerRef.current !== undefined) {
-      window.clearTimeout(conversationCopyResetTimerRef.current);
-      conversationCopyResetTimerRef.current = undefined;
-    }
-    setConversationCopyState({ messageId, state: "copying" });
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(markdown);
-      if (sequence !== conversationCopySequenceRef.current) return;
-      setConversationCopyState({ messageId, state: "copied" });
-      conversationCopyResetTimerRef.current = window.setTimeout(() => {
-        if (sequence === conversationCopySequenceRef.current) setConversationCopyState(null);
-      }, 1_800);
-    } catch {
-      if (sequence !== conversationCopySequenceRef.current) return;
-      setConversationCopyState({ messageId, state: "failed" });
-    }
-  };
-
-  const conversationCopyAction = (messageId: string, markdown: string): React.JSX.Element => {
-    const state = conversationCopyState?.messageId === messageId ? conversationCopyState.state : null;
-    const label = state === "copied"
-      ? props.t("home.messageCopied")
-      : state === "failed"
-        ? props.t("home.messageCopyFailed")
-        : props.t("home.copyMessage");
-    return (
-      <div className="conversation-message-actions">
-        <button
-          type="button"
-          data-conversation-action="copy"
-          title={label}
-          aria-label={label}
-          aria-busy={state === "copying"}
-          disabled={state === "copying"}
-          onClick={() => void copyConversationMessage(messageId, markdown)}
-        >
-          <PigeIcon
-            name={state === "copied" ? "check" : state === "copying" ? "loading" : "copy"}
-            size={15}
-            className={state === "copying" ? "spinning" : undefined}
-          />
-        </button>
-        {state === "copied" || state === "failed" ? (
-          <span className="visually-hidden" role="status" aria-live="polite">{label}</span>
-        ) : null}
-      </div>
-    );
-  };
   const agentStatusLabel = props.agentRuntimeStatus?.state === "ready" ? props.t("home.agentReady") : props.t("home.modelUnavailable");
   const enabledHomeModels = props.modelSummary?.models.filter((model) => model.enabled) ?? [];
   const selectedHomeModel = enabledHomeModels.find(
@@ -6551,7 +6487,10 @@ function HomeComposer(props: {
                     />
                   </>
                 )}
-                {message.role === "assistant" ? conversationCopyAction(message.id, markdown) : null}
+                {message.role === "assistant" ? <ConversationMessageActions messageId={message.id} markdown={markdown}
+                  {...props.activeVault && conversationTimeline ? { save: { activeVaultId: props.activeVault.vaultId,
+                    conversationId: conversationTimeline.conversationId, assistantEventId: message.id,
+                    onSaved: () => void props.onHomeStateChanged() } } : {}} t={props.t} /> : null}
               </article>
             );
           })}
@@ -6645,10 +6584,8 @@ function HomeComposer(props: {
                 onOpen={openResult}
                 t={props.t}
               />
-              {conversationCopyAction(
-                liveAnswerEventId ?? "live-conversation-answer",
-                liveConversationAnswer.answer
-              )}
+              <ConversationMessageActions messageId={liveAnswerEventId ?? "live-conversation-answer"}
+                markdown={liveConversationAnswer.answer} t={props.t} />
             </article>
             ) : null}
           </div>
