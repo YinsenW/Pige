@@ -15,6 +15,15 @@ describe("settings registry", () => {
     expect(byKey.get("sourceStorage.defaultStrategy")?.scope).toBe("vault_portable");
     expect(byKey.get("sourceStorage.defaultStrategy")?.agentPolicyEffect).toBe("sourceStorage.defaultStrategy");
     expect(byKey.get("backup.entryPoints")?.scope).toBe("derived_status");
+    expect(byKey.get("backup.includeConversations")).toMatchObject({
+      page: "Vault & Note Storage",
+      scope: "vault_portable",
+      owner: "Backup Service",
+      storage: ".pige/config.json",
+      backedUpByDefault: true,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none"
+    });
     expect(byKey.get("memory.includeMemoryInBackup")).toMatchObject({
       scope: "vault_portable",
       storage: ".pige/config.json"

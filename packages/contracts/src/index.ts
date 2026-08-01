@@ -33,6 +33,9 @@ import type {
   KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  BackupConversationPreferenceSummary,
+  BackupConversationPreferenceUpdateRequest,
+  BackupConversationPreferenceUpdateResult,
   BackupMemoryPreferenceSummary,
   BackupMemoryPreferenceUpdateRequest,
   BackupMemoryPreferenceUpdateResult,
@@ -1403,7 +1406,8 @@ export interface KnowledgeActivitySummary {
     | "update_memory"
     | "trash_memory"
     | "restore_memory"
-    | "update_source_record";
+    | "update_source_record"
+    | "change_setting";
   readonly createdAt: string;
   readonly targetLabel?: string;
   readonly target?: KnowledgeActivityTarget;
@@ -2512,6 +2516,10 @@ export interface PigeDesktopApi {
   };
   readonly backup: {
     readonly status: () => Promise<BackupRestoreStatus>;
+    readonly conversationPreferenceStatus: () => Promise<BackupConversationPreferenceSummary>;
+    readonly setConversationPreference: (
+      request: BackupConversationPreferenceUpdateRequest
+    ) => Promise<BackupConversationPreferenceUpdateResult>;
     readonly memoryPreferenceStatus: () => Promise<BackupMemoryPreferenceSummary>;
     readonly setMemoryPreference: (
       request: BackupMemoryPreferenceUpdateRequest

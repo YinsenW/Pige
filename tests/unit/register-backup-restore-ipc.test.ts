@@ -23,6 +23,42 @@ const destinationRequest = {
 } as const;
 
 describe("registerBackupRestoreIpc", () => {
+  it("binds the strict pathless conversation backup preference identity", () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    const summary = {
+      apiVersion: 1 as const,
+      activeVaultId: "vault_20260801_conversationbackup01",
+      revision: `backupconversationrev_${"a".repeat(64)}`,
+      includeConversations: true,
+      canUpdate: true
+    };
+    const update = vi.fn((value: { readonly requestId: string; readonly activeVaultId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: value.requestId,
+      activeVaultId: value.activeVaultId,
+      status: "updated" as const,
+      summary: { ...summary, revision: `backupconversationrev_${"b".repeat(64)}`, includeConversations: false }
+    }));
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      getBackupConversationPreferenceService: () => ({ summary: () => summary, update })
+    });
+    expect(handlers.get("backup.conversationPreferenceStatus")?.({ sender: sender() })).toEqual(summary);
+    const request = {
+      apiVersion: 1,
+      requestId: "backupconversationreq_abcdefghijklmnop",
+      activeVaultId: summary.activeVaultId,
+      expectedRevision: summary.revision,
+      includeConversations: false
+    } as const;
+    expect(handlers.get("backup.setConversationPreference")?.({ sender: sender() }, request)).toMatchObject({
+      status: "updated",
+      summary: { includeConversations: false }
+    });
+    expect(() => handlers.get("backup.setConversationPreference")?.({ sender: sender() }, { ...request, vaultPath: "/private/vault" })).toThrow();
+  });
+
   it("binds the strict pathless Agent memory backup preference identity", async () => {
     const handlers = new Map<string, (...args: any[]) => unknown>();
     const summary = {
@@ -254,6 +290,7 @@ function register(
     readonly showMessageBox?: () => Promise<{ readonly response: number }>;
     readonly getBackupService?: () => unknown;
     readonly getRestoreCoordinator?: () => unknown;
+    readonly getBackupConversationPreferenceService?: () => unknown;
     readonly getBackupMemoryPreferenceService?: () => unknown;
   }
 ): void {
@@ -275,6 +312,9 @@ function register(
     getLocale: () => "en",
     getDocumentsPath: () => "/documents",
     getBackupService: (overrides.getBackupService ?? (() => ({ status: () => ({}) }))) as any,
+    ...(overrides.getBackupConversationPreferenceService
+      ? { getBackupConversationPreferenceService: overrides.getBackupConversationPreferenceService as any }
+      : {}),
     ...(overrides.getBackupMemoryPreferenceService
       ? { getBackupMemoryPreferenceService: overrides.getBackupMemoryPreferenceService as any }
       : {}),

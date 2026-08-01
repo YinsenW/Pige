@@ -135,6 +135,8 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedMemory"
                 : activity.kind === "restore_memory"
                   ? "activity.restoredMemory"
+                : activity.kind === "change_setting"
+                  ? "activity.changedSetting"
                   : "activity.createdPage");
               const activityLabel = `${props.t(activityMessageKey)}${activity.targetLabel ? `: ${activity.targetLabel}` : ""} (${index + 1})`;
               const createdAt = new Date(activity.createdAt);

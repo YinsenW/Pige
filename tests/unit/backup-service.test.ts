@@ -286,6 +286,32 @@ describe("backup restore service", () => {
     });
   });
 
+  it("excludes conversation history consistently from the archive, manifest, counts, and restored vault", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "no-conversations.pige-backup.zip");
+    const restoreParent = path.join(root, "restore-targets");
+    writeVaultFixture(vaultPath);
+    const config = readVaultConfig(vaultPath);
+    fs.writeFileSync(path.join(vaultPath, ".pige", "config.json"), `${JSON.stringify({
+      ...config,
+      backup: { ...config.backup, includeConversations: false }
+    }, null, 2)}\n`, { mode: 0o600 });
+
+    const service = new BackupRestoreService();
+    expect(service.status(loadVaultSummary(vaultPath), vaultPath).defaultIncludes.conversations).toBe(false);
+    const created = await service.createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+    const preview = await service.inspectRestoreArchive(backupPath);
+    const restored = await applyTestRestore(service, backupPath, restoreParent, preview);
+
+    expect(created.manifest).toMatchObject({ conversationCount: 0, includes: { conversations: false } });
+    expect(archive.manifest.files.some((file) => file.path.startsWith(".pige/conversations/"))).toBe(false);
+    expect(Array.from(archive.entries.keys()).some((entry) => entry.startsWith("vault/.pige/conversations/"))).toBe(false);
+    expect(restored.status).toBe("restored");
+    const restoredConversations = path.join(restored.restoredVaultPath!, ".pige", "conversations");
+    expect(fs.existsSync(restoredConversations) ? fs.readdirSync(restoredConversations) : []).toEqual([]);
+  });
+
   it("round-trips exact vault memory lifecycle state and recalls only restored active records", async () => {
     const { root, vaultPath } = makeVault();
     const backupPath = path.join(root, "memory-lifecycle.pige-backup.zip");

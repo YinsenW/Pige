@@ -403,6 +403,14 @@ import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
+  BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL,
+  BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL,
+  BackupConversationPreferenceSummarySchema,
+  BackupConversationPreferenceUpdateRequestSchema,
+  BackupConversationPreferenceUpdateResultSchema,
+  type BackupConversationPreferenceSummary,
+  type BackupConversationPreferenceUpdateRequest,
+  type BackupConversationPreferenceUpdateResult,
   BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
   BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
   BackupMemoryPreferenceSummarySchema,
@@ -2642,6 +2650,22 @@ const api: PigeDesktopApi = {
   backup: {
     status: async (): Promise<BackupRestoreStatus> =>
       ipcRenderer.invoke("backup.status") as Promise<BackupRestoreStatus>,
+    conversationPreferenceStatus: async (): Promise<BackupConversationPreferenceSummary> =>
+      BackupConversationPreferenceSummarySchema.parse(
+        await ipcRenderer.invoke(BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL)
+      ),
+    setConversationPreference: async (
+      request: BackupConversationPreferenceUpdateRequest
+    ): Promise<BackupConversationPreferenceUpdateResult> => {
+      const parsedRequest = BackupConversationPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupConversationPreferenceUpdateResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL, parsedRequest)
+      );
+      if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
+        throw new Error("Invalid conversation backup preference response identity.");
+      }
+      return result;
+    },
     memoryPreferenceStatus: async (): Promise<BackupMemoryPreferenceSummary> =>
       BackupMemoryPreferenceSummarySchema.parse(
         await ipcRenderer.invoke(BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL)
