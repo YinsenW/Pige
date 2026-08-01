@@ -32,7 +32,7 @@ interface DatasetLifecycleVaultPort {
   activeVaultPath(): string | undefined;
 }
 
-interface DatasetTrashReceipt {
+export interface DatasetTrashReceipt {
   readonly schemaVersion: 1;
   readonly requestId: string;
   readonly activeVaultId: string;
@@ -116,7 +116,7 @@ export class ManagedDatasetLifecycleService {
     const vaultPath = this.#activeVaultPath(parsed.activeVaultId);
     if (!vaultPath) return CollectionListDatasetTrashResultSchema.parse({ ...identity, status: "not_found" });
     try {
-      const inventory = trashInventory(vaultPath);
+      const inventory = readDatasetTrashInventory(vaultPath);
       return CollectionListDatasetTrashResultSchema.parse({
         ...identity,
         status: "ready",
@@ -144,7 +144,7 @@ export class ManagedDatasetLifecycleService {
       if (existing) {
         return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "committed", operationId: existing.id });
       }
-      const inventory = trashInventory(vaultPath);
+      const inventory = readDatasetTrashInventory(vaultPath);
       if (inventory.revision !== parsed.expectedTrashRevision) {
         return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "stale" });
       }
@@ -284,7 +284,7 @@ export class ManagedDatasetLifecycleService {
   }
 }
 
-function trashInventory(vaultPath: string): {
+export function readDatasetTrashInventory(vaultPath: string): {
   readonly revision: `datasettrashrev_${string}`;
   readonly datasets: readonly CollectionDatasetTrashSummary[];
 } {
@@ -311,6 +311,7 @@ function trashInventory(vaultPath: string): {
     datasets
   };
 }
+
 
 function resultIdentity(request: CollectionTrashDatasetRequest) {
   return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
@@ -385,7 +386,7 @@ function createRestoreOperation(receipt: DatasetTrashReceipt, trash: OperationRe
     summary: `Restored ${receipt.title} from recoverable trash.`, reversible: "yes", warnings: [] });
 }
 
-function matchesTrashOperation(receipt: DatasetTrashReceipt, operation: OperationRecord): boolean {
+export function matchesTrashOperation(receipt: DatasetTrashReceipt, operation: OperationRecord): boolean {
   return operation.id === receipt.operationId && operation.kind === "trash_dataset" &&
     operation.targetRefs.some((ref) => ref.kind === "dataset" && ref.id === receipt.datasetId && ref.path === receipt.trashRelativePath) &&
     operation.before?.id === receipt.revisionId && operation.before.path === receipt.originalRelativePath &&
@@ -407,14 +408,14 @@ function createRedoReceipt(original: DatasetTrashReceipt, undo: OperationRecord,
     originalOperationId: original.operationId, undoOperationId: undo.id };
 }
 
-function receiptRoot(vaultPath: string): string { return resolveVault(vaultPath, path.posix.join(".pige", "dataset-lifecycle")); }
-function receiptPath(vaultPath: string, operationId: string): string { return path.join(receiptRoot(vaultPath), `${operationId}.json`); }
+export function receiptRoot(vaultPath: string): string { return resolveVault(vaultPath, path.posix.join(".pige", "dataset-lifecycle")); }
+export function receiptPath(vaultPath: string, operationId: string): string { return path.join(receiptRoot(vaultPath), `${operationId}.json`); }
 function operationPath(vaultPath: string, operationId: string): string { return resolveVault(vaultPath, path.posix.join(".pige", "operations", `${operationId}.json`)); }
 function restoreIntentRoot(vaultPath: string): string { return resolveVault(vaultPath, path.posix.join(".pige", "dataset-lifecycle", "restore-intents")); }
 function restoreIntentPath(vaultPath: string, operationId: string): string { return path.join(restoreIntentRoot(vaultPath), `${operationId}.json`); }
 
 function writeReceipt(vaultPath: string, receipt: DatasetTrashReceipt): void { writeJsonExclusive(receiptPath(vaultPath, receipt.operationId), receipt); }
-function readReceipt(vaultPath: string, operationId: string): DatasetTrashReceipt | undefined {
+export function readReceipt(vaultPath: string, operationId: string): DatasetTrashReceipt | undefined {
   return readJson(receiptPath(vaultPath, operationId)) as DatasetTrashReceipt | undefined;
 }
 function readRedoReceipt(vaultPath: string, originalOperationId: string): DatasetTrashReceipt | undefined {
@@ -428,8 +429,8 @@ function readReceipts(vaultPath: string): DatasetTrashReceipt[] {
     return value && typeof value === "object" ? [value as DatasetTrashReceipt] : [];
   });
 }
-function writeOperation(vaultPath: string, operation: OperationRecord): void { writeJsonExclusive(operationPath(vaultPath, operation.id), operation); }
-function readOperation(vaultPath: string, operationId: string): OperationRecord | undefined {
+export function writeOperation(vaultPath: string, operation: OperationRecord): void { writeJsonExclusive(operationPath(vaultPath, operation.id), operation); }
+export function readOperation(vaultPath: string, operationId: string): OperationRecord | undefined {
   const value = readJson(operationPath(vaultPath, operationId));
   const parsed = OperationRecordSchema.safeParse(value);
   return parsed.success ? parsed.data : undefined;
@@ -466,6 +467,7 @@ function removeRestoreIntent(vaultPath: string, operationId: string): void {
   }
 }
 
+
 function readJson(filePath: string): unknown {
   try { return JSON.parse(fs.readFileSync(filePath, "utf8")); }
   catch (caught) { if ((caught as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw caught; }
@@ -475,7 +477,7 @@ function writeJsonExclusive(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   syncDirectory(path.dirname(filePath));
 }
-function resolveVault(vaultPath: string, relativePath: string): string {
+export function resolveVault(vaultPath: string, relativePath: string): string {
   if (path.isAbsolute(relativePath) || relativePath.split("/").some((part) => !part || part === "." || part === "..")) throw stale();
   const resolved = path.resolve(vaultPath, ...relativePath.split("/"));
   if (!resolved.startsWith(`${path.resolve(vaultPath)}${path.sep}`)) throw stale();
@@ -496,9 +498,9 @@ function digestTree(root: string): string {
   };
   visit(root, ""); return `sha256:${hash.digest("hex")}`;
 }
-function treeMatches(root: string, digest: string): boolean { try { return fs.existsSync(root) && digestTree(root) === digest; } catch { return false; } }
+export function treeMatches(root: string, digest: string): boolean { try { return fs.existsSync(root) && digestTree(root) === digest; } catch { return false; } }
 function syncDirectory(directory: string): void { const descriptor = fs.openSync(directory, "r"); try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); } }
-function operationIdFor(seed: string, datasetId: string, action: string, date: Date): string {
+export function operationIdFor(seed: string, datasetId: string, action: string, date: Date): string {
   const day = date.toISOString().slice(0, 10).replace(/-/gu, "");
   return `op_${day}_${createHash("sha256").update(`${action}\0${seed}\0${datasetId}`).digest("hex").slice(0, 24)}`;
 }

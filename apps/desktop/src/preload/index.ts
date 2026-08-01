@@ -548,6 +548,7 @@ import {
   COLLECTION_TRASH_DATASET_CHANNEL,
   COLLECTION_LIST_DATASET_TRASH_CHANNEL,
   COLLECTION_RESTORE_DATASET_CHANNEL,
+  COLLECTION_PURGE_DATASET_CHANNEL,
   COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
@@ -586,6 +587,8 @@ import {
   CollectionListDatasetTrashResultSchema,
   CollectionRestoreDatasetRequestSchema,
   CollectionRestoreDatasetResultSchema,
+  CollectionPurgeDatasetRequestSchema,
+  CollectionPurgeDatasetResultSchema,
   CollectionRenameDatasetRequestSchema,
   CollectionRenameDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
@@ -1040,6 +1043,8 @@ import type {
   CollectionListDatasetTrashResult,
   CollectionRestoreDatasetRequest,
   CollectionRestoreDatasetResult,
+  CollectionPurgeDatasetRequest,
+  CollectionPurgeDatasetResult,
   CollectionRenameDatasetRequest,
   CollectionRenameDatasetResult,
   CollectionOpenCitationRequest,
@@ -1633,6 +1638,23 @@ async function invokeCollectionRestoreDataset(
       result.trashOperationId !== parsedRequest.trashOperationId ||
       result.expectedTrashRevision !== parsedRequest.expectedTrashRevision) {
     throw new Error("Invalid Managed Dataset restore response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionPurgeDataset(
+  request: CollectionPurgeDatasetRequest
+): Promise<CollectionPurgeDatasetResult> {
+  const parsedRequest = CollectionPurgeDatasetRequestSchema.parse(request);
+  const result = CollectionPurgeDatasetResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_PURGE_DATASET_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId ||
+      result.trashOperationId !== parsedRequest.trashOperationId ||
+      result.expectedTrashRevision !== parsedRequest.expectedTrashRevision ||
+      result.confirmation !== parsedRequest.confirmation) {
+    throw new Error("Invalid Managed Dataset purge response identity.");
   }
   return result;
 }
@@ -2383,6 +2405,7 @@ const api: PigeDesktopApi = {
     trashDataset: invokeCollectionTrashDataset,
     listDatasetTrash: invokeCollectionListDatasetTrash,
     restoreDataset: invokeCollectionRestoreDataset,
+    purgeDataset: invokeCollectionPurgeDataset,
     renameDataset: invokeCollectionRenameDataset,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow

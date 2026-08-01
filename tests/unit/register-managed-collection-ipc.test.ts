@@ -389,6 +389,9 @@ function makeHarness(options: {
     renameCollectionView,
     trashCollectionView,
     trashDataset,
+    listDatasetTrash: (request) => ({ ...request, status: "failed" }),
+    restoreDataset: (request) => ({ ...request, status: "failed" }),
+    purgeDataset: (request) => ({ ...request, status: "failed" }),
     renameDataset,
     trashCollectionColumn,
     trashCollectionRow
@@ -451,6 +454,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.trashDataset",
       "collections.listDatasetTrash",
       "collections.restoreDataset",
+      "collections.purgeDataset",
       "collections.renameDataset",
       "collections.trashColumn",
       "collections.trashRow"

@@ -1374,6 +1374,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "trash_collection_row",
     "trash_dataset",
     "restore_dataset",
+    "purge_dataset",
     "rename_dataset",
     "create_memory",
     "update_memory",
@@ -7839,6 +7840,7 @@ export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_TRASH_DATASET_CHANNEL = "collections.trashDataset" as const;
 export const COLLECTION_LIST_DATASET_TRASH_CHANNEL = "collections.listDatasetTrash" as const;
 export const COLLECTION_RESTORE_DATASET_CHANNEL = "collections.restoreDataset" as const;
+export const COLLECTION_PURGE_DATASET_CHANNEL = "collections.purgeDataset" as const;
 export const COLLECTION_RENAME_DATASET_CHANNEL = "collections.renameDataset" as const;
 export const COLLECTION_RENAME_TABLE_CHANNEL = "collections.renameTable" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
@@ -8526,6 +8528,19 @@ export const CollectionRestoreDatasetResultSchema = z.discriminatedUnion("status
     operationId: OperationIdSchema
   }).strict(),
   CollectionRestoreDatasetRequestSchema.extend({
+    status: z.enum(["stale", "not_found", "ineligible", "failed"])
+  }).strict()
+]);
+
+export const CollectionPurgeDatasetRequestSchema = CollectionRestoreDatasetRequestSchema.extend({
+  confirmation: z.literal("delete_permanently")
+}).strict();
+export const CollectionPurgeDatasetResultSchema = z.discriminatedUnion("status", [
+  CollectionPurgeDatasetRequestSchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionPurgeDatasetRequestSchema.extend({
     status: z.enum(["stale", "not_found", "ineligible", "failed"])
   }).strict()
 ]);
@@ -12234,6 +12249,7 @@ export const OperationRecordSchema = z.object({
     "trash_collection_row",
     "trash_dataset",
     "restore_dataset",
+    "purge_dataset",
     "rename_dataset",
     "trash_artifact",
     "restore_artifact",
@@ -12817,6 +12833,8 @@ export type CollectionListDatasetTrashRequest = z.infer<typeof CollectionListDat
 export type CollectionListDatasetTrashResult = z.infer<typeof CollectionListDatasetTrashResultSchema>;
 export type CollectionRestoreDatasetRequest = z.infer<typeof CollectionRestoreDatasetRequestSchema>;
 export type CollectionRestoreDatasetResult = z.infer<typeof CollectionRestoreDatasetResultSchema>;
+export type CollectionPurgeDatasetRequest = z.infer<typeof CollectionPurgeDatasetRequestSchema>;
+export type CollectionPurgeDatasetResult = z.infer<typeof CollectionPurgeDatasetResultSchema>;
 export type CollectionRenameDatasetRequest = z.infer<typeof CollectionRenameDatasetRequestSchema>;
 export type CollectionRenameDatasetResult = z.infer<typeof CollectionRenameDatasetResultSchema>;
 export type LibraryBrowseRequestId = z.infer<typeof LibraryBrowseRequestIdSchema>;

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   CollectionListDatasetTrashResultSchema,
   CollectionRestoreDatasetRequestSchema,
-  CollectionRestoreDatasetResultSchema
+  CollectionRestoreDatasetResultSchema,
+  CollectionPurgeDatasetRequestSchema,
+  CollectionPurgeDatasetResultSchema
 } from "@pige/schemas";
 
 describe("Managed Dataset trash restore schemas", () => {
@@ -15,6 +17,12 @@ describe("Managed Dataset trash restore schemas", () => {
     expect(CollectionRestoreDatasetResultSchema.parse({ ...base, status: "committed",
       operationId: "op_20260801_datasetrestore01" })).toMatchObject({ status: "committed" });
     expect(() => CollectionRestoreDatasetRequestSchema.parse({ ...base, path: "/private" })).toThrow();
+    expect(CollectionPurgeDatasetRequestSchema.parse({ ...base, confirmation: "delete_permanently" }))
+      .toMatchObject({ confirmation: "delete_permanently" });
+    expect(CollectionPurgeDatasetResultSchema.parse({ ...base, confirmation: "delete_permanently",
+      status: "committed", operationId: "op_20260801_datasetpurge01" })).toMatchObject({ status: "committed" });
+    expect(() => CollectionPurgeDatasetRequestSchema.parse({ ...base, confirmation: "delete_permanently",
+      path: "/private" })).toThrow();
     expect(CollectionListDatasetTrashResultSchema.parse({ apiVersion: 1,
       requestId: "collection_request_datasettrashlist1", activeVaultId: base.activeVaultId, status: "ready",
       revision: base.expectedTrashRevision, datasets: [{ datasetId: base.datasetId, title: "Records",

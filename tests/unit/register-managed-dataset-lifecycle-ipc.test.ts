@@ -15,13 +15,16 @@ describe("managed Dataset lifecycle IPC", () => {
         trashOperationId: operationId, trashedAt: "2026-08-01T00:00:00.000Z" }] }));
     const restoreDataset = vi.fn((request) => ({ ...request, status: "committed" as const,
       operationId: "op_20260801_datasetrestore01" }));
+    const purgeDataset = vi.fn((request) => ({ ...request, status: "committed" as const,
+      operationId: "op_20260801_datasetpurge001" }));
     registerManagedDatasetLifecycleIpc({
       ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler as never); } },
       isTrustedSender: (sender) => sender.id === 7,
       getActiveVaultId: () => vaultId,
       trashDataset: (request) => ({ ...request, status: "failed" }),
       listDatasetTrash,
-      restoreDataset
+      restoreDataset,
+      purgeDataset
     });
     const event = { sender: { id: 7 } } as IpcMainInvokeEvent;
     const list = await handlers.get("collections.listDatasetTrash")!(event, {
@@ -35,7 +38,14 @@ describe("managed Dataset lifecycle IPC", () => {
       expectedTrashRevision: trashRevision
     });
     expect(restored).toMatchObject({ status: "committed", datasetId, operationId: "op_20260801_datasetrestore01" });
+    const purged = await handlers.get("collections.purgeDataset")!(event, {
+      apiVersion: 1, requestId: "collection_request_datasetpurge0001", activeVaultId: vaultId,
+      datasetId, expectedRevisionId: revisionId, trashOperationId: operationId,
+      expectedTrashRevision: trashRevision, confirmation: "delete_permanently"
+    });
+    expect(purged).toMatchObject({ status: "committed", datasetId, operationId: "op_20260801_datasetpurge001" });
     expect(listDatasetTrash).toHaveBeenCalledOnce(); expect(restoreDataset).toHaveBeenCalledOnce();
+    expect(purgeDataset).toHaveBeenCalledOnce();
     const denied = await handlers.get("collections.listDatasetTrash")!({ sender: { id: 8 } } as IpcMainInvokeEvent, {
       apiVersion: 1, requestId: "collection_request_datasettrashlist2", activeVaultId: vaultId
     });
