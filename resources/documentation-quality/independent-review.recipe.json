@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T18:28:00.000Z",
+  "reviewedAt": "2026-08-02T02:45:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Library directly lists and restores exact trashed managed Datasets through the existing durable Operation owner while PIGE-VAULT-004 remains partial.",
+    "scope": "Backup default inclusion, exact destination reconnect and default exclusion acceptance now reflects the already-shipped durable service, IPC, UI and negative archive evidence.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "81b6ee1d3b37dcdbdef781bacdbbef300e34f1af519016e0b6e85383c02e8e30"
+    "reviewedSha256": "e4f4e22a9bf4cf7da095191857e8d68e2a53b6791c2b3fda5df9a9ac3e230879"
   },
   "reviewers": [
     {
-      "reviewerId": "managed-dataset-trash-restore-review",
-      "task": "Review exact managed Dataset trash inventory and direct Library restore",
+      "reviewerId": "backup-acceptance-review",
+      "task": "Review exact Backup inclusion, destination repair and exclusion evidence",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews trash-first storage and acceptance facts; Development supplies separate lifecycle, IPC and renderer evidence."
+      "independence": "Planning reviews Backup acceptance facts; existing service, archive, IPC and renderer tests supply separate executable evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "managed-dataset-trash-restore-review",
+      "reviewerId": "backup-acceptance-review",
       "blockerCount": 0,
-      "summary": "Library uses one progressive disclosure for pathless Dataset trash summaries, exact restore status and catalog refresh."
+      "summary": "Vault settings exposes exact destination reconnect and portable inclusion controls without renderer path authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "managed-dataset-trash-restore-review",
+      "reviewerId": "backup-acceptance-review",
       "blockerCount": 0,
-      "summary": "Data lifecycle, IPC, UI and the accepted decision consistently reuse the existing Dataset restore Operation and receipt."
+      "summary": "Backup data ownership, durable Job recovery, strict IPC and the acceptance projection agree on the shipped behavior."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "managed-dataset-trash-restore-review",
+      "reviewerId": "backup-acceptance-review",
       "blockerCount": 0,
-      "summary": "PIGE-VAULT-004 cites current service, trusted IPC and pathless UI evidence while retaining its remaining lifecycle gaps."
+      "summary": "PIGE-BACKUP-001, PIGE-BACKUP-002 and E9.01 cite current direct evidence with no remaining acceptance gap."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "managed-dataset-trash-restore-review",
+      "reviewerId": "backup-acceptance-review",
       "blockerCount": 0,
-      "summary": "ManagedDatasetLifecycleService retains private receipt verification and delegates the durable effect to its existing Undo implementation."
+      "summary": "The existing Backup owners retain destination currentness, manifest coverage, exclusion and Operation responsibilities."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "managed-dataset-trash-restore-review",
+      "reviewerId": "backup-acceptance-review",
       "blockerCount": 0,
-      "summary": "Existing storage, API, UI, playbook, decision and acceptance owners contain the complete delta without a new design document."
+      "summary": "Only the acceptance and independent-review locks change because product and owner documentation already describe the behavior."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/managed-dataset-lifecycle-service.test.ts tests/unit/register-managed-dataset-lifecycle-ipc.test.ts tests/unit/register-managed-collection-ipc.test.ts tests/unit/managed-dataset-trash-restore-ui.test.ts tests/unit/managed-dataset-trash-restore-schemas.test.ts tests/unit/desktop-shell-contract.test.ts",
+      "command": "npx vitest run tests/unit/backup-service.test.ts tests/unit/backup-coordinator-service.test.ts tests/unit/backup-conversation-preference-service.test.ts tests/unit/backup-conversation-preference-ui.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/backup-destination-reconnect-ui.test.ts tests/unit/restore-ui.test.ts",
       "status": "passed",
-      "evidence": "Focused service, registrar, schema, renderer and shell tests cover exact restart-safe restore, strict currentness and pathless UI."
+      "evidence": "Focused archive, coordinator, preference, registrar and renderer tests cover inclusion, reconnect restart/currentness and all exclusion classes."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with the bounded lifecycle owner, extracted registrar and frozen App line budget."
+      "evidence": "The existing Backup implementation compiles, builds and remains within protected architecture ownership."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Independent snapshot and accepted decision owners agree on the still-partial Dataset workflow; remote Verify owns final trace execution."
+      "evidence": "Independent snapshot and semantic claims agree with the completed Backup acceptance; remote Verify owns final trace execution."
     }
   ],
   "coordination": {
-    "taskId": "managed-dataset-trash-restore-bind-20260802",
-    "taskTitle": "Bind managed Dataset direct trash inventory and restore",
+    "taskId": "backup-acceptance-closure-20260802",
+    "taskTitle": "Bind complete Backup inclusion, reconnect and exclusion acceptance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Dataset trash, Activity Undo and collection open/mutation behavior remain unchanged; the new path only discovers and invokes the same restore owner.",
-    "acknowledgement": "Planning records direct managed Dataset recovery evidence without promoting PIGE-VAULT-004 or claiming unrelated cleanup, reset, migration or permanent-delete breadth."
+    "compatibility": "No Backup runtime, archive format, renderer contract or restore behavior changes; only stale acceptance ownership is corrected.",
+    "acknowledgement": "Planning records the current direct evidence and promotes only PIGE-BACKUP-001, PIGE-BACKUP-002 and their exact E9.01 exit."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
