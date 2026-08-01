@@ -118,6 +118,9 @@ Mitigations:
 
 - Store secrets only in the machine-local Pige app-data credential file with local-user
   file permissions where supported; never use the OS keychain.
+- Re-prove the credential root and bounded `secrets.json` as one owner-only, regular,
+  single-link file before read, revision hashing, replacement, Provider use, or deletion;
+  links, oversized files, identity drift, and malformed records fail closed.
 - Treat the credential file as non-portable machine state, exclude it from backup/export,
   and disclose that another process running as the same OS user may read it.
 - Secret scanning before memory persistence, diagnostics export, and support bundles.
@@ -128,6 +131,8 @@ Mitigations:
 Acceptance:
 
 - API keys do not appear in SQLite, Markdown, conversation logs, operation records, default backups, or normal diagnostics exports.
+- A Settings-written synthetic key survives restart, reaches only the reviewed Provider
+  authentication adapter, and becomes unusable after its Provider is deleted.
 
 ### 6.3 Cloud Model Data Boundary Surprise
 

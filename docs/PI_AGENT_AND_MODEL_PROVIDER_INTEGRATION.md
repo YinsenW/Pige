@@ -140,6 +140,9 @@ Rules:
   Custom asks protocol, Base URL, and credentials. `endpointProtocol` dispatches calls.
 - Keys are secret-store-only; required/optional/none auth controls references. `none` uses
   an in-memory sentinel stripped before headers. Profiles stay out of backup.
+- Runtime credential resolution revalidates the bounded owner-only machine credential file
+  and supplies the selected key only to the reviewed protocol adapter. Restart reopens the
+  same reference; Provider deletion removes it and later Pi resolution fails closed.
 - Schema rejects missing or non-`builtin_verified` boundary metadata and requires canonical
   HTTPS or loopback HTTP without userinfo/query/fragment. Taxonomy stays internal.
 - Connect authorizes one Profile/Endpoint; every failure returns typed repair, not success.

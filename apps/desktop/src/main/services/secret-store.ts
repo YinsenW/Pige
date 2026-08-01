@@ -18,7 +18,7 @@ const SecretRecordIdentitySchema = z.object({
   updatedAt: z.string().datetime({ offset: true })
 }).strict();
 const LocalSecretRecordSchema = SecretRecordIdentitySchema.extend({
-  value: z.string().min(1)
+  value: z.string().min(1).max(16_384)
 }).strict();
 const LegacySecretRecordSchema = SecretRecordIdentitySchema.extend({
   legacyEncryptedValue: z.string().min(1)
@@ -36,12 +36,29 @@ const LegacySecretStoreFileSchema = z.object({
 
 type SecretRecord = z.infer<typeof LocalSecretRecordSchema> | z.infer<typeof LegacySecretRecordSchema>;
 type SecretStoreFile = z.infer<typeof SecretStoreFileSchema>;
+type SecretRootIdentity = { readonly dev: number; readonly ino: number };
+
+const MAX_SECRET_STORE_BYTES = 5 * 1024 * 1024;
+const NO_FOLLOW = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
 
 export class JsonSecretStore {
+  readonly #rootPath: string;
+  readonly #rootIdentity: SecretRootIdentity;
   readonly #secretsPath: string;
 
   constructor(userDataPath: string, _retiredCrypto?: SecretCryptoAdapter) {
-    this.#secretsPath = path.join(userDataPath, "secrets.json");
+    try {
+      const resolved = path.resolve(userDataPath);
+      fs.realpathSync.native(resolved);
+      const stat = fs.lstatSync(resolved);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw secretStoreInvalidError();
+      this.#rootPath = resolved;
+      this.#rootIdentity = { dev: stat.dev, ino: stat.ino };
+      this.#secretsPath = path.join(resolved, "secrets.json");
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      throw secretStoreInvalidError();
+    }
   }
 
   saveProviderSecret(secretValue: string, requestedRef?: string): string {
@@ -93,7 +110,7 @@ export class JsonSecretStore {
   revisionToken(): string {
     let contents: Buffer;
     try {
-      contents = fs.existsSync(this.#secretsPath) ? fs.readFileSync(this.#secretsPath) : Buffer.alloc(0);
+      contents = this.#readBytes() ?? Buffer.alloc(0);
     } catch {
       contents = Buffer.from("unavailable", "utf8");
     }
@@ -129,14 +146,18 @@ export class JsonSecretStore {
   #validateSecretValue(secretValue: string): string {
     const value = secretValue.trim();
     if (!value) throw new PigeDomainError("secret_empty", "Provider API key cannot be empty.");
+    if (Array.from(value).length > 16_384) {
+      throw new PigeDomainError("secret_invalid", "Provider API key is too large.");
+    }
     return value;
   }
 
   #read(): SecretStoreFile {
-    if (!fs.existsSync(this.#secretsPath)) return { schemaVersion: 2, secrets: [] };
+    const bytes = this.#readBytes();
+    if (!bytes) return { schemaVersion: 2, secrets: [] };
     let parsed: unknown;
     try {
-      parsed = JSON.parse(fs.readFileSync(this.#secretsPath, "utf8"));
+      parsed = JSON.parse(bytes.toString("utf8"));
     } catch {
       throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
     }
@@ -158,11 +179,16 @@ export class JsonSecretStore {
 
   #write(fileInput: SecretStoreFile): void {
     const file = SecretStoreFileSchema.parse(fileInput);
-    fs.mkdirSync(path.dirname(this.#secretsPath), { recursive: true });
-    const temporaryPath = `${this.#secretsPath}.${process.pid}.tmp`;
+    this.#assertRootCurrent();
+    if (fs.existsSync(this.#secretsPath)) this.#assertSafeSecretFile();
+    const temporaryPath = path.join(this.#rootPath, `.secrets.${randomUUID()}.tmp`);
     let descriptor: number | undefined;
     try {
-      descriptor = fs.openSync(temporaryPath, "w", 0o600);
+      descriptor = fs.openSync(
+        temporaryPath,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | NO_FOLLOW,
+        0o600
+      );
       fs.writeFileSync(descriptor, `${JSON.stringify(file, null, 2)}\n`, "utf8");
       fs.fsyncSync(descriptor);
       fs.closeSync(descriptor);
@@ -179,6 +205,53 @@ export class JsonSecretStore {
       } catch {
         // Temporary cleanup cannot replace the primary persistence result.
       }
+    }
+  }
+
+  #readBytes(): Buffer | undefined {
+    this.#assertRootCurrent();
+    let before: fs.Stats;
+    try {
+      before = fs.lstatSync(this.#secretsPath);
+    } catch (caught) {
+      if (isMissing(caught)) return undefined;
+      throw secretStoreInvalidError();
+    }
+    assertSafeSecretStat(before);
+    let descriptor: number | undefined;
+    try {
+      descriptor = fs.openSync(this.#secretsPath, fs.constants.O_RDONLY | NO_FOLLOW);
+      const opened = fs.fstatSync(descriptor);
+      assertSafeSecretStat(opened);
+      if (opened.dev !== before.dev || opened.ino !== before.ino) throw secretStoreInvalidError();
+      return fs.readFileSync(descriptor);
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      throw secretStoreInvalidError();
+    } finally {
+      if (descriptor !== undefined) fs.closeSync(descriptor);
+    }
+  }
+
+  #assertRootCurrent(): void {
+    try {
+      const current = fs.lstatSync(this.#rootPath);
+      if (!current.isDirectory() || current.isSymbolicLink() ||
+        current.dev !== this.#rootIdentity.dev || current.ino !== this.#rootIdentity.ino) {
+        throw secretStoreInvalidError();
+      }
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      throw secretStoreInvalidError();
+    }
+  }
+
+  #assertSafeSecretFile(): void {
+    try {
+      assertSafeSecretStat(fs.lstatSync(this.#secretsPath));
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) throw caught;
+      throw secretStoreInvalidError();
     }
   }
 }
@@ -205,6 +278,21 @@ function secretUpdateRepairRequiredError(): PigeDomainError {
     "secret_update_repair_required",
     "Provider credential replacement could not restore the previous local value safely."
   );
+}
+
+function assertSafeSecretStat(stat: fs.Stats): void {
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > MAX_SECRET_STORE_BYTES) {
+    throw secretStoreInvalidError();
+  }
+  if (process.platform !== "win32" && (stat.mode & 0o077) !== 0) throw secretStoreInvalidError();
+}
+
+function secretStoreInvalidError(): PigeDomainError {
+  return new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
+}
+
+function isMissing(caught: unknown): boolean {
+  return typeof caught === "object" && caught !== null && "code" in caught && caught.code === "ENOENT";
 }
 
 function fsyncDirectoryIfSupported(directoryPath: string): void {
