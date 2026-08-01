@@ -4758,6 +4758,37 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260801-Atomic-Vault-Creation-Publication
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Main creates a Vault in a private sibling staging directory, validates its complete current
+layout, and publishes it to the user-selected parent with one directory rename. The compatibility
+manifest is written last inside the staging tree. Failed creation never activates or exposes a
+partial Vault.
+
+Rationale:
+
+First-run must remain retryable after storage errors. Creating directly in the final directory can
+leave a non-empty incompatible folder that blocks retry and obscures whether it is user-owned.
+
+Consequences:
+
+- Creation failure removes only Pige's private staging directory and preserves an existing empty
+  destination, non-empty user destination, current Vault binding and first-run name draft.
+- The final directory becomes visible only after schema/config/default Markdown validation passes.
+- Opening and startup restoration continue through the existing compatibility and writer-lease
+  owners; renderer code never receives the selected filesystem path.
+
+References:
+
+- `docs/ONBOARDING_AND_FIRST_RUN.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/DATA_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   PIGE_TRANSIENT_RUNTIME_ROOTS,
   createVaultRelativePathResolver,
   createVaultOnDisk,
+  inspectVaultCompatibility,
   loadVaultSummary,
   readVaultConfig,
   readVaultManifest,
@@ -73,6 +74,51 @@ describe("vault layout", () => {
     expect(manifest.rebuildable_roots).toContain(".pige/db");
     expect(fs.existsSync(path.join(vaultPath, PIGE_TRANSIENT_RUNTIME_ROOTS[0]))).toBe(true);
     expect(manifestText).not.toContain(root);
+  });
+
+  it("publishes a validated vault atomically and leaves creation retryable after publication failure", () => {
+    const root = makeTempRoot();
+    const target = path.join(root, "Retryable");
+    const rename = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("injected publication failure");
+    });
+
+    expect(() => createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "Retryable",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp")
+    })).toThrow("injected publication failure");
+    rename.mockRestore();
+
+    expect(fs.existsSync(target)).toBe(false);
+    expect(fs.readdirSync(root).filter((entry) => entry.startsWith(".pige-vault-create-"))).toEqual([]);
+
+    const retried = createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "Retryable",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp")
+    });
+    expect(retried.name).toBe("Retryable");
+    expect(inspectVaultCompatibility(target).status).toBe("current");
+  });
+
+  it("preserves an existing empty destination while staging and replaces it only at publication", () => {
+    const root = makeTempRoot();
+    const target = path.join(root, "Existing Empty");
+    fs.mkdirSync(target);
+
+    const vault = createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "Existing Empty",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp")
+    });
+
+    expect(vault.name).toBe("Existing Empty");
+    expect(inspectVaultCompatibility(target).status).toBe("current");
+    expect(fs.readdirSync(root).filter((entry) => entry.startsWith(".pige-vault-create-"))).toEqual([]);
   });
 
   it("keeps source storage policy in vault config and reflects it in the summary", () => {

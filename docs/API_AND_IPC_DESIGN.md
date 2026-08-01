@@ -309,6 +309,7 @@ Rules:
   refreshed `OnboardingStatus`; the preference is idempotent, non-secret, and excluded
   from vault files and backup.
 - `vault.create` takes a parent folder and vault name selected through a trusted OS file dialog.
+- `vault.create` validates a complete private sibling staging tree before atomically publishing the named Vault; creation failure does not publish a partial Vault or replace the current binding.
 - `vault.open` takes a folder selected through a trusted OS file dialog and validates Pige compatibility.
 - Active vault path and recent vault list are machine-local settings; they are not written into `.pige/manifest.json`.
 - Updating an external managed-copy root creates/selects a machine-local binding keyed by `vaultId` plus stable `rootId`; in-vault managed-copy roots use relative vault preferences. Existing source records retain their recorded root ID.
