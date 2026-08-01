@@ -67,7 +67,7 @@ describe("Agent-selected URL ingress", () => {
     expect(readRecords<SourceRecord>(path.join(fixture.vaultPath, ".pige", "source-records"))).toEqual([]);
   });
 
-  it.each(["typed_url", "typed_text"] as const)(
+  it.each(["typed_url", "pasted_url", "typed_text"] as const)(
     "runs one real Pi-selected fetch/preserve/source response for %s without a capture or ingest side route",
     async (inputKind) => {
       const fixture = makeFixture();
@@ -87,7 +87,7 @@ describe("Agent-selected URL ingress", () => {
       }));
 
       const outcome = await home.submitTurn({
-        text: inputKind === "typed_url"
+        text: inputKind === "typed_url" || inputKind === "pasted_url"
           ? "https://example.com/article"
           : "Please read https://example.com/article and summarize it.",
         inputKind,

@@ -4689,6 +4689,7 @@ function HomeComposer(props: {
   const composerCompositionTimerRef = useRef<number | undefined>(undefined);
   const draftRevisionRef = useRef(0);
   const stagedAttachmentRevisionRef = useRef(0);
+  const pastedUrlRef = useRef<string | null>(null);
   const stagedComposerAttemptRef = useRef<{
     readonly key: string;
     readonly clientTurnId: string;
@@ -5451,6 +5452,7 @@ function HomeComposer(props: {
     setOptimisticConversationTurns([]);
     stagedAttachmentRevisionRef.current += 1;
     stagedComposerAttemptRef.current = null;
+    pastedUrlRef.current = null;
     setStagedComposerItems([]);
     setFailedFileDropRecovery(null);
     setLiveAnswerEventId(null);
@@ -5709,6 +5711,9 @@ function HomeComposer(props: {
     setSelectedNoteRelated(null);
     const submittedText = text;
     const turnText = submittedText;
+    const submittedInputKind = pastedUrlRef.current === submittedText
+      ? "pasted_url" as const
+      : classifyTextTransportKind(submittedText);
     const submittedVaultId = activeVaultIdRef.current;
     const submittedDraftRevision = draftRevisionRef.current;
     const clearedDraftRevision = submittedDraftRevision + 1;
@@ -5739,7 +5744,7 @@ function HomeComposer(props: {
       const submission = window.pige.agent.submitTurn({
         schemaVersion: 1,
         text: turnText,
-        inputKind: followUpConversation ? "follow_up" : classifyTextTransportKind(turnText),
+        inputKind: followUpConversation ? "follow_up" : submittedInputKind,
         locale: props.locale,
         clientTurnId,
         ...(followUpConversation ? {
@@ -5754,6 +5759,7 @@ function HomeComposer(props: {
       const durableUserTurnExists = outcome.state !== "failed" || Boolean(outcome.conversationEventId);
       if (durableUserTurnExists) {
         stagedComposerAttemptRef.current = null;
+        if (pastedUrlRef.current === submittedText) pastedUrlRef.current = null;
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -5806,6 +5812,7 @@ function HomeComposer(props: {
       clearAgentDraft();
       if (durableUserTurnExists) {
         stagedComposerAttemptRef.current = null;
+        if (pastedUrlRef.current === submittedText) pastedUrlRef.current = null;
         setOptimisticConversationTurns((current) => current.map((turn) =>
           turn.clientTurnId === clientTurnId
             ? {
@@ -6948,10 +6955,11 @@ function HomeComposer(props: {
             setStagedComposerItems((current) => [...current, classification.kind === "staged"
               ? { kind: "pasted_text", ...classification.item }
               : { kind: "rejected_pasted_text", reason: classification.reason, ...classification.item }]);
-          })}
+          }, (preparedUrl) => { pastedUrlRef.current = preparedUrl; })}
           onChange={(event) => {
             draftRevisionRef.current += 1;
             stagedComposerAttemptRef.current = null;
+            if (pastedUrlRef.current !== event.target.value) pastedUrlRef.current = null;
             props.onDraftChange(event.target.value);
           }}
           onCompositionStart={() => {
@@ -6975,6 +6983,9 @@ function HomeComposer(props: {
           }}
           onKeyDown={handleComposerKeyDown}
         />
+        {pastedUrlRef.current === text ? (
+          <p className="composer-status" role="status" aria-live="polite">{props.t("home.urlQueued")}</p>
+        ) : null}
         <div className="toolbar">
           <div className="model-switcher-wrap home-model-switcher-wrap">
             <button
@@ -7197,14 +7208,19 @@ function handleComposerPaste(
   event: ReactClipboardEvent<HTMLTextAreaElement>,
   composerText: string,
   stagedItems: readonly StagedComposerItem[],
-  onStage: (classification: Exclude<HomeLargePasteClassification, { readonly kind: "ordinary" }>) => void
+  onStage: (classification: Exclude<HomeLargePasteClassification, { readonly kind: "ordinary" }>) => void,
+  onPreparedUrl: (url: string | null) => void
 ): void {
   const pastedText = event.clipboardData.getData("text/plain");
   if (!pastedText) return;
   const selectionStart = event.currentTarget.selectionStart ?? composerText.length;
   const selectionEnd = event.currentTarget.selectionEnd ?? selectionStart;
   const resultingText = `${composerText.slice(0, selectionStart)}${pastedText}${composerText.slice(selectionEnd)}`;
-  if (Array.from(resultingText).length <= AGENT_AUTHORED_TEXT_MAX_CODE_POINTS) return;
+  if (Array.from(resultingText).length <= AGENT_AUTHORED_TEXT_MAX_CODE_POINTS) {
+    onPreparedUrl(classifyTextTransportKind(resultingText.trim()) === "typed_url" ? resultingText : null);
+    return;
+  }
+  onPreparedUrl(null);
   const utf8ByteSize = new TextEncoder().encode(pastedText).byteLength;
   const item: StagedPastedTextItem = {
     localId: createComposerItemId("paste"),
