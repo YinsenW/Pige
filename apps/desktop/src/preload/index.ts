@@ -437,6 +437,14 @@ import {
   type BackupMemoryPreferenceSummary,
   type BackupMemoryPreferenceUpdateRequest,
   type BackupMemoryPreferenceUpdateResult,
+  PIGE_POLICY_STATUS_CHANNEL,
+  PIGE_POLICY_UPDATE_CHANNEL,
+  PigePolicySummarySchema,
+  PigePolicyUpdateRequestSchema,
+  PigePolicyUpdateResultSchema,
+  type PigePolicySummary,
+  type PigePolicyUpdateRequest,
+  type PigePolicyUpdateResult,
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
   BackupReconnectDestinationRequestSchema,
   BackupReconnectDestinationResultSchema,
@@ -2663,7 +2671,13 @@ const api: PigeDesktopApi = {
       return () => ipcRenderer.removeListener("settings.appearanceChanged", handler);
     },
     registry: async (): Promise<SettingsRegistrySummary> =>
-      ipcRenderer.invoke("settings.registry") as Promise<SettingsRegistrySummary>
+      ipcRenderer.invoke("settings.registry") as Promise<SettingsRegistrySummary>,
+    pigePolicy: async (): Promise<PigePolicySummary> =>
+      PigePolicySummarySchema.parse(await ipcRenderer.invoke(PIGE_POLICY_STATUS_CHANNEL)),
+    updatePigePolicy: async (request: PigePolicyUpdateRequest): Promise<PigePolicyUpdateResult> => {
+      const parsed = PigePolicyUpdateRequestSchema.parse(request);
+      return PigePolicyUpdateResultSchema.parse(await ipcRenderer.invoke(PIGE_POLICY_UPDATE_CHANNEL, parsed));
+    }
   },
   updates: {
     summary: async (): Promise<UpdateSummary> =>

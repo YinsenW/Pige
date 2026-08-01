@@ -5383,6 +5383,55 @@ export const BackupConversationPreferenceUpdateResultSchema = z.discriminatedUni
     .extend({ status: z.enum(["stale", "blocked"]), summary: BackupConversationPreferenceSummarySchema }).strict()
 ]);
 
+export const PIGE_POLICY_STATUS_CHANNEL = "settings.pigePolicy" as const;
+export const PIGE_POLICY_UPDATE_CHANNEL = "settings.updatePigePolicy" as const;
+export const PigePolicyRevisionSchema = z.string().regex(/^pigepolicyrev_[a-f0-9]{64}$/u);
+export const PigePolicyMarkdownSchema = z.string().min(1).max(65_536);
+export const PigePolicyValidationIssueSchema = z.enum([
+  "invalid_heading_structure",
+  "missing_required_section",
+  "duplicate_required_section",
+  "secret_like_content"
+]);
+export const PigePolicySummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: PigePolicyRevisionSchema,
+  markdown: PigePolicyMarkdownSchema,
+  requiredSections: z.array(z.string().min(1).max(64)).length(8),
+  canEdit: z.literal(true)
+}).strict();
+export const PigePolicyUpdateRequestIdSchema = z.string().regex(/^pigepolicyreq_[a-z0-9]{16,64}$/u);
+export const PigePolicyUpdateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PigePolicyUpdateRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: PigePolicyRevisionSchema,
+  markdown: PigePolicyMarkdownSchema
+}).strict();
+const PigePolicyUpdateIdentitySchema = PigePolicyUpdateRequestSchema.pick({
+  apiVersion: true,
+  requestId: true,
+  activeVaultId: true
+});
+export const PigePolicyUpdateResultSchema = z.discriminatedUnion("status", [
+  PigePolicyUpdateIdentitySchema.extend({
+    status: z.literal("updated"),
+    summary: PigePolicySummarySchema,
+    operationId: OperationIdSchema.optional()
+  }).strict(),
+  PigePolicyUpdateIdentitySchema.extend({
+    status: z.enum(["stale", "denied"]),
+    summary: PigePolicySummarySchema
+  }).strict(),
+  PigePolicyUpdateIdentitySchema.extend({
+    status: z.literal("invalid"),
+    summary: PigePolicySummarySchema,
+    issues: z.array(PigePolicyValidationIssueSchema).min(1).max(16)
+  }).strict(),
+  PigePolicyUpdateIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 export const RESTORE_CANCEL_CHANNEL = "restore.cancel" as const;
 export const RestoreCancelRequestIdSchema = z.string()
   .regex(/^restorecancelreq_[a-z0-9]{8,64}$/);
@@ -11165,6 +11214,12 @@ export type BackupConversationPreferenceRevision = z.infer<typeof BackupConversa
 export type BackupConversationPreferenceSummary = z.infer<typeof BackupConversationPreferenceSummarySchema>;
 export type BackupConversationPreferenceUpdateRequest = z.infer<typeof BackupConversationPreferenceUpdateRequestSchema>;
 export type BackupConversationPreferenceUpdateResult = z.infer<typeof BackupConversationPreferenceUpdateResultSchema>;
+export type PigePolicyRevision = z.infer<typeof PigePolicyRevisionSchema>;
+export type PigePolicyMarkdown = z.infer<typeof PigePolicyMarkdownSchema>;
+export type PigePolicyValidationIssue = z.infer<typeof PigePolicyValidationIssueSchema>;
+export type PigePolicySummary = z.infer<typeof PigePolicySummarySchema>;
+export type PigePolicyUpdateRequest = z.infer<typeof PigePolicyUpdateRequestSchema>;
+export type PigePolicyUpdateResult = z.infer<typeof PigePolicyUpdateResultSchema>;
 export type RestoreCancelRequestId = z.infer<typeof RestoreCancelRequestIdSchema>;
 export type RestoreCancelRequest = z.infer<typeof RestoreCancelRequestSchema>;
 export type RestoreCancelResult = z.infer<typeof RestoreCancelResultSchema>;

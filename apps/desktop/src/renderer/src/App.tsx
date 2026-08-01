@@ -59,6 +59,7 @@ import { renameCollectionView, trashCollectionView, updateCollectionView } from 
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
+import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import {
   DiagnosticsJobCard,
@@ -226,6 +227,7 @@ export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticR
 export { LocalRerankerSettingsPanel } from "./components/LocalRerankerSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
+export { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 const startupDestinationApi: StartupDestinationApi = {
   load: () => window.pige.settings.startupDestination(),
@@ -3068,12 +3070,15 @@ export function App(): React.JSX.Element {
               t={t}
             />
           ) : settingsSection === "memory" ? (
-            <AgentMemorySettingsPanel
-              activeVaultId={activeVault?.vaultId ?? null}
-              focusRequest={memoryActivityFocusRequest}
-              onFocusRequestSettled={settleMemoryActivityFocus}
-              t={t}
-            />
+            <>
+              <PigePolicySettingsPanel activeVaultId={activeVault?.vaultId ?? null} t={t} />
+              <AgentMemorySettingsPanel
+                activeVaultId={activeVault?.vaultId ?? null}
+                focusRequest={memoryActivityFocusRequest}
+                onFocusRequestSettled={settleMemoryActivityFocus}
+                t={t}
+              />
+            </>
           ) : settingsSection === "privacy" ? (
             <PermissionsPrivacySettingsPanel
               activeVaultId={activeVault?.vaultId ?? null}
