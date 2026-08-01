@@ -70,7 +70,25 @@ describe("TopicParentService", () => {
   it("accepts only one bounded unique stable parent list", () => {
     expect(readTopicParentIds(topicFrontmatter([]))).toEqual([]);
     expect(readTopicParentIds(topicFrontmatter([request.targetPageId, request.targetPageId]))).toBeUndefined();
+    expect(readTopicParentIds(topicFrontmatter(Array.from({ length: 9 }, (_, index) =>
+      `page_20260801_parent${String(index).padStart(2, "0")}`)))).toBeUndefined();
     expect(readTopicParentIds(topicFrontmatter([]).replace("topics: []", "topics: []\ntopics: []"))).toBeUndefined();
+  });
+
+  it("fails closed before mutation when any active Topic has malformed hierarchy truth", async () => {
+    const vaultPath = makeVault();
+    writeTopic(vaultPath, request.targetPageId, "Broader topic", request.expectedTargetUpdatedAt);
+    fs.writeFileSync(path.join(vaultPath, "wiki", "malformed.md"), topicDocument(
+      "page_20260801_malformed", "Malformed topic", "2026-08-01T11:30:00.000Z", "active", []
+    ).replace("topics: []", "topics: not-an-array"), "utf8");
+    const save = vi.fn();
+    const service = new TopicParentService({ resolveManagedPageTarget: vi.fn(() => readyTarget(() => true)),
+      render: vi.fn() } as never, { open: vi.fn(() => openedTopic()), save } as never, () => vaultPath);
+
+    expect(service.search("reader_owner", { ...request, query: "broader" }))
+      .toMatchObject({ status: "ready", candidates: [] });
+    await expect(service.change("reader_owner", request)).resolves.toMatchObject({ status: "ineligible" });
+    expect(save).not.toHaveBeenCalled();
   });
 });
 
@@ -80,7 +98,12 @@ function makeVault(): string {
 }
 function writeTopic(vaultPath: string, pageId: string, title: string, updatedAt: string,
   status: "active" | "archived" = "active", parents: readonly string[] = []): void {
-  fs.writeFileSync(path.join(vaultPath, "wiki", `${pageId}.md`), `---\nid: "${pageId}"\nschema_version: 1\ntitle: "${title}"\ntype: "topic"\ncreated_at: 2026-08-01T10:00:00.000Z\nupdated_at: ${updatedAt}\nstatus: "${status}"\naliases: []\ntags: []\ntopics: ${JSON.stringify(parents)}\nentities: []\nsource_ids: []\n---\n\n# ${title}\n`, "utf8");
+  fs.writeFileSync(path.join(vaultPath, "wiki", `${pageId}.md`),
+    topicDocument(pageId, title, updatedAt, status, parents), "utf8");
+}
+function topicDocument(pageId: string, title: string, updatedAt: string,
+  status: "active" | "archived", parents: readonly string[]): string {
+  return `---\nid: "${pageId}"\nschema_version: 1\ntitle: "${title}"\ntype: "topic"\ncreated_at: 2026-08-01T10:00:00.000Z\nupdated_at: ${updatedAt}\nstatus: "${status}"\naliases: []\ntags: []\ntopics: ${JSON.stringify(parents)}\nentities: []\nsource_ids: []\n---\n\n# ${title}\n`;
 }
 function readyTarget(assertCurrent: () => boolean) {
   return { status: "ready" as const, pageContentHash: `sha256:${"a".repeat(64)}`, assertCurrent };

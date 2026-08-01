@@ -18,7 +18,7 @@ import type { NotesService } from "./notes-service";
 
 type TargetPort = Pick<NotesService, "resolveManagedPageTarget" | "render">;
 type EditorPort = Pick<NoteMarkdownEditorService, "open" | "save">;
-const MAX_PARENTS = 32;
+const MAX_PARENTS = 8;
 
 export class TopicParentService {
   constructor(
@@ -132,7 +132,9 @@ function wouldCreateCycle(vaultPath: string, currentPageId: string, targetPageId
       const located = findMarkdownPageByIdAtSignature(vaultPath, record.summary.pageId);
       if (!located) return true;
       const raw = readMarkdownPageContentAtSignature(vaultPath, located.signature, 4 * 1024 * 1024 + 1).markdown;
-      parents.set(record.summary.pageId, readTopicParentIds(parsePigeFrontmatter(raw)?.raw ?? "") ?? []);
+      const parentIds = readTopicParentIds(parsePigeFrontmatter(raw)?.raw ?? "");
+      if (!parentIds) return true;
+      parents.set(record.summary.pageId, parentIds);
     } catch { return true; }
   }
   const pending = [targetPageId], visited = new Set<string>();

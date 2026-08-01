@@ -1938,7 +1938,7 @@ export const NoteConceptParentsSummarySchema = z.object({
 }).strict();
 export const NoteTopicParentItemSchema = NoteConceptParentItemSchema;
 export const NoteTopicParentsSummarySchema = z.object({
-  items: z.array(NoteTopicParentItemSchema).max(32),
+  items: z.array(NoteTopicParentItemSchema).max(8),
   canEdit: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
