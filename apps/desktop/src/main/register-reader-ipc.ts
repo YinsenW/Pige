@@ -81,6 +81,9 @@ import {
   NoteImportMarkdownResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NOTE_OPEN_SEARCH_MATCH_CHANNEL,
+  NoteOpenSearchMatchRequestSchema,
+  NoteOpenSearchMatchResultSchema,
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
   NoteReconnectOriginalSourceRequestSchema,
   NoteReconnectOriginalSourceResultSchema,
@@ -286,6 +289,31 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       }
       return result;
     });
+  });
+  options.ipcMain.handle(NOTE_OPEN_SEARCH_MATCH_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteOpenSearchMatchRequestSchema.parse(request);
+    const sender = event.sender;
+    const ownerId = trackNotesSender(sender);
+    const result = NoteOpenSearchMatchResultSchema.parse(
+      await options.getNotesService().openSearchMatch(parsed, ownerId)
+    );
+    if (
+      sender.isDestroyed() ||
+      notesTrackedSenders.get(sender.id) !== ownerId ||
+      result.requestId !== parsed.requestId ||
+      result.activeVaultId !== parsed.activeVaultId ||
+      result.pageId !== parsed.pageId
+    ) {
+      options.getNotesService().releaseOwner(ownerId);
+      return NoteOpenSearchMatchResultSchema.parse({
+        apiVersion: 1,
+        requestId: parsed.requestId,
+        activeVaultId: parsed.activeVaultId,
+        pageId: parsed.pageId,
+        status: "stale"
+      });
+    }
+    return result;
   });
   options.ipcMain.handle("notes.openEditor", (event, request: unknown) => {
     const parsed = NoteEditorOpenRequestSchema.parse(request);

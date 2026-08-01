@@ -1879,6 +1879,28 @@ export const NoteRenderResultSchema = z.object({
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
+export const NOTE_OPEN_SEARCH_MATCH_CHANNEL = "notes.openSearchMatch" as const;
+export const NoteOpenSearchMatchRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: z.string().regex(/^notesearch_[a-z0-9]{16,64}$/u),
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  query: z.string().trim().min(1).refine(
+    (value) => Array.from(value).length <= 320,
+    "Search focus queries must contain at most 320 Unicode characters."
+  )
+}).strict();
+const NoteOpenSearchMatchResultIdentitySchema = NoteOpenSearchMatchRequestSchema.omit({ query: true });
+export const NoteOpenSearchMatchResultSchema = z.discriminatedUnion("status", [
+  NoteOpenSearchMatchResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    render: NoteRenderResultSchema,
+    focusSegmentId: ReaderSelectionSegmentIdSchema.optional()
+  }).strict(),
+  NoteOpenSearchMatchResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  NoteOpenSearchMatchResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  NoteOpenSearchMatchResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 const NoteReconnectOriginalSourceResultIdentitySchema = NoteReconnectOriginalSourceRequestSchema;
 export const NoteReconnectOriginalSourceResultSchema = z.discriminatedUnion("status", [
   NoteReconnectOriginalSourceResultIdentitySchema.extend({
@@ -11469,6 +11491,8 @@ export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSumma
 export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
 export type NoteClaimContradictionsSummary = z.infer<typeof NoteClaimContradictionsSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
+export type NoteOpenSearchMatchRequest = z.infer<typeof NoteOpenSearchMatchRequestSchema>;
+export type NoteOpenSearchMatchResult = z.infer<typeof NoteOpenSearchMatchResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
 export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
 export type NoteEditorRequestId = z.infer<typeof NoteEditorRequestIdSchema>;

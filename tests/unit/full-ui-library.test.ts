@@ -544,6 +544,7 @@ describe("full UI Library", () => {
     const requests: RetrievalSearchRequest[] = [];
     const resolvers = new Map<string, (result: RetrievalSearchResult) => void>();
     const opened: string[] = [];
+    const focused: Array<{ readonly pageId: string; readonly query: string }> = [];
     await act(async () => {
       root.render(createElement(LibraryPanel, {
         libraryList: libraryList(),
@@ -559,6 +560,7 @@ describe("full UI Library", () => {
         },
         searchFocusRequest: 0,
         onOpenNote: async (pageId) => { opened.push(pageId); },
+        onOpenSearchMatch: async (pageId, query) => { focused.push({ pageId, query }); },
         onCloseNote: () => undefined,
         noteAgentOpen: false,
         onToggleNoteAgent: () => undefined,
@@ -629,7 +631,8 @@ describe("full UI Library", () => {
       buttonContaining(container, "Beta source").click();
       await settle(dom);
     });
-    expect(opened).toEqual(["page_20260715_beta2222"]);
+    expect(opened).toEqual([]);
+    expect(focused).toEqual([{ pageId: "page_20260715_beta2222", query: "beta" }]);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2798,6 +2801,31 @@ describe("full UI Library", () => {
     expect(link.dataset.readerLinkState).toBe("failed");
     expect(container.textContent).toContain("This reference could not be opened. Try again.");
     expect(container.textContent).not.toContain(href);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("marks the Main-derived search segment when Reader opens a matching result", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        focusSegmentId: "readerseg_aaaaaaaaaaaaaaaa",
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+
+    const focused = dom.window.document.querySelector<HTMLElement>(
+      '[data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa"]'
+    );
+    expect(focused?.dataset.pigeSearchFocus).toBe("true");
 
     await act(async () => root.unmount());
     dom.window.close();

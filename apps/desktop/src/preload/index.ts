@@ -209,6 +209,8 @@ import type {
   NoteRevisionHistoryRestoreResult,
   NoteDocument,
   NoteGetRequest,
+  NoteOpenSearchMatchRequest,
+  NoteOpenSearchMatchResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -648,6 +650,9 @@ import {
   PaddleOcrTestResultSchema,
   RetrievalSearchRequestSchema,
   RetrievalSearchResultSchema,
+  NOTE_OPEN_SEARCH_MATCH_CHANNEL,
+  NoteOpenSearchMatchRequestSchema,
+  NoteOpenSearchMatchResultSchema,
   NoteEditorOpenRequestSchema,
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
@@ -2077,6 +2082,22 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("notes.get", request) as Promise<NoteDocument>,
     render: async (request: NoteRenderRequest): Promise<NoteRenderResult> =>
       ipcRenderer.invoke("notes.render", request) as Promise<NoteRenderResult>,
+    openSearchMatch: async (
+      request: NoteOpenSearchMatchRequest
+    ): Promise<NoteOpenSearchMatchResult> => {
+      const parsed = NoteOpenSearchMatchRequestSchema.parse(request);
+      const result = NoteOpenSearchMatchResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_OPEN_SEARCH_MATCH_CHANNEL, parsed)
+      );
+      if (
+        result.requestId !== parsed.requestId ||
+        result.activeVaultId !== parsed.activeVaultId ||
+        result.pageId !== parsed.pageId
+      ) {
+        throw new Error("Search focus response identity mismatch.");
+      }
+      return result;
+    },
     openEditor: async (request: NoteEditorOpenRequest): Promise<NoteEditorOpenResult> =>
       NoteEditorOpenResultSchema.parse(
         await ipcRenderer.invoke(

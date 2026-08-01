@@ -68,6 +68,7 @@ type SourceReferenceState = {
 
 export function NoteReader(props: {
   readonly note: NoteRenderResult;
+  readonly focusSegmentId?: string;
   readonly activeVaultId?: string;
   readonly onResolveSelection?: (request: ReaderSelectionResolveRequest) => Promise<ReaderSelectionResolveResult>;
   readonly onSubmitSelectionAction?: (request: ReaderSelectionActionRequest) => Promise<ReaderSelectionActionResult>;
@@ -135,6 +136,21 @@ export function NoteReader(props: {
     readonly right: number;
     readonly bottom: number;
   } | null>(null);
+
+  useLayoutEffect(() => {
+    const focusSegmentId = props.focusSegmentId;
+    const body = markdownBodyRef.current;
+    if (!focusSegmentId || !body || !/^readerseg_[a-f0-9]{16}$/u.test(focusSegmentId)) return;
+    const target = body.querySelector<HTMLElement>(
+      `[data-pige-selection-segment="${focusSegmentId}"]`
+    );
+    if (!target) return;
+    target.dataset.pigeSearchFocus = "true";
+    target.scrollIntoView?.({ block: "center", inline: "nearest" });
+    return () => {
+      delete target.dataset.pigeSearchFocus;
+    };
+  }, [props.focusSegmentId, props.note.renderContextId]);
   const dismissedSelectionRef = useRef<typeof currentSelectionRef.current>(null);
   const [selectionAnchor, setSelectionAnchor] = useState<{
     readonly left: number;

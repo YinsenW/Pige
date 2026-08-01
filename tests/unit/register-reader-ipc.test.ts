@@ -146,6 +146,7 @@ describe("registerReaderIpc", () => {
     expect([...handlers.keys()]).toEqual([
       "notes.get",
       "notes.render",
+      "notes.openSearchMatch",
       "notes.openEditor",
       "notes.saveEditor",
       "notes.listRevisionHistory",
@@ -185,6 +186,29 @@ describe("registerReaderIpc", () => {
       "readerSelection.currentProposal",
       "readerSelection.decideProposal"
     ]);
+  });
+
+  it("parses and identity-checks body-free search-match opening", async () => {
+    const openSearchMatch = vi.fn(async (request) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId,
+      status: "stale" as const
+    }));
+    const handlers = makeHarness({ openSearchMatch });
+    const sender = makeSender(81);
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "notesearch_20260801registrar",
+      activeVaultId: "vault_20260801_search",
+      pageId: "page_20260801_search0001",
+      query: "bounded match"
+    };
+
+    await expect(handlers.get("notes.openSearchMatch")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "stale", requestId: request.requestId });
+    expect(openSearchMatch).toHaveBeenCalledWith(request, expect.stringMatching(/^notes_owner_/u));
   });
 
   it("binds question-state mutation to the tracked Reader owner and refreshes only after commit", async () => {

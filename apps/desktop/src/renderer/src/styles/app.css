@@ -2623,6 +2623,12 @@ h2 {
   color: #7a4f15;
 }
 
+.markdown-body [data-pige-search-focus="true"] {
+  border-radius: 3px;
+  background: var(--accent-surface);
+  box-shadow: 0 0 0 2px var(--accent-surface);
+}
+
 .reader-inline-reference-surface { min-width: 0; }
 
 .markdown-body a[data-reader-link-state="ready"] { cursor: pointer; }

@@ -11,6 +11,8 @@ import type {
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteOpenSearchMatchRequest,
+  NoteOpenSearchMatchResult,
   NoteRevealSourceRequest,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
@@ -235,6 +237,44 @@ export class NotesService {
         ...(claimContradictions ? { claimContradictions: { items: [...claimContradictions], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
       } : {})
     };
+  }
+
+  async openSearchMatch(
+    request: NoteOpenSearchMatchRequest,
+    ownerId: string
+  ): Promise<NoteOpenSearchMatchResult> {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      pageId: request.pageId
+    };
+    const vault = this.#vaults.current();
+    if (!vault || vault.vaultId !== request.activeVaultId) return { ...identity, status: "stale" };
+    try {
+      const render = await this.render({ pageId: request.pageId }, ownerId);
+      if (this.#vaults.current()?.vaultId !== request.activeVaultId) {
+        return { ...identity, status: "stale" };
+      }
+      const context = render.renderContextId
+        ? this.#renderContexts.get(ownerId)?.get(render.renderContextId)
+        : undefined;
+      const focusSegmentId = context ? findSearchFocusSegment(context.selectionSegments, request.query) : undefined;
+      return {
+        ...identity,
+        status: "ready",
+        render,
+        ...(focusSegmentId ? { focusSegmentId } : {})
+      };
+    } catch (caught) {
+      if (caught instanceof PigeDomainError) {
+        if (caught.code === "note_not_found") return { ...identity, status: "not_found" };
+        if (caught.code === "note_changed" || caught.code === "vault_missing") {
+          return { ...identity, status: "stale" };
+        }
+      }
+      return { ...identity, status: "failed" };
+    }
   }
 
   openEditor(ownerId: string, request: NoteEditorOpenRequest): NoteEditorOpenResult {
@@ -907,6 +947,31 @@ function sameFileIdentity(left: FileIdentity, right: FileIdentity): boolean {
     left.ctimeMs === right.ctimeMs &&
     left.deviceId === right.deviceId &&
     left.fileId === right.fileId;
+}
+
+function findSearchFocusSegment(
+  segments: ReadonlyMap<string, PigeMarkdownSelectionSegment>,
+  query: string
+): string | undefined {
+  const normalizedQuery = normalizeSearchFocusText(query);
+  const terms = [...new Set(normalizedQuery.split(/[^\p{L}\p{N}]+/gu).filter(Boolean))]
+    .sort((left, right) => right.length - left.length || left.localeCompare(right));
+  let best: { readonly id: string; readonly score: number } | undefined;
+  for (const [id, segment] of segments) {
+    const text = normalizeSearchFocusText(segment.text);
+    const exact = normalizedQuery.length > 0 && text.includes(normalizedQuery);
+    const matchedCharacters = terms.reduce(
+      (total, term) => total + (text.includes(term) ? Array.from(term).length : 0),
+      0
+    );
+    const score = (exact ? 1_000_000 : 0) + matchedCharacters;
+    if (score > 0 && (!best || score > best.score)) best = { id, score };
+  }
+  return best?.id;
+}
+
+function normalizeSearchFocusText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
 }
 
 function resolveSelectionEndpoint(
