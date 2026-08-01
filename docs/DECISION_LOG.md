@@ -4696,6 +4696,36 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260801-Active-Knowledge-Page-Trash-Lifecycle
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+The existing recoverable Reader trash lifecycle applies to every active Pige-managed claim,
+question, concept, entity and topic as well as notes, regardless of author provenance. Source pages
+remain ineligible and no permanent-delete path is added.
+
+Rationale:
+
+These page types are durable Markdown knowledge, so making recovery depend on
+`provenance.generated_by` created an accidental lifecycle gap for user-authored knowledge. Exact
+render/revision/path checks and the private trash receipt already provide the required authority.
+
+Consequences:
+
+- One shared path/body-free list and restore UI survives restart for all eligible page types.
+- Trash, Activity Undo, Redo and public restore preserve exact bytes, identity and page type.
+- Non-active typed knowledge and source pages fail closed; note behavior remains unchanged.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -17,13 +17,11 @@ afterEach(() => {
 });
 
 describe("NoteTrashService", () => {
-  it("trashes one exact Pige-generated claim and converges through Undo, Redo, restart, and public restore", async () => {
-    const fixture = createFixture({
-      pageId: "page_20260801_recoverclaim1",
-      pageType: "claim",
-      title: "Recoverable claim",
-      generatedBy: "pige"
-    });
+  it.each(["claim", "question", "concept", "entity", "topic"] as const)(
+    "trashes one exact active user-authored %s and converges through Undo, Redo, restart, and public restore",
+    async (pageType) => {
+    const fixture = createFixture({ pageId: `page_20260801_${pageType}trash`, pageType,
+      title: `Recoverable ${pageType}`, generatedBy: "user" });
     const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
     expect(rendered.trashEligibility).toEqual({
       canTrash: true,
@@ -31,7 +29,7 @@ describe("NoteTrashService", () => {
     });
     const trashed = fixture.service.trash(fixture.ownerId, {
       apiVersion: 1,
-      requestId: "notetrashreq_generatedclaim1234",
+      requestId: `notetrashreq_${pageType}lifecycle1234`,
       activeVaultId: fixture.vault.vaultId,
       currentPageId: fixture.pageId,
       renderContextId: rendered.renderContextId!,
@@ -51,24 +49,24 @@ describe("NoteTrashService", () => {
     expect(redone).toMatchObject({ status: "redone" });
     const listed = restarted.list({
       apiVersion: 1,
-      requestId: "notetrashlistreq_generatedclaim12",
+      requestId: `notetrashlistreq_${pageType}lifecycle12`,
       activeVaultId: fixture.vault.vaultId
     });
     expect(listed).toMatchObject({ status: "ready", notes: [{
       pageId: fixture.pageId,
-      title: "Recoverable claim",
+      title: `Recoverable ${pageType}`,
       canRestore: true
     }] });
-    if (listed.status !== "ready" || !listed.notes[0]) throw new Error("Expected one recoverable claim.");
+    if (listed.status !== "ready" || !listed.notes[0]) throw new Error(`Expected one recoverable ${pageType}.`);
     expect(new NoteTrashService(fixture.vaults, fixture.notes).restore({
       apiVersion: 1,
-      requestId: "notetrashrestorereq_generatedclaim12",
+      requestId: `notetrashrestorereq_${pageType}lifecycle12`,
       activeVaultId: fixture.vault.vaultId,
       pageId: fixture.pageId,
       trashOperationId: listed.notes[0].trashOperationId,
       expectedTrashRevision: listed.notes[0].expectedTrashRevision
     })).toMatchObject({ status: "committed" });
-    expect((await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId)).summary.pageType).toBe("claim");
+    expect((await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId)).summary.pageType).toBe(pageType);
   });
 
   it("lists pathless recoverable notes after restart and restores one exact receipt into Reader truth", async () => {

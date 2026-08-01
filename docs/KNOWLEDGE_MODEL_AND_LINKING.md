@@ -376,6 +376,8 @@ Deduplication rules:
   a current path-safe original. History derives bounded summaries from intact private images;
   exact-current restore writes one reversible revision. Retry/restart adopts `restore_page`; public
   lifecycle data excludes Markdown/path.
+- Active claims, questions, concepts, entities and topics use the same exact-current recoverable
+  trash/list/restore boundary regardless of author provenance; source pages remain ineligible.
 - If uncertain, preserve both pages.
 
 Multilingual rules preserve source language, add useful translated aliases, avoid duplicates caused

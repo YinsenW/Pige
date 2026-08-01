@@ -22,9 +22,9 @@ export function isPigeGeneratedFrontmatter(raw: string): boolean {
   try { return (value.startsWith('"') ? JSON.parse(value) : value) === "pige"; } catch { return false; }
 }
 
-const TRASHABLE_GENERATED_PAGE_TYPES = new Set(["claim", "concept", "entity", "question", "topic"]);
-export function isTrashableKnowledgePage(pageType: string | undefined, status: string | undefined, generatedByPige: boolean): boolean {
-  return pageType === "note" || Boolean(generatedByPige && status === "active" && pageType && TRASHABLE_GENERATED_PAGE_TYPES.has(pageType));
+const TRASHABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES = new Set(["claim", "concept", "entity", "question", "topic"]);
+export function isTrashableKnowledgePage(pageType: string | undefined, status: string | undefined): boolean {
+  return pageType === "note" || Boolean(status === "active" && pageType && TRASHABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType));
 }
 
 export function resolveGeneratedNoteReveal(request: NoteRevealGeneratedRequest, input: {

@@ -203,7 +203,7 @@ export class NotesService {
         ownerId === undefined ? undefined : this.#sourceRefresh?.refreshableSourceIds(stable.document.summary.sourceIds)),
       ...(renderContextId ? {
         renderContextId,
-        ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status, generatedByPige)
+        ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status)
           ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } }
           : {}),
         ...(stable.document.summary.pageType === "note"
@@ -502,7 +502,7 @@ export class NotesService {
       return { status: "stale" };
     }
     const parsed = parsePigeFrontmatter(context.markdown);
-    const trashable = isTrashableKnowledgePage(context.pageType, parsed?.frontmatter.status, context.generatedByPige);
+    const trashable = isTrashableKnowledgePage(context.pageType, parsed?.frontmatter.status);
     if (pageType === "trashable_page" ? !trashable : context.pageType !== pageType) return { status: "ineligible" };
     const title = parsed?.frontmatter.title?.replace(/\s+/gu, " ").trim();
     if (!title) return { status: "ineligible" };

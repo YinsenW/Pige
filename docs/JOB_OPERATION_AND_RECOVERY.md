@@ -635,7 +635,9 @@ Rules:
 - Policy-affected Operations retain context/hash/enforcer and permission-decision IDs, never full settings, grants, paths, prompts or secrets. Provider sends create no content/approval Operation; recovery may retain Provider/model/evidence identity, never credentials or payload bodies.
 - Relink/root, settings, trash/restore, backup/migration, Skill/package and memory lifecycle never fall through to generic page updates.
 - `create_page.after` binds result hash/path; `trash_page` binds unchanged live `before` and private-trash `after`; later edits are never signed retroactively.
-- Public note restore binds the exact trash receipt/revision, restores original bytes/path only when free/current, and restart adopts one forward `restore_page` Operation.
+- Public knowledge-page restore binds the exact trash receipt/revision, restores original bytes/path
+  only when free/current, and restart adopts one forward `restore_page` Operation. Notes and active
+  claims/questions/concepts/entities/topics participate; source pages do not.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery
