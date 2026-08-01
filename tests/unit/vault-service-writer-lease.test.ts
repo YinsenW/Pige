@@ -370,9 +370,7 @@ describe("VaultService writer lease lifecycle", () => {
     expect(() => service.current()).toThrowError(leaseLost);
     expect(() => service.activeVaultPath()).toThrowError(leaseLost);
     expect(() => service.assertWriterLease(vault.path)).toThrowError(leaseLost);
-    expect(() => service.updateSourceStoragePolicy({
-      defaultStrategy: "reference_original"
-    })).toThrowError(leaseLost);
+    expect(() => service.applySourceStorageStrategy("reference_original")).toThrowError(leaseLost);
 
     expect(readVaultConfig(vault.path)).toEqual(configBefore);
     expect(settings.getActiveVaultPath()).toBe(vault.path);

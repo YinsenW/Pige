@@ -544,6 +544,9 @@ import type {
   SourceKind,
   SourceAssetRootKind,
   SourceStorageStrategy,
+  SourceStoragePolicySummary,
+  UpdateSourceStoragePolicyRequest,
+  UpdateSourceStoragePolicyResult,
   StartupDestinationMutationResult,
   StartupDestinationSummary,
   VaultMigrationApplyRequest,
@@ -1121,6 +1124,9 @@ export type {
   SkillSummary,
   SkillTrust,
   SkillUninstallRequest,
+  SourceStoragePolicySummary,
+  UpdateSourceStoragePolicyRequest,
+  UpdateSourceStoragePolicyResult,
   RecentVaultForgetRequest,
   RecentVaultForgetResult,
   RecentVaultReconnectRequest,
@@ -2330,10 +2336,6 @@ export interface OpenRecentVaultRequest {
   readonly vaultId: string;
 }
 
-export interface UpdateSourceStoragePolicyRequest {
-  readonly defaultStrategy: SourceStorageStrategy;
-}
-
 export type VaultActionResult =
   | {
       readonly status: "completed";
@@ -2853,7 +2855,7 @@ export interface PigeDesktopApi {
     ) => Promise<VaultRenameDisplayNameResult>;
     readonly revealKnowledgeRoot: () => Promise<VaultRevealResult>;
     readonly revealSourceAssetRoot: () => Promise<VaultRevealResult>;
-    readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<VaultSummary>;
+    readonly updateSourceStoragePolicy: (request: UpdateSourceStoragePolicyRequest) => Promise<UpdateSourceStoragePolicyResult>;
     readonly configureManagedCopyRoot: (
       request: ManagedCopyRootConfigureRequest
     ) => Promise<ManagedCopyRootConfigureResult>;

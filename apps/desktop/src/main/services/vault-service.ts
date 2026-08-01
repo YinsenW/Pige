@@ -9,7 +9,6 @@ import type {
   RecentVaultReconnectRequest,
   RecentVaultReconnectResult,
   RecentVaultSummary,
-  UpdateSourceStoragePolicyRequest,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   VaultActionResult,
@@ -268,11 +267,18 @@ export class VaultService {
     return this.#revealStorageRoot("source_asset_root");
   }
 
-  updateSourceStoragePolicy(request: UpdateSourceStoragePolicyRequest): VaultSummary {
+  applySourceStorageStrategy(defaultStrategy: VaultSummary["defaultSourceStorageStrategy"]): VaultSummary {
     const activeVaultPath = this.#requireActiveVaultPath();
-    const vault = updateVaultSourceStorageStrategy(activeVaultPath, request.defaultStrategy);
+    const vault = updateVaultSourceStorageStrategy(activeVaultPath, defaultStrategy);
     this.#assertActiveWriterLease();
     this.#activeVault = this.#decorateVault(activeVaultPath, vault);
+    this.#settings.setActiveVault(activeVaultPath, this.#activeVault);
+    return this.#activeVault;
+  }
+
+  refreshActiveVaultSummary(): VaultSummary {
+    const activeVaultPath = this.#requireActiveVaultPath();
+    this.#activeVault = this.#decorateVault(activeVaultPath, loadVaultSummary(activeVaultPath));
     this.#settings.setActiveVault(activeVaultPath, this.#activeVault);
     return this.#activeVault;
   }
