@@ -3,7 +3,7 @@
   "baseline": "f2f9e7818c5be6a8e9fdfe9fab3b67e0d1c5bbb1",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 280,
-  "baselineLines": 124930,
+  "baselineLines": 124961,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -19,7 +19,7 @@
       ["pi-agent-runtime-adapter.ts", 1398, "aprf"]
     ],
     "authority_reliability": [
-      ["agent-conversation-capture-reference.ts", 83, "rd"],
+      ["agent-conversation-capture-reference.ts", 114, "rd"],
       ["agent-conversation-export-service.ts", 182, "prd"],
       ["agent-conversation-history.ts", 538, "r"],
       ["agent-conversation-pagination.ts", 134, "r"],

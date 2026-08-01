@@ -61,7 +61,7 @@ export class SourcePageService {
     hooks: SourcePagePublicationHooks = {}
   ): SourcePageResult {
     const startPublication = createPublicationGate(hooks.onPublicationStart);
-    const pageId = createPageId(sourceRecord.id);
+    const pageId = sourcePageIdForSourceId(sourceRecord.id);
     const pagePath = createSourcePagePath(sourceRecord);
     const absolutePagePath = resolveVaultRelativePath(vaultPath, pagePath);
     const absoluteSourceRecordPath = resolveSourceRecordPath(vaultPath, sourceRecordPath);
@@ -508,7 +508,7 @@ function hasReadableTextPreview(sourceRecord: SourceRecord): boolean {
     sourceRecord.artifacts.some((artifact) => artifact.kind === "extracted_text" || artifact.kind === "ocr");
 }
 
-function createPageId(sourceId: string): string {
+export function sourcePageIdForSourceId(sourceId: string): string {
   return sourceId.replace(/^src_/u, "page_");
 }
 

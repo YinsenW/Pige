@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import type { AgentConversationMessage } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import { ConversationEventSchema, type ConversationEvent, type SourceKind } from "@pige/schemas";
+import type { AgentTurnConversationStore, PreservedAgentTurn } from "./agent-turn-conversation-store";
 
 export interface ConversationCaptureReferenceInput {
   readonly sourceId: string;
@@ -72,6 +74,35 @@ export function captureReferencesByUserEvent(events: readonly ConversationEvent[
     projected.set(parent.id, references);
   }
   return projected;
+}
+
+export function captureReferenceTurnBinding(
+  conversations: AgentTurnConversationStore,
+  vaultPath: string,
+  turn: PreservedAgentTurn
+): {
+  readonly tailEventId: string;
+  readonly captureReferences: NonNullable<AgentConversationMessage["captureReferences"]>;
+} {
+  const timeline = conversations.readConversationTimeline(
+    vaultPath,
+    turn.event.conversationId,
+    1,
+    turn.metadata?.scope
+  );
+  const message = timeline?.messages[0];
+  const captureReferences = message?.captureReferences ?? [];
+  const expectedTailEventId = captureReferences.at(-1)?.eventId ?? turn.event.id;
+  if (
+    !timeline ||
+    timeline.messages.length !== 1 ||
+    message?.id !== turn.event.id ||
+    message.role !== "user" ||
+    timeline.tailEventId !== expectedTailEventId
+  ) {
+    throw new PigeDomainError("agent_runtime.turn_changed", "The durable conversation changed during the Agent turn.");
+  }
+  return { tailEventId: timeline.tailEventId, captureReferences };
 }
 
 function digest(value: string): string {

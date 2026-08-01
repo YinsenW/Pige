@@ -26,6 +26,7 @@ import {
   type AgentTurnTextPreservationRequest,
   type AgentTurnTextPreservationResult
 } from "./capture-service";
+import { sourcePageIdForSourceId } from "./source-page-service";
 
 export const HOME_AGENT_ATTACHMENT_POLICY = Object.freeze({
   maxFiles: 8,
@@ -86,6 +87,7 @@ export interface PreservedHomeAgentAttachments {
     readonly captureId: string;
     readonly displayName: string;
     readonly sourceKind: NonNullable<ReturnType<typeof supportedFileSourceKind>> | "text";
+    readonly pageId?: string;
   }[];
   readonly rejectedFiles: readonly CaptureFileRejection[];
   readonly rejectedItems?: PreparedHomeAgentAttachments["rejectedItems"];
@@ -338,8 +340,16 @@ export class HomeAgentAttachmentService {
         };
       }
       sourceIds.push(sourceId);
-      captureReferences.push({ sourceId, captureId: preserved.captureId, displayName: entry.displayName,
-        sourceKind: supportedFileSourceKind(entry.filePath)! });
+      const sourceKind = supportedFileSourceKind(entry.filePath)!;
+      captureReferences.push({
+        sourceId,
+        captureId: preserved.captureId,
+        displayName: entry.displayName,
+        sourceKind,
+        ...(sourceKind === "markdown_file" || sourceKind === "plain_text_file"
+          ? { pageId: sourcePageIdForSourceId(sourceId) }
+          : {})
+      });
     }
     return {
       status: "preserved",

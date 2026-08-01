@@ -40,7 +40,11 @@ import {
   PiAgentRuntimeAdapter,
   type PiAgentRunRequest
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
-import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
+import {
+  createVaultOnDisk,
+  loadVaultSummary,
+  updateVaultSourceStorageStrategy
+} from "../../apps/desktop/src/main/services/vault-layout";
 
 const roots: string[] = [];
 
@@ -732,6 +736,108 @@ describe("Unified Agent ingress", () => {
     ]);
   });
 
+  it("reopens reference-original Markdown and TXT captures from body-free conversation references after restart", async () => {
+    const fixture = makeVault("reference_original");
+    const privateSentinel = "PRIVATE_CAPTURE_BODY_MUST_NOT_ENTER_CONVERSATION";
+    const files = [
+      { name: "restart-evidence.md", body: `# Restart evidence\n\n${privateSentinel}\n${"markdown detail\n".repeat(400)}` },
+      { name: "restart-evidence.txt", body: `${privateSentinel}\n${"plain text detail\n".repeat(400)}` }
+    ].map(({ name, body }, ordinal) => {
+      const internalPath = path.join(path.dirname(fixture.vaultPath), name);
+      fs.writeFileSync(internalPath, body, "utf8");
+      return { ordinal, displayName: name, internalPath, body };
+    });
+    const stagedItems = files.map(({ ordinal, displayName }) => ({
+      kind: "file" as const,
+      ordinal,
+      displayName
+    }));
+    const models = createMutableModels(true);
+    const adapter = new PiAgentRuntimeAdapter({
+      fauxResponses: [
+        { kind: "tool_call", toolName: "pige_list_attachments", args: {} },
+        { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_1" } },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_2" } },
+        { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+        { kind: "text", text: "Both preserved text sources remain available. [citation_11] [citation_12]" }
+      ]
+    });
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(models, adapter));
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
+    const capture = new CaptureService(fixture.vaultPort);
+    const attachments = new HomeAgentAttachmentService(capture);
+    const preparedItems = await attachments.prepare(files, stagedItems);
+    const request = {
+      schemaVersion: 1 as const,
+      text: "Compare the two preserved sources.",
+      inputKind: "file_picker" as const,
+      locale: "en" as const,
+      clientTurnId: "turn_20260801_markdowntxt01",
+      stagedItems
+    };
+    const prepared = home.prepareSourceTurn(request, {
+      count: preparedItems.entries.length,
+      attachmentSetHash: preparedItems.attachmentSetHash,
+      inputChecksums: preparedItems.entries.map((entry) => entry.inputChecksum)
+    });
+    const preserved = await attachments.preserve({
+      prepared: preparedItems,
+      turn: request,
+      jobId: prepared.jobId,
+      firstSourceId: prepared.sourceId
+    });
+    expect(preserved).toMatchObject({ status: "preserved", sourceIds: prepared.sourceIds });
+    home.appendPreparedCaptureReferences(prepared, preserved.captureReferences.map((reference) => ({
+      ...reference,
+      jobId: prepared.jobId
+    })));
+
+    const result = await home.submitPreparedSourceTurn(prepared);
+    expect(result).toMatchObject({ state: "completed" });
+
+    const sourceRecordPaths = listFiles(path.join(fixture.vaultPath, ".pige", "source-records"), ".json");
+    expect(sourceRecordPaths).toHaveLength(2);
+    const sourceRecords = sourceRecordPaths.map((recordPath) => JSON.parse(fs.readFileSync(recordPath, "utf8")) as {
+      id: string;
+      kind: string;
+      storageStrategy: string;
+      managedCopy?: unknown;
+      original?: { path?: string };
+      knowledgePageId?: string;
+      knowledgePagePath?: string;
+    });
+    expect(new Set(sourceRecords.map((record) => record.id))).toEqual(new Set(prepared.sourceIds));
+    expect(sourceRecords.map((record) => record.kind).sort()).toEqual(["markdown_file", "plain_text_file"]);
+    expect(sourceRecords.every((record) =>
+      record.storageStrategy === "reference_original" &&
+      record.managedCopy === undefined &&
+      typeof record.original?.path === "string" &&
+      typeof record.knowledgePageId === "string" &&
+      typeof record.knowledgePagePath === "string"
+    )).toBe(true);
+    expect(listFiles(path.join(fixture.vaultPath, "raw", "files"), "")).toHaveLength(0);
+    expect(listFiles(path.join(fixture.vaultPath, "sources"), ".md")).toHaveLength(2);
+
+    const conversationText = listFiles(path.join(fixture.vaultPath, ".pige", "conversations"), ".jsonl")
+      .map((filePath) => fs.readFileSync(filePath, "utf8"))
+      .join("\n");
+    expect(conversationText).not.toContain(privateSentinel);
+    expect(conversationText).not.toContain(files[0]!.internalPath);
+    expect(conversationText).not.toContain(files[1]!.internalPath);
+
+    const restarted = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, adapter);
+    const captureReferences = restarted.conversation()?.messages.find((message) => message.role === "user")?.captureReferences;
+    expect(captureReferences).toEqual(preserved.captureReferences.map((reference) => expect.objectContaining({
+      sourceId: reference.sourceId,
+      captureId: reference.captureId,
+      jobId: prepared.jobId,
+      displayName: reference.displayName,
+      sourceKind: reference.sourceKind,
+      pageId: reference.sourceId.replace(/^src_/u, "page_")
+    })));
+  });
+
   it("does not schedule a Host correction turn after provider prose stops the Pi loop", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-recovery-source.md");
@@ -1203,7 +1309,7 @@ function groundedOutput(title: string) {
   };
 }
 
-function makeVault(): {
+function makeVault(defaultSourceStorageStrategy?: "copy_to_source_library" | "reference_original"): {
   readonly vaultPath: string;
   readonly vaultPort: { current(): VaultSummary; activeVaultPath(): string };
 } {
@@ -1217,7 +1323,9 @@ function makeVault(): {
     now: new Date("2026-07-12T00:00:00.000Z")
   });
   const vaultPath = path.join(root, "UnifiedAgent");
-  const vault = loadVaultSummary(vaultPath);
+  const vault = defaultSourceStorageStrategy
+    ? updateVaultSourceStorageStrategy(vaultPath, defaultSourceStorageStrategy)
+    : loadVaultSummary(vaultPath);
   return { vaultPath, vaultPort: { current: () => vault, activeVaultPath: () => vaultPath } };
 }
 

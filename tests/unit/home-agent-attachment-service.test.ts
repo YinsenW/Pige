@@ -61,6 +61,28 @@ describe("HomeAgentAttachmentService", () => {
       createAttachmentSourceId(request.jobId, 1),
       createAttachmentSourceId(request.jobId, 2)
     ]);
+    expect(first.captureReferences).toEqual([
+      {
+        sourceId: request.firstSourceId,
+        captureId: "cap_20260722_abcdefgh",
+        displayName: "first.md",
+        sourceKind: "markdown_file",
+        pageId: "page_20260722_abcdefghijkl"
+      },
+      {
+        sourceId: createAttachmentSourceId(request.jobId, 1),
+        captureId: "cap_20260722_abcdefgh",
+        displayName: "second.txt",
+        sourceKind: "plain_text_file",
+        pageId: createAttachmentSourceId(request.jobId, 1).replace(/^src_/u, "page_")
+      },
+      {
+        sourceId: createAttachmentSourceId(request.jobId, 2),
+        captureId: "cap_20260722_abcdefgh",
+        displayName: "third.pdf",
+        sourceKind: "pdf_file"
+      }
+    ]);
     expect(preserve.mock.calls.map((call) => call[1])).toEqual(first.sourceIds.map((sourceId, ordinal) => ({
       jobId: request.jobId,
       sourceId,
@@ -115,7 +137,7 @@ describe("HomeAgentAttachmentService", () => {
       attachmentSetHash: prepared.attachmentSetHash,
       sourceIds: [request.firstSourceId],
       captureReferences: [{ sourceId: request.firstSourceId, captureId: "cap_20260722_abcdefgh",
-        displayName: "first.md", sourceKind: "markdown_file" }],
+        displayName: "first.md", sourceKind: "markdown_file", pageId: "page_20260722_partialcopy1" }],
       rejectedFiles: [{ displayName: "second.md", reason: "copy_failed" }]
     });
     expect(JSON.stringify(failed)).not.toContain(root);
@@ -266,7 +288,7 @@ describe("HomeAgentAttachmentService", () => {
       sourceIds: ["src_20260723_mixedowner01", createAttachmentSourceId("job_20260723_mixedowner01", 1)],
       captureReferences: [
         { sourceId: "src_20260723_mixedowner01", captureId: "cap_20260723_mixedowner01",
-          displayName: "first.md", sourceKind: "markdown_file" },
+          displayName: "first.md", sourceKind: "markdown_file", pageId: "page_20260723_mixedowner01" },
         { sourceId: createAttachmentSourceId("job_20260723_mixedowner01", 1),
           captureId: "cap_20260723_mixedowner02", displayName: "Pasted text", sourceKind: "text" }
       ]

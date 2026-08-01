@@ -62,7 +62,10 @@ import type {
   AgentSourceToolSession
 } from "./agent-ingest-service";
 import { HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME, type HomeAuthoredTextCaptureService } from "./home-authored-text-capture-service";
-import type { ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
+import {
+  captureReferenceTurnBinding,
+  type ConversationCaptureReferenceInput
+} from "./agent-conversation-capture-reference";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
@@ -842,7 +845,12 @@ export class HomeAgentService {
       );
       const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, activeTurn);
       const history = toPiAgentHistory(conversationContext);
-      const conversationContextHash = createConversationContextHash(activeTurn, conversationContext);
+      const conversationContextHash = createConversationContextHash(
+        this.#conversations,
+        vaultPath,
+        activeTurn,
+        conversationContext
+      );
       const assertConversationCurrent = (): void => {
         assertConversationContextCurrent(this.#conversations, vaultPath, activeTurn, conversationContextHash);
         context.assertCurrent?.();
@@ -1163,7 +1171,12 @@ export class HomeAgentService {
         session.modelInvocationStarted = false;
         const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, currentPreserved);
         const history = toPiAgentHistory(conversationContext);
-        const conversationContextHash = createConversationContextHash(currentPreserved, conversationContext);
+        const conversationContextHash = createConversationContextHash(
+          this.#conversations,
+          vaultPath,
+          currentPreserved,
+          conversationContext
+        );
         const assertConversationCurrent = (): void => assertConversationContextCurrent(
           this.#conversations,
           vaultPath,
@@ -3336,15 +3349,20 @@ function toPiAgentHistory(
 }
 
 function createConversationContextHash(
+  conversations: AgentTurnConversationStore,
+  vaultPath: string,
   turn: PreservedAgentTurn,
   history: readonly AgentTurnConversationContextMessage[]
 ): string {
+  const binding = captureReferenceTurnBinding(conversations, vaultPath, turn);
   return hashValue(JSON.stringify({
     conversationId: turn.event.conversationId,
     eventId: turn.event.id,
     inputHash: turn.inputHash,
     parentEventId: turn.event.parentEventId ?? null,
-    history
+    history,
+    tailEventId: binding.tailEventId,
+    captureReferences: binding.captureReferences
   }));
 }
 
@@ -3361,15 +3379,8 @@ function assertConversationContextCurrent(
     turn.inputHash
   );
   const currentContext = conversations.readContextBeforeUserTurn(vaultPath, currentTurn);
-  const timeline = conversations.readConversationTimeline(
-    vaultPath,
-    currentTurn.event.conversationId,
-    1,
-    currentTurn.metadata?.scope
-  );
   if (
-    timeline?.tailEventId !== currentTurn.event.id ||
-    createConversationContextHash(currentTurn, currentContext) !== expectedHash
+    createConversationContextHash(conversations, vaultPath, currentTurn, currentContext) !== expectedHash
   ) {
     throw new PigeDomainError("agent_runtime.turn_changed", "The durable conversation changed during the Agent turn.");
   }
