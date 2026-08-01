@@ -138,15 +138,22 @@ describe("notes service", () => {
   it("projects exact mutable state only for a current valid question page", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260801_question1";
+    const answerPageId = "page_20260801_answer001";
+    writePage({ vaultPath, fileName: "answer.md", pageId: answerPageId, title: "Answer", pageType: "note",
+      sourceIds: ["src_20260801_answer0001"] });
     writePage({
       vaultPath, fileName: "question.md", pageId, title: "Question", pageType: "question",
-      extraFrontmatter: 'question:\n  state: "partially_answered"\n  answered_by: []'
+      extraFrontmatter: `question:\n  state: "partially_answered"\n  answered_by: ["${answerPageId}"]`
     });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId }, OWNER_ID);
     expect(rendered.questionState).toEqual({
       state: "partially_answered", canChange: true,
       revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(rendered.questionAnswers).toEqual({
+      canEdit: true, revision: rendered.questionState!.revision,
+      items: [expect.objectContaining({ pageId: answerPageId, title: "Answer", pageType: "note" })]
     });
     expect(notes.resolveManagedPageTarget(OWNER_ID, {
       activeVaultId: vault.vaultId,

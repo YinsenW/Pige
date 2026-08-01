@@ -5,6 +5,8 @@ import type {
   NoteRevealSourceRequest, NoteRevealSourceResult,
   NoteRenderResult,
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
+  NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
+  NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -24,6 +26,7 @@ import { NoteReaderSources } from "./NoteReaderSources";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
+import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 
 function readerSelectionEndpoint(
@@ -86,6 +89,8 @@ export function NoteReader(props: {
     request: NoteSetQuestionStateRequest
   ) => Promise<NoteSetQuestionStateResult>;
   readonly onQuestionStateChanged?: (render: NoteRenderResult) => void;
+  readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
+  readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -859,6 +864,11 @@ export function NoteReader(props: {
           ) : null}
         </div>
       </header>
+      {props.activeVaultId && props.onSearchQuestionAnswers && props.onChangeQuestionAnswer && props.onQuestionStateChanged ? (
+        <ReaderQuestionAnswers activeVaultId={props.activeVaultId} note={props.note}
+          search={props.onSearchQuestionAnswers} change={props.onChangeQuestionAnswer}
+          onCommitted={props.onQuestionStateChanged} t={props.t} />
+      ) : null}
       <ReaderInlineReferenceSurface
         ref={markdownBodyRef}
         pageIdentity={`${summary.pageId}:${props.note.renderContextId ?? "unavailable"}`}
