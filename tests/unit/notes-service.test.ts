@@ -39,6 +39,7 @@ function writePage(input: {
   readonly pageId: string;
   readonly title: string;
   readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
+  readonly status?: "active" | "archived";
   readonly aliases?: readonly string[];
   readonly tags?: readonly string[];
   readonly sourceIds?: readonly string[];
@@ -54,7 +55,7 @@ title: "${input.title}"
 type: "${input.pageType ?? "note"}"
 created_at: "2026-07-09T12:00:00.000Z"
 updated_at: "2026-07-09T12:00:00.000Z"
-status: "active"
+status: "${input.status ?? "active"}"
 aliases: ${JSON.stringify(input.aliases ?? [])}
 tags: ${JSON.stringify(input.tags ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
@@ -1387,6 +1388,8 @@ status: "active"
       pageType: "claim", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
     writePage({ vaultPath, fileName: "generated-source.md", pageId: "page_20260801_source001", title: "Source",
       pageType: "source", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+    writePage({ vaultPath, fileName: "archived-claim.md", pageId: "page_20260801_archived01", title: "Archived claim",
+      pageType: "claim", status: "archived", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     expect(rendered.revealGeneratedEligibility).toEqual({
@@ -1411,9 +1414,14 @@ status: "active"
       expectedRevision: imported.trashEligibility!.revision
     })).toEqual({ status: "ineligible" });
     const importedClaim = await notes.render({ pageId: "page_20260801_imported02" }, OWNER_ID);
-    expect(importedClaim.trashEligibility).toBeUndefined();
+    expect(importedClaim.trashEligibility).toEqual({
+      canTrash: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
     const source = await notes.render({ pageId: "page_20260801_source001" }, OWNER_ID);
     expect(source.revealGeneratedEligibility).toBeUndefined();
+    expect(source.trashEligibility).toBeUndefined();
+    const archivedClaim = await notes.render({ pageId: "page_20260801_archived01" }, OWNER_ID);
+    expect(archivedClaim.trashEligibility).toBeUndefined();
 
     const current = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     const currentRequest = { ...request, renderContextId: current.renderContextId!,

@@ -673,7 +673,8 @@ Rules:
 - Follow the lifecycle matrix in section 5.1.
 - Managed source copy deletion requires explicit confirmation.
 - Externally referenced originals are never deleted by normal Pige cleanup.
-- Generated pages/artifacts move to recoverable trash first.
+- Active Pige-managed notes, claims, questions, concepts, entities and topics move to recoverable
+  private trash first; source pages are not deleted through this lifecycle.
 - Deletions write operation records.
 - Related indexes are updated or marked dirty.
 

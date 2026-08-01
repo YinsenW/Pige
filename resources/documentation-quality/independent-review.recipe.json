@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T12:43:00Z",
+  "reviewedAt": "2026-08-01T12:55:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Acceptance-ledger reconciliation for complete Knowledge Health and recent merged capabilities, plus exact reversible Concept broader-parent editing with derived backlinks and Knowledge Tree hierarchy.",
+    "scope": "Exact recoverable lifecycle for every active mutable knowledge-page type while source pages remain protected.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "45afe8a990104726ea9a86b5093c98510aa744b3922c9630ddd5fe6b8e6a377b"
+    "reviewedSha256": "faf140c390769265ace7c3c38798a8a8bdecafbd71e2df2ead475fc46d8b02b8"
   },
   "reviewers": [{
-    "reviewerId": "concept-parent-lifecycle-review",
-      "task": "Review exact reversible Concept broader-parent editing",
+    "reviewerId": "knowledge-page-trash-lifecycle-review",
+      "task": "Review exact recoverable active knowledge-page lifecycle",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews Concept hierarchy truth across knowledge, API, UI, Operation and one durable Decision; Development supplies separate schema, CAS, indexing, tree, Activity and renderer evidence."
+      "independence": "Planning reviews lifecycle truth across data, knowledge, API, UI, Operation and one durable Decision; Development supplies separate Reader, receipt, Activity and restart evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"concept-parent-lifecycle-review","blockerCount":0,"summary":"Reader owns one progressive-disclosure broader-Concept control while derived backlinks and Knowledge Tree remain rebuildable."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"concept-parent-lifecycle-review","blockerCount":0,"summary":"Knowledge, API, UI, Operation and D-20260801-Concept-Hierarchy-Single-Direction agree on one-direction truth and exact CAS."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"concept-parent-lifecycle-review","blockerCount":0,"summary":"Direct schema, service, IPC, Activity, index, Knowledge Tree and Reader tests prove a real hierarchy-editing happy path without overclaiming Knowledge completion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"concept-parent-lifecycle-review","blockerCount":0,"summary":"A bounded Concept parent owner composes with existing Markdown update_page, Activity and rebuildable-index owners without a second hierarchy store."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"concept-parent-lifecycle-review","blockerCount":0,"summary":"Existing Knowledge, API, UI and Operation owners plus one durable Decision absorb the feature without a new design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Reader and Settings reuse one recoverable workflow for notes and all five active typed knowledge pages while source remains protected."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Data, Knowledge, API, UI, Operation and D-20260801-Active-Knowledge-Page-Trash-Lifecycle agree on exact currentness and source exclusion."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Direct service and UI evidence proves claim, question, concept, entity and topic trash/Undo/Redo/restart/restore without claiming remaining lifecycle completion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"The existing NoteTrash receipt, Operation, Activity and UI owners absorb the broader eligibility without a second store or public channel."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Existing lifecycle owner documents plus one durable Decision absorb the feature without a new design document."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Concept hierarchy truth, lifecycle ownership and references remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/register-reader-ipc.test.ts tests/unit/concept-parent-service.test.ts tests/unit/reader-concept-parents-ui.test.ts tests/unit/note-markdown-editor-service.test.ts tests/unit/local-database-service.test.ts tests/unit/knowledge-tree-aggregate.test.ts tests/unit/locale-catalog-parity.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact Reader CAS, reversible update_page lifecycle, derived backlinks and Knowledge Tree hierarchy are executable."},
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Knowledge-page trash lifecycle truth and source exclusion remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/note-trash-service.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-settings-surface.test.ts -t 'active user-authored|projects and revalidates|browses pathless knowledge-page Trash' && npm run typecheck && npm run build","status":"passed","evidence":"Five typed active pages converge through Reader trash, Activity Undo/Redo, restart list and authoritative restore while source and archived pages fail closed."},
     {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Service responsibility, Main and renderer authority boundaries remain enforced without a budget raise."}
   ],
   "coordination": {
-    "taskId": "concept-parent-lifecycle-bind-20260801",
-    "taskTitle": "Bind reversible Concept broader-parent editing",
+    "taskId": "knowledge-page-trash-lifecycle-bind-20260801",
+    "taskTitle": "Bind recoverable active knowledge-page lifecycle",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds the active Concept render and exact target identity, mutates only parent_concepts, then rebuilds narrower backlinks and Knowledge Tree without renderer paths or bodies.",
-    "acknowledgement": "Planning binds the first exact Concept parent lifecycle while broader taxonomy, multi-parent editing and remaining Knowledge acceptance exits stay open."
+    "compatibility": "Main binds the active render/revision/path and exact private receipt; renderer sees only safe identities and authoritative restored render.",
+    "acknowledgement": "Planning binds the completed mutable knowledge-page trash lifecycle while source deletion and remaining Knowledge acceptance exits stay open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

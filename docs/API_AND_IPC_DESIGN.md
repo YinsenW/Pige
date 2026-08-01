@@ -497,9 +497,10 @@ Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderCo
 only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
 
 Reader edits are revision-fenced. `openEditor` returns bounded Markdown; `saveEditor` CAS-writes
-`update_page`, preserving stale drafts. Trash lists safe receipts; restore revalidates private bytes
-and returns authoritative render without duplicate `restore_page`. Merge binds both notes and keeps
-current. History binds render/revision, lists <=100 safe summaries and opens sanitized read-only
+`update_page`, preserving stale drafts. `trashCurrent` accepts notes and active Pige-managed
+`claim | question | concept | entity | topic` pages, but never source pages; list/restore stays
+path/body-free, revalidates exact private bytes and returns authoritative render without duplicate
+`restore_page`. Merge binds both notes and keeps current. History binds render/revision, lists <=100 safe summaries and opens sanitized read-only
 previews; restore CAS-writes one `restore_page`. Source/rich-text stays read-only and closed results
 expose no body/path.
 

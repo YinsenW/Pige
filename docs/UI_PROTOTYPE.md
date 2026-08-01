@@ -602,8 +602,9 @@ Editing mode:
   Question state and `updated_at`, adopts Main's authoritative render, and remains Activity/Undo
   recoverable. Closed outcomes retain the visible page, selected value, and keyboard focus; the
   renderer never receives Markdown, paths, hashes, or frontmatter authority.
-- Settings Trash lists safe notes and opens only Main's restored page. All mutations are recoverable;
-  permanent/source deletion and restyle stay absent.
+- Settings Trash lists safe active knowledge pages and opens only Main's restored page. Notes plus
+  claims, questions, concepts, entities and topics share the recoverable workflow; source pages,
+  permanent deletion and restyle stay absent.
 
 Reader foundation:
 
