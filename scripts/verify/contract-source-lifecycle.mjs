@@ -30,8 +30,8 @@ requireAll("packages/schemas/src/index.ts", [
 ]);
 requireAll("apps/desktop/src/main/services/capture-service.ts", [
   "const storageStrategy = vault.defaultSourceStorageStrategy", "storageStrategy,",
-  "storageStrategy === \"copy_to_source_library\"", "ingressSnapshotService.promoteManagedCopy",
-  "checksum: adoptedSnapshot.checksum"
+  "storageStrategy === \"copy_to_source_library\"", "freezeAcceptedFileIngress({",
+  "ingressSnapshotService.promoteManagedCopy({", "checksum: adoptedSnapshot.checksum"
 ]);
 for (const service of [
   "apps/desktop/src/main/services/pdf-parser-service.ts",

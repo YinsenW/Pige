@@ -6,7 +6,7 @@
     { "path": "scripts/verify/contract-consistency.mjs", "sha256": "3a57e55b1e3de2a6127879da49f7cb395b61daab3b48ee56ed152ff1eaf2e879" },
     { "path": "scripts/verify/contract-job-recovery.mjs", "sha256": "1b1787cc50f3dbf085783c030e0a439e4d8ff25d7f5fdf217aa91239183218d0" },
     { "path": "scripts/verify/contract-security-egress.mjs", "sha256": "512f0302311bdf47c5a308c291ecf52e8022c9910e00c3478c022208f7d7ecf4" },
-    { "path": "scripts/verify/contract-source-lifecycle.mjs", "sha256": "e15002333e30c52978166698ce59af74221c27b6a73deab202c8db012ad249d3" },
+    { "path": "scripts/verify/contract-source-lifecycle.mjs", "sha256": "859cbc000c56bde81c1a36a25e7e69d4d212e0f3e9770eeb3278445b32a05506" },
     { "path": "scripts/verify/contract-stable-vocabulary.mjs", "sha256": "7661520c8b4809e4c2db52aff9ed1d750b6c06c831bcb19667ac29f39afa31a8" },
     { "path": "scripts/verify/decision-log.mjs", "sha256": "f157a17e2ea3df4158a379dbc95cc1753da035424658cc2d1243db96316b8b77" },
     { "path": "scripts/verify/dependency-manifest-negative-cases.mjs", "sha256": "2c336fd461a5dbe49b4a51d99c330f26d83649a1fe459e7ffb2b382774d98f06" },

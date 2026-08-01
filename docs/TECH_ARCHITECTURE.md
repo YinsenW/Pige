@@ -1411,7 +1411,11 @@ assistant text is never implicitly converted into a write; Pi explicitly selects
 knowledge-write tool and supplies its Markdown when durable knowledge is valuable.
 Ranked results and citations may be empty for a general answer. Local evidence requires
 citations; zero retrieval results return control to Pi unless the user required
-vault-only grounding.
+vault-only grounding. Pi declares that exact authored restriction through the typed
+Home search scope; Main then requires a returned citation for the final answer and
+projects localized insufficient evidence when the bounded search is empty or uncited.
+The Host does not infer semantic intent from user prose, and optional retrieval remains
+pass-through for ordinary empty-vault chat.
 
 ## 10. Model Provider Architecture
 
