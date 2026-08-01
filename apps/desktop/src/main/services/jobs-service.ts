@@ -167,6 +167,7 @@ export interface RequeueWaitingAgentIngestResult {
 
 export type RequeueWaitingParsesResult = RequeueWaitingAgentIngestResult;
 export type RequeueWaitingOcrResult = RequeueWaitingAgentIngestResult;
+export type RequeueWaitingDatasetImportsResult = RequeueWaitingAgentIngestResult;
 
 export interface RecoverInterruptedJobsResult {
   readonly requeued: number;
@@ -1740,6 +1741,29 @@ export class JobsService {
     return { requeued };
   }
 
+  requeueWaitingDatasetImports(): RequeueWaitingDatasetImportsResult {
+    const vaultPath = this.#requireActiveVaultPath();
+    const datasets = this.#datasets;
+    if (!datasets) return { requeued: 0 };
+
+    let requeued = 0;
+    for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
+      if (jobFile.job.class !== "dataset_import" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
+      const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
+      if (!sourceRecord || !datasets.canMaterialize(sourceRecord.kind)) continue;
+      const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
+      const proof = dependencyRepairProof(snapshot.job);
+      if (!proof) continue;
+      this.#jobExecutionCoordinator(vaultPath).queue(snapshot, {
+        reason: "dependency_repaired",
+        proof,
+        message: "Bundled Dataset materialization is ready; import requeued."
+      });
+      requeued += 1;
+    }
+    return { requeued };
+  }
+
   requeueWaitingOcr(): RequeueWaitingOcrResult {
     const vaultPath = this.#requireActiveVaultPath();
     const ocr = this.#ocr;
@@ -3103,7 +3127,13 @@ export class JobsService {
       },
       waitForParser: (message) => {
         this.#assertWriterLease(vaultPath);
-        this.#markJobWaitingDependency(snapshot.path, snapshot.job, message);
+        this.#markJobWaitingDependency(
+          snapshot.path,
+          snapshot.job,
+          message,
+          undefined,
+          runtimeCapabilityWaitingDependency("document_parser")
+        );
       },
       begin: (abortSignal) => {
         this.#assertWriterLease(vaultPath);
@@ -3281,7 +3311,13 @@ export class JobsService {
       },
       waitForMaterializer: (message) => {
         this.#assertWriterLease(vaultPath);
-        this.#markJobWaitingDependency(snapshot.path, snapshot.job, message);
+        this.#markJobWaitingDependency(
+          snapshot.path,
+          snapshot.job,
+          message,
+          undefined,
+          runtimeCapabilityWaitingDependency("dataset_materializer")
+        );
       },
       begin: (abortSignal) => {
         this.#assertWriterLease(vaultPath);
@@ -5625,7 +5661,7 @@ function ensureAgentParseToolJob(
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
     ...(state === "waiting_dependency"
-      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      ? { waitingDependency: runtimeCapabilityWaitingDependency("document_parser") }
       : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
@@ -5744,7 +5780,7 @@ function ensureAgentDatasetToolJob(
     policyContextId: parentJob.policyContextId,
     policyHash: request.policyHash,
     ...(state === "waiting_dependency"
-      ? { waitingDependency: localToolWaitingDependency(request.toolId) }
+      ? { waitingDependency: runtimeCapabilityWaitingDependency("dataset_materializer") }
       : {}),
     inputRefs: createAgentToolInputRefs({
       sourceRecord,
@@ -6311,6 +6347,17 @@ function localToolWaitingDependency(
     dependencyId,
     requiredAction: "repair_tool",
     messageKey: "errors.agent_runtime.tool_dependency_waiting"
+  };
+}
+
+function runtimeCapabilityWaitingDependency(
+  dependencyId: "document_parser" | "dataset_materializer"
+): NonNullable<JobRecord["waitingDependency"]> {
+  return {
+    dependencyKind: "runtime_capability",
+    dependencyId,
+    requiredAction: "enable_capability",
+    messageKey: "errors.agent_runtime.runtime_capability_waiting"
   };
 }
 

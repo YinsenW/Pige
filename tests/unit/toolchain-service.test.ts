@@ -127,15 +127,18 @@ describe("toolchain service", () => {
       tools: [{ id: "parser", name: "Parser", required: true, bundledPath: "bin/tool" }]
     })}\n`, "utf8");
     const scheduleParseProcessing = vi.fn();
+    const scheduleDatasetImportProcessing = vi.fn();
     const scheduleOcrProcessing = vi.fn();
     const scheduleAgentIngestProcessing = vi.fn();
     let first = true;
     const dependencies = {
       hasActiveVault: () => true,
       requeueWaitingParses: vi.fn(() => ({ requeued: first ? 2 : 0 })),
+      requeueWaitingDatasetImports: vi.fn(() => ({ requeued: first ? 4 : 0 })),
       requeueWaitingOcr: vi.fn(() => ({ requeued: first ? 3 : 0 })),
       requeueWaitingAgentIngest: vi.fn(() => ({ requeued: first ? 1 : 0 })),
       scheduleParseProcessing,
+      scheduleDatasetImportProcessing,
       scheduleOcrProcessing,
       scheduleAgentIngestProcessing,
       onRecoveryFailure: vi.fn()
@@ -147,9 +150,11 @@ describe("toolchain service", () => {
     expect(service.recheckAndRecover(dependencies).status).toBe("ready");
 
     expect(dependencies.requeueWaitingParses).toHaveBeenCalledTimes(2);
+    expect(dependencies.requeueWaitingDatasetImports).toHaveBeenCalledTimes(2);
     expect(dependencies.requeueWaitingOcr).toHaveBeenCalledTimes(2);
     expect(dependencies.requeueWaitingAgentIngest).toHaveBeenCalledTimes(2);
     expect(scheduleParseProcessing).toHaveBeenCalledTimes(1);
+    expect(scheduleDatasetImportProcessing).toHaveBeenCalledTimes(1);
     expect(scheduleOcrProcessing).toHaveBeenCalledTimes(1);
     expect(scheduleAgentIngestProcessing).toHaveBeenCalledTimes(1);
   });
@@ -165,9 +170,11 @@ describe("toolchain service", () => {
     const dependencies = {
       hasActiveVault: vi.fn(() => true),
       requeueWaitingParses,
+      requeueWaitingDatasetImports: vi.fn(() => ({ requeued: 1 })),
       requeueWaitingOcr: vi.fn(() => ({ requeued: 1 })),
       requeueWaitingAgentIngest: vi.fn(() => ({ requeued: 1 })),
       scheduleParseProcessing: vi.fn(),
+      scheduleDatasetImportProcessing: vi.fn(),
       scheduleOcrProcessing: vi.fn(),
       scheduleAgentIngestProcessing: vi.fn(),
       onRecoveryFailure: vi.fn()
@@ -208,9 +215,11 @@ describe("toolchain service", () => {
     expect(new ToolchainService(manifestPath).recheckAndRecover({
       hasActiveVault: () => true,
       requeueWaitingParses: () => { throw new Error("damaged private job record"); },
+      requeueWaitingDatasetImports: () => ({ requeued: 0 }),
       requeueWaitingOcr: () => ({ requeued: 0 }),
       requeueWaitingAgentIngest: () => ({ requeued: 1 }),
       scheduleParseProcessing: vi.fn(),
+      scheduleDatasetImportProcessing: vi.fn(),
       scheduleOcrProcessing: vi.fn(),
       scheduleAgentIngestProcessing,
       onRecoveryFailure

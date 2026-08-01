@@ -1167,9 +1167,11 @@ const recoverReadyLocalCapabilities = (): ToolchainHealth =>
   getToolchainService().recheckAndRecover({
     hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
     requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
+    requeueWaitingDatasetImports: () => getJobsService().requeueWaitingDatasetImports(),
     requeueWaitingOcr: () => getJobsService().requeueWaitingOcr(),
     requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
     scheduleParseProcessing,
+    scheduleDatasetImportProcessing,
     scheduleOcrProcessing,
     scheduleAgentIngestProcessing,
     onRecoveryFailure: (owner) => recordBackgroundFailure(

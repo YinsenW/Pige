@@ -394,7 +394,7 @@ describe("Agent-selected Dataset ingest tool", () => {
     expect(planner.callCount).toBe(0);
   });
 
-  it("lets Pi finish while an unavailable Dataset capability remains a typed child result", async () => {
+  it("lets Pi finish while an unavailable Dataset capability resumes the same typed child after repair", async () => {
     const fixture = makeVault();
     const captured = await preserveCsv(fixture);
     const planner = new StaticPlanner(csvPlan(captured.bytes), false);
@@ -415,6 +415,12 @@ describe("Agent-selected Dataset ingest tool", () => {
     });
     const waitingChild = requireValue(readJobs(fixture.vaultPath).find((job) => job.class === "dataset_import"));
     expect(waitingChild.state).toBe("waiting_dependency");
+    expect(waitingChild.waitingDependency).toEqual({
+      dependencyKind: "runtime_capability",
+      dependencyId: "dataset_materializer",
+      requiredAction: "enable_capability",
+      messageKey: "errors.agent_runtime.runtime_capability_waiting"
+    });
     expect(readJob(fixture.vaultPath, parentId).state).toBe("completed");
     expect(waitingJobs.requeueWaitingAgentIngest()).toEqual({ requeued: 0 });
 
@@ -422,6 +428,21 @@ describe("Agent-selected Dataset ingest tool", () => {
     expect(children).toHaveLength(1);
     expect(children[0]?.id).toBe(waitingChild.id);
     expect(planner.callCount).toBe(0);
+
+    planner.available = true;
+    expect(waitingJobs.requeueWaitingDatasetImports()).toEqual({ requeued: 1 });
+    const requeuedChild = readJob(fixture.vaultPath, waitingChild.id);
+    expect(requeuedChild).toMatchObject({
+      id: waitingChild.id,
+      state: "queued"
+    });
+    expect(requeuedChild.waitingDependency).toBeUndefined();
+    await expect(waitingJobs.datasetImportExecutor().process({ jobIds: [waitingChild.id] })).resolves.toEqual({
+      processed: 1,
+      completed: 1,
+      failed: 0
+    });
+    expect(planner.callCount).toBe(1);
   });
 
   it("propagates parent cancellation into the active Dataset child before bundle commit", async () => {
