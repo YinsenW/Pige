@@ -8,6 +8,7 @@ const CATEGORY_PROJECTIONS: Readonly<Record<string, CategoryProjection>> = {
   diagnostics_health: { titleKey: "support.category.diagnosticsHealth", descriptionKey: "support.category.diagnosticsHealthDescription" },
   recent_errors: { titleKey: "support.category.recentErrors", descriptionKey: "support.category.recentErrorsDescription" },
   provider_metadata: { titleKey: "support.category.providerMetadata", descriptionKey: "support.category.providerMetadataDescription" },
+  private_excerpt: { titleKey: "support.category.privateExcerpt", descriptionKey: "support.category.privateExcerptDescription" },
   secrets: { titleKey: "support.category.secrets", descriptionKey: "support.category.secretsDescription" },
   content: { titleKey: "support.category.privateContent", descriptionKey: "support.category.privateContentDescription" },
   binaries: { titleKey: "support.category.binaries", descriptionKey: "support.category.binariesDescription" }
@@ -15,7 +16,8 @@ const CATEGORY_PROJECTIONS: Readonly<Record<string, CategoryProjection>> = {
 const WARNING_PROJECTIONS: Readonly<Record<string, string>> = {
   "The bundle is created locally and is not uploaded automatically.": "support.warning.localOnly",
   "Paths, emails, and common secret patterns are redacted by default.": "support.warning.redacted",
-  "Review the preview before exporting.": "support.warning.review"
+  "Review the preview before exporting.": "support.warning.review",
+  "The optional excerpt shown below is the exact redacted text that will be exported.": "support.warning.privateExcerpt"
 };
 
 export function supportBundlePreviewIsFullyProjected(preview: SupportBundlePreview): boolean {
@@ -69,6 +71,31 @@ export function ProviderMetadataSupportOption(props: {
   </div>;
 }
 
+export function PrivateExcerptSupportOption(props: {
+  readonly checked: boolean;
+  readonly value: string;
+  readonly disabled: boolean;
+  readonly onCheckedChange: (checked: boolean) => void;
+  readonly onValueChange: (value: string) => void;
+  readonly t: Translate;
+}): React.JSX.Element {
+  return <div className="settings-row tall">
+    <div className="settings-row-copy">
+      <strong>{props.t("support.includePrivateExcerpt")}</strong>
+      <span id="support-private-excerpt-description">{props.t("support.includePrivateExcerptDescription")}</span>
+      {props.checked ? <textarea value={props.value} maxLength={2048} disabled={props.disabled}
+        aria-label={props.t("support.privateExcerptInput")}
+        aria-describedby="support-private-excerpt-description"
+        placeholder={props.t("support.privateExcerptPlaceholder")}
+        onInput={(event) => props.onValueChange(event.currentTarget.value)} /> : null}
+    </div>
+    <input type="checkbox" checked={props.checked} disabled={props.disabled}
+      aria-label={props.t("support.includePrivateExcerpt")}
+      aria-describedby="support-private-excerpt-description"
+      onChange={(event) => props.onCheckedChange(event.currentTarget.checked)} />
+  </div>;
+}
+
 export function SupportBundlePreviewTrigger(props: {
   readonly disabled: boolean;
   readonly onPreview: () => void;
@@ -112,6 +139,12 @@ export function SupportBundlePreviewCard(props: {
         <h3 id="support-preview-warnings">{props.t("system.privacyWarnings")}</h3>
         <ul className="support-preview-list warnings">{warnings.map((warningKey) => warningKey ? <li key={warningKey}>{props.t(warningKey)}</li> : null)}</ul>
       </section>
+      {props.preview.reviewedPrivateExcerpt ? <section className="support-preview-section" aria-labelledby="support-preview-private-excerpt">
+        <h3 id="support-preview-private-excerpt">{props.t("support.reviewedPrivateExcerpt")}</h3>
+        <pre>{props.preview.reviewedPrivateExcerpt.text}</pre>
+        <span>{props.t(props.preview.reviewedPrivateExcerpt.redactionApplied
+          ? "support.privateExcerptRedacted" : "support.privateExcerptUnchanged")}</span>
+      </section> : null}
       {!complete ? <p className="error" role="alert">{props.t("support.previewUnsafe")}</p> : null}
       <div className="settings-inline-actions"><button className="settings-button primary" type="button" disabled={!complete || props.busy || props.exportBlocked} onClick={props.onExport}>{props.t("maintenance.exportSupport")}</button></div>
     </div>

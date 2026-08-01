@@ -140,6 +140,42 @@ describe("durable diagnostics lifecycle", () => {
     service.close();
   });
 
+  it("exports only the exact redacted private excerpt that the user reviewed", async () => {
+    const root = tempRoot();
+    const destination = path.join(root, "private-excerpt-support.json");
+    const service = lifecycle(path.join(root, "user-data"), writeExporter());
+    const initial = service.summary();
+    const raw = "Contact alice@example.test with Bearer sk-proj-abcdefghijklmnop at /Users/alice/private.md";
+    const preview = service.preview({
+      apiVersion: 1,
+      requestId: ids("diagpreviewreq", "excerpt"),
+      optionalCategories: ["private_excerpt"],
+      privateExcerpt: raw
+    });
+
+    expect(preview.reviewedPrivateExcerpt).toEqual({
+      text: "Contact [REDACTED_EMAIL] with Bearer [REDACTED_SECRET] at <home>/private.md",
+      redactionApplied: true
+    });
+    const started = service.start({
+      apiVersion: 1,
+      requestId: ids("diagexportreq", "excerpt"),
+      previewId: preview.previewId,
+      scopeContextId: initial.scopeContextId,
+      expectedRevision: initial.revision
+    }, destination);
+
+    expect(started.status).toBe("started");
+    await waitFor(service, "completed");
+    const exported = fs.readFileSync(destination, "utf8");
+    expect(exported).toContain('"id": "private_excerpt"');
+    expect(exported).toContain("Contact [REDACTED_EMAIL] with Bearer [REDACTED_SECRET] at <home>/private.md");
+    expect(exported).not.toContain("alice@example.test");
+    expect(exported).not.toContain("sk-proj-abcdefghijklmnop");
+    expect(exported).not.toContain("/Users/alice");
+    service.close();
+  });
+
   it("exports through one pathless durable Job and bounds progress", async () => {
     const root = tempRoot();
     const destination = path.join(root, "selected-support.json");

@@ -9,6 +9,7 @@ import {
 import type { DiagnosticsExportPort, DiagnosticsExportWriteOptions } from "./diagnostics-export-types";
 import { DiagnosticsExportWorkerService } from "./diagnostics-export-worker-service";
 import type { DiagnosticsProviderMetadata } from "./diagnostics-provider-metadata";
+import { buildSupportBundlePreview, estimateSupportBundleBytes } from "./diagnostics-support-preview";
 
 export { redactDiagnosticText, redactPaths } from "./diagnostics-export-core";
 
@@ -223,10 +224,10 @@ export class DiagnosticsService {
 
   previewSupportBundle(context?: Pick<SupportBundlePreview,
     "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
-  > & Partial<Pick<SupportBundlePreview, "selectedOptionalCategories">>): SupportBundlePreview {
+  > & Partial<Pick<SupportBundlePreview, "selectedOptionalCategories" | "reviewedPrivateExcerpt">>): SupportBundlePreview {
     const recentEvents = this.#readRecentEvents();
     const generatedAt = this.#nowIso();
-    const preview = buildSupportBundlePreview(estimateBundleBytes(recentEvents), generatedAt, context ? {
+    const preview = buildSupportBundlePreview(estimateSupportBundleBytes(recentEvents), generatedAt, context ? {
       ...context,
       selectedOptionalCategories: context.selectedOptionalCategories ?? []
     } : {
@@ -235,7 +236,8 @@ export class DiagnosticsService {
       scopeContextId: `diagctx_${createHash("sha256").update("legacy-diagnostics-preview").digest("hex").slice(0, 48)}`,
       expectedRevision: 0,
       activeVaultId: null,
-      selectedOptionalCategories: []
+      selectedOptionalCategories: [],
+      reviewedPrivateExcerpt: undefined
     });
     this.recordEvent({
       level: "info",
@@ -278,7 +280,8 @@ export class DiagnosticsService {
         selectedOptionalCategories: preview.selectedOptionalCategories,
         includedCategories: preview.includedCategories,
         excludedCategories: preview.excludedCategories,
-        privacyWarnings: preview.privacyWarnings
+        privacyWarnings: preview.privacyWarnings,
+        ...(preview.reviewedPrivateExcerpt ? { reviewedPrivateExcerpt: preview.reviewedPrivateExcerpt } : {})
       },
       app: {
         platform: process.platform,
@@ -537,85 +540,6 @@ export class DiagnosticsService {
     }
     return now.toISOString();
   }
-}
-
-function buildSupportBundlePreview(
-  estimatedBytes: number,
-  generatedAt: string,
-  context: Pick<SupportBundlePreview,
-    "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId" |
-    "selectedOptionalCategories"
-  >
-): SupportBundlePreview {
-  return {
-    ...context,
-    previewId: `supportpreview_${createHash("sha256").update(`${context.requestId}\0${generatedAt}\0${randomUUID()}`).digest("hex").slice(0, 48)}`,
-    generatedAt,
-    localOnly: true,
-    estimatedBytes,
-    selectedOptionalCategories: context.selectedOptionalCategories,
-    includedCategories: [
-      {
-        id: "app_runtime",
-        label: "App version, platform, and architecture",
-        included: true,
-        reason: "Needed to diagnose platform-specific failures."
-      },
-      {
-        id: "diagnostics_health",
-        label: "Diagnostics health summary",
-        included: true,
-        reason: "Redacted operational status only."
-      },
-      {
-        id: "recent_errors",
-        label: "Recent redacted diagnostic events",
-        included: true,
-        reason: "Bounded and redacted event summaries."
-      },
-      ...(context.selectedOptionalCategories.includes("provider_metadata") ? [{
-        id: "provider_metadata",
-        label: "Redacted model-provider metadata",
-        included: true as const,
-        reason: "Aggregate provider types and health only; credentials, URLs, names, and model IDs stay excluded."
-      }] : [])
-    ],
-    excludedCategories: [
-      {
-        id: "secrets",
-        label: "API keys, tokens, cookies, and credentials",
-        included: false,
-        reason: "Secrets are never exported by default."
-      },
-      {
-        id: "content",
-        label: "Full notes, source files, conversations, memory, prompts, and model responses",
-        included: false,
-        reason: "Support bundles must not duplicate private knowledge content by default."
-      },
-      {
-        id: "binaries",
-        label: "Local models, parser binaries, packages, and source artifacts",
-        included: false,
-        reason: "Large binaries and artifacts are excluded."
-      },
-      ...(!context.selectedOptionalCategories.includes("provider_metadata") ? [{
-        id: "provider_metadata",
-        label: "Model-provider metadata",
-        included: false as const,
-        reason: "Provider metadata is included only after explicit preview selection."
-      }] : [])
-    ],
-    privacyWarnings: [
-      "The bundle is created locally and is not uploaded automatically.",
-      "Paths, emails, and common secret patterns are redacted by default.",
-      "Review the preview before exporting."
-    ]
-  };
-}
-
-function estimateBundleBytes(recentEvents: unknown[]): number {
-  return Math.min(2 * 1024 * 1024, Buffer.byteLength(JSON.stringify({ recentEvents }, null, 2)) + 4096);
 }
 
 function buildPersistedEvent(

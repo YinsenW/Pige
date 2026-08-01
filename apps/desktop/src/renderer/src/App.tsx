@@ -67,13 +67,8 @@ import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
-import {
-  DiagnosticsJobCard,
-  ProviderMetadataSupportOption,
-  SupportBundlePreviewCard,
-  SupportBundlePreviewTrigger,
-  supportBundlePreviewIsFullyProjected
-} from "./components/DiagnosticsWorkflowCards";
+import { DiagnosticsJobCard, PrivateExcerptSupportOption, ProviderMetadataSupportOption, SupportBundlePreviewCard,
+  SupportBundlePreviewTrigger, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryHistory } from "./components/CrashRecoveryHistory";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -8230,9 +8225,8 @@ export function SystemSettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
-  const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null);
-  const [clearConfirming, setClearConfirming] = useState(false);
-  const [includeProviderMetadata, setIncludeProviderMetadata] = useState(false);
+  const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false), [includeProviderMetadata, setIncludeProviderMetadata] = useState(false),
+    [includePrivateExcerpt, setIncludePrivateExcerpt] = useState(false), [privateExcerpt, setPrivateExcerpt] = useState("");
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
@@ -8367,8 +8361,9 @@ export function SystemSettingsPanel(props: {
     setNotice(null);
     try {
       const requestId = `diagpreviewreq_${crypto.randomUUID().replaceAll("-", "")}`;
-      const optionalCategories = includeProviderMetadata ? ["provider_metadata" as const] : [];
-      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId, optionalCategories });
+      const optionalCategories = [...(includeProviderMetadata ? ["provider_metadata" as const] : []), ...(includePrivateExcerpt ? ["private_excerpt" as const] : [])];
+      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId, optionalCategories,
+        ...(includePrivateExcerpt ? { privateExcerpt } : {}) });
       if (preview.requestId !== requestId || JSON.stringify(preview.selectedOptionalCategories) !==
         JSON.stringify(optionalCategories)) throw new Error("diagnostics_preview_identity_mismatch");
       props.onSupportBundlePreviewChange(preview);
@@ -8402,6 +8397,7 @@ export function SystemSettingsPanel(props: {
       }
       if (result.status === "started") {
         props.onSupportBundlePreviewChange(null);
+        setIncludePrivateExcerpt(false); setPrivateExcerpt("");
         setNotice({ kind: "success", key: "system.exportStarted" });
       } else if (result.status === "stale") {
         setNotice({ kind: "error", key: "system.diagnosticsStale" });
@@ -8736,7 +8732,7 @@ export function SystemSettingsPanel(props: {
             </div>
           ) : null}
           <CrashRecoveryHistory history={props.diagnosticsHealth?.crashRecoveryHistory} t={props.t} />
-          <SupportBundlePreviewTrigger disabled={Boolean(diagnosticsBusy)}
+          <SupportBundlePreviewTrigger disabled={Boolean(diagnosticsBusy) || (includePrivateExcerpt && privateExcerpt.trim().length === 0)}
             onPreview={() => void previewSupportBundle()} t={props.t} />
           <ProviderMetadataSupportOption checked={includeProviderMetadata}
             disabled={Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
@@ -8745,6 +8741,10 @@ export function SystemSettingsPanel(props: {
               props.onSupportBundlePreviewChange(null);
               setNotice(null);
             }} t={props.t} />
+          <PrivateExcerptSupportOption checked={includePrivateExcerpt} value={privateExcerpt}
+            disabled={Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
+            onCheckedChange={(checked) => { setIncludePrivateExcerpt(checked); props.onSupportBundlePreviewChange(null); setNotice(null); }}
+            onValueChange={(value) => { setPrivateExcerpt(value); props.onSupportBundlePreviewChange(null); setNotice(null); }} t={props.t} />
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.clearDiagnostics")}</strong>
