@@ -464,7 +464,11 @@ describe("Unified Agent ingress", () => {
 
     expect(outcome.state, JSON.stringify({ outcome, parent, child })).toBe("completed");
     expect(outcome).toMatchObject({
-      answer: { answer: "The committed Dataset remains the only durable effect." }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: []
+      }
     });
     expect(parent.childJobIds).toEqual([child.id]);
     expect(checkpointFailure).toBe("synthetic unified Dataset adoption checkpoint failure");
@@ -676,8 +680,8 @@ describe("Unified Agent ingress", () => {
       modelUsage: "local",
       sourceIds: preserved.sourceIds,
       answer: {
-        answer: "The source was inspected and published.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -693,7 +697,7 @@ describe("Unified Agent ingress", () => {
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(1);
   });
 
-  it("lets the same dropped-source ingress answer through Pi without forcing publication", async () => {
+  it("keeps the same dropped-source ingress unpublished when Pi omits its evidence ref", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "answer-only-source.txt");
     fs.writeFileSync(sourceFile, "The source can support a direct answer without becoming a note.\n", "utf8");
@@ -724,8 +728,8 @@ describe("Unified Agent ingress", () => {
       state: "completed",
       sourceIds: preserved.sourceIds,
       answer: {
-        answer: "The preserved source supports a direct answer.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -868,14 +872,18 @@ describe("Unified Agent ingress", () => {
     expect(outcome).toMatchObject({
       state: "completed",
       jobId: prepared.jobId,
-      answer: { answer: "I inspected the source but stopped too early." }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: []
+      }
     });
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
       state: "completed"
     });
   });
 
-  it("accepts provider prose after source inspection without a terminal action", async () => {
+  it("projects insufficient evidence after source inspection without a citation", async () => {
     const fixture = makeVault();
     const sourceFile = path.join(path.dirname(fixture.vaultPath), "terminal-missing-source.txt");
     fs.writeFileSync(sourceFile, "The source remains retryable when no terminal tool succeeds.\n", "utf8");
@@ -903,7 +911,11 @@ describe("Unified Agent ingress", () => {
 
     expect(outcome).toMatchObject({
       state: "completed",
-      answer: { answer: "Incomplete response without a terminal action." }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: []
+      }
     });
     expect(jobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
       state: "completed"

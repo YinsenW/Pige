@@ -308,7 +308,7 @@ describe("Home Pi Agent service", () => {
     });
   });
 
-  it("runs a source-bearing turn through one Home-owned Pi loop", async () => {
+  it("fails closed when a source-bearing turn skips inspection and returns uncited factual prose", async () => {
     const fixture = makeFixture();
     const models = makeModels();
     let runtimeCalls = 0;
@@ -316,10 +316,7 @@ describe("Home Pi Agent service", () => {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
         runtimeCalls += 1;
         return new PiAgentRuntimeAdapter({
-          fauxResponses: [
-            { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-            { kind: "text", text: "The attached source describes one unified Pi tool loop." }
-          ]
+          fauxResponses: [{ kind: "text", text: "The attached source describes one unified Pi tool loop." }]
         }).run(request);
       }
     };
@@ -358,8 +355,8 @@ describe("Home Pi Agent service", () => {
       jobId: prepared.jobId,
       sourceIds: [prepared.sourceId],
       answer: {
-        answer: "The attached source describes one unified Pi tool loop.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -1614,7 +1611,11 @@ describe("Home Pi Agent service", () => {
     expect(outcome).toMatchObject({
       state: "completed",
       conversationId: first.conversationId,
-      answer: { answer: "Continued with the attached source." }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: []
+      }
     });
     expect(histories).toHaveLength(2);
     expect(histories[1]).toEqual([
@@ -1626,7 +1627,10 @@ describe("Home Pi Agent service", () => {
         { role: "user", text: "Start one durable conversation." },
         { role: "assistant", text: "Base conversation answer." },
         { role: "user", text: "Continue with this attachment." },
-        { role: "assistant", text: "Continued with the attached source." }
+        {
+          role: "assistant",
+          text: "I couldn't verify an answer from the selected local evidence."
+        }
       ]
     });
   });
@@ -3019,7 +3023,7 @@ describe("Home Pi Agent service", () => {
     }
   }, 15_000);
 
-  it("allows general and evidence-using Pi prose without a citation output schema", async () => {
+  it("allows general Pi prose but replaces an invented evidence citation without a terminal schema", async () => {
     const fixture = makeFixture();
     const general = await new TestHomeAgentService(
       fixture.vaults,
@@ -3050,8 +3054,8 @@ describe("Home Pi Agent service", () => {
     expect(invalidCitation).toMatchObject({
       state: "completed",
       answer: {
-        answer: "Invented [citation_99]",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -5319,8 +5323,8 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(outcome).toMatchObject({
       state: "completed",
       answer: {
-        answer: "There is no readable content in this note.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -5374,8 +5378,8 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(outcome).toMatchObject({
       state: "completed",
       answer: {
-        answer: "The supplied range does not contain the requested tail.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });

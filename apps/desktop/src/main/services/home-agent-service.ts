@@ -117,6 +117,7 @@ import type {
   ReadHomeAgentUrlRequest
 } from "./home-agent-url-service";
 import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
+import { validateHomeGroundedAnswer } from "./home-grounded-answer-validator";
 import {
   createCurrentNoteReplaceTool,
   hasExplicitCurrentNoteReplaceIntent,
@@ -2107,18 +2108,23 @@ export class HomeAgentService {
       sourceCitations,
       urlCitations
     );
-    const citations = selectExplicitAssistantCitations(runtimeResult.assistantText, availableCitations);
+    const groundedAnswer = validateHomeGroundedAnswer({
+      assistantText: runtimeResult.assistantText,
+      availableCitations,
+      groundingRequired: datasetResult !== undefined || urlEvidenceInspected || sourceSession !== undefined ||
+        (currentNoteEvidence !== undefined && readerSelectionTransform === undefined && readerSelectionLink === undefined &&
+          readerSelectionCreateNote === undefined && !currentNoteReplaceRegistered &&
+          !runtimeResult.invokedTools.some((toolName) => toolName === HOME_APPEND_CURRENT_NOTE_TOOL_NAME)),
+      locale: request.locale
+    });
     const sourceIds = Array.from(new Set([
       ...(urlEvidenceInspected && urlEvidence ? [urlEvidence.sourceId] : []),
       ...(datasetResult?.evidence.sourceIds ?? []), ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : []),
       ...capturedAuthoredTextSourceIds
     ]));
-    const grounding: AgentTurnAnswer["grounding"] = citations.length > 0 ? "local_knowledge" : "general";
     return {
       answer: {
-        answer: runtimeResult.assistantText,
-        grounding,
-        citations,
+        ...groundedAnswer,
         ...(searchResult ? { retrieval: searchResult } : {}),
         ...(datasetResult ? { datasetResult: datasetResult.preview } : {})
       },
@@ -3051,14 +3057,6 @@ function projectDatasetResultForHome(result: DatasetQueryExecutionResult): Datas
     })),
     evidence: projectDatasetEvidenceForHome(result.evidence)
   };
-}
-
-function selectExplicitAssistantCitations(
-  assistantText: string,
-  availableCitations: readonly AgentTurnAnswer["citations"][number][]
-): AgentTurnAnswer["citations"] {
-  const explicitRefs = new Set(assistantText.match(/\bcitation_[1-9][0-9]*\b/gu) ?? []);
-  return availableCitations.filter((citation) => explicitRefs.has(citation.refId));
 }
 
 function projectDatasetEvidenceForHome(evidence: DatasetQueryEvidenceSnapshot): DatasetQueryEvidenceSnapshot {
