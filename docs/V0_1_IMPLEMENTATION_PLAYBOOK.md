@@ -568,7 +568,8 @@ fails honestly without a Host semantic classifier. Deterministic retrieval regre
 PIGE-SEARCH-001; broader mixed-source/query breadth keeps E6.01 partial. B6.05/B6.06/B6.07
 prove one Qwen3 lifecycle, body-free rebuild, local vector/hybrid retrieval and bounded
 reranking; package/recovery gaps keep E6.02 partial. B6.10/B6.11 prove cited current-note
-and Reader action/recovery, including all four explicit conflict outcomes; broader
+and Reader action/recovery: append, replace, and selection-transform conflicts all expose the four
+explicit exact-revision outcomes with Activity/Undo and restart adoption; broader
 mutation/platform proof keeps E6.06/PIGE-UI-005 partial. B6.15 proves unknown citation
 refs and exact Source/current-note/Dataset answers without a required Host ref fail closed
 to localized insufficiency while general answers remain pass-through; broader model-quality

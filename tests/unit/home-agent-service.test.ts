@@ -2907,7 +2907,8 @@ describe("Home Pi Agent service", () => {
     stageReaderSelectionPublicationIntent(
       fixture.vaultPath,
       job,
-      "The recovery passage is shorter."
+      "The recovery passage is shorter.",
+      "model_local_default"
     );
     const userTurn = conversations.readUserTurn(
       fixture.vaultPath,
@@ -3008,7 +3009,7 @@ describe("Home Pi Agent service", () => {
     if (!job || !inputRef?.locator || !inputRef.checksum || !inputRef.id) {
       throw new Error("Missing durable Reader turn binding.");
     }
-    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} revised.`);
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} revised.`, "model_local_default");
     const userTurn = conversations.readUserTurn(
       fixture.vaultPath,
       inputRef.locator,
@@ -3034,7 +3035,7 @@ describe("Home Pi Agent service", () => {
 
     const completedJob = jobs.readAgentTurnJob(waiting.jobId);
     if (!completedJob) throw new Error("Missing completed Reader Job.");
-    stageReaderSelectionPublicationIntent(fixture.vaultPath, completedJob, `${selected} revised.`);
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, completedJob, `${selected} revised.`, "model_local_default");
     expect(await service.submitTurn(request, context)).toMatchObject({
       state: "completed",
       jobId: waiting.jobId
@@ -3087,7 +3088,7 @@ describe("Home Pi Agent service", () => {
     if (waiting.state !== "waiting") throw new Error("Expected a waiting Reader transform turn.");
     const job = jobs.readAgentTurnJob(waiting.jobId);
     if (!job) throw new Error("Missing durable Reader Job.");
-    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} stale.`);
+    stageReaderSelectionPublicationIntent(fixture.vaultPath, job, `${selected} stale.`, "model_local_default");
 
     models.setReady(true);
     expect(await service.resumeWaitingTurns()).toMatchObject({ completed: 1, failed: 0 });
@@ -5111,7 +5112,8 @@ SYNTHETIC_DISTRACTOR_BODY
     stageReaderSelectionPublicationIntent(
       fixture.vaultPath,
       awaitingReview,
-      `${selected} with expanded detail.`
+      `${selected} with expanded detail.`,
+      "model_local_default"
     );
 
     const duplicate = await service.submitTurn({

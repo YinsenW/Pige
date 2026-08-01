@@ -60,7 +60,8 @@ describe("Reader selection proposal service", () => {
       action: "expand",
       selection: fixture.selection,
       selectedText: "SECRET_SELECTED_LINE\nsecond removed line\nthird\nfourth\nfifth",
-      replacement: Array.from({ length: 12 }, (_, index) => `replacement line ${index} ${"x".repeat(200)}`).join("\n")
+      replacement: Array.from({ length: 12 }, (_, index) => `replacement line ${index} ${"x".repeat(200)}`).join("\n"),
+      modelProfileId: "model_reader_fixture"
     });
 
     expect(preview.state).toBe("ready");
@@ -83,20 +84,23 @@ describe("Reader selection proposal service", () => {
       action: "expand",
       selection: fixture.selection,
       selectedText: "selected",
-      replacement
+      replacement,
+      modelProfileId: "model_reader_fixture"
     });
 
     expect(service.readPublication({
       job: fixture.job,
       action: "expand",
       selection: fixture.selection,
-      replacement
+      replacement,
+      modelProfileId: "model_reader_fixture"
     })).toMatchObject({ proposalId: preview.proposalId, state: "ready" });
     expect(() => service.readPublication({
       job: fixture.job,
       action: "expand",
       selection: fixture.selection,
-      replacement: "A different structurally valid replacement."
+      replacement: "A different structurally valid replacement.",
+      modelProfileId: "model_reader_fixture"
     })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
   });
 
@@ -182,7 +186,8 @@ describe("Reader selection proposal service", () => {
       job: fixture.job,
       action: "expand",
       selection: fixture.selection,
-      replacement: "PRIVATE_REPLACEMENT ".repeat(400)
+      replacement: "PRIVATE_REPLACEMENT ".repeat(400),
+      modelProfileId: "model_reader_fixture"
     })).toMatchObject({ state: "applied", revision: 3 });
     expect(writer).toHaveBeenCalledOnce();
     expect(resolveReview).toHaveBeenCalledTimes(2);
@@ -209,7 +214,8 @@ describe("Reader selection proposal service", () => {
       job: fixture.job,
       action: "expand",
       selection: fixture.selection,
-      replacement: "PRIVATE_REPLACEMENT ".repeat(400)
+      replacement: "PRIVATE_REPLACEMENT ".repeat(400),
+      modelProfileId: "model_reader_fixture"
     })).toMatchObject({ state: "rejected", revision: 2 });
     expect(resolveReview).toHaveBeenCalledTimes(2);
   });
@@ -292,7 +298,8 @@ describe("Reader selection proposal service", () => {
       action: "expand",
       selection: fixture.selection,
       selectedText: "selected",
-      replacement: String.raw`\\server\private\replacement`
+      replacement: String.raw`\\server\private\replacement`,
+      modelProfileId: "model_reader_fixture"
     })).toThrowError(expect.objectContaining({ code: "agent_ingest.update_content_restricted" }));
     expect(fs.existsSync(path.join(
       fixture.vaultPath,
@@ -310,7 +317,8 @@ describe("Reader selection proposal service", () => {
       action: "shorten",
       selection: fixture.selection,
       selectedText: "selected",
-      replacement: "selected"
+      replacement: "selected",
+      modelProfileId: "model_reader_fixture"
     })).toThrowError(expect.objectContaining({ code: "agent_ingest.update_content_restricted" }));
     expect(fs.existsSync(path.join(
       fixture.vaultPath,
@@ -351,6 +359,67 @@ describe("Reader selection proposal service", () => {
       })
     }));
   });
+
+  it("routes a transform conflict through exact current-revision review and settles its Job", () => {
+    const fixture = makeFixture();
+    const resolveReview = vi.fn((input) => input.job);
+    const conflictOperation = { id: "op_20260718_conflictreview" } as OperationRecord;
+    const conflicts = {
+      read: vi.fn(() => ({
+        state: "conflicted" as const,
+        currentRevision: `noteeditrev_${"c".repeat(64)}` as const,
+        lines: [{ kind: "context" as const, text: "Current reviewed note" }]
+      })),
+      resolve: vi.fn(() => ({
+        state: "applied" as const,
+        operation: conflictOperation,
+        lines: [{ kind: "added" as const, text: "Reviewed proposal" }]
+      }))
+    };
+    const service = new ReaderSelectionProposalService(
+      fixture.vaults,
+      { readAgentTurnJob: () => fixture.job, resolveAgentTurnReview: resolveReview },
+      { apply: () => { throw new PigeDomainError("agent_ingest.page_conflict", "changed"); } },
+      undefined,
+      conflicts
+    );
+    const preview = stage(service, fixture);
+    const conflicted = service.decide({
+      apiVersion: 1,
+      proposalId: preview.proposalId,
+      expectedRevision: preview.revision,
+      decision: "approve"
+    });
+    expect(conflicted).toMatchObject({
+      status: "conflicted",
+      proposal: { state: "conflicted", currentRevision: `noteeditrev_${"c".repeat(64)}` }
+    });
+    if (conflicted.status !== "conflicted" || !conflicted.proposal.currentRevision) {
+      throw new Error("expected actionable conflict");
+    }
+
+    expect(service.decide({
+      apiVersion: 1,
+      proposalId: preview.proposalId,
+      expectedRevision: conflicted.proposal.revision,
+      decision: "apply_proposed",
+      expectedCurrentRevision: conflicted.proposal.currentRevision
+    })).toMatchObject({
+      status: "applied",
+      operationId: conflictOperation.id,
+      proposal: { state: "applied" }
+    });
+    expect(conflicts.resolve).toHaveBeenCalledWith(expect.objectContaining({
+      decision: "apply_proposed",
+      expectedCurrentRevision: `noteeditrev_${"c".repeat(64)}`
+    }));
+    expect(resolveReview).toHaveBeenCalledWith(expect.objectContaining({
+      proposalId: preview.proposalId,
+      result: "completed",
+      facts: expect.objectContaining({ operationIds: [conflictOperation.id] })
+    }));
+    expect(resolveReview).toHaveBeenCalledTimes(1);
+  });
 });
 
 function stage(service: ReaderSelectionProposalService, fixture: ReturnType<typeof makeFixture>) {
@@ -359,7 +428,8 @@ function stage(service: ReaderSelectionProposalService, fixture: ReturnType<type
     action: "expand",
     selection: fixture.selection,
     selectedText: "selected",
-    replacement: "PRIVATE_REPLACEMENT ".repeat(400)
+    replacement: "PRIVATE_REPLACEMENT ".repeat(400),
+    modelProfileId: "model_reader_fixture"
   });
 }
 

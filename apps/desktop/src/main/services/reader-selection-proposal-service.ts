@@ -31,6 +31,11 @@ import {
   createReaderSelectionPublicationIntentHash,
   createReaderSelectionReviewResolution
 } from "./reader-selection-job-binding";
+import type {
+  ReaderSelectionConflictDecision,
+  ReaderSelectionConflictInput,
+  ReaderSelectionConflictState
+} from "./reader-selection-conflict-service";
 import type { ResolveJobReviewInput } from "./job-execution-coordinator";
 
 const MAX_RECORD_BYTES = 64 * 1024;
@@ -53,6 +58,7 @@ const ReaderSelectionProposalRecordSchema = z.object({
   action: ReaderSelectionTransformActionSchema,
   selection: ReaderSelectionIdentitySchema,
   replacement: z.string().min(1).max(MAX_REPLACEMENT_BYTES),
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
   previewLines: z.array(z.object({
     kind: z.enum(["context", "removed", "added"]),
     text: z.string().min(1).max(MAX_PREVIEW_LINE_CHARACTERS)
@@ -90,22 +96,33 @@ export interface ReaderSelectionCreateNoteProposalPort {
   decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult | undefined;
 }
 
+export interface ReaderSelectionConflictPort {
+  read(input: ReaderSelectionConflictInput): ReaderSelectionConflictState;
+  resolve(input: ReaderSelectionConflictInput & {
+    readonly expectedCurrentRevision: string;
+    readonly decision: ReaderSelectionConflictDecision;
+  }): ReaderSelectionConflictState;
+}
+
 export class ReaderSelectionProposalService {
   readonly #vaults: ReaderSelectionProposalVaultPort;
   readonly #jobs: ReaderSelectionProposalJobPort;
   readonly #writer: ReaderSelectionProposalWriterPort;
   readonly #createNotes: ReaderSelectionCreateNoteProposalPort | undefined;
+  readonly #conflicts: ReaderSelectionConflictPort | undefined;
 
   constructor(
     vaults: ReaderSelectionProposalVaultPort,
     jobs: ReaderSelectionProposalJobPort,
     writer: ReaderSelectionProposalWriterPort,
-    createNotes?: ReaderSelectionCreateNoteProposalPort
+    createNotes?: ReaderSelectionCreateNoteProposalPort,
+    conflicts?: ReaderSelectionConflictPort
   ) {
     this.#vaults = vaults;
     this.#jobs = jobs;
     this.#writer = writer;
     this.#createNotes = createNotes;
+    this.#conflicts = conflicts;
   }
 
   shouldRequireReview(selection: ReaderSelectionIdentity, replacement: string): boolean {
@@ -121,6 +138,7 @@ export class ReaderSelectionProposalService {
     readonly selection: ReaderSelectionIdentity;
     readonly selectedText: string;
     readonly replacement: string;
+    readonly modelProfileId: string;
   }): ReaderSelectionProposalPreview {
     const { vault, vaultPath } = this.#requireVault();
     if (input.job.activeVaultId !== vault.vaultId || input.job.class !== "agent_turn") {
@@ -147,7 +165,8 @@ export class ReaderSelectionProposalService {
     );
     const existing = readRecord(vaultPath, proposalId);
     if (existing) {
-      if (existing.intentHash !== intentHash || existing.activeVaultId !== vault.vaultId) {
+      if (existing.intentHash !== intentHash || existing.activeVaultId !== vault.vaultId ||
+        existing.modelProfileId !== input.modelProfileId) {
         throw new PigeDomainError("proposal.identity_conflict", "The Reader proposal identity is already bound to another intent.");
       }
       return project(existing, input.selectedText);
@@ -163,6 +182,7 @@ export class ReaderSelectionProposalService {
       action: input.action,
       selection: input.selection,
       replacement: input.replacement,
+      modelProfileId: input.modelProfileId,
       previewLines: createPreviewLines(input.selectedText, input.replacement),
       intentHash,
       createdAt: now,
@@ -184,7 +204,7 @@ export class ReaderSelectionProposalService {
       if (record.activeVaultId !== current.vaultId) {
         return { apiVersion: 1, status: "unavailable", reason: "vault_changed" };
       }
-      return { apiVersion: 1, status: "available", proposal: project(this.#reconcile(vaultPath, record)) };
+      return { apiVersion: 1, status: "available", proposal: this.#project(vaultPath, this.#reconcile(vaultPath, record)) };
     } catch {
       return { apiVersion: 1, status: "unavailable", reason: "record_invalid" };
     }
@@ -195,6 +215,7 @@ export class ReaderSelectionProposalService {
     readonly action: ReaderSelectionTransformAction;
     readonly selection: ReaderSelectionIdentity;
     readonly replacement: string;
+    readonly modelProfileId: string;
   }): ReaderSelectionProposalPreview | undefined {
     const { vault, vaultPath } = this.#requireVault();
     const proposalId = createReaderSelectionProposalId(input.job.id);
@@ -211,6 +232,7 @@ export class ReaderSelectionProposalService {
       record.jobId !== input.job.id ||
       record.intentHash !== expectedIntentHash ||
       record.action !== input.action ||
+      record.modelProfileId !== input.modelProfileId ||
       !isDeepStrictEqual(record.selection, input.selection) ||
       record.replacement !== input.replacement
     ) {
@@ -219,7 +241,7 @@ export class ReaderSelectionProposalService {
         "The durable Reader proposal does not match its exact publication intent."
       );
     }
-    return project(this.#reconcile(vaultPath, record));
+    return this.#project(vaultPath, this.#reconcile(vaultPath, record));
   }
 
   decide(request: ReaderSelectionProposalDecisionRequest): ReaderSelectionProposalDecisionResult {
@@ -245,8 +267,17 @@ export class ReaderSelectionProposalService {
     if (!current || current.activeVaultId !== vault.vaultId) {
       return { apiVersion: 1, status: "stale" };
     }
-    if (current.revision !== request.expectedRevision || current.state !== "ready") {
-      return { apiVersion: 1, status: "stale", proposal: project(this.#reconcile(vaultPath, current)) };
+    if (current.revision !== request.expectedRevision) {
+      return { apiVersion: 1, status: "stale", proposal: this.#project(vaultPath, this.#reconcile(vaultPath, current)) };
+    }
+    if (current.state === "conflicted") {
+      return this.#resolveConflict(vaultPath, current, request);
+    }
+    if (current.state !== "ready") {
+      return { apiVersion: 1, status: "stale", proposal: this.#project(vaultPath, this.#reconcile(vaultPath, current)) };
+    }
+    if (isConflictDecision(request.decision)) {
+      return { apiVersion: 1, status: "stale", proposal: this.#project(vaultPath, current) };
     }
     if (request.decision === "reject") {
       const rejected = replaceRecord(vaultPath, current, { state: "rejected" });
@@ -257,14 +288,14 @@ export class ReaderSelectionProposalService {
       } catch {
         // The durable rejection remains authoritative; get() retries Job reconciliation.
       }
-      return { apiVersion: 1, status: "rejected", proposal: project(rejected) };
+      return { apiVersion: 1, status: "rejected", proposal: this.#project(vaultPath, rejected) };
     }
 
     const resolving = replaceRecord(vaultPath, current, { state: "resolving" });
     const job = this.#jobs.readAgentTurnJob(current.jobId);
     if (!job) {
       const conflicted = replaceRecord(vaultPath, resolving, { state: "conflicted" });
-      return { apiVersion: 1, status: "conflicted", proposal: project(conflicted) };
+      return { apiVersion: 1, status: "conflicted", proposal: this.#project(vaultPath, conflicted) };
     }
     let operation: OperationRecord;
     try {
@@ -277,6 +308,12 @@ export class ReaderSelectionProposalService {
       });
     } catch (caught) {
       const conflicted = replaceRecord(vaultPath, resolving, { state: "conflicted" });
+      if (isExpectedConflict(caught)) {
+        const proposal = this.#project(vaultPath, conflicted);
+        if (proposal.currentRevision) {
+          return { apiVersion: 1, status: "conflicted", proposal };
+        }
+      }
       const error = conflictError();
       try {
         this.#resolveReview(job, {
@@ -287,9 +324,7 @@ export class ReaderSelectionProposalService {
       } catch {
         // The durable proposal remains conflicted even if its parent Job changed concurrently.
       }
-      if (isExpectedConflict(caught)) {
-        return { apiVersion: 1, status: "conflicted", proposal: project(conflicted) };
-      }
+      if (isExpectedConflict(caught)) return { apiVersion: 1, status: "conflicted", proposal: this.#project(vaultPath, conflicted) };
       return { apiVersion: 1, status: "failed", error };
     }
 
@@ -309,7 +344,7 @@ export class ReaderSelectionProposalService {
     return {
       apiVersion: 1,
       status: "applied",
-      proposal: project(applied),
+      proposal: this.#project(vaultPath, applied),
       operationId: operation.id
     };
   }
@@ -344,6 +379,17 @@ export class ReaderSelectionProposalService {
         current = replaceRecord(vaultPath, current, { state: "conflicted" });
       }
     }
+    if (current.state === "conflicted") {
+      const conflict = this.#readConflict(vaultPath, current);
+      if (conflict?.state === "rejected") {
+        current = replaceRecord(vaultPath, current, { state: "rejected" });
+      } else if (conflict?.state === "applied") {
+        current = replaceRecord(vaultPath, current, {
+          state: "applied",
+          operationId: conflict.operation.id
+        });
+      }
+    }
     try {
       if (current.state === "applied" && current.operationId) {
         this.#resolveReview(job, {
@@ -364,6 +410,85 @@ export class ReaderSelectionProposalService {
       // A terminal or concurrently advanced parent already owns the settled state.
     }
     return current;
+  }
+
+  #resolveConflict(
+    vaultPath: string,
+    current: ReaderSelectionProposalRecord,
+    request: ReaderSelectionProposalDecisionRequest
+  ): ReaderSelectionProposalDecisionResult {
+    if (!this.#conflicts || !isConflictDecision(request.decision) || !request.expectedCurrentRevision) {
+      return { apiVersion: 1, status: "stale", proposal: this.#project(vaultPath, current) };
+    }
+    const input = this.#conflictInput(vaultPath, current);
+    if (!input) return { apiVersion: 1, status: "stale", proposal: this.#project(vaultPath, current) };
+    const result = this.#conflicts.resolve({
+      ...input,
+      expectedCurrentRevision: request.expectedCurrentRevision,
+      decision: request.decision
+    });
+    if (result.state === "conflicted") {
+      return {
+        apiVersion: 1,
+        status: "stale",
+        proposal: project(current, undefined, result)
+      };
+    }
+    if (result.state === "rejected") {
+      const rejected = replaceRecord(vaultPath, current, { state: "rejected" });
+      try {
+        this.#resolveReview(input.job, { proposalId: current.proposalId, result: "completed" });
+      } catch {
+        // The durable resolution remains authoritative; get() retries Job convergence.
+      }
+      return { apiVersion: 1, status: "rejected", proposal: project(rejected, undefined, result) };
+    }
+    const applied = replaceRecord(vaultPath, current, {
+      state: "applied",
+      operationId: result.operation.id
+    });
+    try {
+      this.#resolveReview(input.job, {
+        proposalId: current.proposalId,
+        result: "completed",
+        operationId: result.operation.id
+      });
+    } catch {
+      // The durable Operation remains authoritative; get() retries Job convergence.
+    }
+    return {
+      apiVersion: 1,
+      status: "applied",
+      proposal: project(applied, undefined, result),
+      operationId: result.operation.id,
+      ...(result.createdPageId ? { createdPageId: result.createdPageId } : {})
+    };
+  }
+
+  #project(vaultPath: string, record: ReaderSelectionProposalRecord): ReaderSelectionProposalPreview {
+    const conflict = record.state === "conflicted" ? this.#readConflict(vaultPath, record) : undefined;
+    return project(record, undefined, conflict);
+  }
+
+  #readConflict(vaultPath: string, record: ReaderSelectionProposalRecord): ReaderSelectionConflictState | undefined {
+    const input = this.#conflictInput(vaultPath, record);
+    return input && this.#conflicts ? this.#conflicts.read(input) : undefined;
+  }
+
+  #conflictInput(vaultPath: string, record: ReaderSelectionProposalRecord): ReaderSelectionConflictInput | undefined {
+    const job = this.#jobs.readAgentTurnJob(record.jobId);
+    if (!job) return undefined;
+    return {
+      vaultPath,
+      job,
+      proposalId: record.proposalId,
+      intentHash: record.intentHash,
+      selection: record.selection,
+      replacement: record.replacement,
+      modelProfileId: record.modelProfileId,
+      action: record.action,
+      previewLines: record.previewLines
+    };
   }
 
   #resolveReview(job: JobRecord, input: {
@@ -388,14 +513,25 @@ export function createReaderSelectionProposalId(jobId: string): string {
   return `proposal_${dateKey}_${suffix}`;
 }
 
-function project(record: ReaderSelectionProposalRecord, _selectedText?: string): ReaderSelectionProposalPreview {
+function project(
+  record: ReaderSelectionProposalRecord,
+  _selectedText?: string,
+  conflict?: ReaderSelectionConflictState
+): ReaderSelectionProposalPreview {
   return {
     proposalId: record.proposalId,
     action: record.action,
-    state: record.state,
+    state: conflict?.state ?? record.state,
     revision: record.revision,
-    lines: record.previewLines
+    ...(conflict?.state === "conflicted" ? { currentRevision: conflict.currentRevision } : {}),
+    lines: [...(conflict?.lines ?? record.previewLines)]
   };
+}
+
+function isConflictDecision(
+  decision: ReaderSelectionProposalDecisionRequest["decision"]
+): decision is ReaderSelectionConflictDecision {
+  return decision === "keep_current" || decision === "apply_proposed" || decision === "save_proposed_as_new_page";
 }
 
 function createPreviewLines(selectedText: string, replacement: string): ReaderSelectionProposalPreview["lines"] {

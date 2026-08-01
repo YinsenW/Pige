@@ -657,7 +657,11 @@ Current production boundary:
   note, publishes the exact reviewed proposal as a related reversible note, and opens that
   authoritative page; later drift refreshes the conflict instead of silently resolving different
   bytes.
-- Selection binds identity/action; writes gain Operation/Undo or bounded review. Other mutations stay
+- Selection transforms use those same four exits when the note changes during review. Apply-proposed
+  records the exact live note as the new reversible before-image; save-as-new keeps that note intact;
+  restart adopts the one durable decision. The renderer receives only bounded lines and an opaque
+  current revision, never proposal bytes or a path.
+- Selection binds identity/action/model profile; writes gain Operation/Undo or bounded review. Other mutations stay
   unavailable and reads never write.
 
 ### 8.3 Selection Actions

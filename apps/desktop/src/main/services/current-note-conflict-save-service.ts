@@ -244,7 +244,11 @@ function createOperation(input: CurrentNoteConflictSaveBaseInput & {
       policyHash: input.policyHash,
       enforcementOwners: [
         "Current Note Conflict Save Service",
-        input.mutationKind === "append" ? "Current Note Append Service" : "Current Note Replace Service"
+        input.mutationKind === "append"
+          ? "Current Note Append Service"
+          : input.mutationKind === "replace"
+            ? "Current Note Replace Service"
+            : "Reader Selection Conflict Service"
       ]
     },
     kind: "create_page",
@@ -284,7 +288,7 @@ function isReceipt(value: unknown): value is SaveReceiptRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Partial<SaveReceiptRecord>;
   return record.schemaVersion === 1 && record.kind === "current_note_conflict_save" &&
-    (record.mutationKind === "append" || record.mutationKind === "replace") &&
+    (record.mutationKind === "append" || record.mutationKind === "replace" || record.mutationKind === "selection_transform") &&
     typeof record.proposalId === "string" && PROPOSAL_ID.test(record.proposalId) &&
     typeof record.intentHash === "string" && INTENT_HASH.test(record.intentHash) &&
     typeof record.jobId === "string" && /^job_\d{8}_[a-z0-9_]+$/u.test(record.jobId) &&

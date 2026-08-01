@@ -323,6 +323,7 @@ import {
   createReaderSelectionProposalId,
   ReaderSelectionProposalService
 } from "./services/reader-selection-proposal-service";
+import { ReaderSelectionConflictService } from "./services/reader-selection-conflict-service";
 import {
   readCurrentNotePageForMutation,
   readCurrentNoteSelectionEvidenceBinding
@@ -1649,7 +1650,7 @@ const getHomeAgentService = (): HomeAgentService => {
       getDatasetQueryService(),
       getPermissionedExternalCapabilityRegistry(),
       {
-        publish: ({ vaultPath, job, selection, replacement, action }) => {
+        publish: ({ vaultPath, job, selection, replacement, action, modelProfileId }) => {
           const proposalService = getReaderSelectionProposalService();
           if (proposalService.shouldRequireReview(selection, replacement)) {
             const selected = readCurrentNoteSelectionEvidenceBinding(vaultPath, selection);
@@ -1658,7 +1659,8 @@ const getHomeAgentService = (): HomeAgentService => {
               action,
               selection,
               selectedText: selected.modelText,
-              replacement
+              replacement,
+              modelProfileId
             });
             return { status: "review_required" as const, proposalId: proposal.proposalId };
           }
@@ -1676,7 +1678,7 @@ const getHomeAgentService = (): HomeAgentService => {
             pageContentHash: result.operation.after!.id
           };
         },
-        readPublication: ({ vaultPath, job, selection, replacement, action }) => {
+        readPublication: ({ vaultPath, job, selection, replacement, action, modelProfileId }) => {
           const operationId = createAgentPageUpdateOperationId(job.id, selection.pageId);
           const operation = readReaderSelectionPageUpdateOperation({
             vaultPath,
@@ -1703,7 +1705,8 @@ const getHomeAgentService = (): HomeAgentService => {
             job,
             action,
             selection,
-            replacement
+            replacement,
+            modelProfileId
           });
           if (proposal) {
             return new Set(["ready", "resolving"]).has(proposal.state)
@@ -2224,7 +2227,8 @@ const getReaderSelectionProposalService = (): ReaderSelectionProposalService => 
           action
         }).operation
       },
-      getReaderSelectionCreateNoteProposalService()
+      getReaderSelectionCreateNoteProposalService(),
+      new ReaderSelectionConflictService()
     );
   }
   return readerSelectionProposalService;

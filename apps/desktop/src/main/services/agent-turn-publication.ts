@@ -79,6 +79,7 @@ export interface HomeAgentReaderSelectionMutationPort {
     readonly selection: ReaderSelectionIdentity;
     readonly replacement: string;
     readonly action: ReaderSelectionTransformAction;
+    readonly modelProfileId: string;
   }): HomeAgentReaderSelectionPublication;
   readPublication(input: {
     readonly vaultPath: string;
@@ -86,6 +87,7 @@ export interface HomeAgentReaderSelectionMutationPort {
     readonly selection: ReaderSelectionIdentity;
     readonly replacement: string;
     readonly action: ReaderSelectionTransformAction;
+    readonly modelProfileId: string;
   }): HomeAgentReaderSelectionPublication | undefined;
   publishLink(input: {
     readonly vaultPath: string;
@@ -149,6 +151,7 @@ interface ReaderSelectionPublicationIntent {
   readonly selection: ReaderSelectionIdentity;
   readonly action: ReaderSelectionTransformAction;
   readonly replacement: string;
+  readonly modelProfileId: string;
 }
 
 interface ReaderSelectionLinkPublicationIntent {
@@ -164,10 +167,12 @@ const MAX_READER_SELECTION_INTENT_BYTES = 24 * 1024;
 export function stageReaderSelectionPublicationIntent(
   vaultPath: string,
   job: JobRecord,
-  replacement: string
+  replacement: string,
+  modelProfileId: string
 ): void {
   const binding = readReaderSelectionTransformBinding(job);
-  if (!binding || !replacement || Buffer.byteLength(replacement, "utf8") > 16 * 1024) {
+  if (!binding || !replacement || Buffer.byteLength(replacement, "utf8") > 16 * 1024 ||
+    !/^model_[a-z0-9_]+$/u.test(modelProfileId)) {
     throw publicationConflict("The Reader transform publication intent is invalid.");
   }
   const intent: ReaderSelectionPublicationIntent = {
@@ -175,7 +180,8 @@ export function stageReaderSelectionPublicationIntent(
     jobId: job.id,
     selection: binding.selection,
     action: binding.action,
-    replacement
+    replacement,
+    modelProfileId
   };
   const serialized = `${JSON.stringify(intent, null, 2)}\n`;
   const intentPath = readerSelectionIntentPath(vaultPath, job.id);
@@ -300,7 +306,8 @@ export function readReaderSelectionTransformPublication(
     job,
     selection: binding.selection,
     replacement: intent.replacement,
-    action: binding.action
+    action: binding.action,
+    modelProfileId: intent.modelProfileId
   });
 }
 
@@ -850,12 +857,13 @@ function readerSelectionIntentPath(vaultPath: string, jobId: string): string {
 function isReaderSelectionPublicationIntent(value: unknown): value is ReaderSelectionPublicationIntent {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
-  return Object.keys(record).sort().join(",") === "action,jobId,replacement,schemaVersion,selection" &&
+  return Object.keys(record).sort().join(",") === "action,jobId,modelProfileId,replacement,schemaVersion,selection" &&
     record.schemaVersion === 1 &&
     typeof record.jobId === "string" &&
     typeof record.replacement === "string" &&
     record.replacement.length > 0 &&
     Buffer.byteLength(record.replacement, "utf8") <= 16 * 1024 &&
+    typeof record.modelProfileId === "string" && /^model_[a-z0-9_]+$/u.test(record.modelProfileId) &&
     typeof record.action === "string" &&
     ["translate", "polish", "expand", "shorten"].includes(record.action) &&
     typeof record.selection === "object" &&
