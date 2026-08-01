@@ -20,6 +20,7 @@ import {
   type DatasetQueryExecutor
 } from "../../apps/desktop/src/main/services/dataset-query-types";
 import { ManagedCollectionViewService } from "../../apps/desktop/src/main/services/managed-collection-view-service";
+import { ManagedCollectionViewRedoService } from "../../apps/desktop/src/main/services/managed-collection-view-redo-service";
 import { ManagedCollectionDiscovery } from "../../apps/desktop/src/main/services/managed-collection-discovery";
 import {
   createVaultOnDisk,
@@ -302,6 +303,20 @@ describe("ManagedCollectionViewService", () => {
       tableId: table.id,
       viewId: committed.viewId
     })).resolves.toMatchObject({ status: "not_found" });
+    const createRedo = new ManagedCollectionViewRedoService(port);
+    expect(createRedo.activityState(operation, undoOperation)).toEqual({ canRedo: true });
+    expect(createRedo.redo({ operationId: operation.id, expectedRevisionId: manifest.activeRevision }))
+      .toMatchObject({ status: "redone", operationId: operation.id, revisionId: manifest.activeRevision });
+    await expect(new ManagedCollectionViewService(port, directExecutor).open({
+      apiVersion: 1,
+      requestId: "collection_request_viewredoopen0001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: committed.viewId
+    })).resolves.toMatchObject({
+      status: "ready", snapshot: { activeViewId: committed.viewId, views: [{ viewRevision: 3 }] }
+    });
     await expect(service.undoCreateView({
       activeVaultId: vault.vaultId,
       datasetId: manifest.datasetId,
@@ -358,6 +373,15 @@ describe("ManagedCollectionViewService", () => {
     expect(service.activitySummary(renameOperation)).toMatchObject({
       kind: "rename_collection_view", targetLabel: "Renamed", canUndo: true
     });
+    const renameUndone = await service.undo(renameOperation, manifest.activeRevision);
+    if (renameUndone.status !== "undone" || !renameUndone.undoOperationId) throw new Error("View rename Undo failed");
+    const renameUndoOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${renameUndone.undoOperationId}.json`
+    )));
+    const renameRedo = new ManagedCollectionViewRedoService(port);
+    expect(renameRedo.activityState(renameOperation, renameUndoOperation)).toEqual({ canRedo: true });
+    expect(renameRedo.redo({ operationId: renameOperation.id, expectedRevisionId: manifest.activeRevision }))
+      .toMatchObject({ status: "redone", operationId: renameOperation.id });
     await expect(service.trashView({
       apiVersion: 1,
       requestId: "collection_request_lifecycletrashstale",
@@ -369,7 +393,7 @@ describe("ManagedCollectionViewService", () => {
       expectedViewRevision: 1
     })).resolves.toMatchObject({
       status: "stale",
-      currentViewRevision: 2,
+      currentViewRevision: 4,
       snapshot: { views: [{ viewId: created.viewId, name: "Renamed" }] }
     });
     const trashed = await service.trashView({
@@ -380,7 +404,7 @@ describe("ManagedCollectionViewService", () => {
       tableId: table.id,
       expectedRevisionId: manifest.activeRevision,
       viewId: created.viewId,
-      expectedViewRevision: 2
+      expectedViewRevision: 4
     });
     expect(trashed).toMatchObject({
       status: "committed",
@@ -414,10 +438,22 @@ describe("ManagedCollectionViewService", () => {
       viewId: created.viewId
     })).resolves.toMatchObject({
       status: "ready",
-      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 4, name: "Renamed" }] }
+      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 6, name: "Renamed" }] }
     });
     fs.rmSync(findFile(path.join(fixture.vaultPath, ".pige/operations"), `${restored.undoOperationId}.json`));
     expect(new ManagedCollectionViewService(port, directExecutor).recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(new ManagedCollectionViewRedoService(port).redo({
+      operationId: trashOperation.id,
+      expectedRevisionId: manifest.activeRevision
+    })).toMatchObject({ status: "redone", operationId: trashOperation.id });
+    await expect(new ManagedCollectionViewService(port, directExecutor).open({
+      apiVersion: 1,
+      requestId: "collection_request_lifecycleredo001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId
+    })).resolves.toMatchObject({ status: "not_found" });
     expect(fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"))).toEqual(manifestBytes);
     expect(fs.readFileSync(path.join(fixture.bundlePath, manifest.payload.path))).toEqual(payloadBytes);
   }, 30_000);
@@ -486,6 +522,31 @@ describe("ManagedCollectionViewService", () => {
     });
     const undone = await service.undo(operation, manifest.activeRevision);
     expect(undone).toMatchObject({ status: "undone", revisionId: manifest.activeRevision });
+    if (undone.status !== "undone" || !undone.undoOperationId) throw new Error("View update Undo failed");
+    const undoOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${undone.undoOperationId}.json`
+    )));
+    const redo = new ManagedCollectionViewRedoService(port);
+    expect(redo.activityState(operation, undoOperation)).toEqual({ canRedo: true });
+    expect(redo.redo({ operationId: operation.id, expectedRevisionId: "dataset_rev_20260728_ffffffffffff" }))
+      .toMatchObject({ status: "stale", currentRevisionId: manifest.activeRevision });
+    const redone = redo.redo({ operationId: operation.id, expectedRevisionId: manifest.activeRevision });
+    expect(redone).toMatchObject({ status: "redone", operationId: operation.id,
+      undoOperationId: undoOperation.id, redoOperationId: expect.stringMatching(/^op_/),
+      revisionId: manifest.activeRevision });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("View update Redo failed");
+    const redoOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${redone.redoOperationId}.json`
+    )));
+    expect(redoOperation).toMatchObject({ kind: "update_collection_view", reversible: "yes" });
+    expect(service.activitySummary(redoOperation)).toMatchObject({
+      kind: "update_collection_view", canUndo: true
+    });
+    expect(redo.activityState(operation, undoOperation)).toEqual({
+      canRedo: false, redoUnavailableReason: "already_redone"
+    });
+    expect(redo.redo({ operationId: operation.id, expectedRevisionId: manifest.activeRevision }))
+      .toMatchObject({ status: "already_redone", redoOperationId: redone.redoOperationId });
     await expect(new ManagedCollectionViewService(port, directExecutor).open({
       apiVersion: 1,
       requestId: "collection_request_vieweditopen0001",
@@ -495,10 +556,14 @@ describe("ManagedCollectionViewService", () => {
       viewId: created.viewId
     })).resolves.toMatchObject({
       status: "ready",
-      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 3,
-        filter: { operator: "is_null", columnId: nameColumn.id },
-        sort: { columnId: countColumn.id, direction: "asc" } }] }
+      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 4,
+        filter: request.filter, sort: request.sort }] }
     });
+    fs.rmSync(findFile(path.join(fixture.vaultPath, ".pige/operations"), `${redone.redoOperationId}.json`));
+    const recovery = new ManagedCollectionViewRedoService(port);
+    expect(recovery.recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    expect(readJson(findFile(path.join(fixture.vaultPath, ".pige/operations"), `${redone.redoOperationId}.json`)))
+      .toMatchObject({ id: redone.redoOperationId, kind: "update_collection_view" });
     const cleared = await new ManagedCollectionViewService(port, directExecutor).updateView({
       apiVersion: 1,
       requestId: "collection_request_vieweditclear001",
@@ -507,10 +572,10 @@ describe("ManagedCollectionViewService", () => {
       tableId: table.id,
       viewId: created.viewId,
       expectedRevisionId: manifest.activeRevision,
-      expectedViewRevision: 3
+      expectedViewRevision: 4
     });
     expect(cleared).toMatchObject({ status: "committed", snapshot: { activeViewId: created.viewId,
-      totalRowCount: 3, views: [{ viewId: created.viewId, viewRevision: 4 }] } });
+      totalRowCount: 3, views: [{ viewId: created.viewId, viewRevision: 5 }] } });
     if (cleared.status !== "committed") throw new Error("View definition clear failed");
     expect(cleared.snapshot.views[0]).not.toHaveProperty("filter");
     expect(cleared.snapshot.views[0]).not.toHaveProperty("sort");
