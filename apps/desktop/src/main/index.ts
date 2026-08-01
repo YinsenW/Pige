@@ -2061,7 +2061,8 @@ const getNoteMarkdownEditorService = (): NoteMarkdownEditorService => {
   if (!noteMarkdownEditorService) {
     noteMarkdownEditorService = new NoteMarkdownEditorService(
       getVaultService(),
-      getNoteMarkdownEditorActivityAdapter()
+      getNoteMarkdownEditorActivityAdapter(),
+      { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
     );
   }
   return noteMarkdownEditorService;
@@ -3908,7 +3909,8 @@ app.whenReady().then(async () => {
   noteMarkdownEditorRedoService = new NoteMarkdownEditorRedoService(getVaultService());
   noteMarkdownEditorService = new NoteMarkdownEditorService(
     getVaultService(),
-    noteMarkdownEditorActivityAdapter
+    noteMarkdownEditorActivityAdapter,
+    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
   );
   notesService = undefined;
   noteRevisionHistoryService = new NoteRevisionHistoryService(

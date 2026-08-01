@@ -315,7 +315,7 @@ describe("notes service", () => {
   });
 
   it.each(["note", "claim", "question", "concept", "entity"] as const)(
-    "projects active %s aliases and taxonomy without exposing the full Markdown editor", async (pageType) => {
+    "projects active %s aliases and taxonomy", async (pageType) => {
       const { vaultPath, vault } = makeVault();
       const pageId = `page_20260801_taxonomy${pageType}`;
       writePage({ vaultPath, fileName: `${pageType}-taxonomy.md`, pageId, title: `Typed ${pageType}`,
@@ -324,8 +324,6 @@ describe("notes service", () => {
       expect(rendered.summary.pageType).toBe(pageType);
       expect(rendered.aliasing).toMatchObject({ aliases: ["Alternate name"], canAdd: true, canRemove: true });
       expect(rendered.tagging).toMatchObject({ tags: ["research"], topics: [], canAdd: true, canEdit: true });
-      expect(notes.openEditor(OWNER_ID, { apiVersion: 1, requestId: `noteeditreq_taxonomy${pageType}`,
-        activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId! }).status).not.toBe("ready");
     });
 
   it.each(["source", "topic"] as const)("does not project alias or taxonomy mutation authority for %s pages", async (pageType) => {
@@ -337,30 +335,47 @@ describe("notes service", () => {
     expect(rendered.tagging).toBeUndefined();
   });
 
-  it("opens Source Pages for bounded sidecar edits and keeps other page types out", async () => {
+  it("opens active typed knowledge pages and Source Pages while keeping Topic out", async () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
-    const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
+    const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined }, {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true,
+    });
     const notes = new NotesService(vaults, undefined, undefined, editor);
 
-    for (const [index, pageType] of ["concept", "entity", "topic", "claim", "question"].entries()) {
-      const pageId = `page_20260709_noneditable${index}`;
+    for (const [index, pageType] of ["concept", "entity", "claim", "question"].entries()) {
+      const pageId = `page_20260709_typededit${index}`;
       writePage({
         vaultPath,
         fileName: `${pageType}.md`,
         pageId,
-        title: `Non-editable ${pageType}`,
-        pageType: pageType as "source" | "concept" | "entity" | "topic" | "claim" | "question"
+        title: `Editable ${pageType}`,
+        pageType: pageType as "concept" | "entity" | "claim" | "question",
+        body: `Before ${pageType}`,
       });
       const rendered = await notes.render({ pageId }, OWNER_ID);
-      expect(notes.openEditor(OWNER_ID, {
+      const opened = notes.openEditor(OWNER_ID, {
         apiVersion: 1,
-        requestId: `noteeditreq_noneditable${index}`,
+        requestId: `noteeditreq_typedopen${index}`,
         activeVaultId: vault.vaultId,
         pageId,
         renderContextId: rendered.renderContextId!
-      })).toMatchObject({ status: "failed" });
+      });
+      expect(opened).toMatchObject({ status: "ready" });
+      if (opened.status !== "ready") throw new Error("Expected typed page editor to open.");
+      await expect(notes.saveEditor(OWNER_ID, {
+        apiVersion: 1, requestId: `noteeditreq_typedsave${index}`, activeVaultId: vault.vaultId,
+        pageId, renderContextId: opened.renderContextId, expectedRevision: opened.revision,
+        markdown: opened.markdown.replace(`Before ${pageType}`, `After ${pageType}`),
+      })).resolves.toMatchObject({ status: "committed", render: { summary: { pageType } } });
     }
+
+    const topicPageId = "page_20260709_noneditabletopic";
+    writePage({ vaultPath, fileName: "topic.md", pageId: topicPageId, title: "Topic", pageType: "topic" });
+    const topicRender = await notes.render({ pageId: topicPageId }, OWNER_ID);
+    expect(notes.openEditor(OWNER_ID, { apiVersion: 1, requestId: "noteeditreq_topicclosed",
+      activeVaultId: vault.vaultId, pageId: topicPageId, renderContextId: topicRender.renderContextId! }))
+      .toMatchObject({ status: "failed" });
 
     const sourcePageId = "page_20260709_editablesource";
     writePage({

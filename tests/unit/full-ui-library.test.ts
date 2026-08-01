@@ -1432,6 +1432,7 @@ describe("full UI Library", () => {
 
   it("binds the approved Reader toolbar to real copy and keeps unowned actions honest", async () => {
     const dom = createDom();
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: { unlinkRelation: vi.fn() } } });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const copied: string[] = [];
     const opened: string[] = [];
@@ -1673,7 +1674,7 @@ describe("full UI Library", () => {
     expect(opened).toEqual(["page_20260715_source111"]);
     expect(unavailable).toEqual([]);
 
-    for (const pageType of ["source", "topic"] as const) {
+    for (const pageType of ["source", "claim", "question", "concept", "entity", "topic"] as const) {
       const readOnlyPage: NoteRenderResult = {
         ...note,
         summary: {
@@ -1704,8 +1705,8 @@ describe("full UI Library", () => {
         }));
         await settle(dom);
       });
-      if (pageType === "source") {
-        const sourceEdit = buttonWithLabel(container, "Edit Markdown");
+      if (pageType !== "topic") {
+        const sourceEdit = buttonWithLabel(container, pageType === "source" ? "Edit Markdown" : "Edit note");
         await act(async () => {
           sourceEdit.click();
           await settle(dom);
@@ -1716,13 +1717,13 @@ describe("full UI Library", () => {
           renderContextId: readOnlyPage.renderContextId
         });
         expect(container.querySelector(".note-reader h1")?.textContent).toBe(readOnlyPage.summary.title);
-        expect(buttonWithLabel(container, "Edit Markdown").disabled).toBe(false);
+        expect(buttonWithLabel(container, pageType === "source" ? "Edit Markdown" : "Edit note").disabled).toBe(false);
       } else {
         expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit note"]')).toHaveLength(0);
         expect(container.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit Markdown"]')).toHaveLength(0);
       }
     }
-    expect(editorOpenRequests).toHaveLength(2);
+    expect(editorOpenRequests).toHaveLength(6);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2301,7 +2302,8 @@ describe("full UI Library", () => {
     const sourceIds = Array.from({ length: 7 }, (_, index) => `source_private_${String(index + 1).padStart(4, "0")}`);
     const note: NoteRenderResult = {
       ...baseNote,
-      summary: { ...baseNote.summary, sourceIds }
+      summary: { ...baseNote.summary, sourceIds },
+      refreshableSourceIds: sourceIds
     };
     const openRequests: NoteOpenSourceReferenceRequest[] = [];
     const revealRequests: NoteRevealSourceRequest[] = [];

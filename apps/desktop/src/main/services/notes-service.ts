@@ -42,7 +42,7 @@ import { readCurrentSourceRecordSnapshot } from "./source-file-access";
 import { isLifecycleKnowledgePage, isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { projectConceptParents } from "./concept-parent-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
-const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u, EDITOR_PAGE_TYPES = new Set(["note", "source", "claim", "question", "concept", "entity"]);
 export interface NotesVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
@@ -233,7 +233,7 @@ export class NotesService {
     if (!this.#editor || !context || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale" };
     }
-    if (context.pageType !== "note" && context.pageType !== "source") return { ...identity, status: "failed" };
+    if (!EDITOR_PAGE_TYPES.has(context.pageType)) return { ...identity, status: "failed" };
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.pageId });
     if (opened.status === "not_found") return { ...identity, status: "not_found" };
     if (
@@ -263,7 +263,7 @@ export class NotesService {
     if (!this.#editor || !context || !binding || !this.#matchesEditorContext(ownerId, context, request)) {
       return { ...identity, status: "stale", revision: request.expectedRevision };
     }
-    if (context.pageType !== "note" && context.pageType !== "source") {
+    if (!EDITOR_PAGE_TYPES.has(context.pageType)) {
       return { ...identity, status: "invalid", reason: "unsupported_page_type" };
     }
     if (publicEditorRevision(binding.privateRevision) !== request.expectedRevision) {

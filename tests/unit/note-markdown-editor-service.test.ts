@@ -191,6 +191,30 @@ describe("NoteMarkdownEditorService", () => {
     expect(fixture.records).toEqual([]);
   });
 
+  it.each([
+    ["claim", { allowClaim: true }],
+    ["question", { allowQuestion: true }],
+    ["concept", { allowConcept: true }],
+    ["entity", { allowEntity: true }],
+  ] as const)("atomically edits an enabled active %s without changing its page type", (pageType, permission) => {
+    const fixture = createFixture({ pageType, ...permission });
+    const opened = requireOpened(fixture.service);
+    const edited = opened.markdown.replace("Original body.", `Edited ${pageType} body.`);
+    expect(fixture.service.save({
+      requestId: `request_typed_${pageType}_save`, activeVaultId: VAULT_ID, pageId: PAGE_ID,
+      expectedRevisionId: opened.revisionId, renderIdentity: opened.renderIdentity, markdown: edited,
+    })).toMatchObject({ status: "committed" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(edited);
+    expect(fixture.records).toHaveLength(1);
+
+    const reopened = requireOpened(fixture.service);
+    expect(fixture.service.save({
+      requestId: `request_typed_${pageType}_drift`, activeVaultId: VAULT_ID, pageId: PAGE_ID,
+      expectedRevisionId: reopened.revisionId, renderIdentity: reopened.renderIdentity,
+      markdown: reopened.markdown.replace(`type: "${pageType}"`, 'type: "note"'),
+    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+  });
+
   it("preserves exact CAS and forward Undo for a generated type-note page", () => {
     const fixture = createAdapterFixture({ pageRelativePath: `wiki/generated/${PAGE_ID}.md` });
     const committed = commitEdit(fixture);
@@ -568,9 +592,9 @@ interface ActivityRecord {
 function createFixture(options: {
   readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
   readonly pageRelativePath?: string;
+  readonly allowClaim?: boolean;
   readonly allowQuestion?: boolean;
   readonly allowConcept?: boolean;
-  readonly allowClaim?: boolean;
   readonly allowEntity?: boolean;
 } = {}): {
   readonly root: string;
