@@ -1059,6 +1059,38 @@ References:
 
 - `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`
 
+### D-20260802-Reversible-Source-Storage-Preference
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Changing the default preservation strategy for new local-file captures is an exact active-Vault,
+source-storage-revision, and request-bound setting mutation. Main confirms it, the Source Storage
+Preference Service persists a private receipt before the config effect, and one pathless
+`change_setting` Operation makes the change visible and reversible in Activity.
+
+Rationale:
+
+The preference changes ownership behavior for future evidence and Agent policy context. A direct
+renderer-to-config write could race a root change, could not recover an interrupted Operation, and
+could not be undone. Treating it as a durable setting mutation closes those gaps without turning a
+preference change into a migration.
+
+Consequences:
+
+- The change affects only future local-file captures; text and URL inputs remain managed snapshots.
+- Existing originals, managed copies, SourceRecords, and derived artifacts are never moved or rewritten.
+- Stale, cross-Vault, replay-conflicting, or tampered requests fail before changing config.
+- Activity Undo and startup recovery converge the exact prior or next strategy once.
+- Public results contain only safe setting identity and revision facts, never source paths or bodies.
+
+References:
+
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ### D-20260802-Reader-Selection-Conflict-Resolution
 
 Status: Accepted

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T21:54:00.000Z",
+  "reviewedAt": "2026-08-01T22:35:53.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review safe machine-local preference export/import, Main-owned file selection, explicit confirmation, digest CAS and excluded authority classes.",
+    "scope": "Review safe preference transfer plus the confirmed, revision-fenced and reversible future-capture source-storage preference without migration of existing evidence.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "796c88da406eabda6ca53f85d9cd1f656a7230edd422afd2f971c58bc3ab6923"
+    "reviewedSha256": "ee6cb1fd32c3cbb4bc15ab05a3fea7ace6513068aff95c35d83a84ae835403f2"
   },
   "reviewers": [
     {
-      "reviewerId": "settings-profile-transfer-review",
-      "task": "Review safe preference profile transfer",
+      "reviewerId": "settings-integrity-review",
+      "task": "Review safe preference transfer and reversible source-storage policy",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks transfer scope, excluded authority, file ownership, confirmation and atomic currentness separately from implementation authorship."
+      "independence": "Project review checks transfer scope, excluded authority, future-only source behavior, confirmation, receipt recovery and atomic currentness separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "settings-profile-transfer-review",
+      "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "Main owns both file dialogs; the renderer receives only a safe key list and opaque preview identity, while cancel, stale and failure preserve current settings."
+      "summary": "Main owns transfer file dialogs and the source-policy confirmation; public results stay pathless, while cancel, stale and failure preserve current settings and existing evidence bytes."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "settings-profile-transfer-review",
+      "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "Settings, API, UI, decision, schemas, IPC and six locale catalogs express the same seven-field portable profile and exclusions."
+      "summary": "Settings, Jobs, API, decision, schemas, IPC and tests agree that profile transfer excludes authority and source-policy changes affect only future file captures."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "settings-profile-transfer-review",
+      "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "PIGE-SETTINGS-001/002/003 gain a complete safe preference-transfer workflow while remaining partial for the broader settings census and sensitive-owner coverage."
+      "summary": "PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 gain exact transfer and source-policy evidence while remaining partial for broader setting-owner and mutation coverage."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "settings-profile-transfer-review",
+      "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "One bounded service and registrar reuse the machine-local writer lease; no provider, permission, Vault, network, model or release owner expands."
+      "summary": "One bounded source-preference owner reuses the Vault writer and Activity owners; no source migration, provider, network, model or release owner expands."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "settings-profile-transfer-review",
+      "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "Existing Settings/API/UI owners plus one durable decision record the behavior without a new design document."
+      "summary": "Existing Settings and Job owner documents plus one durable decision record both behaviors without adding a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/settings-profile-transfer-service.test.ts tests/unit/register-settings-profile-ipc.test.ts tests/unit/settings-profile-transfer-ui.test.ts",
+      "command": "npx vitest run tests/unit/source-storage-preference-service.test.ts tests/unit/source-storage-policy-contract.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/restore-ui.test.ts tests/unit/settings-profile-transfer-service.test.ts tests/unit/register-settings-profile-ipc.test.ts tests/unit/settings-profile-transfer-ui.test.ts",
       "status": "passed",
-      "evidence": "Seven direct service, IPC and renderer tests prove safe export, pathless preview, explicit confirmation, atomic import, stale rejection and exclusion preservation."
+      "evidence": "Focused service, contract, writer and renderer tests prove safe transfer plus confirmed source-policy CAS, receipt recovery, exact Undo and no migration of existing bytes."
     },
     {
       "command": "git diff --check",
       "status": "passed",
-      "evidence": "The focused Main, preload, renderer, locale, tests and governance delta has no whitespace or conflict-marker defects."
+      "evidence": "The focused Main, preload, renderer, tests and governed Settings/Job delta has no whitespace or conflict-marker defects."
     },
     {
       "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "The current Settings/API/UI owners, direct tests, semantic lock and five-dimensional review agree on safe preference transfer."
+      "evidence": "The current Settings/Job owners, exact evidence selectors, semantic lock and five-dimensional review agree on transfer and future-only reversible source policy."
     }
   ],
   "coordination": {
-    "taskId": "settings-profile-transfer-20260802",
-    "taskTitle": "Export and import safe preferences",
+    "taskId": "settings-integrity-source-policy-20260802",
+    "taskTitle": "Safe preference transfer and reversible source storage policy",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing setting mutations, Vault bindings, window state, provider credentials, permission grants and backup behavior remain unchanged.",
-    "acknowledgement": "The bounded transfer workflow is bound while PIGE-SETTINGS-001/002/003 remain partial for broader setting-owner coverage."
+    "compatibility": "Existing source bytes, SourceRecords, managed copies, Vault bindings, provider credentials, permission grants and backup behavior remain unchanged.",
+    "acknowledgement": "Safe transfer and reversible future-capture source policy are bound while PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 remain partial for broader coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

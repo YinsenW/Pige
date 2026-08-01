@@ -34,6 +34,8 @@ describe("source storage policy contract", () => {
     const preload = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     expect(contracts).toContain("Promise<UpdateSourceStoragePolicyResult>");
     expect(main).toContain("UpdateSourceStoragePolicyRequestSchema.parse(request)");
+    expect(main).toContain('confirmSettingAction(event.sender, ["sourceStorage.defaultStrategy"]');
+    expect(main).toContain("Existing source files and managed copies will not be moved or rewritten.");
     expect(main).toContain("getSourceStoragePreferenceService().update");
     expect(preload).toContain("UpdateSourceStoragePolicyRequestSchema.parse(request)");
     expect(preload).toContain("UpdateSourceStoragePolicyResultSchema.parse(");

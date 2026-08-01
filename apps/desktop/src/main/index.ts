@@ -3842,10 +3842,17 @@ ipcMain.handle("vault.revealSourceAssetRoot", (event) => {
   requireWindow(event.sender);
   return getVaultService().revealSourceAssetRoot();
 });
-ipcMain.handle("vault.updateSourceStoragePolicy", (_event, request: UpdateSourceStoragePolicyRequest) =>
-  UpdateSourceStoragePolicyResultSchema.parse(
-    getSourceStoragePreferenceService().update(UpdateSourceStoragePolicyRequestSchema.parse(request))
-  ));
+ipcMain.handle("vault.updateSourceStoragePolicy", async (event, request: UpdateSourceStoragePolicyRequest) => {
+  const parsed = UpdateSourceStoragePolicyRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["sourceStorage.defaultStrategy"], {
+    title: "Change how new files are preserved?",
+    message: "This changes only future file captures. Existing source files and managed copies will not be moved or rewritten.",
+    confirmLabel: "Change source storage"
+  });
+  return UpdateSourceStoragePolicyResultSchema.parse(
+    getSourceStoragePreferenceService().update(parsed)
+  );
+});
 registerVaultMetadataIpc({ ipcMain, renameDisplayName: (request) => getVaultService().renameDisplayName(request) });
 registerPigePolicyIpc({
   ipcMain,
