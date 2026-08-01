@@ -848,9 +848,10 @@ Settings rules:
 - Cross-links are allowed, but cards from another domain should not be embedded in the current page.
 - General offers next-launch Home (default) or Library; stale/failure retains draft and focus.
 - General also offers Preferences backup: Export uses a Main-owned save dialog; Import uses
-  a Main-owned picker, a safe pathless preview, and native confirmation. The card states that
-  Vaults, credentials, permissions, recent items, and window state are excluded. Cancel/failure
-  preserves current settings, while stale import asks the user to choose the file again.
+  a Main-owned picker, a safe pathless before/after review, and native confirmation. The card
+  states that Vaults, credentials, permissions, recent items, and window state are excluded.
+  An already-current profile does not mint apply authority; cancel restores the picker focus,
+  failure preserves current settings, and stale import asks the user to choose the file again.
 
 Current shell: Home + Knowledge Tree are primary; Library sits below; Settings opens via
 vault/profile; Models is only a Settings/Home repair target. Vault owns storage/Backup/

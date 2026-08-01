@@ -6056,6 +6056,44 @@ export const SettingsProfilePreferencesSchema = z.object({
   ocrLanguagePreference: OcrLanguagePreferenceSchema,
   dictationLanguagePreference: DictationLanguagePreferenceSchema
 }).strict();
+const SettingsProfileAppearanceValueSchema = SettingsProfilePreferencesSchema.shape.appearance;
+export const SettingsProfilePreferenceChangeSchema = z.discriminatedUnion("key", [
+  z.object({
+    key: z.literal("app_locale"),
+    before: LocaleSchema,
+    after: LocaleSchema
+  }).strict(),
+  z.object({
+    key: z.literal("appearance"),
+    before: SettingsProfileAppearanceValueSchema,
+    after: SettingsProfileAppearanceValueSchema
+  }).strict(),
+  z.object({
+    key: z.literal("startup_destination"),
+    before: StartupDestinationSchema,
+    after: StartupDestinationSchema
+  }).strict(),
+  z.object({
+    key: z.literal("update_channel"),
+    before: UpdateChannelSchema,
+    after: UpdateChannelSchema
+  }).strict(),
+  z.object({
+    key: z.literal("ocr_engine"),
+    before: OcrEnginePreferenceSchema,
+    after: OcrEnginePreferenceSchema
+  }).strict(),
+  z.object({
+    key: z.literal("ocr_language"),
+    before: OcrLanguagePreferenceSchema,
+    after: OcrLanguagePreferenceSchema
+  }).strict(),
+  z.object({
+    key: z.literal("dictation_language"),
+    before: DictationLanguagePreferenceSchema,
+    after: DictationLanguagePreferenceSchema
+  }).strict()
+]);
 export const SettingsProfileDocumentSchema = z.object({
   schemaVersion: z.literal(1),
   kind: z.literal("pige_preferences"),
@@ -6087,8 +6125,9 @@ export const SettingsProfileImportPreviewResultSchema = z.discriminatedUnion("st
   SettingsProfileImportPreviewIdentitySchema.extend({
     status: z.literal("ready"),
     previewId: SettingsProfilePreviewIdSchema,
-    keys: z.array(SettingsProfileTransferKeySchema).min(1).max(7).readonly()
+    changes: z.array(SettingsProfilePreferenceChangeSchema).min(1).max(7).readonly()
   }).strict(),
+  SettingsProfileImportPreviewIdentitySchema.extend({ status: z.literal("current") }).strict(),
   SettingsProfileImportPreviewIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
   SettingsProfileImportPreviewIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
@@ -13216,6 +13255,7 @@ export type ReferencedOriginalReconnectResult = z.infer<typeof ReferencedOrigina
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
 export type SettingsProfileTransferKey = z.infer<typeof SettingsProfileTransferKeySchema>;
 export type SettingsProfilePreferences = z.infer<typeof SettingsProfilePreferencesSchema>;
+export type SettingsProfilePreferenceChange = z.infer<typeof SettingsProfilePreferenceChangeSchema>;
 export type SettingsProfileDocument = z.infer<typeof SettingsProfileDocumentSchema>;
 export type SettingsProfileExportRequest = z.infer<typeof SettingsProfileExportRequestSchema>;
 export type SettingsProfileExportResult = z.infer<typeof SettingsProfileExportResultSchema>;

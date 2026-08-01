@@ -153,34 +153,30 @@ export class LocalSettingsStore {
         }
         return revision + 1;
       };
+      const differs = (before: unknown, after: unknown): boolean =>
+        JSON.stringify(before) !== JSON.stringify(after);
       this.#writeUnlocked(createMachineLocalSettings({
         activeVaultPath: current.activeVaultPath,
-        appLocale: preferences.appLocale,
-        appearance: AppearanceMachineSettingsSchema.parse({
-          revision: nextRevision(appearance.revision),
-          ...preferences.appearance
-        }),
-        startupDestination: {
-          revision: nextRevision(startup.revision),
-          destination: preferences.startupDestination
-        },
+        appLocale: currentPreferences.appLocale === preferences.appLocale ? current.appLocale : preferences.appLocale,
+        appearance: differs(currentPreferences.appearance, preferences.appearance)
+          ? AppearanceMachineSettingsSchema.parse({ revision: nextRevision(appearance.revision), ...preferences.appearance })
+          : current.appearance,
+        startupDestination: currentPreferences.startupDestination === preferences.startupDestination
+          ? current.startupDestination
+          : { revision: nextRevision(startup.revision), destination: preferences.startupDestination },
         window: current.window,
-        updates: UpdateMachineSettingsSchema.parse({
-          revision: nextRevision(updates.revision),
-          channel: preferences.updateChannel
-        }),
-        ocrEnginePreference: OcrEnginePreferenceMachineSettingsSchema.parse({
-          revision: nextRevision(ocrEngine.revision),
-          preference: preferences.ocrEnginePreference
-        }),
-        ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.parse({
-          revision: nextRevision(ocrLanguage.revision),
-          preference: preferences.ocrLanguagePreference
-        }),
-        dictationLanguagePreference: DictationLanguagePreferenceMachineSettingsSchema.parse({
-          revision: nextRevision(dictationLanguage.revision),
-          preference: preferences.dictationLanguagePreference
-        }),
+        updates: currentPreferences.updateChannel === preferences.updateChannel
+          ? current.updates
+          : UpdateMachineSettingsSchema.parse({ revision: nextRevision(updates.revision), channel: preferences.updateChannel }),
+        ocrEnginePreference: currentPreferences.ocrEnginePreference === preferences.ocrEnginePreference
+          ? current.ocrEnginePreference
+          : OcrEnginePreferenceMachineSettingsSchema.parse({ revision: nextRevision(ocrEngine.revision), preference: preferences.ocrEnginePreference }),
+        ocrLanguagePreference: differs(currentPreferences.ocrLanguagePreference, preferences.ocrLanguagePreference)
+          ? OcrLanguagePreferenceMachineSettingsSchema.parse({ revision: nextRevision(ocrLanguage.revision), preference: preferences.ocrLanguagePreference })
+          : current.ocrLanguagePreference,
+        dictationLanguagePreference: differs(currentPreferences.dictationLanguagePreference, preferences.dictationLanguagePreference)
+          ? DictationLanguagePreferenceMachineSettingsSchema.parse({ revision: nextRevision(dictationLanguage.revision), preference: preferences.dictationLanguagePreference })
+          : current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));

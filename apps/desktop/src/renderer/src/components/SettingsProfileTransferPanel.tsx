@@ -5,7 +5,8 @@ import type {
   SettingsProfileImportApplyRequest,
   SettingsProfileImportApplyResult,
   SettingsProfileImportPreviewRequest,
-  SettingsProfileImportPreviewResult
+  SettingsProfileImportPreviewResult,
+  SettingsProfilePreferenceChange
 } from "@pige/contracts";
 
 export interface SettingsProfileTransferApi {
@@ -24,7 +25,7 @@ export function SettingsProfileTransferPanel(props: {
 }): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<Extract<SettingsProfileImportPreviewResult, { status: "ready" }> | null>(null);
-  const [notice, setNotice] = useState<"exported" | "committed" | "stale" | "failed" | null>(null);
+  const [notice, setNotice] = useState<"exported" | "committed" | "current" | "stale" | "failed" | null>(null);
   const busyRef = useRef(false);
   const importButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -49,8 +50,14 @@ export function SettingsProfileTransferPanel(props: {
   const previewImport = (): void => { void run(async () => {
     const result = await props.api.previewImport({ apiVersion: 1, requestId: requestId() });
     if (result.status === "ready") setPreview(result);
+    else if (result.status === "current") setNotice("current");
     else if (result.status === "failed") setNotice("failed");
   }); };
+
+  const cancelImport = (): void => {
+    setPreview(null);
+    window.requestAnimationFrame(() => importButtonRef.current?.focus({ preventScroll: true }));
+  };
 
   const applyImport = (): void => { if (!preview) return; void run(async () => {
     const result = await props.api.applyImport({
@@ -92,13 +99,25 @@ export function SettingsProfileTransferPanel(props: {
           {notice ? <span role="status" aria-live="polite">
             {props.t(`settings.general.profileTransfer${capitalize(notice)}`)}
           </span> : null}
-          {preview ? <span role="status" aria-live="polite">
-            {props.t("settings.general.profileTransferPreviewReady")}
-          </span> : null}
+          {preview ? <>
+            <span role="status" aria-live="polite">
+              {props.t("settings.general.profileTransferPreviewReady")}
+            </span>
+            <dl aria-label={props.t("settings.general.profileTransferChanges")}>
+              {preview.changes.map((change) => <div key={change.key}>
+                <dt>{props.t(`settings.general.profileTransferKey.${change.key}`)}</dt>
+                <dd>
+                  <span>{formatPreferenceValue(change, "before", props.t)}</span>
+                  <span aria-hidden="true"> → </span>
+                  <span>{formatPreferenceValue(change, "after", props.t)}</span>
+                </dd>
+              </div>)}
+            </dl>
+          </> : null}
         </div>
         <div className="settings-actions">
           {preview ? <>
-            <button className="settings-button" type="button" disabled={busy} onClick={() => setPreview(null)}>
+            <button className="settings-button" type="button" disabled={busy} onClick={cancelImport}>
               {props.t("settings.general.profileTransferCancel")}
             </button>
             <button className="settings-button settings-button-primary" type="button" disabled={busy} onClick={applyImport}>
@@ -125,4 +144,41 @@ function requestId(): string {
 
 function capitalize(value: string): string {
   return `${value[0]!.toUpperCase()}${value.slice(1)}`;
+}
+
+function formatPreferenceValue(
+  change: SettingsProfilePreferenceChange,
+  side: "before" | "after",
+  t: (key: string) => string
+): string {
+  switch (change.key) {
+    case "app_locale": return change[side];
+    case "appearance": {
+      const value = change[side];
+      return `${t(`appearance.theme.${value.themePreference}`)} · ${
+        t(`appearance.knowledgeLanguage.${knowledgeLanguageKey(value.generatedKnowledgeLanguage)}`)
+      }`;
+    }
+    case "startup_destination": return t(`settings.general.startup${capitalize(change[side])}`);
+    case "update_channel": return t("settings.general.profileTransferValue.alpha");
+    case "ocr_engine": return t(`capabilities.ocrEngine.${ocrEngineKey(change[side])}`);
+    case "ocr_language": return change[side].mode === "automatic"
+      ? t("capabilities.ocrLanguage.automatic")
+      : change[side].language;
+    case "dictation_language": return change[side].mode === "automatic"
+      ? t("capabilities.dictationLanguage.automatic")
+      : change[side].language;
+  }
+}
+
+function knowledgeLanguageKey(value: "preserve_source" | "app_locale" | "follow_query"): string {
+  if (value === "preserve_source") return "preserve";
+  if (value === "app_locale") return "appLocale";
+  return "followQuery";
+}
+
+function ocrEngineKey(value: "automatic" | "platform_native" | "paddleocr_local"): string {
+  if (value === "platform_native") return "platformNative";
+  if (value === "paddleocr_local") return "paddle";
+  return "automatic";
 }

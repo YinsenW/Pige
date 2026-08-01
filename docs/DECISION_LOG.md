@@ -5659,8 +5659,9 @@ Decision:
 
 Pige v0.1 provides one versioned, Main-owned preference export/import workflow for
 locale, appearance, startup, update channel, OCR, and dictation preferences. Import
-uses a pathless preview, explicit native confirmation, safe-preference digest CAS, and
-one writer-lease-protected atomic commit. Vault identity and paths, recent/dismissed
+uses a pathless typed before/after preview, explicit native confirmation, safe-preference
+digest CAS, and one writer-lease-protected atomic commit. A profile with no changed safe
+values returns `current` without mutation authority. Vault identity and paths, recent/dismissed
 Vault history, window state, provider profiles and credentials, permission grants, and
 external bindings are excluded.
 
@@ -5672,6 +5673,7 @@ into a credential, filesystem-authority, or permission-transfer channel.
 Consequences:
 
 - The renderer never receives selected paths or document bodies.
+- The renderer reviews only exact safe differences; commit reports only those changed keys.
 - Secret/provider/permission transfer requires a separately designed redacted workflow.
 - Excluded machine-local state survives every committed import unchanged.
 - Stale, cancelled, malformed, linked, oversized, or failed imports have no effect.

@@ -8,6 +8,18 @@ describe("settings registry", () => {
     const byKey = new Map(registry.entries.map((entry) => [entry.key, entry]));
 
     expect(byKey.get("app.locale")?.scope).toBe("machine_local");
+    expect(byKey.get("appearance.theme")).toMatchObject({
+      scope: "machine_local", backedUpByDefault: false, applyBehavior: "immediate"
+    });
+    expect(byKey.get("appearance.generatedKnowledgeLanguage")).toMatchObject({
+      scope: "machine_local",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      agentPolicyEffect: "language.generatedKnowledgeLanguage"
+    });
+    expect(byKey.get("startup.destination")).toMatchObject({
+      scope: "machine_local", backedUpByDefault: false, applyBehavior: "next_launch"
+    });
     expect(byKey.get("window.layoutMode")?.scope).toBe("machine_local");
     expect(byKey.get("window.alwaysOnTop")?.owner).toBe("Window Service");
     expect(byKey.get("vault.activePath")?.scope).toBe("machine_local");
@@ -52,6 +64,17 @@ describe("settings registry", () => {
       applyBehavior: "immediate",
       permissionRequirement: "none",
       agentPolicyEffect: "language.voiceInputLanguage"
+    });
+    expect(byKey.get("ocr.enginePreference")).toMatchObject({
+      scope: "machine_local", backedUpByDefault: false, applyBehavior: "new_jobs"
+    });
+    expect(byKey.get("ocr.languagePreference")).toMatchObject({
+      scope: "machine_local",
+      backedUpByDefault: false,
+      agentPolicyEffect: "language.ocrLanguageHints"
+    });
+    expect(byKey.get("updates.channel")).toMatchObject({
+      scope: "machine_local", backedUpByDefault: false, applyBehavior: "new_jobs"
     });
     expect(byKey.get("ocr.excludeLowConfidenceFromSummaries")).toMatchObject({
       page: "Local Capabilities",
