@@ -36,7 +36,10 @@ const DIAGNOSTIC_MESSAGE_CATALOG: Readonly<Record<string, string>> = {
   "jobs.interrupted_reconciled": "Interrupted background jobs reconciled.",
   "jobs.resume_failed": "Durable background job recovery failed.",
   "ocr.image.background_failed": "Background image OCR failed.",
-  "parser.document.background_failed": "Background document parsing failed."
+  "parser.document.background_failed": "Background document parsing failed.",
+  "runtime.child_process_gone": "A child process stopped unexpectedly.",
+  "runtime.main_process_fault": "The Main process encountered an unhandled runtime fault.",
+  "runtime.renderer_process_gone": "A renderer process stopped unexpectedly."
 };
 
 const SAFE_STRING_DETAIL_KEYS: Readonly<Record<string, string>> = {
@@ -88,6 +91,7 @@ const SAFE_NUMBER_DETAIL_KEYS: Readonly<Record<string, string>> = {
   durationms: "durationMs",
   elapsedms: "elapsedMs",
   errorcount: "errorCount",
+  exitcode: "exitCode",
   filecount: "fileCount",
   itemcount: "itemCount",
   maxbytes: "maxBytes",

@@ -98,6 +98,9 @@ Rules:
 Pige should record compact local events for:
 
 - App startup and shutdown.
+- Main unhandled runtime faults and unexpected renderer/child-process termination, using
+  fixed codes plus bounded reason/type/exit-code facts only; exception text, stack, URLs,
+  process names and service names are never persisted.
 - Active vault open, close, switch, and validation result.
 - Job created, state changed, retried, cancelled, completed, failed, compacted.
 - Parser/OCR/tool invocation started and ended, without full input or output.
@@ -253,6 +256,11 @@ Default retention:
 - Crash recovery records: 10 most recent recoveries.
 - Support bundles: user-created files remain user-owned; Pige clears only private workflow metadata, not exported files.
 
+The v0.1 machine-local diagnostic event stores are the bounded rotated App event JSONL and
+the bounded crash-recovery session/history owner. Support-bundle workflow Jobs are durable
+workflow state rather than an additional raw log store. Electron and Node runtime-fault
+observers write through the same App event owner, ignore clean exits, and detach before quit.
+
 Rules:
 
 - Rotate logs in bounded files.
@@ -313,6 +321,8 @@ Required tests:
 - Support bundle export is user-initiated and cancelable.
 - Raw tool stdout/stderr is truncated and scanned before storage/export.
 - Crash recovery summary is created after forced quit with pending job fixtures.
+- Main, renderer, and child-process runtime faults persist only fixed bounded facts; raw
+  exception/process metadata is absent and a diagnostics write failure never replaces the fault.
 - Diagnostics log rotation enforces size and retention limits.
 - Clearing diagnostics does not delete vault data.
 - Renderer diagnostics APIs never return raw secret values or arbitrary filesystem paths with capability.

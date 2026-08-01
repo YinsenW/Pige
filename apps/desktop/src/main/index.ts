@@ -229,6 +229,7 @@ import { DiagnosticsService } from "./services/diagnostics-service";
 import { CrashRecoveryService } from "./services/crash-recovery-service";
 import { DiagnosticsLifecycleService } from "./services/diagnostics-lifecycle-service";
 import { projectDiagnosticsProviderMetadata } from "./services/diagnostics-provider-metadata";
+import { installDiagnosticsRuntimeFaultObserver } from "./services/diagnostics-runtime-fault-observer";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
 import { DatasetService } from "./services/dataset-service";
@@ -432,6 +433,7 @@ let localSettingsStore: LocalSettingsStore | undefined;
 let diagnosticsService: DiagnosticsService | undefined;
 let crashRecoveryService: CrashRecoveryService | undefined;
 let diagnosticsLifecycleService: DiagnosticsLifecycleService | undefined;
+let disposeDiagnosticsRuntimeFaultObserver: (() => void) | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
 let highRiskConfirmationService: HighRiskConfirmationService | undefined;
@@ -4142,6 +4144,11 @@ app.whenReady().then(async () => {
     crashRecoverySummary: () => getCrashRecoveryService().summary(),
     crashRecoveryHistory: () => getCrashRecoveryService().history()
   });
+  disposeDiagnosticsRuntimeFaultObserver = installDiagnosticsRuntimeFaultObserver({
+    app,
+    process,
+    diagnostics: diagnosticsService
+  });
   crashRecoveryService = new CrashRecoveryService(app.getPath("userData"));
   const priorCrash = crashRecoveryService.beginSession();
   if (priorCrash?.status === "recovering") diagnosticsService.recordEvent({
@@ -4197,6 +4204,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
+  disposeDiagnosticsRuntimeFaultObserver?.();
+  disposeDiagnosticsRuntimeFaultObserver = undefined;
   taskExecutionIpcUnsubscribe?.();
   taskExecutionIpcUnsubscribe = undefined;
   appearanceServiceUnsubscribe?.();

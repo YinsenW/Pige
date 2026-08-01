@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T17:07:29.000Z",
+  "reviewedAt": "2026-08-01T17:13:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Pathless Reader related-page and backlink projection with stable-ID navigation and graph-unavailable degradation.",
+    "scope": "PIGE-DIAG-003 complete bounded redacted local diagnostics, including runtime-fault observation.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "4dc2c662faa05b3b37e94bd2b198e30b4a9c392960da36f0a1ad13e449420093"
+    "reviewedSha256": "80af7abed1b4e85210c4e35eb113763adcc32155b8eaa81dc7da585f5f0e34e3"
   },
   "reviewers": [
     {
-      "reviewerId": "reader-related-boundary-review",
-      "task": "Review the pathless Reader related-page boundary and localized relationship presentation",
+      "reviewerId": "runtime-fault-diagnostics-review",
+      "task": "Review complete bounded redacted diagnostics and runtime-fault privacy",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the Reader and IPC contract while Development supplies separate database projection, renderer presentation and degraded-state evidence."
+      "independence": "Planning reviews diagnostics, privacy and acceptance facts; Development supplies separate runtime observer, persistence, rotation, retention and Main wiring evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "reader-related-boundary-review",
+      "reviewerId": "runtime-fault-diagnostics-review",
       "blockerCount": 0,
-      "summary": "Related and backlink rows retain exact stable page identity for Open while operational Markdown and raw link targets never cross the boundary."
+      "summary": "The observer attaches after diagnostics initialization, ignores clean exits, detaches before quit and reuses one bounded local event lifecycle."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "reader-related-boundary-review",
+      "reviewerId": "runtime-fault-diagnostics-review",
       "blockerCount": 0,
-      "summary": "API, Reader, linking and UI owners agree on a closed relation vocabulary, pathless safe summary and typed unavailable degradation."
+      "summary": "Diagnostics, privacy, Main lifecycle and the decision log agree that runtime faults retain only fixed allowlisted facts."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "reader-related-boundary-review",
+      "reviewerId": "runtime-fault-diagnostics-review",
       "blockerCount": 0,
-      "summary": "PIGE-UI-006 gains direct contract, Main projection and renderer evidence while broader Reader and tree exits remain independently partial."
+      "summary": "PIGE-DIAG-003 is verified by persistence redaction, rotation, retention, crash history and exact runtime-fault wiring evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "reader-related-boundary-review",
+      "reviewerId": "runtime-fault-diagnostics-review",
       "blockerCount": 0,
-      "summary": "The existing Library related channel and rebuildable graph remain compatible; only their public summary and visible label are narrowed."
+      "summary": "One 87-line adapter isolates Electron and Node fault hooks without growing the diagnostics storage owner or changing termination behavior."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "reader-related-boundary-review",
+      "reviewerId": "runtime-fault-diagnostics-review",
       "blockerCount": 0,
-      "summary": "Existing API, UI, playbook, decision and trace owners contain the boundary without introducing a new design document or durable format."
+      "summary": "Existing diagnostics, privacy, playbook, decision, acceptance and responsibility owners contain the closure without another design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/library-service.test.ts tests/unit/reader-note-related-panel.test.ts tests/unit/desktop-shell-contract.test.ts",
+      "command": "npx vitest run tests/unit/diagnostics-runtime-fault-observer.test.ts tests/unit/diagnostics-service.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "The direct service, contract and renderer tests prove stable-ID Open, closed labels, pathless projection and graph degradation."
+      "evidence": "All 96 focused runtime-fault, bounded persistence and Main boundary tests pass."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The narrowed related summary compiles and builds without adding a channel, service, durable owner or architecture-budget change."
+      "evidence": "The runtime observer compiles and the Main/preload/renderer build passes while governed service boundaries remain intact."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:traceability && npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "API, UI, linking, playbook, accepted decision, acceptance evidence and semantic claims agree on pathless related browsing."
+      "evidence": "Diagnostics, privacy, playbook, decision, acceptance and semantic claims agree on complete bounded redacted logs."
     }
   ],
   "coordination": {
-    "taskId": "reader-related-pathless-bind-20260802",
-    "taskTitle": "Bind pathless stable-ID Reader related browsing",
+    "taskId": "runtime-fault-diagnostics-bind-20260802",
+    "taskTitle": "Bind complete bounded runtime-fault diagnostics",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing page IDs, graph indexes, Library related IPC and Reader Open semantics remain compatible; private path, source and raw-target fields are removed.",
-    "acknowledgement": "Planning records direct pathless contract, Main and renderer evidence for verified PIGE-UI-006 without promoting unrelated long-page, scale or packaged-platform exits."
+    "compatibility": "Existing diagnostic JSONL, support bundles and crash-recovery records remain readable; the observer adds only fixed catalog events through the current bounded store.",
+    "acknowledgement": "Planning promotes PIGE-DIAG-003 from complete redaction, rotation, retention, crash history, runtime-fault privacy and wiring evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

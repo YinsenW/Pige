@@ -189,7 +189,7 @@ Build:
 - [B1.20 -> E1.16] Shared namespaced error schemas for API/IPC, durable Job warnings/errors, diagnostics, localization, and retry/repair actions.
 - [B1.21 -> E1.17] Stable path-independent ID and sync-conflict metadata foundation for durable records.
 - [B1.22 -> E1.18] Runtime capability contracts for Agent, tool, parser, OCR, and RAG adapters with explicit unavailable/degraded states.
-- [B1.23 -> E1.19] No-telemetry/no-auto-upload baseline plus bounded local diagnostic log rotation, retention, and content redaction.
+- [B1.23 -> E1.19] No-telemetry/no-auto-upload baseline plus bounded local diagnostic log rotation, retention, content redaction, and fixed-fact Main/renderer/child runtime-fault observation.
 - [B1.24 -> E1.20] Main-process closed-list high-risk setting/effect guard; ordinary reversible settings do not re-prompt.
 - [B1.25 -> E1.21] Atomic checksum-aware Markdown write and external-change conflict foundation.
 - [B1.26 -> E1.22] Executable conversation-event and operation-kind vocabulary parity with the job/operation owner document.
@@ -221,7 +221,7 @@ Exit criteria:
 - [E1.16] API errors, durable Job warnings/errors, diagnostics, and UI failure actions validate against one shared taxonomy; malformed codes or unstructured private details are rejected, and every locale covers release-visible message keys.
 - [E1.17] Stable IDs remain valid across rename/path changes and durable contracts expose explicit sync-conflict metadata without using a path as identity.
 - [E1.18] Agent, tool, parser, OCR, and RAG work resolves through typed runtime-capability adapters; unavailable capabilities fail visibly without renderer or domain-layer runtime assumptions.
-- [E1.19] No product analytics or automatic diagnostic/crash upload is configured, and local logs rotate within bounded retention while rejecting secrets and large private bodies.
+- [E1.19] No product analytics or automatic diagnostic/crash upload is configured; local logs rotate within bounded retention while rejecting secrets and large private bodies, and runtime faults record only fixed bounded facts without exception/process identity.
 - [E1.20] Closed-list high-risk settings/effects fail closed unless the exact explicit confirmation reaches the main-process owner.
 - [E1.21] Interrupted Markdown writes recover atomically, and a changed target checksum produces a visible conflict instead of silent overwrite.
 - [E1.22] Every executable conversation-event type and operation kind is documented by the owner contract; adding or removing a value breaks traceability until parity is restored.
