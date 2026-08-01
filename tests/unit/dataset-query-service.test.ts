@@ -95,6 +95,55 @@ describe("Dataset Query Service", () => {
     await expect(service.revalidateResult(fixture.vaultPath, result)).resolves.toMatchObject({ drifted: false });
   });
 
+  it("executes exactly two declared same-Dataset relation hops and rejects an invented second hop", async () => {
+    const fixture = await createManagedFixture({ withTwoHopRelation: true });
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath);
+    const catalogResult = await service.revalidateCatalog(fixture.vaultPath, catalog);
+
+    expect(catalogResult.evidence.modelText).toContain("at most two declared Pige relations");
+    expect(catalogResult.evidence.modelText).toContain('"targetTableRef":"table_3"');
+    const request = {
+      action: "query" as const,
+      datasetRef: "dataset_1" as const,
+      tableRef: "table_1" as const,
+      join: {
+        relation: "column_3" as const,
+        targetTable: "table_2" as const,
+        next: { relation: "column_6" as const, targetTable: "table_3" as const }
+      },
+      select: ["column_1" as const, "column_7" as const],
+      filters: [{ column: "column_7" as const, op: "eq" as const, value: "North" }],
+      orderBy: [{ by: "column_7" as const, direction: "asc" as const }],
+      limit: 10
+    };
+    const first = await service.execute(fixture.vaultPath, catalog, request);
+    const restartedService = new DatasetQueryService(directExecutor);
+    const restartedCatalog = await restartedService.createCatalog(fixture.vaultPath);
+    const replay = await restartedService.execute(fixture.vaultPath, restartedCatalog, request);
+
+    expect(first.preview).toMatchObject({
+      tableName: "records → people → regions",
+      returnedRowCount: 1,
+      matchedRowCount: 1,
+      rows: [{ values: ["Ada", "North"] }]
+    });
+    expect(replay.preview).toEqual(first.preview);
+    expect(replay.citations).toEqual(first.citations);
+    expect(first.evidence.modelText).toContain('"next"');
+    await expect(service.revalidateResult(fixture.vaultPath, first)).resolves.toMatchObject({ drifted: false });
+
+    const invalidService = new DatasetQueryService(directExecutor);
+    const invalidCatalog = await invalidService.createCatalog(fixture.vaultPath);
+    await expect(invalidService.execute(fixture.vaultPath, invalidCatalog, {
+      ...request,
+      join: {
+        ...request.join,
+        next: { relation: "column_5", targetTable: "table_3" }
+      }
+    })).rejects.toMatchObject({ code: "dataset.query.ref_invalid" });
+  });
+
   it("keeps immutable source evidence bound to the initial revision after the active revision changes", async () => {
     const fixture = await createManagedFixture();
     const sourceBefore = SourceRecordSchema.parse(readJson(fixture.sourceRecordPath));
@@ -601,6 +650,7 @@ interface ManagedFixture {
 async function createManagedFixture(options: {
   readonly privateEvidence?: boolean;
   readonly withRelationJoin?: boolean;
+  readonly withTwoHopRelation?: boolean;
 } = {}): Promise<ManagedFixture> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-query-service-"));
   roots.push(root);
@@ -664,8 +714,12 @@ async function createManagedFixture(options: {
   const bundlePath = onlyEntryPath(path.join(vaultPath, "datasets"));
   const manifestPath = path.join(bundlePath, "dataset.json");
   let manifest = DatasetManifestSchema.parse(readJson(manifestPath));
-  if (options.withRelationJoin) {
+  if (options.withRelationJoin || options.withTwoHopRelation) {
     publishRelationJoinRevision(bundlePath, manifest);
+    manifest = DatasetManifestSchema.parse(readJson(manifestPath));
+  }
+  if (options.withTwoHopRelation) {
+    publishSecondRelationJoinRevision(bundlePath, manifest);
     manifest = DatasetManifestSchema.parse(readJson(manifestPath));
   }
   return {
@@ -920,6 +974,125 @@ function publishRelationJoinRevision(
     schema: schemaRef,
     payload,
     updatedAt: "2026-08-01T00:00:00.000Z"
+  });
+}
+
+function publishSecondRelationJoinRevision(
+  bundlePath: string,
+  manifest: ReturnType<typeof DatasetManifestSchema.parse>
+): void {
+  const revisionId = "dataset_rev_20260802_relationjoin02";
+  const peopleTableId = "table_peoplejoin001";
+  const relationColumnId = "column_regionjoin001";
+  const targetTableId = "table_regionsjoin01";
+  const regionColumnId = "column_regionname001";
+  const previousRevision = DatasetRevisionSchema.parse(readJson(path.join(bundlePath, manifest.revision.path)));
+  const previousSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(bundlePath, manifest.schema.path)));
+  const peopleTable = requireValue(previousSchema.tables.find(({ id }) => id === peopleTableId));
+  const sourcePayload = path.join(bundlePath, manifest.payload.path);
+  const payloadRelativePath = `data/revisions/${revisionId}.sqlite`;
+  const schemaRelativePath = `schemas/${revisionId}.json`;
+  const revisionRelativePath = `revisions/${revisionId}.json`;
+  const payloadPath = path.join(bundlePath, payloadRelativePath);
+  const schemaPath = path.join(bundlePath, schemaRelativePath);
+  const revisionPath = path.join(bundlePath, revisionRelativePath);
+  fs.mkdirSync(path.dirname(payloadPath), { recursive: true });
+  fs.copyFileSync(sourcePayload, payloadPath);
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
+    database.prepare("UPDATE pige_dataset_tables SET column_count = column_count + 1 WHERE table_id = ?")
+      .run(peopleTableId);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(relationColumnId, peopleTableId, peopleTable.columnCount, "region", "text",
+        '["pige.relation.single"]', JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(targetTableId, 2, "regions", "fixture:regions", "{}", "{}", 2, 1);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(regionColumnId, targetTableId, 0, "region", "text", '["text"]',
+        JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    const insertRow = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
+    insertRow.run("row_regionjoin0001", targetTableId, 0, 4);
+    insertRow.run("row_regionjoin0002", targetTableId, 1, 5);
+    const insertCell = database.prepare(
+      "INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)"
+    );
+    insertCell.run("row_regionjoin0001", regionColumnId, "value", "text", "North", "North", 0,
+      "text", JSON.stringify({ kind: "text", value: "North" }));
+    insertCell.run("row_regionjoin0002", regionColumnId, "value", "text", "South", "South", 0,
+      "text", JSON.stringify({ kind: "text", value: "South" }));
+    insertCell.run("row_personjoin0001", relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_regionjoin0002" }));
+    insertCell.run("row_personjoin0002", relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_regionjoin0001" }));
+    database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId);
+    database.exec("COMMIT");
+  } catch (caught) {
+    database.exec("ROLLBACK");
+    throw caught;
+  } finally { database.close(); }
+
+  const schema = DatasetSchemaRecordSchema.parse({
+    ...previousSchema,
+    revisionId,
+    createdAt: "2026-08-02T00:00:00.000Z",
+    tables: [...previousSchema.tables.map((table) => table.id !== peopleTableId ? table : {
+      ...table,
+      columnCount: table.columnCount + 1,
+      columns: [...table.columns, {
+        id: relationColumnId,
+        name: "region",
+        ordinal: table.columnCount,
+        sourceType: "pige.relation.single",
+        sourceTypes: ["pige.relation.single"],
+        logicalType: "string",
+        nullable: true,
+        relation: { kind: "pige_single_relation", schemaVersion: 1, targetTableId, targetDisplayColumnId: regionColumnId },
+        stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }), {
+      id: targetTableId,
+      name: "regions",
+      sourceLocator: "fixture:regions",
+      sourceMetadata: {},
+      header: { mode: "absent", used: false },
+      ordinal: 2,
+      rowCount: 2,
+      columnCount: 1,
+      columns: [{
+        id: regionColumnId, name: "region", ordinal: 0, sourceType: "text", sourceTypes: ["text"],
+        logicalType: "string", nullable: false, stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }]
+  });
+  writeJson(schemaPath, schema);
+  const payload = fileRef(payloadPath, payloadRelativePath, { format: "sqlite" });
+  const schemaRef = fileRef(schemaPath, schemaRelativePath);
+  const revision = DatasetRevisionSchema.parse({
+    ...previousRevision,
+    id: revisionId,
+    parentRevisionId: previousRevision.id,
+    schema: schemaRef,
+    payload,
+    stats: {
+      ...previousRevision.stats,
+      tableCount: previousRevision.stats.tableCount + 1,
+      rowCount: previousRevision.stats.rowCount + 2,
+      columnCount: previousRevision.stats.columnCount + 2
+    },
+    operationId: "op_20260802_relationjoin02",
+    change: { kind: "collection_relation_add", tableId: peopleTableId, columnId: relationColumnId,
+      targetTableId, targetDisplayColumnId: regionColumnId },
+    createdAt: "2026-08-02T00:00:00.000Z"
+  });
+  writeJson(revisionPath, revision);
+  writeJson(path.join(bundlePath, "dataset.json"), {
+    ...manifest,
+    activeRevision: revisionId,
+    revision: fileRef(revisionPath, revisionRelativePath),
+    schema: schemaRef,
+    payload,
+    updatedAt: "2026-08-02T00:00:00.000Z"
   });
 }
 

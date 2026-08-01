@@ -4931,7 +4931,8 @@ Date: 2026-08-01
 
 Decision:
 
-Permit one Home-only analytical join across an exact Pige-owned same-Dataset single relation.
+Permit one Home-only analytical join across an exact Pige-owned same-Dataset relation path
+of at most two edges.
 
 Rationale:
 
@@ -4940,9 +4941,10 @@ payloads, paths or renderer query authority.
 
 Consequences:
 
-- Main revalidates both table schemas, the relation descriptor and every referenced target row.
+- Main revalidates every table schema, relation descriptor and referenced target row in the
+  bounded path.
 - Joined projection/filter/order uses the existing bounded result hash, citation and durable
-  conversation contract; multi-hop joins and joined aggregation remain unavailable.
+  conversation contract; paths longer than two edges and joined aggregation remain unavailable.
 
 References:
 

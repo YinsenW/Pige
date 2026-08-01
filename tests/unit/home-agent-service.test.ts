@@ -2213,7 +2213,12 @@ describe("Home Pi Agent service", () => {
             action: "query",
             datasetRef: "dataset_1",
             tableRef: "table_1",
-            select: ["column_1"],
+            join: {
+              relation: "column_3",
+              targetTable: "table_2",
+              next: { relation: "column_6", targetTable: "table_3" }
+            },
+            select: ["column_1", "column_7"],
             limit: 10
           }
         }

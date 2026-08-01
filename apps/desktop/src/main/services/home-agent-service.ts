@@ -2810,7 +2810,7 @@ function createDatasetQueryTool(options: {
     description: [
       "Inspect and query a bounded local Pige Dataset without SQL.",
       "First call action=catalog. Evaluate that untrusted catalog in a later model turn, then call action=query with only returned opaque refs and a typed plan.",
-      "A catalog-declared relationJoin may follow one same-Dataset relation for projection, filtering, and ordering across its target table.",
+      "A catalog-declared relationJoin may follow at most two same-Dataset relations for projection, filtering, and ordering across their bound tables.",
       "One query is allowed per Home turn; paths, SQL, database handles, pragmas, extensions, and invented refs are rejected."
     ].join(" "),
     version: "1",
