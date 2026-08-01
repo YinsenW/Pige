@@ -1186,9 +1186,11 @@ export function App(): React.JSX.Element {
   };
 
   const setHomeDefaultModel = async (modelProfileId: string): Promise<boolean> => {
+    const expectedRevision = modelSummary?.revision;
+    if (!expectedRevision) return false;
     const modelRequestId = ++modelRefreshSequence.current;
     try {
-      await window.pige.models.setDefaultModel({ modelProfileId });
+      await window.pige.models.setDefaultModel({ modelProfileId, expectedRevision });
       const nextSummary = await window.pige.models.summary();
       if (modelRequestId !== modelRefreshSequence.current) return false;
       const runtimeRequestId = ++agentRuntimeRefreshSequence.current;
@@ -9038,7 +9040,8 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     props.onBusy(true);
     setFailure(null);
     try {
-      await window.pige.models.setDefaultModel({ modelProfileId });
+      if (!summary?.revision) throw new Error("The current model settings revision is unavailable.");
+      await window.pige.models.setDefaultModel({ modelProfileId, expectedRevision: summary.revision });
       await refreshCommittedSettings();
     } catch {
       setFailure({ kind: "model_change" });

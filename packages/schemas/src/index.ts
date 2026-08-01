@@ -11589,7 +11589,8 @@ export const AddManualProviderRequestSchema = z.object({
 });
 
 export const SetDefaultModelRequestSchema = z.object({
-  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/)
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
+  expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/)
 }).strict();
 
 export const RefreshProviderModelsRequestSchema = z.object({

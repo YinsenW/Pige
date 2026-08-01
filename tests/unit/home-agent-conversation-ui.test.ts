@@ -6837,6 +6837,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
 
 function emptyModelSummary(): ModelProviderSettingsSummary {
   return {
+    revision: `sha256:${"0".repeat(64)}`,
     presets: [],
     providers: [],
     models: [],
@@ -6918,6 +6919,7 @@ function switchableModelSummary(defaultModelProfileId: string): ModelProviderSet
     }
   ];
   return {
+    revision: `sha256:${"1".repeat(64)}`,
     presets: [],
     providers: [{
       id: "provider_switchable",
@@ -7052,8 +7054,15 @@ function makePigeApi(harness: ConversationHarness): object {
     },
     models: {
       summary: () => harness.loadModelSummary(),
-      setDefaultModel: ({ modelProfileId }: { readonly modelProfileId: string }) =>
-        harness.setDefaultModel(modelProfileId)
+      setDefaultModel: ({ modelProfileId, expectedRevision }: {
+        readonly modelProfileId: string;
+        readonly expectedRevision: string;
+      }) => {
+        if (!/^sha256:[a-f0-9]{64}$/.test(expectedRevision)) {
+          throw new Error("Default-model mutation was not bound to the visible settings revision.");
+        }
+        return harness.setDefaultModel(modelProfileId);
+      }
     },
     speech: {
       availability: async (request: SpeechAvailabilityRequest) => {

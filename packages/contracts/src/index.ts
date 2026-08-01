@@ -1278,6 +1278,7 @@ export interface AddManualProviderRequest {
 
 export interface SetDefaultModelRequest {
   readonly modelProfileId: string;
+  readonly expectedRevision: string;
 }
 
 export interface RefreshProviderModelsRequest {

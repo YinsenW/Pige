@@ -632,6 +632,7 @@ export class ModelProviderRegistry {
   }
 
   async #setDefaultModel(request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> {
+    this.#assertExpectedRevision(request.expectedRevision);
     const models = this.#readModels();
     const selected = models.models.find((model) => model.id === request.modelProfileId && model.enabled);
     const provider = selected
@@ -661,7 +662,6 @@ export class ModelProviderRegistry {
     }
     return this.summary();
   }
-
   #queueMutation<T>(operation: () => Promise<T>): Promise<T> {
     const result = this.#mutationTail.then(operation);
     this.#mutationTail = result.then(() => undefined, () => undefined);

@@ -230,7 +230,10 @@ describe("model provider registry", () => {
       enabled: true,
       displayName: "Preferred model"
     });
-    await registry.setDefaultModel({ modelProfileId: secondary?.id ?? "" });
+    await registry.setDefaultModel({
+      modelProfileId: secondary?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
 
     const reconnected = await registry.addPresetProvider({ presetId: "openai", apiKey: "second-secret" });
 
@@ -1107,11 +1110,51 @@ describe("model provider registry", () => {
 
     const nextDefault = second.models.find((model) => model.modelId === "model-b");
     expect(nextDefault).toBeDefined();
-    const updated = await registry.setDefaultModel({ modelProfileId: nextDefault?.id ?? "" });
+    const updated = await registry.setDefaultModel({
+      modelProfileId: nextDefault?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
 
     expect(first.defaultModelProfileId).not.toBe(updated.defaultModelProfileId);
     expect(updated.models.find((model) => model.modelId === "model-b")?.isDefault).toBe(true);
     expect(probe.configs).toHaveLength(2);
+  });
+
+  it("rejects a stale default-model choice before changing the persisted runtime binding", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a", "model-b"]));
+    const first = await registry.addManualProvider({
+      displayName: "Provider A",
+      providerKind: "openai",
+      endpointProtocol: "openai_responses",
+      apiKey: "secret-a",
+      manualModelId: "model-a",
+      cloudBoundary: "cloud"
+    });
+    const staleRevision = first.revision ?? "";
+    const second = await registry.addManualProvider({
+      displayName: "Provider B",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://example.com/v1",
+      apiKey: "secret-b",
+      manualModelId: "model-b",
+      cloudBoundary: "self_hosted"
+    });
+    const nextDefault = second.models.find((model) => model.modelId === "model-b");
+
+    await expect(registry.setDefaultModel({
+      modelProfileId: nextDefault?.id ?? "",
+      expectedRevision: staleRevision
+    })).rejects.toMatchObject({ code: "model_provider.profile_stale" });
+
+    const reopened = new ModelProviderRegistry(
+      root,
+      new JsonSecretStore(root, fakeCrypto),
+      new ModelProviderConnectionTester(okModelListFetch(["model-a", "model-b"])),
+      passingProbe
+    );
+    expect(reopened.summary().defaultModelProfileId).toBe(first.defaultModelProfileId);
+    expect(reopened.getDefaultRuntimeConfig()?.model.modelId).toBe("model-a");
   });
 
   it("changes the global default without probing every discovered model", async () => {
@@ -1137,7 +1180,10 @@ describe("model provider registry", () => {
     const nextDefault = second.models.find((model) => model.modelId === "model-b");
     probe.failNext = true;
 
-    const updated = await registry.setDefaultModel({ modelProfileId: nextDefault?.id ?? "" });
+    const updated = await registry.setDefaultModel({
+      modelProfileId: nextDefault?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
 
     expect(updated.defaultModelProfileId).toBe(nextDefault?.id);
     expect(updated.defaultModelProfileId).not.toBe(first.defaultModelProfileId);
@@ -1521,7 +1567,10 @@ describe("model provider registry", () => {
       return originalRename(from, to);
     });
 
-    await expect(registry.setDefaultModel({ modelProfileId: nextDefault?.id ?? "" }))
+    await expect(registry.setDefaultModel({
+      modelProfileId: nextDefault?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    }))
       .rejects.toMatchObject({ code: "model_provider.persistence_failed" });
 
     expect(fs.readFileSync(modelsPath, "utf8")).toBe(beforeModels);
