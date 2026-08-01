@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "c71277ecb14e49889ce939060b1c1df96f1b64a9",
+  "baseline": "5663822a97ad5397b3189ab3f5dfd678d473c0b7",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 292,
-  "baselineLines": 126909,
+  "baselineFileCount": 293,
+  "baselineLines": 127271,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -82,6 +82,7 @@
       ["managed-collection-citation-service.ts", 159, "rf"],
       ["managed-collection-reveal-service.ts", 90, "p"],
       ["managed-collection-rollup-storage.ts", 391, "rdf"],
+      ["managed-collection-view-redo-service.ts", 362, "rd"],
       ["managed-collection-view-service.ts", 986, "rdf"],
       ["managed-dataset-lifecycle-service.ts", 414, "rd"],
       ["managed-dataset-title-service.ts", 306, "rdf"],
@@ -325,7 +326,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-  "serviceOwnerCount": 292,
+    "serviceOwnerCount": 293,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

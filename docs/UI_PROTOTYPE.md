@@ -305,7 +305,7 @@ Behavior:
 - Activity History is in Settings; Home keeps active attention.
 - Activity History loads bounded older pages through one Load more action. A stale or failed next page preserves every visible row and returns focus to Load more; exhausting history returns focus to the History heading. Existing Open and Undo behavior is unchanged.
 - Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
-- An undone exact note edit, active-note or Topic-title rename, Library tag lifecycle action, exact note merge, or Knowledge Health duplicate-topic merge offers Redo only while every original live/trash page, destination and durable Undo binding still match. Undo and Redo share one in-flight lock; success rereads Activity truth and restores focus to the newly available inverse action. If that row disappears, focus falls back to the History heading; drift or blocked authority fails closed.
+- An undone exact note edit, active-note or Topic-title rename, Library tag lifecycle action, exact note merge, Knowledge Health duplicate-topic merge, or saved Collection view create/update/rename/trash offers Redo only while every original target, immutable revision and durable Undo binding still match. Undo and Redo share one in-flight lock; success rereads Activity truth and restores focus to the newly available inverse action. If that row disappears, focus falls back to the History heading; drift or blocked authority fails closed.
 - Applied rows open current-vault pages in Reader or memory in Agent & Memory by safe ID. Exact Edit or heading receives focus; drift/failure returns to Activity/Open focus. Labels/paths grant no authority; Open never invokes Undo.
 
 ### 4.4 Sidebar Expanded
@@ -465,7 +465,7 @@ Processing states:
 - Needs attention.
 - Completed with warnings.
 
-Current Home Activity distinguishes created from updated. Checksum-current exact create/cited append offers non-confirming Undo; changed/hashless/missing fails closed. Settings Activity offers restart-safe Redo after matching Undo for exact user note edit, active-note or Topic-title rename, Library tag lifecycle, exact note merge, and Knowledge Health duplicate-topic merge. Proposals stay transitional; unrelated mutation families, broader restore/redo, broad history, and packaged proof remain open.
+Current Home Activity distinguishes created from updated. Checksum-current exact create/cited append offers non-confirming Undo; changed/hashless/missing fails closed. Settings Activity offers restart-safe Redo after matching Undo for exact user note edit, active-note or Topic-title rename, Library tag lifecycle, exact note merge, Knowledge Health duplicate-topic merge, and saved Collection view lifecycle changes. Proposals stay transitional; unrelated mutation families, broader restore/redo, broad history, and packaged proof remain open.
 
 ## 7. Home Conversation And Optional Local Knowledge
 
