@@ -5367,6 +5367,33 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
+### D-20260802-Managed-Dataset-Direct-Trash-Restore
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Library exposes one progressive Dataset trash inventory and direct restore action. The renderer receives only bounded title and stable Dataset/revision/Operation identities plus an opaque inventory revision; Main reuses the existing durable Dataset restore Operation owned by Activity Undo.
+
+Rationale:
+
+Managed Datasets were already trash-first and recoverable through Activity, but users could not discover or restore them directly after navigation or restart. Reusing the same receipt avoids a second recovery format while making the durable lifecycle usable.
+
+Consequences:
+
+- Restore is exact-vault, Dataset-revision, trash-Operation and inventory-revision fenced.
+- Restored, tampered, conflicting, missing, or drifted entries fail closed before publication.
+- No path, bundle digest, checksum, source identity, or private receipt body crosses IPC.
+- PIGE-VAULT-004 remains partial until remaining durable classes, compaction/reset, migration and permanent-delete breadth are closed.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

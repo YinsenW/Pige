@@ -682,7 +682,9 @@ Action behavior:
 
 ### 8.4 Structured Knowledge Surface
 
-Datasets stay in Library. Bound paging preserves rows/focus; citations are read-only. Stable-ID
+Datasets stay in Library. Bound paging preserves rows/focus; citations are read-only. Dataset trash is
+an explicit progressive disclosure that lists pathless safe summaries and restores one exact current
+receipt before refreshing the catalog; stale inventory retains the surface and reloads Main truth. Stable-ID
 snapshots have Undo. Dialogs edit representable formulas, including numeric lookup/rollup and acyclic
 same-table Pige-formula operands while hiding nonnumeric/self/downstream cycle candidates, select one relation row, or derive its
 scalar lookup/rollup; eligible relation fields can switch their table/display field, preserving row links

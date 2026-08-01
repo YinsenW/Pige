@@ -12,7 +12,6 @@ import {
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
-  COLLECTION_TRASH_DATASET_CHANNEL,
   COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
@@ -47,8 +46,6 @@ import {
   CollectionRenameViewResultSchema,
   CollectionTrashViewRequestSchema,
   CollectionTrashViewResultSchema,
-  CollectionTrashDatasetRequestSchema,
-  CollectionTrashDatasetResultSchema,
   CollectionRenameDatasetRequestSchema,
   CollectionRenameDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
@@ -97,6 +94,10 @@ import {
   type CollectionTrashViewResult,
   type CollectionTrashDatasetRequest,
   type CollectionTrashDatasetResult,
+  type CollectionListDatasetTrashRequest,
+  type CollectionListDatasetTrashResult,
+  type CollectionRestoreDatasetRequest,
+  type CollectionRestoreDatasetResult,
   type CollectionRenameDatasetRequest,
   type CollectionRenameDatasetResult,
   type CollectionOpenCitationRequest,
@@ -116,6 +117,7 @@ import {
   type CollectionTrashRowRequest,
   type CollectionTrashRowResult
 } from "@pige/schemas";
+import { registerManagedDatasetLifecycleIpc } from "./register-managed-dataset-lifecycle-ipc";
 
 interface RegisterManagedCollectionIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -187,6 +189,12 @@ interface RegisterManagedCollectionIpcOptions {
   readonly trashDataset: (
     request: CollectionTrashDatasetRequest
   ) => CollectionTrashDatasetResult | Promise<CollectionTrashDatasetResult>;
+  readonly listDatasetTrash: (
+    request: CollectionListDatasetTrashRequest
+  ) => CollectionListDatasetTrashResult | Promise<CollectionListDatasetTrashResult>;
+  readonly restoreDataset: (
+    request: CollectionRestoreDatasetRequest
+  ) => CollectionRestoreDatasetResult | Promise<CollectionRestoreDatasetResult>;
   readonly renameDataset: (
     request: CollectionRenameDatasetRequest
   ) => CollectionRenameDatasetResult | Promise<CollectionRenameDatasetResult>;
@@ -427,12 +435,6 @@ function failedTrashView(request: CollectionTrashViewRequest): CollectionTrashVi
   return CollectionTrashViewResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
     activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
     viewId: request.viewId, status: "failed" });
-}
-
-function failedTrashDataset(request: CollectionTrashDatasetRequest): CollectionTrashDatasetResult {
-  return CollectionTrashDatasetResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
-    activeVaultId: request.activeVaultId, datasetId: request.datasetId,
-    expectedRevisionId: request.expectedRevisionId, status: "failed" });
 }
 
 function failedRenameDataset(request: CollectionRenameDatasetRequest): CollectionRenameDatasetResult {
@@ -881,21 +883,7 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
       ? result : failedTrashView(parsed);
   });
 
-  options.ipcMain.handle(COLLECTION_TRASH_DATASET_CHANNEL, async (event, request: unknown) => {
-    const parsed = CollectionTrashDatasetRequestSchema.parse(request);
-    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
-      return failedTrashDataset(parsed);
-    }
-    let rawResult: CollectionTrashDatasetResult;
-    try { rawResult = await options.trashDataset(parsed); } catch { return failedTrashDataset(parsed); }
-    const result = CollectionTrashDatasetResultSchema.parse(rawResult);
-    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
-        result.datasetId !== parsed.datasetId || result.expectedRevisionId !== parsed.expectedRevisionId) {
-      throw new Error("Managed Dataset trash response identity did not match the request.");
-    }
-    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
-      ? result : failedTrashDataset(parsed);
-  });
+  registerManagedDatasetLifecycleIpc(options);
 
   options.ipcMain.handle(COLLECTION_RENAME_DATASET_CHANNEL, async (event, request: unknown) => {
     const parsed = CollectionRenameDatasetRequestSchema.parse(request);

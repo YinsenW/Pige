@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T18:30:26.000Z",
+  "reviewedAt": "2026-08-01T18:28:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Validated restore blocks unsupported durable schemas, migrates compatible v1 vaults in private staging, rebuilds enabled derived indexes, and closes PIGE-BACKUP-004/E9.02.",
+    "scope": "Library directly lists and restores exact trashed managed Datasets through the existing durable Operation owner while PIGE-VAULT-004 remains partial.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "a2838dc1377e9ecd3e4c505136f0f40c2f0676967c63a802452bbbf24742cbce"
+    "reviewedSha256": "81b6ee1d3b37dcdbdef781bacdbbef300e34f1af519016e0b6e85383c02e8e30"
   },
   "reviewers": [
     {
-      "reviewerId": "validated-restore-review",
-      "task": "Review durable schema compatibility, staged migration and derived-index restore acceptance",
+      "reviewerId": "managed-dataset-trash-restore-review",
+      "task": "Review exact managed Dataset trash inventory and direct Library restore",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews restore and acceptance facts; Development supplies separate compatibility, migration, index and renderer evidence."
+      "independence": "Planning reviews trash-first storage and acceptance facts; Development supplies separate lifecycle, IPC and renderer evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "validated-restore-review",
+      "reviewerId": "managed-dataset-trash-restore-review",
       "blockerCount": 0,
-      "summary": "Restore keeps its existing preview/apply flow and exposes one clear body-free unsupported-schema state before any destination effect."
+      "summary": "Library uses one progressive disclosure for pathless Dataset trash summaries, exact restore status and catalog refresh."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "validated-restore-review",
+      "reviewerId": "managed-dataset-trash-restore-review",
       "blockerCount": 0,
-      "summary": "Archive manifests, durable-domain ranges, staged v1 migration, clone identity and restart adoption resolve to the same exact restored vault."
+      "summary": "Data lifecycle, IPC, UI and the accepted decision consistently reuse the existing Dataset restore Operation and receipt."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "validated-restore-review",
+      "reviewerId": "managed-dataset-trash-restore-review",
       "blockerCount": 0,
-      "summary": "PIGE-BACKUP-004 and E9.02 cite current schema, migration, publication, restart, rollback, cancellation, UI and derived-index tests."
+      "summary": "PIGE-VAULT-004 cites current service, trusted IPC and pathless UI evidence while retaining its remaining lifecycle gaps."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "validated-restore-review",
+      "reviewerId": "managed-dataset-trash-restore-review",
       "blockerCount": 0,
-      "summary": "BackupRestoreService delegates compatibility, materialization and derived-index work to bounded private owners while preserving the existing coordinator."
+      "summary": "ManagedDatasetLifecycleService retains private receipt verification and delegates the durable effect to its existing Undo implementation."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "validated-restore-review",
+      "reviewerId": "managed-dataset-trash-restore-review",
       "blockerCount": 0,
-      "summary": "Existing restore contracts already specify this behavior; the change adds direct evidence and bounded owners without a new design document."
+      "summary": "Existing storage, API, UI, playbook, decision and acceptance owners contain the complete delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/backup-restore-schema-compatibility.test.ts tests/unit/restore-derived-index-rebuilder.test.ts tests/unit/backup-service.test.ts tests/unit/restore-coordinator-service.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/desktop-shell-contract.test.ts tests/unit/restore-ui.test.ts",
+      "command": "npx vitest run tests/unit/managed-dataset-lifecycle-service.test.ts tests/unit/register-managed-dataset-lifecycle-ipc.test.ts tests/unit/register-managed-collection-ipc.test.ts tests/unit/managed-dataset-trash-restore-ui.test.ts tests/unit/managed-dataset-trash-restore-schemas.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Focused restore tests cover exact schema compatibility, v1 migration, restart adoption, derived-index rebuild and pathless unsupported UI."
+      "evidence": "Focused service, registrar, schema, renderer and shell tests cover exact restart-safe restore, strict currentness and pathless UI."
     },
     {
-      "command": "npm run typecheck && npm run build --workspace @pige/desktop && npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs",
+      "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with BackupRestoreService at its frozen line ceiling and three bounded private owners inventoried."
+      "evidence": "The candidate compiles and builds with the bounded lifecycle owner, extracted registrar and frozen App line budget."
     },
     {
-      "command": "node scripts/verify/update-semantic-claims.mjs --accept-semantic-change && node scripts/verify/independent-documentation-review.mjs",
+      "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "The semantic-claim ledger and independent review snapshot bind the verified validated-restore workflow; normal CI remains the publication gate."
+      "evidence": "Independent snapshot and accepted decision owners agree on the still-partial Dataset workflow; remote Verify owns final trace execution."
     }
   ],
   "coordination": {
-    "taskId": "validated-restore-bind-20260802",
-    "taskTitle": "Bind validated restore schema, migration and derived-index acceptance",
+    "taskId": "managed-dataset-trash-restore-bind-20260802",
+    "taskTitle": "Bind managed Dataset direct trash inventory and restore",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing supported backups retain preview/apply behavior; only unsupported schemas fail earlier and compatible v1 backups are migrated privately before publication.",
-    "acknowledgement": "Planning records complete validated restore coverage and promotes PIGE-BACKUP-004 plus E9.02 without claiming release signing or unrelated platform packaging."
+    "compatibility": "Existing Dataset trash, Activity Undo and collection open/mutation behavior remain unchanged; the new path only discovers and invokes the same restore owner.",
+    "acknowledgement": "Planning records direct managed Dataset recovery evidence without promoting PIGE-VAULT-004 or claiming unrelated cleanup, reset, migration or permanent-delete breadth."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

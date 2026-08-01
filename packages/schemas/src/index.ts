@@ -7329,6 +7329,8 @@ export const COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL = "collections.updateRollup
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_TRASH_DATASET_CHANNEL = "collections.trashDataset" as const;
+export const COLLECTION_LIST_DATASET_TRASH_CHANNEL = "collections.listDatasetTrash" as const;
+export const COLLECTION_RESTORE_DATASET_CHANNEL = "collections.restoreDataset" as const;
 export const COLLECTION_RENAME_DATASET_CHANNEL = "collections.renameDataset" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
@@ -7975,6 +7977,46 @@ export const CollectionTrashDatasetResultSchema = z.discriminatedUnion("status",
     operationId: OperationIdSchema
   }).strict(),
   CollectionTrashDatasetIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "ineligible", "failed"])
+  }).strict()
+]);
+
+export const CollectionDatasetTrashRevisionSchema = z.string().regex(/^datasettrashrev_[a-f0-9]{64}$/u);
+export const CollectionDatasetTrashSummarySchema = z.object({
+  datasetId: DatasetQueryDatasetIdSchema,
+  title: z.string().trim().min(1).max(240),
+  revisionId: DatasetQueryRevisionIdSchema,
+  trashOperationId: OperationIdSchema,
+  trashedAt: z.string().datetime({ offset: true })
+}).strict();
+export const CollectionListDatasetTrashRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const CollectionListDatasetTrashResultSchema = z.discriminatedUnion("status", [
+  CollectionListDatasetTrashRequestSchema.extend({
+    status: z.literal("ready"),
+    revision: CollectionDatasetTrashRevisionSchema,
+    datasets: z.array(CollectionDatasetTrashSummarySchema).max(100)
+  }).strict(),
+  CollectionListDatasetTrashRequestSchema.extend({ status: z.enum(["not_found", "failed"]) }).strict()
+]);
+export const CollectionRestoreDatasetRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  trashOperationId: OperationIdSchema,
+  expectedTrashRevision: CollectionDatasetTrashRevisionSchema
+}).strict();
+export const CollectionRestoreDatasetResultSchema = z.discriminatedUnion("status", [
+  CollectionRestoreDatasetRequestSchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionRestoreDatasetRequestSchema.extend({
     status: z.enum(["stale", "not_found", "ineligible", "failed"])
   }).strict()
 ]);
@@ -12155,6 +12197,11 @@ export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
 export type CollectionTrashDatasetRequest = z.infer<typeof CollectionTrashDatasetRequestSchema>;
 export type CollectionTrashDatasetResult = z.infer<typeof CollectionTrashDatasetResultSchema>;
+export type CollectionDatasetTrashSummary = z.infer<typeof CollectionDatasetTrashSummarySchema>;
+export type CollectionListDatasetTrashRequest = z.infer<typeof CollectionListDatasetTrashRequestSchema>;
+export type CollectionListDatasetTrashResult = z.infer<typeof CollectionListDatasetTrashResultSchema>;
+export type CollectionRestoreDatasetRequest = z.infer<typeof CollectionRestoreDatasetRequestSchema>;
+export type CollectionRestoreDatasetResult = z.infer<typeof CollectionRestoreDatasetResultSchema>;
 export type CollectionRenameDatasetRequest = z.infer<typeof CollectionRenameDatasetRequestSchema>;
 export type CollectionRenameDatasetResult = z.infer<typeof CollectionRenameDatasetResultSchema>;
 export type LibraryBrowseRequestId = z.infer<typeof LibraryBrowseRequestIdSchema>;

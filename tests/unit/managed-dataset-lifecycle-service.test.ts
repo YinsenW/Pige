@@ -10,6 +10,29 @@ const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
 
 describe("ManagedDatasetLifecycleService", () => {
+  it("lists pathless trashed datasets and restores one exact candidate after restart", () => {
+    const fixture = createFixture();
+    const service = createService(fixture);
+    const committed = service.trash(requestFor(fixture));
+    if (committed.status !== "committed") throw new Error("Dataset trash did not commit");
+    const restarted = createService(fixture);
+    const listed = restarted.listTrash({ apiVersion: 1, requestId: "collection_request_datasettrashlist1",
+      activeVaultId: fixture.vaultId });
+    expect(listed).toMatchObject({ status: "ready", datasets: [{ datasetId: fixture.datasetId,
+      revisionId: fixture.revisionId, trashOperationId: committed.operationId, title: "Records" }] });
+    expect(JSON.stringify(listed)).not.toMatch(/path|digest|checksum|source/u);
+    if (listed.status !== "ready") throw new Error("Dataset trash list unavailable");
+    const request = { apiVersion: 1 as const, requestId: "collection_request_datasetrestore01",
+      activeVaultId: fixture.vaultId, datasetId: fixture.datasetId, expectedRevisionId: fixture.revisionId,
+      trashOperationId: committed.operationId, expectedTrashRevision: listed.revision };
+    const restored = restarted.restore(request);
+    expect(restored).toMatchObject({ status: "committed", operationId: expect.stringMatching(/^op_/) });
+    expect(restarted.restore(request)).toEqual(restored);
+    expect(fs.existsSync(fixture.bundlePath)).toBe(true);
+    expect(restarted.listTrash({ apiVersion: 1, requestId: "collection_request_datasettrashlist2",
+      activeVaultId: fixture.vaultId })).toMatchObject({ status: "ready", datasets: [] });
+  });
+
   it("trashes one exact bundle, adopts a crash, and restores/redoes without touching source evidence", () => {
     const fixture = createFixture();
     const service = createService(fixture);

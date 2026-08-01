@@ -105,6 +105,10 @@ import type {
   CollectionTrashViewResult,
   CollectionTrashDatasetRequest,
   CollectionTrashDatasetResult,
+  CollectionListDatasetTrashRequest,
+  CollectionListDatasetTrashResult,
+  CollectionRestoreDatasetRequest,
+  CollectionRestoreDatasetResult,
   CollectionRenameDatasetRequest,
   CollectionRenameDatasetResult,
   CollectionListRequest,
@@ -2484,6 +2488,12 @@ export interface PigeDesktopApi {
     readonly trashDataset: (
       request: CollectionTrashDatasetRequest
     ) => Promise<CollectionTrashDatasetResult>;
+    readonly listDatasetTrash: (
+      request: CollectionListDatasetTrashRequest
+    ) => Promise<CollectionListDatasetTrashResult>;
+    readonly restoreDataset: (
+      request: CollectionRestoreDatasetRequest
+    ) => Promise<CollectionRestoreDatasetResult>;
     readonly renameDataset: (
       request: CollectionRenameDatasetRequest
     ) => Promise<CollectionRenameDatasetResult>;

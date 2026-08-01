@@ -11,7 +11,16 @@ import { PigeDomainError } from "@pige/domain";
 import {
   CollectionTrashDatasetRequestSchema,
   CollectionTrashDatasetResultSchema,
+  CollectionListDatasetTrashRequestSchema,
+  CollectionListDatasetTrashResultSchema,
+  CollectionRestoreDatasetRequestSchema,
+  CollectionRestoreDatasetResultSchema,
   OperationRecordSchema,
+  type CollectionDatasetTrashSummary,
+  type CollectionListDatasetTrashRequest,
+  type CollectionListDatasetTrashResult,
+  type CollectionRestoreDatasetRequest,
+  type CollectionRestoreDatasetResult,
   type CollectionTrashDatasetRequest,
   type CollectionTrashDatasetResult,
   type OperationRecord
@@ -98,6 +107,61 @@ export class ManagedDatasetLifecycleService {
     } catch (caught) {
       const status = caught instanceof PigeDomainError && caught.code === "dataset_lifecycle.stale" ? "stale" : "failed";
       return CollectionTrashDatasetResultSchema.parse({ ...identity, status });
+    }
+  }
+
+  listTrash(request: CollectionListDatasetTrashRequest): CollectionListDatasetTrashResult {
+    const parsed = CollectionListDatasetTrashRequestSchema.parse(request);
+    const identity = { apiVersion: 1 as const, requestId: parsed.requestId, activeVaultId: parsed.activeVaultId };
+    const vaultPath = this.#activeVaultPath(parsed.activeVaultId);
+    if (!vaultPath) return CollectionListDatasetTrashResultSchema.parse({ ...identity, status: "not_found" });
+    try {
+      const inventory = trashInventory(vaultPath);
+      return CollectionListDatasetTrashResultSchema.parse({
+        ...identity,
+        status: "ready",
+        revision: inventory.revision,
+        datasets: inventory.datasets.slice(0, 100)
+      });
+    } catch {
+      return CollectionListDatasetTrashResultSchema.parse({ ...identity, status: "failed" });
+    }
+  }
+
+  restore(request: CollectionRestoreDatasetRequest): CollectionRestoreDatasetResult {
+    const parsed = CollectionRestoreDatasetRequestSchema.parse(request);
+    const identity = { ...parsed };
+    const vaultPath = this.#activeVaultPath(parsed.activeVaultId);
+    if (!vaultPath) return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "not_found" });
+    try {
+      const operation = readOperation(vaultPath, parsed.trashOperationId);
+      const receipt = operation ? readReceipt(vaultPath, operation.id) : undefined;
+      if (!operation || !receipt || !matchesTrashOperation(receipt, operation) ||
+          receipt.datasetId !== parsed.datasetId || receipt.revisionId !== parsed.expectedRevisionId) {
+        return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "not_found" });
+      }
+      const existing = this.findUndoOperation(operation, readOperations(vaultPath));
+      if (existing) {
+        return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "committed", operationId: existing.id });
+      }
+      const inventory = trashInventory(vaultPath);
+      if (inventory.revision !== parsed.expectedTrashRevision) {
+        return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "stale" });
+      }
+      const candidate = inventory.datasets.find(({ trashOperationId }) => trashOperationId === operation.id);
+      if (!candidate) return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "not_found" });
+      const result = this.undo(operation);
+      if ((result.status === "undone" || result.status === "already_undone") && result.undoOperationId) {
+        return CollectionRestoreDatasetResultSchema.parse({
+          ...identity, status: "committed", operationId: result.undoOperationId
+        });
+      }
+      return CollectionRestoreDatasetResultSchema.parse({
+        ...identity,
+        status: result.status === "not_found" ? "not_found" : "stale"
+      });
+    } catch {
+      return CollectionRestoreDatasetResultSchema.parse({ ...identity, status: "failed" });
     }
   }
 
@@ -218,6 +282,34 @@ export class ManagedDatasetLifecycleService {
   #activeVaultPath(vaultId: string): string | undefined {
     return this.#vaults.current()?.vaultId === vaultId ? this.#vaults.activeVaultPath() : undefined;
   }
+}
+
+function trashInventory(vaultPath: string): {
+  readonly revision: `datasettrashrev_${string}`;
+  readonly datasets: readonly CollectionDatasetTrashSummary[];
+} {
+  const operations = readOperations(vaultPath);
+  const candidates = readReceipts(vaultPath).flatMap((receipt) => {
+    const operation = operations.find(({ id }) => id === receipt.operationId);
+    if (!operation || !matchesTrashOperation(receipt, operation) ||
+        operations.some((candidate) => matchesRestoreOperation(receipt, operation, candidate)) ||
+        fs.existsSync(resolveVault(vaultPath, receipt.originalRelativePath)) ||
+        !treeMatches(resolveVault(vaultPath, receipt.trashRelativePath), receipt.treeDigest)) return [];
+    return [{
+      datasetId: receipt.datasetId,
+      title: receipt.title,
+      revisionId: receipt.revisionId,
+      trashOperationId: receipt.operationId,
+      trashedAt: receipt.createdAt
+    } satisfies CollectionDatasetTrashSummary];
+  }).sort((left, right) => right.trashedAt.localeCompare(left.trashedAt, "en") ||
+    left.datasetId.localeCompare(right.datasetId, "en"));
+  const datasets = candidates.filter((candidate, index) =>
+    candidates.findIndex(({ datasetId }) => datasetId === candidate.datasetId) === index);
+  return {
+    revision: `datasettrashrev_${createHash("sha256").update(JSON.stringify(datasets)).digest("hex")}`,
+    datasets
+  };
 }
 
 function resultIdentity(request: CollectionTrashDatasetRequest) {

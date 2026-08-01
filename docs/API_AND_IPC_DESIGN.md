@@ -615,6 +615,10 @@ Dataset boundary:
 - `collections.updateView`/`collections.renameView`/`collections.trashView` bind Dataset, stable
   view and view revision; definition updates accept only the bounded typed filter/sort shape.
   Committed/stale returns the safe authoritative snapshot and update conflicts retain the renderer draft.
+- `collections.listDatasetTrash` returns at most 100 path/body/checksum-free Dataset summaries plus
+  one opaque inventory revision. `collections.restoreDataset` binds that revision and the exact Dataset,
+  immutable Dataset revision, and trash Operation; Main reuses the existing durable restore/Undo owner,
+  while changed inventory, private-byte mismatch, path conflict, or cross-Vault identity fails closed.
 
 ### 6.6 Retrieval
 

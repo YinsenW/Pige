@@ -461,6 +461,7 @@ Trash rules:
 - `.pige/trash/` is part of the vault and is backed up by default.
 - Trash entries should retain original path, object ID, deletion time, operation ID, previous checksum when available, and reason.
 - Trash restore should re-check path conflicts before restoring.
+- Managed Dataset trash inventory projects only title and stable Dataset/revision/Operation identities. Direct Library restore binds the exact inventory revision and reuses the same forward restore Operation as Activity Undo; tamper, path conflict, restored state, or inventory drift fails closed.
 - Permanent deletion from trash is out of scope for ordinary Agent actions and should require explicit user confirmation if exposed.
 
 Compaction rules:

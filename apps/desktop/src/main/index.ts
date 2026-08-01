@@ -3249,6 +3249,8 @@ registerManagedCollectionIpc({
   renameCollectionView: (request) => getManagedCollectionViewService().renameView(request),
   trashCollectionView: (request) => getManagedCollectionViewService().trashView(request),
   trashDataset: (request) => getManagedDatasetLifecycleService().trash(request),
+  listDatasetTrash: (request) => getManagedDatasetLifecycleService().listTrash(request),
+  restoreDataset: (request) => getManagedDatasetLifecycleService().restore(request),
   renameDataset: (request) => getManagedDatasetTitleService().rename(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)

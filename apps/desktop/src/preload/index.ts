@@ -521,6 +521,8 @@ import {
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   COLLECTION_TRASH_DATASET_CHANNEL,
+  COLLECTION_LIST_DATASET_TRASH_CHANNEL,
+  COLLECTION_RESTORE_DATASET_CHANNEL,
   COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
@@ -555,6 +557,10 @@ import {
   CollectionTrashViewResultSchema,
   CollectionTrashDatasetRequestSchema,
   CollectionTrashDatasetResultSchema,
+  CollectionListDatasetTrashRequestSchema,
+  CollectionListDatasetTrashResultSchema,
+  CollectionRestoreDatasetRequestSchema,
+  CollectionRestoreDatasetResultSchema,
   CollectionRenameDatasetRequestSchema,
   CollectionRenameDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
@@ -975,6 +981,10 @@ import type {
   CollectionTrashViewResult,
   CollectionTrashDatasetRequest,
   CollectionTrashDatasetResult,
+  CollectionListDatasetTrashRequest,
+  CollectionListDatasetTrashResult,
+  CollectionRestoreDatasetRequest,
+  CollectionRestoreDatasetResult,
   CollectionRenameDatasetRequest,
   CollectionRenameDatasetResult,
   CollectionOpenCitationRequest,
@@ -1524,6 +1534,35 @@ async function invokeCollectionTrashDataset(
   if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
       result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId) {
     throw new Error("Invalid Managed Dataset trash response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionListDatasetTrash(
+  request: CollectionListDatasetTrashRequest
+): Promise<CollectionListDatasetTrashResult> {
+  const parsedRequest = CollectionListDatasetTrashRequestSchema.parse(request);
+  const result = CollectionListDatasetTrashResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_LIST_DATASET_TRASH_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
+    throw new Error("Invalid Managed Dataset trash-list response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionRestoreDataset(
+  request: CollectionRestoreDatasetRequest
+): Promise<CollectionRestoreDatasetResult> {
+  const parsedRequest = CollectionRestoreDatasetRequestSchema.parse(request);
+  const result = CollectionRestoreDatasetResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_RESTORE_DATASET_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId ||
+      result.trashOperationId !== parsedRequest.trashOperationId ||
+      result.expectedTrashRevision !== parsedRequest.expectedTrashRevision) {
+    throw new Error("Invalid Managed Dataset restore response identity.");
   }
   return result;
 }
@@ -2257,6 +2296,8 @@ const api: PigeDesktopApi = {
     renameView: invokeCollectionRenameView,
     trashView: invokeCollectionTrashView,
     trashDataset: invokeCollectionTrashDataset,
+    listDatasetTrash: invokeCollectionListDatasetTrash,
+    restoreDataset: invokeCollectionRestoreDataset,
     renameDataset: invokeCollectionRenameDataset,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
