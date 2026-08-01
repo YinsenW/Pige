@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T04:30:00.000Z",
+  "reviewedAt": "2026-08-02T06:00:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the fixed canonical manual-update download action, strict renderer/Main boundary, unavailable automatic-update truth, and exact PIGE-REL-001 evidence without implying release readiness.",
+    "scope": "Review exact unsaved Markdown draft preview through the existing sanitized Reader renderer without save, navigation, or source-authority expansion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "0bd0c697a47c4145ee036804f4cead028a3760ca301f6d4ed07de2f0a17b7a09"
+    "reviewedSha256": "66fc5cc12d8e4203d6481ab3a45a2107d4f653a7aae8f52bd5100bb3f12a11d1"
   },
   "reviewers": [
     {
-      "reviewerId": "manual-update-download-review",
-      "task": "Review canonical manual update download workflow",
+      "reviewerId": "note-markdown-draft-preview-review",
+      "task": "Review safe note Markdown draft preview and editor-state retention",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the fixed release origin, strict public contract, renderer single-flight behavior and partial acceptance evidence separately from implementation authorship."
+      "independence": "Project review checks the existing Markdown renderer boundary, preview interaction, editor state retention and exact evidence separately from UI implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "manual-update-download-review",
+      "reviewerId": "note-markdown-draft-preview-review",
       "blockerCount": 0,
-      "summary": "System Settings replaces a dead control with one fixed canonical downloads action; completion and failure restore the initiating focus."
+      "summary": "Preview is renderer-local and temporary; returning to Edit preserves the exact unsaved draft and restores focus without writing durable state."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "manual-update-download-review",
+      "reviewerId": "note-markdown-draft-preview-review",
       "blockerCount": 0,
-      "summary": "Schema, contract, preload, Main service and Settings bind the same URL-free request and opened, busy or failed result."
+      "summary": "UI guidance and implementation reuse the shared sanitized Markdown renderer, hide frontmatter, block link navigation and leave Main save/CAS semantics unchanged."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "manual-update-download-review",
+      "reviewerId": "note-markdown-draft-preview-review",
       "blockerCount": 0,
-      "summary": "PIGE-REL-001 cites the exact user workflow test while downloaded ZIP, notes and publication report remain explicitly open."
+      "summary": "PIGE-UI-001 cites the exact unsaved-preview test while remaining partial for broader editing, platform and source-editing work."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "manual-update-download-review",
+      "reviewerId": "note-markdown-draft-preview-review",
       "blockerCount": 0,
-      "summary": "The new action opens only the repository-controlled Releases page and does not widen check, download or apply authority."
+      "summary": "The existing editor gains only Edit/Preview presentation state; save, conflict review, Activity and Reader adoption owners remain unchanged."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "manual-update-download-review",
+      "reviewerId": "note-markdown-draft-preview-review",
       "blockerCount": 0,
-      "summary": "Existing release, API, UI and acceptance owners capture the behavior without a new design document."
+      "summary": "One concise UI owner rule plus existing acceptance and review artifacts capture the behavior without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/manual-update-download-service.test.ts tests/unit/manual-update-download-ui.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/note-markdown-editor-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct service, UI and contract tests prove the fixed origin, strict URL-free boundary, single-flight behavior and retryable failure retention."
+      "evidence": "The direct editor UI test proves exact unsaved draft rendering, sanitization, no save effect, draft retention and focus restoration."
     },
     {
-      "command": "npm run typecheck && npm run verify:architecture-reset",
+      "command": "npm run typecheck --workspace @pige/desktop && npm run build --workspace @pige/desktop",
       "status": "passed",
-      "evidence": "The rebased candidate remains type-safe and within protected owner budgets."
+      "evidence": "The rebased renderer candidate remains type-safe and builds through the existing desktop boundary."
     },
     {
-      "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
+      "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "Current release owner docs, exact evidence selector and partial semantic claim remain structurally and executable-current."
+      "evidence": "The current UI owner, exact evidence selector, semantic lock and five-dimensional review snapshot agree on the bounded preview behavior."
     }
   ],
   "coordination": {
-    "taskId": "manual-update-download-20260802",
-    "taskTitle": "Open canonical manual update downloads from Settings",
+    "taskId": "note-markdown-draft-preview-20260802",
+    "taskTitle": "Add safe unsaved Markdown draft preview",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing no-network update check, download and apply behavior remains unchanged; the renderer receives no URL or release authority.",
-    "acknowledgement": "The user-visible manual download workflow is bound while final downloaded artifact and publication proof remain open."
+    "compatibility": "Existing editor save, stale review, cancel, Activity and Reader adoption behavior remains unchanged; Preview writes nothing.",
+    "acknowledgement": "The draft-preview workflow is bound while PIGE-UI-001 remains partial for its broader open work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
