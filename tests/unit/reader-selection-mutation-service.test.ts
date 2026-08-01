@@ -82,6 +82,41 @@ describe("Reader selection mutation", () => {
     ))).toBe(false);
   });
 
+  it("binds Shorten to one exact reversible replacement", () => {
+    const fixture = makeFixture(undefined, "shorten");
+    expect(() => applyReaderSelectionPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      target: readCurrentNotePageForMutation(fixture.vaultPath, fixture.selection.pageId),
+      selection: fixture.selection,
+      replacement: fixture.selectedText,
+      action: "shorten"
+    })).toThrowError(expect.objectContaining({ code: "agent_ingest.update_content_restricted" }));
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+
+    const result = applyReaderSelectionPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      target: readCurrentNotePageForMutation(fixture.vaultPath, fixture.selection.pageId),
+      selection: fixture.selection,
+      replacement: "A shorter passage.",
+      action: "shorten"
+    });
+
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("A shorter passage.");
+    expect(() => applyReaderSelectionPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: fixture.job,
+      target: readCurrentNotePageForMutation(fixture.vaultPath, fixture.selection.pageId),
+      selection: fixture.selection,
+      replacement: "A polished passage.",
+      action: "polish"
+    })).toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+    const activity = new KnowledgeActivityService(fixture.vaults);
+    expect(activity.undo({ operationId: result.operation.id })).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
   it("validates the exact durable Reader Operation before recovery trusts its Job ref", () => {
     const fixture = makeFixture(undefined, "polish");
     const applied = applyReaderSelectionPageUpdate({
@@ -194,7 +229,7 @@ describe("Reader selection mutation", () => {
 
 function makeFixture(
   selectedText = "The original selected passage remains private.",
-  transformAction: "translate" | "polish" | "expand" = "polish",
+  transformAction: "translate" | "polish" | "expand" | "shorten" = "polish",
   lifecycle: "completed" | "awaiting_review" = "completed"
 ): {
   readonly vaultPath: string;

@@ -132,6 +132,12 @@ export class ReaderSelectionProposalService {
     if (containsRestrictedModelContent(input.replacement)) {
       throw readerSelectionContentRestricted("The Reader transform replacement contains restricted content.");
     }
+    if (
+      input.action === "shorten" &&
+      Buffer.byteLength(input.replacement, "utf8") >= input.selection.span.endExclusive - input.selection.span.start
+    ) {
+      throw readerSelectionContentRestricted("The Shorten replacement must be shorter than the exact selection.");
+    }
     const proposalId = createReaderSelectionProposalId(input.job.id);
     const intentHash = createReaderSelectionPublicationIntentHash(
       input.job.id,

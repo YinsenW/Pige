@@ -857,7 +857,7 @@ function isReaderSelectionPublicationIntent(value: unknown): value is ReaderSele
     record.replacement.length > 0 &&
     Buffer.byteLength(record.replacement, "utf8") <= 16 * 1024 &&
     typeof record.action === "string" &&
-    ["translate", "polish", "expand"].includes(record.action) &&
+    ["translate", "polish", "expand", "shorten"].includes(record.action) &&
     typeof record.selection === "object" &&
     record.selection !== null;
 }

@@ -1521,7 +1521,7 @@ describe("Home durable Agent conversation UI", () => {
       });
       await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
     };
-    const runTransform = async (action: "translate" | "polish" | "expand"): Promise<void> => {
+    const runTransform = async (action: "translate" | "polish" | "expand" | "shorten"): Promise<void> => {
       await showSelection();
       await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
       await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>(`[data-selection-more-action="${action}"]`)));
@@ -1547,8 +1547,10 @@ describe("Home durable Agent conversation UI", () => {
     await runTransform("expand");
     await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
     expect(container.querySelector(".note-reader h1")?.textContent).toBe("Note A");
+    await runTransform("shorten");
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector(".note-reader"));
     expect(harness.readerSelectionTransformRequests.map((request) => request.action)).toEqual([
-      "translate", "polish", "expand"
+      "translate", "polish", "expand", "shorten"
     ]);
 
     await act(async () => root.unmount());

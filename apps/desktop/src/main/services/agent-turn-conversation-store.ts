@@ -738,7 +738,8 @@ function readInputPresentation(value: unknown): AgentConversationInputPresentati
   }
   if (
     candidate.kind === "reader_selection_transform" &&
-    (candidate.action === "translate" || candidate.action === "polish" || candidate.action === "expand")
+    (candidate.action === "translate" || candidate.action === "polish" || candidate.action === "expand" ||
+      candidate.action === "shorten")
   ) {
     return { kind: candidate.kind, action: candidate.action };
   }

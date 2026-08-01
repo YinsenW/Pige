@@ -520,5 +520,13 @@ const TRANSFORM_INSTRUCTIONS: Record<
     ja: "裏付けのない事実を作らず、役立つ文脈を加えて選択箇所を展開してください。",
     ko: "근거 없는 사실을 만들지 말고 유용한 맥락을 더해 선택한 구절을 확장하세요.",
     "zh-Hans": "为所选段落补充有用上下文，但不要编造缺乏依据的事实。"
+  },
+  shorten: {
+    de: "Kürze die ausgewählte Passage, ohne ihre Fakten, Bedeutung oder Quellenangaben zu verlieren.",
+    en: "Shorten the selected passage without losing its facts, meaning, or citations.",
+    fr: "Raccourcissez le passage sélectionné sans perdre ses faits, son sens ni ses citations.",
+    ja: "事実、意味、引用を失わずに、選択した箇所を短くしてください。",
+    ko: "사실, 의미 또는 인용을 잃지 않고 선택한 구절을 줄이세요.",
+    "zh-Hans": "在不丢失事实、含义或引用的前提下缩短所选段落。"
   }
 };

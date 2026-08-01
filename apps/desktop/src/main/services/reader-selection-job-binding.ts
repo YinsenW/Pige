@@ -189,7 +189,7 @@ export function readReaderSelectionTransformBinding(job: JobRecord): {
   const transform = transformRefs[0];
   const scope = scopeRefs[0];
   const selection = selectionRefs[0];
-  const actionMatch = /^reader_selection_(translate|polish|expand)$/u.exec(transform?.id ?? "");
+  const actionMatch = /^reader_selection_(translate|polish|expand|shorten)$/u.exec(transform?.id ?? "");
   const locatorMatch = /^utf8_bytes:(\d+):(\d+)$/u.exec(selection?.locator ?? "");
   const parsed = ReaderSelectionIdentitySchema.safeParse({
     pageId: scope?.id,
@@ -268,7 +268,7 @@ export function isValidReaderSelectionJobScope(
     )) &&
     (scope.transformAction === undefined || (
       scope.selection !== undefined &&
-      ["translate", "polish", "expand"].includes(scope.transformAction)
+      ["translate", "polish", "expand", "shorten"].includes(scope.transformAction)
     )) &&
     (scope.linkAction === undefined || (scope.selection !== undefined && scope.linkAction === "link")) &&
     (scope.createNoteAction === undefined || (scope.selection !== undefined &&

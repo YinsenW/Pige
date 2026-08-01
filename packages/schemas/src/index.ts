@@ -367,7 +367,7 @@ export const AgentConversationInputPresentationSchema = z.discriminatedUnion("ki
   }).strict(),
   z.object({
     kind: z.literal("reader_selection_transform"),
-    action: z.enum(["translate", "polish", "expand"])
+    action: z.enum(["translate", "polish", "expand", "shorten"])
   }).strict()
 ]);
 export const AgentSubmitTurnRequestSchema = z.object({
@@ -9380,7 +9380,7 @@ export const ReaderSelectionLinkResultSchema = z.discriminatedUnion("status", [
   }).strict()
 ]);
 
-export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand"]);
+export const ReaderSelectionTransformActionSchema = z.enum(["translate", "polish", "expand", "shorten"]);
 export const ReaderSelectionCreatePageActionSchema = z.enum([
   "create_note",
   "create_claim",

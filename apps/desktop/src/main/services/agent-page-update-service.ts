@@ -301,13 +301,16 @@ export function applyReaderSelectionPageUpdate(input: {
   readonly target: CurrentRetrievalPageMutationBinding;
   readonly selection: ReaderSelectionIdentity;
   readonly replacement: string;
-  readonly action: "translate" | "polish" | "expand";
+  readonly action: "translate" | "polish" | "expand" | "shorten";
 }): ReaderSelectionPageUpdateResult {
   const job = JobRecordSchema.parse(input.job);
   if (job.class !== "agent_turn" || !["queued", "running", "awaiting_review", "completed", "completed_with_warnings"].includes(job.state)) {
     throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Reader transform Job is not at a publishable lifecycle state.");
   }
   assertReaderSelectionJobBinding(job, input.selection, input.action);
+  if (input.action === "shorten" && Buffer.byteLength(input.replacement, "utf8") >= input.selection.span.endExclusive - input.selection.span.start) {
+    throw new PigeDomainError("agent_ingest.update_content_restricted", "The Shorten replacement must be shorter than the exact selection.");
+  }
   const target = assertEligibleTarget(input.vaultPath, input.target);
   if (target.pageId !== input.selection.pageId) {
     throw pageConflict("The Reader transform target does not match its selected page.");
@@ -1435,11 +1438,10 @@ function createReaderSelectionReplacement(
   ]).toString("utf8");
   return replaceUniqueFrontmatterLine(replaced, "updated_at", JSON.stringify(updatedAt));
 }
-
 function assertReaderSelectionJobBinding(
   job: JobRecord,
   selection: ReaderSelectionIdentity,
-  action: "translate" | "polish" | "expand"
+  action: "translate" | "polish" | "expand" | "shorten"
 ): void {
   const refs = job.inputRefs ?? [];
   const scopeRefs = refs.filter((ref) => ref.role === "agent_turn_current_note_scope");
@@ -1478,7 +1480,7 @@ function createReaderSelectionUpdateOperation(input: {
   readonly beforePath: string;
   readonly afterHash: string;
   readonly selection: ReaderSelectionIdentity;
-  readonly action: "translate" | "polish" | "expand";
+  readonly action: "translate" | "polish" | "expand" | "shorten";
   readonly replacement: string;
 }): OperationRecord {
   const artifact = createReaderSelectionPublicationArtifact(input.job.id, input.action, input.selection, input.replacement);
