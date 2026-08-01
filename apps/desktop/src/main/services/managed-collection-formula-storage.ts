@@ -668,6 +668,7 @@ export function projectCollectionFormulaColumns(
       canUseAsLookupTarget: false,
       canUseAsRollupTarget: false,
       canEditRollup: false,
+      canEditLookup: false,
       hasInboundRelationDescriptors: false,
       ...(pigeFormula
         ? { calculation: column.calculation }

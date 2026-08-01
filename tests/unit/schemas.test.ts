@@ -36,6 +36,7 @@ import {
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
@@ -51,6 +52,7 @@ import {
   CollectionAddRelationColumnRequestSchema,
   CollectionAddRelationColumnResultSchema,
   CollectionAddLookupColumnRequestSchema,
+  CollectionUpdateLookupColumnRequestSchema,
   CollectionAddRollupColumnRequestSchema,
   CollectionUpdateRollupColumnRequestSchema,
   CollectionEditRelationCellRequestSchema,
@@ -2676,6 +2678,7 @@ describe("schemas", () => {
       relationColumnId: "column_lookuprelation01", targetColumnId: "column_lookupcount001"
     } as const;
     expect(COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL).toBe("collections.addLookupColumn");
+    expect(COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL).toBe("collections.updateLookupColumn");
     expect(DatasetPigeLookupSchema.parse(lookup)).toEqual(lookup);
     expect(() => DatasetPigeLookupSchema.parse({ ...lookup, aggregate: "sum" })).toThrow();
 
@@ -2735,6 +2738,9 @@ describe("schemas", () => {
       targetColumnId: lookup.targetColumnId
     } as const;
     expect(CollectionAddLookupColumnRequestSchema.parse(request).label).toBe("Company count");
+    const { label: _label, ...updateBase } = request;
+    expect(CollectionUpdateLookupColumnRequestSchema.parse({ ...updateBase, columnId: lookupColumn.id }))
+      .toMatchObject({ columnId: lookupColumn.id, relationColumnId: lookup.relationColumnId, targetColumnId: lookup.targetColumnId });
     for (const unsafe of [
       { targetDatasetId: "dataset_20260729_outside000001" },
       { aggregate: "sum" },
@@ -2742,6 +2748,10 @@ describe("schemas", () => {
       { query: "SELECT *" },
       { path: "/private/lookup.sqlite" }
     ]) expect(() => CollectionAddLookupColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    expect(KnowledgeActivitySummarySchema.parse({ operationId: "op_20260729_lookupedit01", kind: "update_collection_lookup",
+      createdAt: "2026-07-29T00:00:00.000Z", target: { kind: "collection", datasetId: request.datasetId,
+        tableId: request.tableId, revisionId: request.expectedRevisionId }, status: "applied", canUndo: true }).kind
+    ).toBe("update_collection_lookup");
   });
 
   it("freezes same-Dataset relation rollups to count or numeric sum without renderer query authority", () => {

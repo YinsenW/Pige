@@ -12,6 +12,8 @@ import type {
   CollectionAddRelationColumnResult,
   CollectionAddLookupColumnRequest,
   CollectionAddLookupColumnResult,
+  CollectionUpdateLookupColumnRequest,
+  CollectionUpdateLookupColumnResult,
   CollectionAddRollupColumnRequest,
   CollectionAddRollupColumnResult,
   CollectionUpdateRollupColumnRequest,
@@ -485,6 +487,7 @@ describe("ManagedCollectionPanel", () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: CollectionAddLookupColumnRequest[] = [];
+    const updates: CollectionUpdateLookupColumnRequest[] = [];
     const base = relationSourceSnapshot("dataset_rev_20260729_lookup00001", false);
     const relationRequest = relationAddRequest(base);
     const initial: CollectionSnapshot = {
@@ -494,13 +497,18 @@ describe("ManagedCollectionPanel", () => {
     const targetBase = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
     const target: CollectionSnapshot = {
       ...targetBase,
-      columns: targetBase.columns.map((column) => ({ ...column, canUseAsLookupTarget: true }))
+      columns: [...targetBase.columns.map((column) => ({ ...column, canUseAsLookupTarget: true })), {
+        columnId: "column_relationcount01", label: "Count", logicalType: "integer",
+        canRename: true, canTrash: true, canUseAsFormulaOperand: true, canEditFormula: false,
+        canUseAsRelationDisplay: true, canEditRelation: false, canUseAsLookupTarget: true,
+        canUseAsRollupTarget: true, canEditRollup: false, hasInboundRelationDescriptors: false
+      }]
     };
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: { collections: {
         open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({
-          ...openIdentity(request), status: "ready", snapshot: target
+          ...openIdentity(request), status: "ready", snapshot: { ...target, revisionId: latestSnapshot.revisionId }
         }),
         addLookupColumn: async (request: CollectionAddLookupColumnRequest): Promise<CollectionAddLookupColumnResult> => {
           requests.push(request);
@@ -531,6 +539,7 @@ describe("ManagedCollectionPanel", () => {
                 canEditFormula: false,
                 canUseAsRelationDisplay: false,
                 canUseAsLookupTarget: false,
+                canEditLookup: true,
                 canEditRelation: false,
                 hasInboundRelationDescriptors: false,
                 lookup: {
@@ -551,11 +560,34 @@ describe("ManagedCollectionPanel", () => {
               }))
             }
           };
+        },
+        updateLookupColumn: async (request: CollectionUpdateLookupColumnRequest): Promise<CollectionUpdateLookupColumnResult> => {
+          updates.push(request);
+          const current = requireElementSnapshot();
+          return {
+            apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+            datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+            relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId,
+            status: "committed", operationId: "op_20260729_lookupupdate01",
+            snapshot: {
+              ...current, revisionId: "dataset_rev_20260729_lookup00003",
+              columns: current.columns.map((column) => column.columnId === request.columnId ? {
+                ...column, logicalType: "integer", canEditLookup: true,
+                lookup: { kind: "pige_single_lookup" as const, schemaVersion: 1 as const,
+                  relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId }
+              } : column),
+              rows: current.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => cell.columnId === request.columnId
+                ? { ...cell, value: 42 } : cell) }))
+            }
+          };
         }
       } }
     });
+    let latestSnapshot = initial;
+    function requireElementSnapshot(): CollectionSnapshot { return latestSnapshot; }
     await act(async () => {
-      root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial }));
+      root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial,
+        onSnapshot: (snapshot: CollectionSnapshot) => { latestSnapshot = snapshot; } }));
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
@@ -591,6 +623,17 @@ describe("ManagedCollectionPanel", () => {
     expect(Array.from(container.querySelectorAll("button")).some((button) =>
       button.getAttribute("aria-label") === "Edit cell: Company name, row 1"
     )).toBe(false);
+
+    await click(dom, buttonNamed(container, "Edit lookup: Company name"));
+    expect(dom.window.document.activeElement).toBe(container.querySelector("#collection-lookup-relation"));
+    const targetSelect = requireElement(container.querySelector<HTMLSelectElement>("#collection-lookup-target"));
+    await selectValue(dom, targetSelect, "column_relationcount01");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ columnId: "column_lookupname001", relationColumnId: "column_relationlink01",
+      targetColumnId: "column_relationcount01", expectedRevisionId: "dataset_rev_20260729_lookup00002" });
+    expect(container.textContent).toContain("Lookup field updated as a new revision.");
+    expect(container.textContent).toContain("42");
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -2407,6 +2450,7 @@ function FormulaCollectionHarness(props: {
 
 function RelationCollectionHarness(props: {
   readonly initialSnapshot: CollectionSnapshot;
+  readonly onSnapshot?: (snapshot: CollectionSnapshot) => void;
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState(props.initialSnapshot);
   return createElement(ManagedCollectionPanel, {
@@ -2423,6 +2467,7 @@ function RelationCollectionHarness(props: {
     onAdoptSnapshot: (next, expectedRevisionId) => {
       if (snapshot.revisionId !== expectedRevisionId) return false;
       setSnapshot(next);
+      props.onSnapshot?.(next);
       return true;
     },
     onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),

@@ -57,6 +57,7 @@ export function projectLookupColumns(
       canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !column.lookup,
       canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.lookup,
       canUseAsLookupTarget: scalar,
+      canEditLookup: column.lookup?.kind === "pige_single_lookup",
       ...(column.lookup ? { lookup: column.lookup } : {})
     };
   });

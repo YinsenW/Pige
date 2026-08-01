@@ -1426,9 +1426,41 @@ describe("ManagedCollectionService", () => {
       ...request, requestId: "collection_request_lookuprecreateabc", expectedRevisionId: afterUndo.snapshot.revisionId
     });
     if (recreated.status !== "committed") throw new Error("Lookup was not recreated");
+    const updateRequest = {
+      apiVersion: 1 as const, requestId: "collection_request_lookupupdate0001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      columnId: recreated.columnId, relationColumnId: relation.columnId, targetColumnId: nameColumn.id
+    };
+    const updated = await restarted.updateLookupColumn(updateRequest);
+    if (updated.status !== "committed") throw new Error("Lookup was not updated");
+    expect(updated.snapshot.columns.find((column) => column.columnId === recreated.columnId)).toMatchObject({
+      canEditLookup: true, logicalType: "string",
+      lookup: { relationColumnId: relation.columnId, targetColumnId: nameColumn.id }
+    });
+    expect(updated.snapshot.rows.find((row) => row.rowId === sourceRowId)?.cells.find(
+      (cell) => cell.columnId === recreated.columnId
+    )).toMatchObject({ value: "Ada", editable: false, readOnlyReason: "lookup" });
+    await expect(restarted.updateLookupColumn({ ...updateRequest, requestId: "collection_request_lookupupdatestale", targetColumnId: countColumn.id }))
+      .resolves.toMatchObject({ status: "stale", snapshot: { revisionId: updated.snapshot.revisionId } });
+    await expect(restarted.updateLookupColumn({ ...updateRequest, requestId: "collection_request_lookupupdatenoop", expectedRevisionId: updated.snapshot.revisionId }))
+      .resolves.toMatchObject({ status: "ineligible" });
+    await expect(new ManagedCollectionService(port).updateLookupColumn(updateRequest)).resolves.toEqual(updated);
+    const updateActivity = new KnowledgeActivityService(port, restarted);
+    expect(updateActivity.list({ limit: 20 }).activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationId: updated.operationId, kind: "update_collection_lookup", canUndo: true })
+    ]));
+    const updateUndo = await updateActivity.undo({ operationId: updated.operationId, expectedRevisionId: updated.snapshot.revisionId });
+    expect(updateUndo).toMatchObject({ status: "undone", revisionId: expect.any(String) });
+    if (updateUndo.status !== "undone") throw new Error("Lookup update was not undone");
+    const restored = await restarted.open({ apiVersion: 1, requestId: "collection_request_lookuprestored01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id });
+    if (restored.status !== "ready") throw new Error("Restored lookup did not reopen");
+    expect(restored.snapshot.columns.find((column) => column.columnId === recreated.columnId)).toMatchObject({
+      logicalType: "integer", lookup: { targetColumnId: countColumn.id }
+    });
     const targetEdit = await restarted.editCell({
       apiVersion: 1, requestId: "collection_request_lookuptargetedit", activeVaultId: vault.vaultId,
-      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: updateUndo.revisionId,
       rowId: targetRowId, columnId: countColumn.id, value: 9
     });
     if (targetEdit.status !== "committed") throw new Error("Lookup target was not edited");
