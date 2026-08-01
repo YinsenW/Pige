@@ -884,8 +884,9 @@ Events:
 Skill IPC is body/path-free. Main owns `.md`/`.zip` pickers; ZIP adds `invalid` and one inert bundle.
 `skills.stageUpdate` binds installed/base/registry identity: HTTPS reuses its origin; local pure Skills
 use a matching Main-picked file. Safe review precedes CAS trash/adoption. Pure updates preserve
-enablement; External/Web revalidates origin/manifest/capabilities and commits disabled. Restore
-returns disabled from verified trash.
+enablement; External/Web revalidates origin/manifest/capabilities and commits disabled. Machine-local
+External/Web uninstall/export use the same inert, pathless lifecycle boundary; verified trash restore
+revalidates its install disclosure and returns disabled.
 
 Pi Package IPC is path/body-free and `summary` authoritative. `catalogQuery` returns reviewed
 identity/disclosure. Install/uninstall/update/rollback confirm; pin/unpin and receipt-owned restore

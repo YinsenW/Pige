@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T15:38:00.000Z",
+  "reviewedAt": "2026-08-01T16:14:03.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-KNOW-003 exact reversible Topic hierarchy closure and Reader authority.",
+    "scope": "PIGE-SKILL-001 complete inert External/Web lifecycle and disabled restore authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "57c17e45e7ecf45d3f90e1c8abac7446d60b33f29837c30f744680b5b5fbe2db"
+    "reviewedSha256": "6afabcb6ec40d2378333ed8156527fe26f2b6e30fb06d9e50738d65a076f7434"
   },
   "reviewers": [
     {
-      "reviewerId": "topic-hierarchy-review",
-      "task": "Review reversible Topic hierarchy authority and acceptance",
+      "reviewerId": "external-web-lifecycle-review",
+      "task": "Review inert External/Web lifecycle authority and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the hierarchy and acceptance contract; Development supplies separate schema, service, restart recovery and Reader UI evidence."
+      "independence": "Planning reviews lifecycle and acceptance facts; Development supplies separate schema, service, restart recovery and Settings UI evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "topic-hierarchy-review",
+      "reviewerId": "external-web-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Topic parents have one bounded Markdown direction while child edges remain rebuildable rather than duplicated."
+      "summary": "External/Web bytes remain inert while private trash and exact receipts preserve recoverable user ownership."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "topic-hierarchy-review",
+      "reviewerId": "external-web-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Markdown, knowledge model, strict IPC, Reader UI and Operation recovery agree on one parent-ID vocabulary."
+      "summary": "Skill design, strict schemas, Main lifecycle policy and Settings controls agree on one pathless disabled-restore contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "topic-hierarchy-review",
+      "reviewerId": "external-web-lifecycle-review",
       "blockerCount": 0,
-      "summary": "PIGE-KNOW-003 is verified by executable relation, merge, conflict, Concept and Topic hierarchy evidence."
+      "summary": "PIGE-SKILL-001 and E8.01 are verified by staging, runtime, update, scope, lifecycle and UI evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "topic-hierarchy-review",
+      "reviewerId": "external-web-lifecycle-review",
       "blockerCount": 0,
-      "summary": "One bounded Topic owner reuses the existing editor and Reader boundaries without adding a Job or graph store."
+      "summary": "Existing Skill Registry owners reuse trash, export and restore mechanics without a new channel, store or runtime authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "topic-hierarchy-review",
+      "reviewerId": "external-web-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Existing knowledge, Markdown, API, UI and recovery owners hold the decision without a new design document."
+      "summary": "Existing Skill, API, playbook, trace and acceptance owners hold the closure without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/topic-parent-service.test.ts tests/unit/reader-topic-parents-ui.test.ts tests/unit/note-markdown-editor-service.test.ts",
+      "command": "npx vitest run tests/unit/skill-registry-service.test.ts tests/unit/skill-url-install-service.test.ts tests/unit/scoped-skill-registry-service.test.ts tests/unit/pure-skill-runtime-service.test.ts tests/unit/full-ui-settings-surface.test.ts",
       "status": "passed",
-      "evidence": "Exact search, add/remove, malformed/cycle fences, Reader focus and restart-safe Undo/Redo pass directly."
+      "evidence": "Machine, Vault and External/Web staging, runtime, update, export, trash, disabled restore and Settings controls pass directly."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The hierarchy candidate compiles and builds while the new bounded service is responsibility-inventory bound."
+      "evidence": "The lifecycle candidate compiles and builds while existing responsibility owners remain within governed budgets."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Knowledge, Markdown, API, UI, recovery, acceptance and semantic-claim owners remain mutually consistent."
+      "evidence": "Skill, API, playbook, trace, acceptance and semantic-claim owners remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "topic-hierarchy-bind-20260801",
-    "taskTitle": "Bind reversible Topic hierarchy closure",
+    "taskId": "external-web-lifecycle-bind-20260801",
+    "taskTitle": "Bind complete External/Web lifecycle closure",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Topic Markdown remains readable; exact parent IDs use the bounded common field and derived children need no migration.",
-    "acknowledgement": "Planning promotes PIGE-KNOW-003 from exact relation, merge, conflict, hierarchy and restart-safe Activity evidence."
+    "compatibility": "Existing Skill receipts remain readable; External/Web export and trash restore reuse the exact inert manifest and install disclosure without migration.",
+    "acknowledgement": "Planning promotes PIGE-SKILL-001 and E8.01 from exact staging, runtime, scope, lifecycle, restart and Settings evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

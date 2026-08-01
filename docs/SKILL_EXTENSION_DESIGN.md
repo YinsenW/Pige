@@ -45,10 +45,11 @@ and warnings. Install stores verified inert bytes disabled. A machine-local `ext
 with `pige_readonly_https_v1`, `external_network`, `network` and one HTTPS origin may be enabled;
 other runtimes stay separate.
 
-Verified `user_confirmed` pure Skills can enable, trash-uninstall and pathless-export. Reviewed
-update binds source/base/revision: HTTPS reuses its origin; Main picks matching local `.md`/`.zip`.
-Both trash old bytes, CAS-adopt once and preserve pure enablement; External/Web drift is disclosed
-and commits disabled. Restart uses the private receipt; trash restore returns disabled. No
+Verified `user_confirmed` pure and machine-local `external_web` Skills can trash-uninstall and
+pathless-export; restore revalidates the exact inert manifest/source disclosure and returns disabled.
+Reviewed update binds source/base/revision: HTTPS reuses its origin; Main picks matching local
+`.md`/`.zip`. Both trash old bytes and CAS-adopt once; pure updates preserve enablement while
+External/Web drift is disclosed and commits disabled. Restart uses the private receipt. No
 background or cross-source update.
 
 ## 5. Skill Format

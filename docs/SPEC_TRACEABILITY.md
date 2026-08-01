@@ -176,7 +176,7 @@ Allowed verification classes are `contract`, `unit`, `integration`, `smoke`, `ev
 | PIGE-UI-004 | Knowledge Tree visual encoding makes domain/topic weight and fragment quantity/density explainable and accessible while remaining source-backed and distinct from advanced graph analytics. | `docs/UI_PROTOTYPE.md` | P6 | M5 | integration |
 | PIGE-UI-005 | Note Agent/selection actions keep copy local and auto-apply reversible mutations with Activity/Undo; exceptional boundaries review. | `docs/UI_PROTOTYPE.md` | P6 | M5 | integration |
 | PIGE-UI-006 | The note reader exposes bounded source metadata and related pages without leaking source bodies or operational paths, and degrades safely when graph metadata is unavailable. | `docs/UI_PROTOTYPE.md` | P6 | M5 | integration |
-| PIGE-SKILL-001 | Skills can be staged from Settings or explicit chat intent, inspected, installed, enabled, disabled, updated from source, uninstalled, and exported; sensitive capabilities remain permission mediated. | `docs/SKILL_EXTENSION_DESIGN.md` | P8 | M5 | integration |
+| PIGE-SKILL-001 | Skills can be staged from Settings or explicit chat intent, inspected, installed, enabled, disabled, updated from source, trash-uninstalled, restored disabled, and exported; sensitive capabilities remain permission mediated. | `docs/SKILL_EXTENSION_DESIGN.md` | P8 | M5 | integration |
 | PIGE-SKILL-002 | Curated packages support explicit lifecycle/disclosure without hidden install; registered text-task recipes resolve exact package/native/Skill supply chain before one immutable-plan confirmation. | `docs/SKILL_EXTENSION_DESIGN.md` | P8 | M5 | integration |
 
 ## 5. Update And Handoff Checklist

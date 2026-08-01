@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "3f0732847ba8e8164d949f6cfb7c9258b08d8704",
+  "baseline": "c71277ecb14e49889ce939060b1c1df96f1b64a9",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 292,
-  "baselineLines": 126893,
+  "baselineLines": 126909,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -138,7 +138,7 @@
       ["setting-action-guard.ts", 36, "p"],
       ["scoped-skill-registry-service.ts", 236, "rd"],
       ["skill-source-update-registry.ts", 393, "rd"],
-      ["skill-registry-restore-service.ts", 378, "rd"],
+      ["skill-registry-restore-service.ts", 394, "rd"],
       ["skill-scope-policy.ts", 32, "p"],
       ["skill-url-install-service.ts", 999, "prd"],
       ["skill-zip-stage-service.ts", 256, "pf"],
