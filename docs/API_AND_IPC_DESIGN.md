@@ -488,7 +488,7 @@ Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.list
 `notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
 `notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash`,
 `notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`,
-`notes.changeAlias`, `notes.removeTag`.
+`notes.changeAlias`, `notes.removeTag`, `notes.setQuestionState`.
 
 Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
 only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
@@ -522,10 +522,18 @@ one canonical alias. Main proves governed whole-Vault reference uniqueness, writ
 after commit, and returns a path/body-free closed outcome or authoritative render. The renderer
 never receives Markdown, paths, hashes, or uniqueness internals; closed outcomes retain the draft.
 
+`notes.setQuestionState` binds one active `question` to exact Vault/page/render/revision and one
+canonical state from `open | partially_answered | answered | stale`. Main re-proves the same page,
+changes only `question.state` and `updated_at` through the atomic Markdown editor, and returns an
+authoritative render only after the new state is durable. Stale, missing, ineligible, and failed
+outcomes are body/path-free; Activity, Undo, Redo, and restart reuse the existing `update_page`
+lifecycle.
+
 Reader reference query contract:
 
-- `openSourceReference` binds request/vault/page/render/source; only `resolved` adds target page ID.
-  Other states retain Reader. `revealSource` revalidates and reveals only that asset, path/body-free.
+- `notes.openSourceReference` accepts exact request/vault/page/render/source identity and returns
+  body-free `unresolved | not_found | stale | resolved`; only `resolved` adds target page ID. Other
+  states retain Reader. `revealSource` revalidates and reveals only that asset, path/body-free.
 - `source.refresh.preview` checks a referenced or managed Markdown/TXT/PDF/DOCX/PPTX source and
   returns only safe change metadata plus an opaque candidate. `source.refresh.confirm` binds that
   candidate and expected source revision, rechecks currentness, and returns only closed status,

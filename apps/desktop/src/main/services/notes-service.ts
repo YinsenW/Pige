@@ -38,6 +38,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+import { readQuestionState } from "./question-state-service";
 
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
@@ -113,6 +114,8 @@ export type NotesSourceRevealResolution =
     }
   | { readonly status: "stale" | "not_found" };
 
+export interface NotesManagedPageTargetInput { readonly activeVaultId: string; readonly pageId: string; readonly renderContextId: string; readonly expectedRevision: string }
+
 export type NotesTrashResolution =
   | {
       readonly status: "ready";
@@ -184,7 +187,8 @@ export class NotesService {
       throw new PigeDomainError("note_changed", "The Markdown page changed while it was rendered.");
     }
 
-    const hrefs = extractRenderedInternalHrefs(rendered.html), frontmatter = parsePigeFrontmatter(stable.markdown)?.frontmatter, rawAliases = frontmatter?.aliases ?? [], aliases = rawAliases.filter((alias, index) => alias.length > 0 && alias.length <= 120 && alias === alias.normalize("NFKC").replace(/\s+/gu, " ").trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) && Boolean(normalizeMarkdownPageReferenceKey(alias)) && rawAliases.findIndex((value) => normalizeMarkdownPageReferenceKey(value) === normalizeMarkdownPageReferenceKey(alias)) === index);
+    const hrefs = extractRenderedInternalHrefs(rendered.html), parsedFrontmatter = parsePigeFrontmatter(stable.markdown), frontmatter = parsedFrontmatter?.frontmatter, rawAliases = frontmatter?.aliases ?? [], aliases = rawAliases.filter((alias, index) => alias.length > 0 && alias.length <= 120 && alias === alias.normalize("NFKC").replace(/\s+/gu, " ").trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) && Boolean(normalizeMarkdownPageReferenceKey(alias)) && rawAliases.findIndex((value) => normalizeMarkdownPageReferenceKey(value) === normalizeMarkdownPageReferenceKey(alias)) === index);
+    const questionState = parsedFrontmatter && stable.document.summary.pageType === "question" ? readQuestionState(parsedFrontmatter.raw) : undefined;
     const referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
     const renderContextId = ownerId === undefined
       ? undefined
@@ -227,7 +231,8 @@ export class NotesService {
               tagging: { tags: [...(frontmatter?.tags ?? [])], topics: [...(frontmatter?.topics ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }
             }
           : {}),
-        ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
+        ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(questionState ? { questionState: { state: questionState, canChange: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
       } : {})
     };
   }
@@ -475,12 +480,8 @@ export class NotesService {
       }
     };
   }
-  resolveTrashTarget(ownerId: string, input: {
-    readonly activeVaultId: string;
-    readonly pageId: string;
-    readonly renderContextId: string;
-    readonly expectedRevision: string;
-  }): NotesTrashResolution {
+  resolveTrashTarget(ownerId: string, input: NotesManagedPageTargetInput): NotesTrashResolution { return this.resolveManagedPageTarget(ownerId, input, "note"); }
+  resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question"): NotesTrashResolution {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vault || !vaultPath || vault.vaultId !== input.activeVaultId) return { status: "stale" };
@@ -503,7 +504,7 @@ export class NotesService {
       }
       return { status: "stale" };
     }
-    if (context.pageType !== "note") return { status: "ineligible" };
+    if (context.pageType !== pageType) return { status: "ineligible" };
     const title = parsePigeFrontmatter(context.markdown)?.frontmatter.title?.replace(/\s+/gu, " ").trim();
     if (!title) return { status: "ineligible" };
     return {

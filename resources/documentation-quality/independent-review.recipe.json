@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation, and revision-fenced Question state lifecycle.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "06a9bf1fc98db95aecc40b3fcd558f515bfe3aa67318891e4feb7acd86c12d58"
+    "reviewedSha256": "2735f20197d979eb0334c878fb01b6e500cd2aa46feb9a4fcdf6d40a76a28686"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note and Topic rename, tag lifecycle, note merge and duplicate-topic merge Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, and reviewed Reader exact-selection creation",
+      "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note and Topic rename, tag lifecycle, note merge and duplicate-topic merge Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, reviewed Reader exact-selection creation, and Question state lifecycle",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,14 +67,14 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed the grouped Topic-title, exact note-merge and duplicate-topic-merge Redo contract across API, Job, UI and one durable Decision; Development supplied independent owner, receipt-lineage, two-page drift and restart evidence while the existing Activity API/UI remain authoritative."
+      "independence": "Planning reviewed the Question state contract across Markdown schema, API, UI and one durable Decision; Development supplied independent typed owner, conflict, Activity and renderer evidence while the existing atomic Markdown lifecycle remains authoritative."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Activity can safely repeat undone Topic-title correction and exact note/topic merges while preserving current Reader, Library and Knowledge Health navigation."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, Job, UI and D-20260801-Knowledge-Lifecycle-Redo agree on matching-Undo authority, exact live/trash reproof, deterministic child Operation and restart adoption."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Three direct owner suites and Main routing bind the grouped Redo behavior without promoting broader PIGE-KNOW-001/PIGE-KNOW-005/PIGE-JOB-005 exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing private images and trash receipts own deterministic child lineage, repeatable Undo/Redo and interrupted-operation adoption; no new public state owner is introduced."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Activity/API/Job/UI owners plus one grouped durable Decision absorb all three mutations without a new document, locale, schema or status promotion."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Active Question pages expose one focused state control that adopts Main's authoritative Reader render while closed outcomes retain the current page and focus."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Markdown schema, API, UI and D-20260801-Question-State-Lifecycle agree on the four states, exact Reader revision, body-free authority and update_page lifecycle."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Direct schema, service, IPC and Reader tests bind the Question lifecycle without promoting broader PIGE-KNOW-001 or PIGE-JOB-005 exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"A bounded Question state owner delegates durable CAS, Activity, Undo/Redo and restart recovery to the existing atomic Markdown editor instead of duplicating storage."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Markdown/API/UI owners plus one durable Decision absorb the feature without a new document, mutation kind, path authority or status promotion."}
   ],
   "verification": [
     {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Grouped knowledge-lifecycle Redo semantics, owner routing and references remain structurally synchronized."},

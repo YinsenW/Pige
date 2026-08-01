@@ -388,6 +388,34 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
   });
 
+  it("records an allowed question-state update and converges Undo and Redo after restart", () => {
+    const fixture = createAdapterFixture({ pageType: "question", allowQuestion: true });
+    const opened = requireOpened(fixture.service);
+    const markdown = opened.markdown
+      .replace('  state: "open"', '  state: "answered"')
+      .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z");
+    const committed = fixture.service.save({
+      requestId: "noteeditreq_questionstatefixture",
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      expectedRevisionId: opened.revisionId,
+      renderIdentity: opened.renderIdentity,
+      markdown
+    });
+    expect(committed.status).toBe("committed");
+    if (committed.status !== "committed") throw new Error("Expected question state to commit.");
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const restartedActivity = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+    expect(restartedActivity.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
+    expect(restartedActivity.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  state: "open"');
+    expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({
+      operationId: operation.id,
+      expectedRevisionId: operation.before?.id
+    })).toMatchObject({ status: "redone", revisionId: committed.revisionId });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  state: "answered"');
+  });
+
   it("recovers only an exact interrupted forward Undo and remains idempotent", () => {
     const fixture = createAdapterFixture();
     const committed = commitEdit(fixture);
@@ -490,6 +518,7 @@ interface ActivityRecord {
 function createFixture(options: {
   readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
   readonly pageRelativePath?: string;
+  readonly allowQuestion?: boolean;
 } = {}): {
   readonly root: string;
   readonly vaultPath: string;
@@ -516,7 +545,8 @@ function createFixture(options: {
     activity,
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
-      randomId: () => "fixture-random-id"
+      randomId: () => "fixture-random-id",
+      allowQuestion: options.allowQuestion
     }
   );
   return { root, vaultPath, pagePath, markdown, records, vaults, service };
@@ -530,7 +560,8 @@ function createAdapterFixture(options: Parameters<typeof createFixture>[0] = {})
     adapter,
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
-      randomId: () => "adapter-fixture-random-id"
+      randomId: () => "adapter-fixture-random-id",
+      allowQuestion: options.allowQuestion
     }
   );
   return { ...fixture, adapter, service };
@@ -629,6 +660,10 @@ source:
   captured_at: "2026-07-27T10:00:00.000Z"
   availability: "available"
 ` : "";
+  const questionState = pageType === "question" ? `question:
+  state: "open"
+  answered_by: []
+` : "";
   return `---
 id: "${PAGE_ID}"
 schema_version: 1
@@ -642,7 +677,7 @@ aliases: []
 tags: ["editing"]
 topics: []
 source_ids: ["${SOURCE_ID}"]
-${sourceOwnership}---
+${sourceOwnership}${questionState}---
 
 # Markdown editor fixture
 

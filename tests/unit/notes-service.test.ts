@@ -42,6 +42,7 @@ function writePage(input: {
   readonly aliases?: readonly string[];
   readonly tags?: readonly string[];
   readonly sourceIds?: readonly string[];
+  readonly extraFrontmatter?: string;
   readonly body?: string;
 }): void {
   const pagePath = path.join(input.vaultPath, input.pageType === "source" ? "sources" : "wiki", input.fileName);
@@ -57,6 +58,7 @@ status: "active"
 aliases: ${JSON.stringify(input.aliases ?? [])}
 tags: ${JSON.stringify(input.tags ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
+${input.extraFrontmatter ?? ""}
 ---
 
 # ${input.title}
@@ -133,6 +135,35 @@ afterEach(() => {
 });
 
 describe("notes service", () => {
+  it("projects exact mutable state only for a current valid question page", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260801_question1";
+    writePage({
+      vaultPath, fileName: "question.md", pageId, title: "Question", pageType: "question",
+      extraFrontmatter: 'question:\n  state: "partially_answered"\n  answered_by: []'
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId }, OWNER_ID);
+    expect(rendered.questionState).toEqual({
+      state: "partially_answered", canChange: true,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(notes.resolveManagedPageTarget(OWNER_ID, {
+      activeVaultId: vault.vaultId,
+      pageId,
+      renderContextId: rendered.renderContextId!,
+      expectedRevision: rendered.questionState!.revision
+    }, "question")).toMatchObject({ status: "ready", pageId, title: "Question" });
+
+    writePage({
+      vaultPath, fileName: "malformed-question.md", pageId: "page_20260801_question2",
+      title: "Malformed", pageType: "question",
+      extraFrontmatter: 'question:\n  state: "open"\n  state: "answered"\n  answered_by: []'
+    });
+    await expect(notes.render({ pageId: "page_20260801_question2" }, OWNER_ID))
+      .resolves.not.toHaveProperty("questionState");
+  });
+
   it("projects five current SourceRecord summaries while retaining failures and omitting unsafe names", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_metadata123";

@@ -4,6 +4,7 @@ import type {
   NoteReconnectOriginalSourceRequest, NoteReconnectOriginalSourceResult,
   NoteRevealSourceRequest, NoteRevealSourceResult,
   NoteRenderResult,
+  NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -22,6 +23,7 @@ import { ReaderInlineReferenceSurface, type ReaderInlineReferenceActivation } fr
 import { NoteReaderSources } from "./NoteReaderSources";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
+import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 
 function readerSelectionEndpoint(
@@ -80,6 +82,10 @@ export function NoteReader(props: {
   readonly onOpenRelated: (pageId: string) => Promise<void>;
   readonly onUnlinkRelated?: (request: NoteUnlinkRelationRequest) => Promise<NoteUnlinkRelationResult>;
   readonly onRelatedUnlinked?: (render: NoteRenderResult) => void;
+  readonly onSetQuestionState?: (
+    request: NoteSetQuestionStateRequest
+  ) => Promise<NoteSetQuestionStateResult>;
+  readonly onQuestionStateChanged?: (render: NoteRenderResult) => void;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -840,6 +846,16 @@ export function NoteReader(props: {
             <span>
               {props.t("library.sources")}: {summary.sourceIds.length}
             </span>
+          ) : null}
+          {props.activeVaultId && props.onSetQuestionState && props.onQuestionStateChanged ? (
+            <ReaderQuestionStateControl
+              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.questionState?.revision ?? ""}`}
+              activeVaultId={props.activeVaultId}
+              note={props.note}
+              onSetState={props.onSetQuestionState}
+              onCommitted={props.onQuestionStateChanged}
+              t={props.t}
+            />
           ) : null}
         </div>
       </header>
