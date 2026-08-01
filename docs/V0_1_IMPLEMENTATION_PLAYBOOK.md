@@ -580,8 +580,8 @@ partial. B6.16 proves fenced bounded queries/citations/paging/Open plus an opaqu
 same-Dataset relation path of at most three hops through the real Home tool and restart;
 analytical snapshots, longer relation paths/aggregate joins, scale/platform and complete
 authority proof keep E6.11/PIGE-DATA-002 partial. B6.12/B6.14 prove main-owned rebuildable
-tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, keyboard
-and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep
+tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, branch
+collapse/expand with hidden-match reveal, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep
 E6.07/E6.09 partial.
 PIGE-CONTEXT-001 and PIGE-CONTEXT-002 are verified for the v0.1 local desktop runtime:
 Home/current-note, selection/retrieval, mixed attachments, lower-authority memory and

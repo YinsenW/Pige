@@ -170,6 +170,51 @@ describe("Knowledge Tree renderer", () => {
     await unmount(dom, mount.root);
   });
 
+  it("collapses branches, reveals hidden search matches, and follows accessible tree-key semantics", async () => {
+    const dom = createDom();
+    const mount = await mountTree(dom, readyTree(), async () => undefined);
+    const domain = treeItemNamed(mount.container, "Local-first");
+    expect(domain.getAttribute("aria-expanded")).toBe("true");
+
+    await click(dom, domain);
+    const collapse = buttonNamed(mount.container, "Collapse");
+    expect(collapse.dataset.knowledgeAction).toBe("toggle-branch");
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    await click(dom, collapse);
+    expect(domain.getAttribute("aria-expanded")).toBe("false");
+    expect(mount.container.querySelector('[role="treeitem"][aria-label="Local RAG"]')).toBeNull();
+    expect(mount.container.querySelector('[role="treeitem"][aria-label="Ranking note"]')).toBeNull();
+
+    const search = mount.container.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error("Missing Knowledge Tree search.");
+    await inputText(dom, search, "Lexical");
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent).toBe("1 matching knowledge units");
+    await keyDown(dom, search, "Enter");
+    const topic = treeItemNamed(mount.container, "Local RAG");
+    const concept = treeItemNamed(mount.container, "Lexical retrieval");
+    expect(domain.getAttribute("aria-expanded")).toBe("true");
+    expect(topic.getAttribute("aria-expanded")).toBe("true");
+    expect(concept.getAttribute("aria-selected")).toBe("true");
+
+    await keyDown(dom, concept, "ArrowLeft");
+    expect(topic.getAttribute("aria-selected")).toBe("true");
+    await keyDown(dom, topic, "ArrowLeft");
+    expect(topic.getAttribute("aria-expanded")).toBe("false");
+    expect(mount.container.querySelector('[role="treeitem"][aria-label="Lexical retrieval"]')).toBeNull();
+    await keyDown(dom, topic, "ArrowRight");
+    expect(topic.getAttribute("aria-expanded")).toBe("true");
+    const restoredConcept = treeItemNamed(mount.container, "Lexical retrieval");
+    expect(restoredConcept.getAttribute("aria-selected")).toBe("false");
+    await keyDown(dom, topic, "ArrowRight");
+    expect(restoredConcept.getAttribute("aria-selected")).toBe("true");
+
+    await click(dom, buttonNamed(mount.container, "More Knowledge Tree actions"));
+    await click(dom, buttonNamed(mount.container, "Show all branches"));
+    expect(treeItemNamed(mount.container, "Local RAG").getAttribute("aria-expanded")).toBe("true");
+    expect(treeItemNamed(mount.container, "Lexical retrieval")).toBeTruthy();
+    await unmount(dom, mount.root);
+  });
+
   it("deepens dense evidence leaves and outlines review-needed growth without hiding exact counts", async () => {
     const dom = createDom();
     const base = readyTree();

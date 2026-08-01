@@ -8,8 +8,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent
 } from "react";
-import type { KnowledgeTreeNode, KnowledgeTreePageRef, LibraryRelatedPage, LibraryRelatedResult } from "@pige/contracts";
+import type { KnowledgeTreeNode, KnowledgeTreePageRef, LibraryRelatedResult } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
+import {
+  KnowledgeTreeBranchPanel,
+  KnowledgeTreeRelatedPanel,
+  type KnowledgeTreeRelatedState
+} from "./KnowledgeTreeInspectorPanels";
 
 type TreeMode = "tree" | "network" | "list";
 
@@ -59,8 +64,6 @@ type PointerDrag = {
   readonly panY: number;
 };
 
-type KnowledgeTreeRelatedState = LibraryRelatedResult | "loading" | "unavailable" | null;
-
 export function KnowledgeTreeMap(props: {
   readonly roots: readonly KnowledgeTreeNode[];
   readonly activeVaultId: string;
@@ -74,6 +77,7 @@ export function KnowledgeTreeMap(props: {
   const [announcedMode, setAnnouncedMode] = useState<TreeMode | null>(null);
   const [query, setQuery] = useState("");
   const [reviewOnly, setReviewOnly] = useState(false);
+  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [activeId, setActiveId] = useState(() => visual.nodes[1]?.id ?? visual.nodes[0]?.id ?? "pige-root");
   const [zoom, setZoom] = useState(() => visual.fitZoom);
   const [pan, setPan] = useState(() => visual.fitPan);
@@ -123,19 +127,59 @@ export function KnowledgeTreeMap(props: {
     });
   }, [active?.id, active?.pageId, props.activeVaultId]);
 
-  const nodeInteractive = (node: VisualNode): boolean => {
+  const nodeAllowedByMode = (node: VisualNode): boolean => {
     if (mode === "list" && node.level >= 3) return false;
     if (reviewOnly && node.status !== "needs_review" && node.kind !== "root") return false;
     return true;
   };
 
+  const nodeVisibleInBranch = (node: VisualNode): boolean => {
+    let parentId = node.parentId;
+    while (parentId) {
+      if (collapsedIds.has(parentId)) return false;
+      parentId = visual.byId.get(parentId)?.parentId ?? null;
+    }
+    return true;
+  };
+
+  const nodeInteractive = (node: VisualNode): boolean =>
+    nodeAllowedByMode(node) && nodeVisibleInBranch(node);
+
   const nodeSearchMatch = (node: VisualNode): boolean =>
     !normalizedQuery || node.title.toLocaleLowerCase().includes(normalizedQuery);
 
   const nodeDimmed = (node: VisualNode): boolean => !nodeInteractive(node) || !nodeSearchMatch(node);
-  const activeChildren = active
+  const visibleNodes = visual.nodes.filter(nodeVisibleInBranch);
+  const activeChildren = active && !collapsedIds.has(active.id)
     ? visual.nodes.filter((node) => node.parentId === active.id && nodeInteractive(node))
     : [];
+
+  const setBranchCollapsed = (node: VisualNode, collapsed: boolean): void => {
+    if (node.childCount === 0) return;
+    setCollapsedIds((current) => {
+      if (current.has(node.id) === collapsed) return current;
+      const next = new Set(current);
+      if (collapsed) next.add(node.id);
+      else next.delete(node.id);
+      return next;
+    });
+  };
+
+  const revealNode = (node: VisualNode): void => {
+    const ancestors = new Set<string>();
+    let parentId = node.parentId;
+    while (parentId) {
+      ancestors.add(parentId);
+      parentId = visual.byId.get(parentId)?.parentId ?? null;
+    }
+    if (ancestors.size === 0) return;
+    setCollapsedIds((current) => {
+      if (![...ancestors].some((id) => current.has(id))) return current;
+      const next = new Set(current);
+      for (const id of ancestors) next.delete(id);
+      return next;
+    });
+  };
 
   const cameraForNode = (node: VisualNode): { readonly zoom: number; readonly pan: { readonly x: number; readonly y: number } } => {
     if (node.kind === "root") return { zoom: visual.fitZoom, pan: visual.fitPan };
@@ -145,6 +189,13 @@ export function KnowledgeTreeMap(props: {
       pan: { x: 450 - node.x * nextZoom, y: 310 - node.y * nextZoom }
     };
   };
+
+  useEffect(() => {
+    setCollapsedIds((current) => {
+      const next = new Set([...current].filter((id) => (visual.byId.get(id)?.childCount ?? 0) > 0));
+      return next.size === current.size ? current : next;
+    });
+  }, [visual]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -268,6 +319,7 @@ export function KnowledgeTreeMap(props: {
     if (!root) return;
     setMode("tree");
     setReviewOnly(false);
+    setCollapsedIds(new Set());
     setQuery("");
     searchOriginRef.current = null;
     closeMore();
@@ -366,6 +418,25 @@ export function KnowledgeTreeMap(props: {
       focusNode(node);
       return;
     }
+    if (event.key === "ArrowLeft") {
+      if (node.childCount > 0 && !collapsedIds.has(node.id)) {
+        setBranchCollapsed(node, true);
+        return;
+      }
+      const parent = node.parentId ? visual.byId.get(node.parentId) : undefined;
+      if (parent && nodeInteractive(parent)) focusNode(parent, true);
+      return;
+    }
+    if (event.key === "ArrowRight") {
+      if (node.childCount === 0) return;
+      if (collapsedIds.has(node.id)) {
+        setBranchCollapsed(node, false);
+        return;
+      }
+      const firstChild = visual.nodes.find((candidate) => candidate.parentId === node.id && nodeInteractive(candidate));
+      if (firstChild) focusNode(firstChild, true);
+      return;
+    }
     const candidates = visual.nodes.filter((candidate) => candidate.kind !== "root" && nodeInteractive(candidate));
     if (candidates.length === 0) return;
     const horizontal = event.key === "ArrowLeft" || event.key === "ArrowRight";
@@ -424,7 +495,7 @@ export function KnowledgeTreeMap(props: {
         >
           <g className="knowledge-map-stage" transform={transform}>
             <g aria-hidden="true">
-              {visual.nodes.filter((node) => node.parentId).map((node) => {
+              {visibleNodes.filter((node) => node.parentId).map((node) => {
                 const parent = visual.byId.get(node.parentId!);
                 if (!parent) return null;
                 const interactive = nodeInteractive(node);
@@ -443,7 +514,7 @@ export function KnowledgeTreeMap(props: {
               })}
             </g>
             <g>
-              {visual.nodes.map((node) => {
+              {visibleNodes.map((node) => {
                 const interactive = nodeInteractive(node);
                 const dimmed = nodeDimmed(node);
                 const density = evidenceDensity(node);
@@ -462,7 +533,7 @@ export function KnowledgeTreeMap(props: {
                     aria-level={node.level + 1}
                     aria-posinset={node.siblingIndex + 1}
                     aria-setsize={node.siblingCount}
-                    aria-expanded={node.childCount > 0 ? true : undefined}
+                    aria-expanded={node.childCount > 0 ? !collapsedIds.has(node.id) : undefined}
                     aria-label={node.title}
                     aria-description={formatNodeSummary(props.t, node)}
                     aria-hidden={!interactive}
@@ -536,7 +607,18 @@ export function KnowledgeTreeMap(props: {
               {props.t("knowledgeTree.browseBranch")}
             </button>
           ) : null}
-          {activeChildren.length > 0 || !active.pageId ? (
+          {active.childCount > 0 ? (
+            <button
+              className="knowledge-inspector-open"
+              type="button"
+              data-knowledge-action="toggle-branch"
+              aria-expanded={!collapsedIds.has(active.id)}
+              onClick={() => setBranchCollapsed(active, !collapsedIds.has(active.id))}
+            >
+              {props.t(collapsedIds.has(active.id) ? "knowledgeTree.expand" : "knowledgeTree.collapse")}
+            </button>
+          ) : null}
+          {!collapsedIds.has(active.id) && (activeChildren.length > 0 || !active.pageId) ? (
             <KnowledgeTreeBranchPanel
               children={activeChildren}
               onSelect={(node) => focusNode(node, true)}
@@ -557,7 +639,7 @@ export function KnowledgeTreeMap(props: {
 
       <div className="knowledge-minimap" aria-hidden="true">
         <svg viewBox={`0 0 ${visual.layoutWidth} 620`} preserveAspectRatio="xMidYMid meet">
-          {visual.nodes.filter((node) => node.parentId).map((node) => {
+          {visibleNodes.filter((node) => node.parentId).map((node) => {
             const parent = visual.byId.get(node.parentId!);
             if (!parent) return null;
             return (
@@ -592,7 +674,7 @@ export function KnowledgeTreeMap(props: {
           : viewportAnnouncement?.kind === "zoom"
             ? props.t("knowledgeTree.zoomStatus").replace("{percent}", String(viewportAnnouncement.percent))
             : normalizedQuery
-                ? props.t("knowledgeTree.searching").replace("{count}", String(visual.nodes.filter((node) => nodeInteractive(node) && nodeSearchMatch(node)).length))
+                ? props.t("knowledgeTree.searching").replace("{count}", String(visual.nodes.filter((node) => nodeAllowedByMode(node) && nodeSearchMatch(node)).length))
                 : announcedMode
                   ? props.t(`knowledgeTree.modeStatus.${announcedMode}`)
                   : props.t("knowledgeTree.showing").replace("{count}", String(visual.nodes.filter((node) => node.kind !== "root" && nodeInteractive(node)).length))}
@@ -616,9 +698,10 @@ export function KnowledgeTreeMap(props: {
                 return;
               }
               if (event.key !== "Enter" || !normalizedQuery) return;
-              const match = visual.nodes.find((node) => nodeInteractive(node) && nodeSearchMatch(node));
+              const match = visual.nodes.find((node) => nodeAllowedByMode(node) && nodeSearchMatch(node));
               if (!match) return;
               event.preventDefault();
+              revealNode(match);
               focusNode(match, true);
             }}
           />
@@ -675,131 +758,6 @@ export function KnowledgeTreeMap(props: {
         ) : null}
       </div>
     </div>
-  );
-}
-
-function KnowledgeTreeBranchPanel(props: {
-  readonly children: readonly VisualNode[];
-  readonly onSelect: (node: VisualNode) => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <section className="knowledge-branch-browser" aria-label={props.t("knowledgeTree.branchContents")}>
-      <h3>{props.t("knowledgeTree.branchContents")}</h3>
-      {props.children.length === 0 ? (
-        <p className="related-empty">{props.t("knowledgeTree.branchEmpty")}</p>
-      ) : (
-        <div className="knowledge-branch-list">
-          {props.children.map((node) => (
-            <button
-              key={node.id}
-              type="button"
-              data-knowledge-action="browse-child"
-              aria-label={`${props.t("knowledgeTree.browseBranch")}: ${node.title}`}
-              onClick={() => props.onSelect(node)}
-            >
-              <span>{node.title}</span>
-              <small>{node.kind === "page"
-                ? props.t("knowledgeTree.supportingPage")
-                : props.t(`knowledgeTree.kind.${node.kind}`)}</small>
-            </button>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function KnowledgeTreeRelatedPanel(props: {
-  readonly state: KnowledgeTreeRelatedState;
-  readonly ownerFocusKey: string;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  if (props.state === "loading" || props.state === "unavailable") {
-    return (
-      <section className="related-group" aria-live="polite" aria-busy={props.state === "loading"}>
-        <h3>{props.t("knowledgeTree.related")}</h3>
-        <p className="related-empty">
-          {props.t(props.state === "loading" ? "knowledgeTree.relatedLoading" : "knowledgeTree.relatedUnavailable")}
-        </p>
-      </section>
-    );
-  }
-  if (!props.state || props.state.degraded) {
-    return (
-      <section className="related-group" aria-live="polite">
-        <h3>{props.t("knowledgeTree.related")}</h3>
-        <p className="related-empty">{props.t(props.state?.degraded ? "knowledgeTree.relatedUnavailable" : "knowledgeTree.relatedEmpty")}</p>
-      </section>
-    );
-  }
-  const total = props.state.outgoing.length + props.state.backlinks.length;
-  if (total === 0) {
-    return (
-      <section className="related-group" aria-live="polite">
-        <h3>{props.t("knowledgeTree.related")}</h3>
-        <p className="related-empty">{props.t("knowledgeTree.relatedEmpty")}</p>
-      </section>
-    );
-  }
-  return (
-    <section className="related-group" aria-label={props.t("knowledgeTree.related")}>
-      <KnowledgeTreeRelatedGroup
-        title={props.t("knowledgeTree.outgoing")}
-        pages={props.state.outgoing}
-        ownerFocusKey={props.ownerFocusKey}
-        noteLoadingPageId={props.noteLoadingPageId}
-        onOpenNote={props.onOpenNote}
-        t={props.t}
-      />
-      <KnowledgeTreeRelatedGroup
-        title={props.t("knowledgeTree.backlinks")}
-        pages={props.state.backlinks}
-        ownerFocusKey={props.ownerFocusKey}
-        noteLoadingPageId={props.noteLoadingPageId}
-        onOpenNote={props.onOpenNote}
-        t={props.t}
-      />
-    </section>
-  );
-}
-
-function KnowledgeTreeRelatedGroup(props: {
-  readonly title: string;
-  readonly pages: readonly LibraryRelatedPage[];
-  readonly ownerFocusKey: string;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpenNote: (pageId: string, focusKey: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element | null {
-  if (props.pages.length === 0) return null;
-  return (
-    <section className="related-group">
-      <h3>{props.title}</h3>
-      <div className="related-list">
-        {props.pages.map(({ relation, relationType, summary }) => {
-          const focusKey = `${props.ownerFocusKey}:${relation}:${relationType}:${summary.pageId}`;
-          return (
-            <article className="related-row" key={`${relation}:${relationType}:${summary.pageId}`}>
-              <div><strong>{summary.title}</strong>{relationType === "contradicts" || relationType === "answers"
-                ? <span>{props.t(`note.relatedType.${relationType}`)}</span> : null}</div>
-              <button
-                type="button"
-                className="ghost"
-                data-knowledge-open-key={focusKey}
-                aria-label={`${props.t("note.open")}: ${summary.title}`}
-                disabled={props.noteLoadingPageId === summary.pageId}
-                onClick={() => void props.onOpenNote(summary.pageId, focusKey)}
-              >
-                {props.noteLoadingPageId === summary.pageId ? props.t("note.opening") : props.t("note.open")}
-              </button>
-            </article>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
