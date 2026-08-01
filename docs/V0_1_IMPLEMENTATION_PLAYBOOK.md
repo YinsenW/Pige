@@ -687,6 +687,11 @@ reverifies and publishes the real 25-source and 10,000-page/100,000-chunk report
 remain partial until the next protected release publishes a passed report. E9.01–03/E9.12
 retain their residual gates.
 
+B9.09/E9.05 are verified: Knowledge Health deterministically reports all four required
+issue classes, and exact eligible broken-link, orphan-parent, duplicate-topic and
+unsourced-claim repairs commit through reversible Operations/Undo while drift and broader
+rewrites fail closed.
+
 Deferred from this phase:
 
 - [D9.01] Cloud sync; post-v0.1.
