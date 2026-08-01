@@ -1396,6 +1396,31 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("requeues waiting model Jobs after every successful model repair mutation", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const handlers = [
+      ["models.addPresetProvider", "models.addManualProvider", "addPresetProvider(validatedRequest)"],
+      ["models.addManualProvider", "models.refreshProviderModels", "addManualProvider(validatedRequest)"],
+      ["models.refreshProviderModels", "models.updateProviderCredential", "refreshProviderModels("],
+      ["models.updateProviderCredential", "models.deleteProvider", "updateProviderCredential(validatedRequest)"],
+      ["models.deleteProvider", "models.addManualModel", "deleteProvider(validatedRequest)"],
+      ["models.addManualModel", "models.updateModel", "addManualModel({"],
+      ["models.updateModel", "models.setDefaultModel", "updateModel({"],
+      ["models.setDefaultModel", "settings.appearance", "setDefaultModel("]
+    ] as const;
+
+    for (const [channel, nextChannel, mutation] of handlers) {
+      const handler = mainSource.slice(
+        mainSource.indexOf(`ipcMain.handle("${channel}"`),
+        mainSource.indexOf(`ipcMain.handle("${nextChannel}"`)
+      );
+      expect(handler.indexOf(mutation)).toBeGreaterThanOrEqual(0);
+      expect(handler.indexOf(mutation)).toBeLessThan(
+        handler.indexOf("scheduleWaitingAgentIngestAfterModelReady()")
+      );
+    }
+  });
+
   it("keeps provider API key help Main-owned and renderer URL-free", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
