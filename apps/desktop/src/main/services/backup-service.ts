@@ -49,6 +49,7 @@ import {
   type AgentMemoryBackupIntegrity
 } from "./agent-memory-backup";
 import { filterConversationBackupPaths, includesConversationHistoryInBackup } from "./backup-conversation-preference-service";
+import { filterTrashBackupPaths, includesTrashInBackup } from "./backup-trash-preference-service";
 import { ManagedCopyRootService } from "./managed-copy-root-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
@@ -485,7 +486,7 @@ export class BackupRestoreService {
   }
 
   status(activeVault: VaultSummary | undefined, vaultPath?: string): BackupRestoreStatus {
-    const includes = { ...DEFAULT_INCLUDES, conversations: includesConversationHistoryInBackup(activeVault ? vaultPath : undefined), vaultMemory: includesAgentMemoryInBackup(activeVault ? vaultPath : undefined) };
+    const includes = { ...DEFAULT_INCLUDES, conversations: includesConversationHistoryInBackup(activeVault ? vaultPath : undefined), vaultMemory: includesAgentMemoryInBackup(activeVault ? vaultPath : undefined), trash: includesTrashInBackup(activeVault ? vaultPath : undefined) };
     return {
       phase: "available",
       createAvailable: Boolean(activeVault),
@@ -1165,9 +1166,9 @@ function inspectBackupPreflight(
   userDataPath: string | undefined
 ): BackupPreflightResult {
   const includeVaultMemory = includesAgentMemoryInBackup(vaultPath);
-  const includeConversations = includesConversationHistoryInBackup(vaultPath);
-  const includes = { ...DEFAULT_INCLUDES, conversations: includeConversations, vaultMemory: includeVaultMemory };
-  const relativePaths = filterAgentMemoryBackupPaths(vaultPath, filterConversationBackupPaths(collectBackupFiles(vaultPath, options), includeConversations), includeVaultMemory);
+  const includeConversations = includesConversationHistoryInBackup(vaultPath), includeTrash = includesTrashInBackup(vaultPath);
+  const includes = { ...DEFAULT_INCLUDES, conversations: includeConversations, vaultMemory: includeVaultMemory, trash: includeTrash };
+  const relativePaths = filterTrashBackupPaths(filterAgentMemoryBackupPaths(vaultPath, filterConversationBackupPaths(collectBackupFiles(vaultPath, options), includeConversations), includeVaultMemory), includeTrash);
   const domainSchemaVersions = deriveBackupDomainSchemaVersions(vaultPath, relativePaths);
   const sourceVaultId = readVaultManifest(vaultPath).vault_id;
   const memoryIntegrity = inspectIncludedAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths, includeVaultMemory);

@@ -19,6 +19,7 @@ import { VaultDisplayNameEditor } from "./VaultDisplayNameEditor";
 import { RecentVaultLifecycleActions } from "./RecentVaultLifecycleActions";
 import { ReferencedOriginalConnections } from "./ReferencedOriginalConnections";
 import { BackupConversationPreferenceControl } from "./BackupConversationPreferenceControl";
+import { BackupTrashPreferenceControl } from "./BackupTrashPreferenceControl";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -830,6 +831,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.lastBackup")}</strong><span>{lastBackupDisplay} · {props.t("backup.excludesSecrets")}</span></div></div>
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.contents")}</strong><span>{props.backupStatus?.messageKey ? props.t(props.backupStatus.messageKey) : props.t("backup.loading")}</span></div><button className="settings-button" type="button" onClick={props.onOpenMemory}>{props.t("backup.viewMemory")}</button></div>
         <BackupConversationPreferenceControl activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || relocationBusy || Boolean(activeBackupJob)} t={props.t} />
+        <BackupTrashPreferenceControl activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || relocationBusy || Boolean(activeBackupJob)} t={props.t} />
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.protectKnowledge")}</strong><span>{props.t("backup.protectKnowledgeDescription")}</span></div><div className="settings-row-control"><button className="settings-button primary" type="button" disabled={backupBusy || relocationBusy || !props.backupStatus?.createAvailable} onClick={() => void createBackup()}>{props.t("backup.create")}</button><button ref={restore.previewButtonRef} className="settings-button" type="button" disabled={backupBusy || relocationBusy || restore.restorePhase !== "idle" || !props.backupStatus?.restoreAvailable} onClick={() => void restore.previewRestore()}>{props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}</button></div></div>
         {activeBackupJob ? <div className="settings-row tall backup-job-status" role="status" aria-live="polite"><div className="settings-row-copy"><strong>{props.t("backup.currentJob")}</strong><span>{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
           {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>

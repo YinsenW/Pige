@@ -5432,6 +5432,33 @@ export const PigePolicyUpdateResultSchema = z.discriminatedUnion("status", [
   PigePolicyUpdateIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 
+export const BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL = "backup.trashPreferenceStatus" as const;
+export const BACKUP_SET_TRASH_PREFERENCE_CHANNEL = "backup.setTrashPreference" as const;
+export const BackupTrashPreferenceRevisionSchema = z.string()
+  .regex(/^backuptrashrev_[a-f0-9]{64}$/u);
+export const BackupTrashPreferenceSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: BackupTrashPreferenceRevisionSchema,
+  includeTrash: z.boolean(),
+  canUpdate: z.boolean()
+}).strict();
+export const BackupTrashPreferenceRequestIdSchema = z.string()
+  .regex(/^backuptrashreq_[a-z0-9]{16,64}$/u);
+export const BackupTrashPreferenceUpdateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupTrashPreferenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: BackupTrashPreferenceRevisionSchema,
+  includeTrash: z.boolean()
+}).strict();
+export const BackupTrashPreferenceUpdateResultSchema = z.discriminatedUnion("status", [
+  BackupTrashPreferenceUpdateRequestSchema.pick({ apiVersion: true, requestId: true, activeVaultId: true })
+    .extend({ status: z.literal("updated"), summary: BackupTrashPreferenceSummarySchema }).strict(),
+  BackupTrashPreferenceUpdateRequestSchema.pick({ apiVersion: true, requestId: true, activeVaultId: true })
+    .extend({ status: z.enum(["stale", "blocked"]), summary: BackupTrashPreferenceSummarySchema }).strict()
+]);
+
 export const RESTORE_CANCEL_CHANNEL = "restore.cancel" as const;
 export const RestoreCancelRequestIdSchema = z.string()
   .regex(/^restorecancelreq_[a-z0-9]{8,64}$/);
@@ -11220,6 +11247,10 @@ export type PigePolicyValidationIssue = z.infer<typeof PigePolicyValidationIssue
 export type PigePolicySummary = z.infer<typeof PigePolicySummarySchema>;
 export type PigePolicyUpdateRequest = z.infer<typeof PigePolicyUpdateRequestSchema>;
 export type PigePolicyUpdateResult = z.infer<typeof PigePolicyUpdateResultSchema>;
+export type BackupTrashPreferenceRevision = z.infer<typeof BackupTrashPreferenceRevisionSchema>;
+export type BackupTrashPreferenceSummary = z.infer<typeof BackupTrashPreferenceSummarySchema>;
+export type BackupTrashPreferenceUpdateRequest = z.infer<typeof BackupTrashPreferenceUpdateRequestSchema>;
+export type BackupTrashPreferenceUpdateResult = z.infer<typeof BackupTrashPreferenceUpdateResultSchema>;
 export type RestoreCancelRequestId = z.infer<typeof RestoreCancelRequestIdSchema>;
 export type RestoreCancelRequest = z.infer<typeof RestoreCancelRequestSchema>;
 export type RestoreCancelResult = z.infer<typeof RestoreCancelResultSchema>;

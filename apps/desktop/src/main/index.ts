@@ -203,6 +203,7 @@ import { BackupRestoreService } from "./services/backup-service";
 import { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
 import { BackupConversationPreferenceService } from "./services/backup-conversation-preference-service";
 import { PigePolicyService } from "./services/pige-policy-service";
+import { BackupTrashPreferenceService } from "./services/backup-trash-preference-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
 import { ManagedCopyRootService } from "./services/managed-copy-root-service";
@@ -415,6 +416,7 @@ let backupRestoreService: BackupRestoreService | undefined;
 let backupMemoryPreferenceService: BackupMemoryPreferenceService | undefined;
 let backupConversationPreferenceService: BackupConversationPreferenceService | undefined;
 let pigePolicyService: PigePolicyService | undefined;
+let backupTrashPreferenceService: BackupTrashPreferenceService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
 let vaultStorageRelocationService: VaultStorageRelocationService | undefined;
@@ -918,6 +920,18 @@ const getBackupConversationPreferenceService = (): BackupConversationPreferenceS
 const getPigePolicyService = (): PigePolicyService => {
   pigePolicyService ??= new PigePolicyService(getVaultService());
   return pigePolicyService;
+};
+
+const getBackupTrashPreferenceService = (): BackupTrashPreferenceService => {
+  backupTrashPreferenceService ??= new BackupTrashPreferenceService({
+    vault: getVaultService(),
+    hasActiveBackupJob: () => getJobsService().list({
+      classes: ["backup"],
+      states: ["queued", "running", "cancel_requested", "waiting_dependency", "failed_retryable"],
+      limit: 1
+    }).jobs.length > 0
+  });
+  return backupTrashPreferenceService;
 };
 
 const getBackupCoordinatorService = (): BackupCoordinatorService => {
@@ -3285,6 +3299,7 @@ registerBackupRestoreIpc({
   getDocumentsPath: () => app.getPath("documents"),
   getBackupService: getBackupRestoreService,
   getBackupConversationPreferenceService,
+  getBackupTrashPreferenceService,
   getBackupMemoryPreferenceService,
   getBackupCoordinator: getBackupCoordinatorService,
   getRestoreCoordinator: getRestoreCoordinatorService,

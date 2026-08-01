@@ -99,6 +99,42 @@ describe("registerBackupRestoreIpc", () => {
     expect(JSON.stringify(update.mock.calls)).not.toContain("/private/");
   });
 
+  it("binds the strict pathless trash backup preference identity", () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    const summary = {
+      apiVersion: 1 as const,
+      activeVaultId: "vault_20260801_trashbackup0001",
+      revision: `backuptrashrev_${"a".repeat(64)}`,
+      includeTrash: true,
+      canUpdate: true
+    };
+    const update = vi.fn((value: { readonly requestId: string; readonly activeVaultId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: value.requestId,
+      activeVaultId: value.activeVaultId,
+      status: "updated" as const,
+      summary: { ...summary, revision: `backuptrashrev_${"b".repeat(64)}`, includeTrash: false }
+    }));
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      getBackupTrashPreferenceService: () => ({ summary: () => summary, update })
+    });
+    expect(handlers.get("backup.trashPreferenceStatus")?.({ sender: sender() })).toEqual(summary);
+    const input = {
+      apiVersion: 1,
+      requestId: "backuptrashreq_abcdefghijklmnop",
+      activeVaultId: summary.activeVaultId,
+      expectedRevision: summary.revision,
+      includeTrash: false
+    } as const;
+    expect(handlers.get("backup.setTrashPreference")?.({ sender: sender() }, input)).toMatchObject({
+      status: "updated",
+      summary: { includeTrash: false }
+    });
+    expect(() => handlers.get("backup.setTrashPreference")?.({ sender: sender() }, { ...input, trashPath: "/private" })).toThrow();
+  });
+
   it("cancels only the exact sender-owned in-flight Restore preview without renderer path authority", async () => {
     const handlers = new Map<string, (...args: any[]) => unknown>();
     let resolveApply: ((value: { readonly status: "canceled" }) => void) | undefined;
@@ -292,6 +328,7 @@ function register(
     readonly getRestoreCoordinator?: () => unknown;
     readonly getBackupConversationPreferenceService?: () => unknown;
     readonly getBackupMemoryPreferenceService?: () => unknown;
+    readonly getBackupTrashPreferenceService?: () => unknown;
   }
 ): void {
   const candidate = {
@@ -317,6 +354,9 @@ function register(
       : {}),
     ...(overrides.getBackupMemoryPreferenceService
       ? { getBackupMemoryPreferenceService: overrides.getBackupMemoryPreferenceService as any }
+      : {}),
+    ...(overrides.getBackupTrashPreferenceService
+      ? { getBackupTrashPreferenceService: overrides.getBackupTrashPreferenceService as any }
       : {}),
     getBackupCoordinator: () => ({
       inspectReconnectCandidate: () => ({ status: "ready", candidate }),

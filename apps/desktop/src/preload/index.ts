@@ -429,6 +429,14 @@ import {
   type BackupConversationPreferenceSummary,
   type BackupConversationPreferenceUpdateRequest,
   type BackupConversationPreferenceUpdateResult,
+  BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL,
+  BACKUP_SET_TRASH_PREFERENCE_CHANNEL,
+  BackupTrashPreferenceSummarySchema,
+  BackupTrashPreferenceUpdateRequestSchema,
+  BackupTrashPreferenceUpdateResultSchema,
+  type BackupTrashPreferenceSummary,
+  type BackupTrashPreferenceUpdateRequest,
+  type BackupTrashPreferenceUpdateResult,
   BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
   BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
   BackupMemoryPreferenceSummarySchema,
@@ -2761,6 +2769,22 @@ const api: PigeDesktopApi = {
       );
       if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
         throw new Error("Invalid conversation backup preference response identity.");
+      }
+      return result;
+    },
+    trashPreferenceStatus: async (): Promise<BackupTrashPreferenceSummary> =>
+      BackupTrashPreferenceSummarySchema.parse(
+        await ipcRenderer.invoke(BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL)
+      ),
+    setTrashPreference: async (
+      request: BackupTrashPreferenceUpdateRequest
+    ): Promise<BackupTrashPreferenceUpdateResult> => {
+      const parsedRequest = BackupTrashPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupTrashPreferenceUpdateResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_SET_TRASH_PREFERENCE_CHANNEL, parsedRequest)
+      );
+      if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
+        throw new Error("Invalid trash backup preference response identity.");
       }
       return result;
     },
