@@ -347,7 +347,8 @@ function assertEligibleOperands(table: DatasetSchemaRecord["tables"][number], ex
 }
 
 function isEligibleOperand(column: DatasetColumn): boolean {
-  return column.calculation === undefined && (column.logicalType === "integer" || column.logicalType === "number") &&
+  return column.calculation === undefined && column.relation === undefined && column.lookup === undefined && column.rollup === undefined &&
+    (column.logicalType === "integer" || column.logicalType === "number") &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula"));
 }
 

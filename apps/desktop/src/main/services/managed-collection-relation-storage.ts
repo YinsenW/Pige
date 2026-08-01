@@ -652,7 +652,7 @@ function relationTargetId(value: unknown): string | undefined {
   return parsed.success && parsed.data ? parsed.data.targetRowId : undefined;
 }
 function isRelationDisplayColumn(column: DatasetColumn): boolean {
-  return !column.calculation && !column.relation && !column.lookup &&
+  return !column.calculation && !column.relation && !column.lookup && !column.rollup &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula")) &&
     ["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType);
 }

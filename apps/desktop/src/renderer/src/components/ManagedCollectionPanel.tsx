@@ -31,6 +31,7 @@ import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog";
 import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
+import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -134,7 +135,7 @@ export function ManagedCollectionPanel(props: {
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
   const [viewControlsBusy, setViewControlsBusy] = useState(false);
   const [formulaActive, setFormulaActive] = useState(false);
-  const [relationActive, setRelationActive] = useState(false); const [lookupActive, setLookupActive] = useState(false);
+  const [relationActive, setRelationActive] = useState(false); const [lookupActive, setLookupActive] = useState(false); const [rollupActive, setRollupActive] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
   const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
   const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
@@ -153,7 +154,7 @@ export function ManagedCollectionPanel(props: {
   const columnLabelRef = useRef<HTMLInputElement | null>(null);
   const columnActionsActiveRef = useRef(false);
   const formulaActiveRef = useRef(false);
-  const relationActiveRef = useRef(false); const lookupActiveRef = useRef(false);
+  const relationActiveRef = useRef(false); const lookupActiveRef = useRef(false); const rollupActiveRef = useRef(false);
   const viewControlsActiveRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
@@ -189,6 +190,7 @@ export function ManagedCollectionPanel(props: {
     formulaActiveRef.current = false;
     relationActiveRef.current = false;
     lookupActiveRef.current = false;
+    rollupActiveRef.current = false;
     viewControlsActiveRef.current = false;
     pendingFocusRef.current = null;
     pendingAppendFocusRef.current = false;
@@ -203,7 +205,7 @@ export function ManagedCollectionPanel(props: {
     setColumnActionsBusy(false);
     setViewControlsBusy(false);
     setFormulaActive(false);
-    setRelationActive(false); setLookupActive(false);
+    setRelationActive(false); setLookupActive(false); setRollupActive(false);
     setColumnFocusRequest(null);
     setCellFocusRequest(null);
     setFormulaEditRequest(null);
@@ -648,69 +650,62 @@ export function ManagedCollectionPanel(props: {
           ) : null}
         </div>
       </header>
-      <ManagedCollectionViewControls
-        activeVaultId={props.activeVaultId}
-        snapshot={props.snapshot}
+      <ManagedCollectionViewControls activeVaultId={props.activeVaultId} snapshot={props.snapshot}
         blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
-        onOpenView={props.onOpenView}
-        onCreateView={props.onCreateView}
-        onUpdateView={props.onUpdateView}
-        onRenameView={props.onRenameView}
-        onTrashView={props.onTrashView}
+        onOpenView={props.onOpenView} onCreateView={props.onCreateView} onUpdateView={props.onUpdateView}
+        onRenameView={props.onRenameView} onTrashView={props.onTrashView}
         onAdoptSnapshot={props.onAdoptSnapshot}
-        onBusyChange={(active) => {
-          viewControlsActiveRef.current = active;
-          setViewControlsBusy(active);
-        }}
+        onBusyChange={(active) => { viewControlsActiveRef.current = active; setViewControlsBusy(active); }}
         t={props.t}
       />
-      <ManagedCollectionFormulaColumnDialog
-        activeVaultId={props.activeVaultId}
-        snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || relationActive || lookupActive || edit !== null || columnDraft !== null}
+      <ManagedCollectionFormulaColumnDialog activeVaultId={props.activeVaultId} snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || relationActive || lookupActive || rollupActive || edit !== null || columnDraft !== null}
         requestedEdit={formulaEditRequest}
         onEditRequestHandled={() => setFormulaEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => {
           formulaActiveRef.current = active;
           setFormulaActive(active);
-          columnActionsActiveRef.current = active || relationActiveRef.current || lookupActiveRef.current;
-          setColumnActionsBusy(active || relationActiveRef.current || lookupActiveRef.current);
+          columnActionsActiveRef.current = active || relationActiveRef.current || lookupActiveRef.current || rollupActiveRef.current;
+          setColumnActionsBusy(active || relationActiveRef.current || lookupActiveRef.current || rollupActiveRef.current);
         }}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
-      <ManagedCollectionRelationDialog
-        activeVaultId={props.activeVaultId}
-        snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || formulaActive || lookupActive || edit !== null || columnDraft !== null}
+      <ManagedCollectionRelationDialog activeVaultId={props.activeVaultId} snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || formulaActive || lookupActive || rollupActive || edit !== null || columnDraft !== null}
         requestedEdit={relationEditRequest}
         onEditRequestHandled={() => setRelationEditRequest(null)}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => {
           relationActiveRef.current = active;
           setRelationActive(active);
-          columnActionsActiveRef.current = active || formulaActiveRef.current || lookupActiveRef.current;
-          setColumnActionsBusy(active || formulaActiveRef.current || lookupActiveRef.current);
+          columnActionsActiveRef.current = active || formulaActiveRef.current || lookupActiveRef.current || rollupActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current || lookupActiveRef.current || rollupActiveRef.current);
         }}
         onFocusCell={(rowId, columnId) => setCellFocusRequest({ rowId, columnId })}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
-      <ManagedCollectionLookupDialog
-        activeVaultId={props.activeVaultId}
-        snapshot={props.snapshot}
-        blocked={busy || viewControlsBusy || formulaActive || relationActive || edit !== null || columnDraft !== null}
+      <ManagedCollectionLookupDialog activeVaultId={props.activeVaultId} snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || formulaActive || relationActive || rollupActive || edit !== null || columnDraft !== null}
         onAdoptSnapshot={props.onAdoptSnapshot}
         onActiveChange={(active) => {
           lookupActiveRef.current = active;
           setLookupActive(active);
-          columnActionsActiveRef.current = active || formulaActiveRef.current || relationActiveRef.current;
-          setColumnActionsBusy(active || formulaActiveRef.current || relationActiveRef.current);
+          columnActionsActiveRef.current = active || formulaActiveRef.current || relationActiveRef.current || rollupActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current || relationActiveRef.current || rollupActiveRef.current);
         }}
         onFocusColumn={setColumnFocusRequest}
         t={props.t}
       />
+      <ManagedCollectionRollupDialog activeVaultId={props.activeVaultId} snapshot={props.snapshot}
+        blocked={busy || viewControlsBusy || formulaActive || relationActive || lookupActive || edit !== null || columnDraft !== null}
+        onAdoptSnapshot={props.onAdoptSnapshot} onActiveChange={(active) => {
+          rollupActiveRef.current = active; setRollupActive(active);
+          columnActionsActiveRef.current = active || formulaActiveRef.current || relationActiveRef.current || lookupActiveRef.current;
+          setColumnActionsBusy(active || formulaActiveRef.current || relationActiveRef.current || lookupActiveRef.current);
+        }} onFocusColumn={setColumnFocusRequest} t={props.t} />
       {columnDraft ? (
         <form
           className="settings-card settings-row tall"
