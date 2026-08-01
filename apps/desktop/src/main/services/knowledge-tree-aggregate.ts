@@ -7,6 +7,8 @@ import type {
   KnowledgeTreeSnapshot,
   LibraryPageSummary
 } from "@pige/contracts";
+import { addKnowledgeTreeEntityBranches, mergeKnowledgeRelationGroups,
+  type MutableKnowledgeTreeNode as MutableStructuralNode } from "./knowledge-tree-entity-branches";
 
 export type {
   KnowledgeTreeMetrics,
@@ -17,7 +19,7 @@ export type {
   KnowledgeTreeSnapshot
 } from "@pige/contracts";
 
-export type KnowledgeTreeRelationType = "has_topic" | "links_to";
+export type KnowledgeTreeRelationType = "has_topic" | "links_to" | "mentions_entity" | "related_to";
 
 export interface KnowledgeTreeRelationInput {
   readonly fromPageId: string;
@@ -25,36 +27,30 @@ export interface KnowledgeTreeRelationInput {
   readonly relationType: KnowledgeTreeRelationType;
 }
 
-interface MutableStructuralNode {
-  readonly id: string;
-  readonly title: string;
-  readonly page?: LibraryPageSummary;
-  readonly synthetic: boolean;
-  readonly childIds: Set<string>;
-  readonly relatedParentPageIds: Set<string>;
-  readonly directPages: Map<string, LibraryPageSummary>;
-  readonly directSourceRefs: Set<string>;
-}
-
 const UNASSIGNED_DOMAIN_ID = "knowledge-domain:unassigned";
 
 export function buildKnowledgeTreeSnapshot(
   pages: readonly LibraryPageSummary[],
   relations: readonly KnowledgeTreeRelationInput[],
-  invalidPageCount: number
+  invalidPageCount: number,
+  entities: readonly import("./knowledge-relation-index").KnowledgeTreeEntityInput[] = []
 ): KnowledgeTreeSnapshot {
   const includedPages = pages.filter((page) => page.status !== "archived").sort(comparePages);
   const pageById = new Map(includedPages.map((page) => [page.pageId, page]));
   const topicIds = new Set(includedPages.filter((page) => page.pageType === "topic").map((page) => page.pageId));
   const conceptIds = new Set(includedPages.filter((page) => page.pageType === "concept").map((page) => page.pageId));
   const explicitTopics = groupRelationTargets(relations, "has_topic", pageById);
-  const linkedPages = groupRelationTargets(relations, "links_to", pageById);
+  const linkedPages = mergeKnowledgeRelationGroups(
+    groupRelationTargets(relations, "links_to", pageById),
+    groupRelationTargets(relations, "related_to", pageById)
+  );
   const nodes = new Map<string, MutableStructuralNode>();
 
   for (const page of includedPages) {
     if (page.pageType !== "topic" && page.pageType !== "concept") continue;
     nodes.set(page.pageId, createStructuralNode(page));
   }
+  const entityRoot = addKnowledgeTreeEntityBranches(nodes, pageById, relations, entities);
 
   const topicParentById = chooseTopicParents(topicIds, explicitTopics, pageById);
   for (const topicId of sortPageIds(topicIds, pageById)) {
@@ -74,6 +70,7 @@ export function buildKnowledgeTreeSnapshot(
       unassigned = {
         id: UNASSIGNED_DOMAIN_ID,
         title: "Unassigned",
+        kind: "domain",
         synthetic: true,
         childIds: new Set(),
         relatedParentPageIds: new Set(),
@@ -117,13 +114,14 @@ export function buildKnowledgeTreeSnapshot(
     .filter((topicId) => !topicParentById.has(topicId))
     .map((topicId) => buildNode(topicId, nodes, sourcePageById, true));
   const roots = topicRoots.sort(compareNodes);
+  if (entityRoot && hasAggregateContent(entityRoot)) roots.push(buildNode(entityRoot.id, nodes, sourcePageById, true));
   if (unassigned && hasAggregateContent(unassigned)) {
     roots.push(buildNode(unassigned.id, nodes, sourcePageById, true));
   }
 
   const sourceIds = new Set(includedPages.flatMap((page) => page.sourceIds));
   const fragmentPageCount = includedPages.filter(
-    (page) => page.pageType !== "topic" && page.pageType !== "concept" && page.pageType !== "source"
+    (page) => page.pageType !== "topic" && page.pageType !== "concept" && page.pageType !== "entity" && page.pageType !== "source"
   ).length;
 
   return {
@@ -134,6 +132,7 @@ export function buildKnowledgeTreeSnapshot(
       pageCount: includedPages.length,
       topicCount: topicIds.size,
       conceptCount: conceptIds.size,
+      entityCount: entities.length,
       fragmentPageCount,
       sourceCount: sourceIds.size,
       leafCount: roots.reduce((total, root) => total + root.metrics.leafCount, 0)
@@ -146,6 +145,7 @@ function createStructuralNode(page: LibraryPageSummary): MutableStructuralNode {
   return {
     id: page.pageId,
     title: page.title,
+    kind: page.pageType === "topic" ? "topic" : page.pageType === "entity" ? "entity" : "concept",
     page,
     synthetic: false,
     childIds: new Set(),
@@ -248,7 +248,7 @@ function finalizeNode(
 
   return {
     id: node.id,
-    kind: node.synthetic || (isRoot && node.page?.pageType === "topic") ? "domain" : node.page?.pageType === "topic" ? "topic" : "concept",
+    kind: isRoot && node.kind === "topic" ? "domain" : node.kind,
     title: node.title,
     ...(node.synthetic ? { synthetic: true as const } : {}),
     ...(node.page ? {
@@ -376,7 +376,7 @@ function compareNodes(left: KnowledgeTreeNode, right: KnowledgeTreeNode): number
 }
 
 function nodeKindRank(kind: KnowledgeTreeNodeKind): number {
-  return kind === "domain" ? 0 : kind === "topic" ? 1 : kind === "concept" ? 2 : 3;
+  return kind === "domain" ? 0 : kind === "topic" ? 1 : kind === "concept" ? 2 : kind === "entity" ? 3 : 4;
 }
 
 function compareText(left: string, right: string): number {

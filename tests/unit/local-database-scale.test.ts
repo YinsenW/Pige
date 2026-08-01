@@ -78,11 +78,11 @@ describe("local database scale evidence", () => {
         indexedPageCount: PAGE_COUNT,
         chunkCount: CHUNK_COUNT,
         chunkerVersion: "pige-markdown-v1",
-        indexRevision: 5
+        indexRevision: 6
       });
 
       const referenceRevision = database.inlineReferenceRevision(vaultPath);
-      expect(referenceRevision).toMatch(/^5:/u);
+      expect(referenceRevision).toMatch(/^6:/u);
       const referenceSamples = measureFive(() => database.inlineReferenceCandidates(vaultPath, {
         normalizedKey: "scale page 09999",
         expectedRevision: referenceRevision!

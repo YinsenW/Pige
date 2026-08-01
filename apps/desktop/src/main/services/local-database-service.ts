@@ -13,7 +13,7 @@ import type {
   RetrievalSearchResultItem
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import { createPigeTagKey, extractPigeMarkdownLinkRefs } from "@pige/markdown";
+import { extractPigeMarkdownLinkRefs } from "@pige/markdown";
 import {
   LocalDatabaseSchemaStateSchema,
   RetrievalSearchResultItemSchema,
@@ -25,6 +25,7 @@ import {
   type KnowledgeTreeRelationInput,
   type KnowledgeTreeSnapshot
 } from "./knowledge-tree-aggregate";
+import { indexPageKnowledgeRelations, type KnowledgeTreeEntityInput } from "./knowledge-relation-index";
 import {
   assertMarkdownPagePathConfined,
   createMarkdownPageReferenceKeys,
@@ -45,7 +46,6 @@ import { readLocalDatabaseLibraryPageSlice, type LocalDatabaseLibraryPageSlice,
 export type { LocalDatabaseLibraryPageSlice, LocalDatabaseLibraryPageSliceRequest } from "./local-database-library-browse";
 import {
   createAmbiguityAwarePageLookup,
-  normalizeLocalReference,
   readKnowledgeHealthIndexGeneration,
   readKnowledgeHealthSnapshot,
   resolveAmbiguityAwareLinkedPageId,
@@ -386,35 +386,51 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       if (!pageExists(db, request.pageId)) return undefined;
       const outgoingRows = db.prepare(
         `
-          SELECT p.*, MIN(l.target) AS target
-          FROM links l
-          JOIN pages p ON p.page_id = l.to_page_id
-          WHERE l.from_page_id = ?
-          GROUP BY p.page_id
-          ORDER BY p.updated_at DESC, p.page_path ASC
+          SELECT * FROM (
+            SELECT p.*, 'links_to' AS relation_type, MIN(l.target) AS target
+            FROM links l JOIN pages p ON p.page_id = l.to_page_id
+            WHERE l.from_page_id = ? GROUP BY p.page_id
+            UNION ALL
+            SELECT p.*, e.relation_type, p.title AS target
+            FROM relation_edges e JOIN pages p ON p.page_id = e.to_page_id
+            WHERE e.from_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity')
+          ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
           LIMIT ?
         `
-      ).all(request.pageId, limit);
+      ).all(request.pageId, request.pageId, limit);
       const backlinkRows = db.prepare(
         `
-          SELECT p.*, MIN(l.target) AS target
-          FROM backlinks b
-          JOIN pages p ON p.page_id = b.from_page_id
-          LEFT JOIN links l ON l.from_page_id = b.from_page_id AND l.to_page_id = b.to_page_id
-          WHERE b.to_page_id = ?
-          GROUP BY p.page_id
-          ORDER BY p.updated_at DESC, p.page_path ASC
+          SELECT * FROM (
+            SELECT p.*, 'links_to' AS relation_type, MIN(l.target) AS target
+            FROM backlinks b JOIN pages p ON p.page_id = b.from_page_id
+            LEFT JOIN links l ON l.from_page_id = b.from_page_id AND l.to_page_id = b.to_page_id
+            WHERE b.to_page_id = ? GROUP BY p.page_id
+            UNION ALL
+            SELECT p.*, e.relation_type, p.title AS target
+            FROM relation_edges e JOIN pages p ON p.page_id = e.from_page_id
+            WHERE e.to_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity')
+          ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
           LIMIT ?
         `
-      ).all(request.pageId, limit);
+      ).all(request.pageId, request.pageId, limit);
 
       return {
         totalOutgoing: readCount(
           db,
-          "SELECT COUNT(DISTINCT to_page_id) AS count FROM links WHERE from_page_id = ? AND to_page_id IS NOT NULL",
-          [request.pageId]
+          `SELECT COUNT(*) AS count FROM (
+            SELECT 'links_to', to_page_id FROM links WHERE from_page_id = ? AND to_page_id IS NOT NULL
+            UNION SELECT relation_type, to_page_id FROM relation_edges
+              WHERE from_page_id = ? AND relation_type IN ('related_to', 'mentions_entity')
+                AND to_page_id IN (SELECT page_id FROM pages)
+          )`,
+          [request.pageId, request.pageId]
         ),
-        totalBacklinks: readCount(db, "SELECT COUNT(*) AS count FROM backlinks WHERE to_page_id = ?", [request.pageId]),
+        totalBacklinks: readCount(db, `SELECT COUNT(*) AS count FROM (
+          SELECT 'links_to', from_page_id FROM backlinks WHERE to_page_id = ?
+          UNION SELECT relation_type, from_page_id FROM relation_edges
+            WHERE to_page_id = ? AND relation_type IN ('related_to', 'mentions_entity')
+              AND from_page_id IN (SELECT page_id FROM pages)
+        )`, [request.pageId, request.pageId]),
         invalidPageCount: readInvalidPageCount(db),
         outgoing: outgoingRows.map((row) => rowToRelatedPage(row, "outgoing")),
         backlinks: backlinkRows.map((row) => rowToRelatedPage(row, "backlink"))
@@ -432,12 +448,14 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       const relations = db.prepare(`
         SELECT from_page_id, to_page_id, relation_type
         FROM relation_edges
-        WHERE relation_type IN ('has_topic', 'links_to')
+        WHERE relation_type IN ('has_topic', 'links_to', 'mentions_entity', 'related_to')
           AND from_page_id IS NOT NULL
           AND to_page_id IS NOT NULL
         ORDER BY relation_type ASC, from_page_id ASC, to_page_id ASC
       `).all().map(rowToKnowledgeTreeRelation);
-      return buildKnowledgeTreeSnapshot(pages, relations, readInvalidPageCount(db));
+      const entities = db.prepare("SELECT entity_id, page_id, name FROM entities ORDER BY name, entity_id")
+        .all().map(rowToKnowledgeTreeEntity);
+      return buildKnowledgeTreeSnapshot(pages, relations, readInvalidPageCount(db), entities);
     } finally {
       db.close();
     }
@@ -897,7 +915,7 @@ const REQUIRED_MIGRATION_IDS = [
   INLINE_REFERENCE_MIGRATION_ID
 ] as const;
 const CURRENT_APP_SCHEMA_VERSION = 3;
-const CURRENT_INDEX_REVISION = 5;
+const CURRENT_INDEX_REVISION = 6;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -1170,46 +1188,7 @@ function readInlineReferenceRevisionFromDatabase(db: DatabaseSync): string | und
   return rebuiltAt ? `${CURRENT_INDEX_REVISION}:${rebuiltAt}` : undefined;
 }
 
-function indexPageKnowledge(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {
-  const pageById = new Map(pages.map((page) => [page.summary.pageId, page]));
-  const lookup = createAmbiguityAwarePageLookup(pages);
-  const insertTag = db.prepare("INSERT OR IGNORE INTO tags(tag) VALUES (?)");
-  const insertPageTag = db.prepare("INSERT OR IGNORE INTO page_tags(page_id, tag) VALUES (?, ?)");
-  const insertTopic = db.prepare(`
-    INSERT OR REPLACE INTO topics(topic_id, page_id, title)
-    VALUES (?, ?, ?)
-  `);
-  const insertRelation = db.prepare(`
-    INSERT OR IGNORE INTO relation_edges(edge_id, from_page_id, to_page_id, relation_type, evidence_json)
-    VALUES (?, ?, ?, 'has_topic', ?)
-  `);
-
-  for (const page of pages) {
-    for (const tag of page.knowledge.tags) {
-      const key = createPigeTagKey(tag);
-      if (!key) continue;
-      insertTag.run(key);
-      insertPageTag.run(page.summary.pageId, key);
-    }
-    if (page.summary.pageType === "topic") {
-      insertTopic.run(page.summary.pageId, page.summary.pageId, page.summary.title);
-    }
-  }
-
-  for (const page of pages) {
-    for (const topicRef of page.knowledge.topics) {
-      const targetId = lookup.get(normalizeLocalReference(topicRef));
-      const target = targetId ? pageById.get(targetId) : undefined;
-      if (!target || target.summary.pageType !== "topic" || target.summary.pageId === page.summary.pageId) continue;
-      insertRelation.run(
-        createRelationEdgeId("has_topic", page.summary.pageId, target.summary.pageId, target.summary.pageId),
-        page.summary.pageId,
-        target.summary.pageId,
-        JSON.stringify([{ source: "frontmatter", field: "topics", target: topicRef }])
-      );
-    }
-  }
-}
+const indexPageKnowledge = indexPageKnowledgeRelations;
 
 function indexPageLinks(
   db: DatabaseSync,
@@ -1407,6 +1386,14 @@ function rowToKnowledgeTreeRelation(row: Record<string, unknown>): KnowledgeTree
   };
 }
 
+function rowToKnowledgeTreeEntity(row: Record<string, unknown>): KnowledgeTreeEntityInput {
+  return {
+    entityId: String(row.entity_id),
+    ...(typeof row.page_id === "string" ? { pageId: row.page_id } : {}),
+    name: String(row.name)
+  };
+}
+
 function rowToSearchResult(row: Record<string, unknown>, query: QueryTerms): RetrievalSearchResultItem {
   const summary = rowToSummary(row);
   const snippet = truncateSearchSnippet(String(row.snippet ?? "").trim());
@@ -1423,6 +1410,9 @@ function rowToRelatedPage(row: Record<string, unknown>, relation: LibraryRelated
   return {
     summary: rowToSummary(row),
     relation,
+    relationType: row.relation_type === "related_to" || row.relation_type === "mentions_entity"
+      ? row.relation_type
+      : "links_to",
     target: String(row.target ?? "")
   };
 }

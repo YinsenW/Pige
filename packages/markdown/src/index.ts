@@ -26,7 +26,9 @@ export interface PigeFrontmatter {
   readonly aliases?: readonly string[];
   readonly tags?: readonly string[];
   readonly topics?: readonly string[];
+  readonly entities?: readonly string[];
   readonly source_ids?: readonly string[];
+  readonly related_page_ids?: readonly string[];
 }
 
 export interface PigeFrontmatterParseResult {
@@ -337,8 +339,8 @@ function parseKnownFrontmatterFields(raw: string): PigeFrontmatter {
   return parsed as PigeFrontmatter;
 }
 
-function isKnownFrontmatterArrayKey(key: keyof PigeFrontmatter): key is "aliases" | "tags" | "topics" | "source_ids" {
-  return ["aliases", "tags", "topics", "source_ids"].includes(key);
+function isKnownFrontmatterArrayKey(key: keyof PigeFrontmatter): key is "aliases" | "tags" | "topics" | "entities" | "source_ids" | "related_page_ids" {
+  return ["aliases", "tags", "topics", "entities", "source_ids", "related_page_ids"].includes(key);
 }
 
 function isKnownFrontmatterKey(key: string): key is keyof PigeFrontmatter {
@@ -354,7 +356,9 @@ function isKnownFrontmatterKey(key: string): key is keyof PigeFrontmatter {
     "aliases",
     "tags",
     "topics",
-    "source_ids"
+    "entities",
+    "source_ids",
+    "related_page_ids"
   ].includes(key);
 }
 

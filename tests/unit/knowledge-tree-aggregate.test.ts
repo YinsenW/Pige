@@ -74,6 +74,7 @@ describe("Knowledge Tree aggregate", () => {
       pageCount: 7,
       topicCount: 2,
       conceptCount: 2,
+      entityCount: 0,
       fragmentPageCount: 2,
       sourceCount: 5,
       leafCount: 7
@@ -137,6 +138,46 @@ describe("Knowledge Tree aggregate", () => {
     expect(service.knowledgeTree(vaultPath)).toEqual(before);
   });
 
+  it("rebuilds entity branches and typed explicit relationships from durable frontmatter", () => {
+    const vaultPath = makeVaultRoot();
+    writePage(vaultPath, "wiki/entities/pige.md", {
+      id: "page_20260801_entitypige",
+      title: "Pige",
+      type: "entity",
+      aliases: ["Pige app"]
+    });
+    writePage(vaultPath, "wiki/notes/entity-research.md", {
+      id: "page_20260801_entitynote",
+      title: "Entity research",
+      entities: ["Pige app", "OpenAI"],
+      relatedPageIds: ["page_20260801_entitypige"],
+      sourceIds: ["src_20260801_entity01"],
+      body: "PRIVATE_ENTITY_BODY"
+    });
+
+    const service = new LocalDatabaseService();
+    service.rebuild(vaultPath);
+
+    const snapshot = service.knowledgeTree(vaultPath);
+    expect(snapshot?.totals).toMatchObject({ pageCount: 2, entityCount: 2 });
+    const entityRoot = snapshot?.roots.find((root) => root.id === "knowledge-domain:entities");
+    expect(entityRoot).toMatchObject({ kind: "domain", title: "Entities" });
+    expect(entityRoot?.children.map((child) => [child.kind, child.title])).toEqual([
+      ["entity", "OpenAI"],
+      ["entity", "Pige"]
+    ]);
+    expect(childNamed(entityRoot, "Pige")?.pageRefs.map((page) => page.title)).toEqual(["Entity research"]);
+    expect(JSON.stringify(snapshot)).not.toContain("PRIVATE_ENTITY_BODY");
+
+    const outgoing = service.relatedPages(vaultPath, { pageId: "page_20260801_entitynote" });
+    expect(outgoing?.outgoing.map(({ relationType, summary }) => [relationType, summary.pageId])).toEqual([
+      ["mentions_entity", "page_20260801_entitypige"],
+      ["related_to", "page_20260801_entitypige"]
+    ]);
+    const backlinks = service.relatedPages(vaultPath, { pageId: "page_20260801_entitypige" });
+    expect(backlinks?.backlinks.map(({ relationType }) => relationType)).toEqual(["mentions_entity", "related_to"]);
+  });
+
   it("returns a deterministic empty state without manufacturing hidden hierarchy", () => {
     const snapshot = new LocalDatabaseService().knowledgeTree(makeVaultRoot());
 
@@ -148,6 +189,7 @@ describe("Knowledge Tree aggregate", () => {
         pageCount: 0,
         topicCount: 0,
         conceptCount: 0,
+        entityCount: 0,
         fragmentPageCount: 0,
         sourceCount: 0,
         leafCount: 0
@@ -285,6 +327,8 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly status?: string;
   readonly aliases?: readonly string[];
   readonly topics?: readonly string[];
+  readonly entities?: readonly string[];
+  readonly relatedPageIds?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly body?: string;
 }): void {
@@ -301,7 +345,9 @@ status: ${JSON.stringify(input.status ?? "active")}
 language: "en"
 aliases: ${JSON.stringify(input.aliases ?? [])}
 topics: ${JSON.stringify(input.topics ?? [])}
+entities: ${JSON.stringify(input.entities ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
+related_page_ids: ${JSON.stringify(input.relatedPageIds ?? [])}
 ---
 
 ${input.body ?? `# ${input.title}`}

@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 243,
-  "baselineLines": 117723,
+  "baselineFileCount": 245,
+  "baselineLines": 117896,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -202,7 +202,9 @@
       ["legacy-agent-ingest-job-executor.ts", 130, "jr"],
       ["ocr-job-executor.ts", 191, "jr"],
       ["paddle-ocr-adapter.ts", 502, "p"],
+      ["knowledge-relation-index.ts", 115, "f"],
       ["knowledge-tree-aggregate.ts", 390, "f"],
+      ["knowledge-tree-entity-branches.ts", 58, "f"],
       ["library-service.ts", 142, "f"],
       ["library-tags-service.ts", 183, "f"],
       ["local-rag-engine-service.ts", 233, "rf"],
@@ -276,7 +278,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 243,
+    "serviceOwnerCount": 245,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

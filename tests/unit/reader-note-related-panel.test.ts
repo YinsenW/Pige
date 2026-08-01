@@ -61,6 +61,25 @@ describe("Reader note relationships", () => {
     expect(button(dom, "Unlink")).toBeTruthy();
     await act(async () => root.unmount()); dom.window.close();
   });
+
+  it("does not offer related-page mutation authority for derived inline or entity edges", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const derived = {
+      ...related,
+      totalOutgoing: 2,
+      outgoing: [
+        { ...related.outgoing[0]!, relationType: "links_to" as const },
+        { ...related.outgoing[0]!, relationType: "mentions_entity" as const }
+      ]
+    } satisfies LibraryRelatedResult;
+    await act(async () => { root.render(createElement(ReaderNoteRelatedPanel, {
+      note, activeVaultId: "vault_20260731_unlink", related: derived, loadingPageId: null,
+      onOpen: async () => undefined, onUnlink: vi.fn(), t,
+    })); await settle(dom); });
+    expect([...dom.window.document.querySelectorAll("button")].some((entry) => entry.textContent === "Unlink")).toBe(false);
+    await act(async () => root.unmount()); dom.window.close();
+  });
 });
 
 const note = {
@@ -74,7 +93,7 @@ const note = {
 const related = {
   queriedAt: "2026-07-31T10:00:00.000Z", activeVaultId: "vault_20260731_unlink", pageId: note.summary.pageId,
   totalOutgoing: 1, totalBacklinks: 0, invalidPageCount: 0, degraded: false,
-  outgoing: [{ relation: "outgoing" as const, target: "Target", summary: {
+  outgoing: [{ relation: "outgoing" as const, relationType: "related_to" as const, target: "Target", summary: {
     pageId: "page_20260731_unlinktarget", title: "Target", pageType: "note" as const, status: "active" as const,
     pagePath: "wiki/target.md", createdAt: "2026-07-31T09:00:00.000Z", updatedAt: "2026-07-31T10:01:00.000Z", sourceIds: [],
   } }], backlinks: [],

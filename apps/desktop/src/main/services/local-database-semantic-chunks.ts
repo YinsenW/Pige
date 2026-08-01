@@ -11,7 +11,7 @@ import { RAG_CHUNKER_VERSION } from "./rag-chunker";
 import { sanitizeSearchBody } from "./search-text-utils";
 import { inheritedChunkLanguage } from "./durable-language";
 
-const CURRENT_INDEX_REVISION = 5;
+const CURRENT_INDEX_REVISION = 6;
 const MAX_INDEXED_BODY_CHARS = 500_000;
 const MAX_INDEXED_BODY_BYTES = MARKDOWN_FRONTMATTER_READ_LIMIT_BYTES + (MAX_INDEXED_BODY_CHARS * 4);
 const CHUNK_ID_PATTERN = /^chunk_[a-f0-9]{32}$/u;

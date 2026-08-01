@@ -640,6 +640,7 @@
   "knowledgeTree.invalid": "已跳过",
   "knowledgeTree.kind.concept": "概念",
   "knowledgeTree.kind.domain": "领域",
+  "knowledgeTree.kind.entity": "实体",
   "knowledgeTree.kind.source": "来源",
   "knowledgeTree.kind.topic": "主题",
   "knowledgeTree.leaves": "叶节点",

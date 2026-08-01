@@ -640,6 +640,7 @@
   "knowledgeTree.invalid": "Übersprungen",
   "knowledgeTree.kind.concept": "Konzept",
   "knowledgeTree.kind.domain": "Bereich",
+  "knowledgeTree.kind.entity": "Entität",
   "knowledgeTree.kind.source": "Quelle",
   "knowledgeTree.kind.topic": "Thema",
   "knowledgeTree.leaves": "Blätter",

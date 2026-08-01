@@ -640,6 +640,7 @@
   "knowledgeTree.invalid": "スキップ",
   "knowledgeTree.kind.concept": "概念",
   "knowledgeTree.kind.domain": "領域",
+  "knowledgeTree.kind.entity": "エンティティ",
   "knowledgeTree.kind.source": "ソース",
   "knowledgeTree.kind.topic": "トピック",
   "knowledgeTree.leaves": "リーフ",
