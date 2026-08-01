@@ -112,7 +112,8 @@ export function NoteRevisionHistoryDialog(props: {
       const result = await window.pige.notes.restoreRevisionHistory(request);
       if (sequence !== sequenceRef.current || owner !== ownerRef.current) return;
       if (matches(request, result) && result.status === "committed" &&
-        result.render.summary.pageId === request.pageId && result.render.summary.pageType === "note") {
+        result.render.summary.pageId === request.pageId &&
+        result.render.summary.pageType === props.note.summary.pageType) {
         setOpen(false);
         props.onCommitted(result.render);
         restoreFocus();

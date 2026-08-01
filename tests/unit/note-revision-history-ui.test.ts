@@ -7,6 +7,7 @@ import { NoteRevisionHistoryDialog } from "../../apps/desktop/src/renderer/src/c
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "MouseEvent"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
+const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity"] as const;
 
 afterEach(() => {
   for (const key of globals) {
@@ -19,14 +20,14 @@ afterEach(() => {
 });
 
 describe("NoteRevisionHistoryDialog", () => {
-  it("fails closed without eligibility and restores an exact historical revision only after confirmation", async () => {
-    const hidden = await mount(renderNote(false), api());
+  it.each(HISTORY_PAGE_TYPES)("restores an exact historical %s revision only after confirmation", async (pageType) => {
+    const hidden = await mount(renderNote(false, pageType), api("committed", pageType));
     expect(hidden.container.querySelector("button")).toBeNull();
     await hidden.unmount();
 
-    const methods = api();
+    const methods = api("committed", pageType);
     const onCommitted = vi.fn();
-    const harness = await mount(renderNote(true), methods, onCommitted);
+    const harness = await mount(renderNote(true, pageType), methods, onCommitted);
     const trigger = harness.container.querySelector<HTMLButtonElement>('[data-reader-action="history"]')!;
     trigger.focus();
     await click(trigger, harness.dom);
@@ -39,7 +40,7 @@ describe("NoteRevisionHistoryDialog", () => {
     await click(button(harness.container, "Restore this version"), harness.dom);
     await click(button(harness.container, "Restore version"), harness.dom);
     expect(methods.restoreRevisionHistory).toHaveBeenCalledTimes(1);
-    expect(onCommitted).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.objectContaining({ pageType: "note" }) }));
+    expect(onCommitted).toHaveBeenCalledWith(expect.objectContaining({ summary: expect.objectContaining({ pageType }) }));
     expect(harness.dom.window.document.activeElement).toBe(trigger);
     await harness.unmount();
   });
@@ -60,9 +61,28 @@ describe("NoteRevisionHistoryDialog", () => {
     expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
     await harness.unmount();
   });
+
+  it("rejects a committed render whose page type drifted", async () => {
+    const methods = api("committed", "claim", "question");
+    const onCommitted = vi.fn();
+    const harness = await mount(renderNote(true, "claim"), methods, onCommitted);
+    await click(harness.container.querySelector<HTMLButtonElement>('[data-reader-action="history"]')!, harness.dom);
+    const historical = [...harness.container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((item) => item.textContent?.includes("7/30"))!;
+    await click(historical, harness.dom);
+    await click(button(harness.container, "Restore this version"), harness.dom);
+    await click(button(harness.container, "Restore version"), harness.dom);
+    expect(onCommitted).not.toHaveBeenCalled();
+    expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
+    await harness.unmount();
+  });
 });
 
-function api(restoreStatus: "committed" | "stale" = "committed") {
+function api(
+  restoreStatus: "committed" | "stale" = "committed",
+  pageType: HistoryPageType = "note",
+  resultPageType: HistoryPageType = pageType
+) {
   const historical = {
     revisionId: `notehistoryrev_${"a".repeat(64)}` as const,
     createdAt: "2026-07-30T10:00:00.000Z",
@@ -80,15 +100,17 @@ function api(restoreStatus: "committed" | "stale" = "committed") {
       currentRevision: `noteeditrev_${"b".repeat(64)}` as const, html: "<p>Earlier body</p>", byteSize: 12
     })),
     restoreRevisionHistory: vi.fn(async (request) => restoreStatus === "committed"
-      ? { ...request, status: "committed" as const, operationId: "op_20260731_historyrestore", revision: `noteeditrev_${"a".repeat(64)}` as const, render: renderNote(true) }
+      ? { ...request, status: "committed" as const, operationId: "op_20260731_historyrestore", revision: `noteeditrev_${"a".repeat(64)}` as const, render: renderNote(true, resultPageType) }
       : { ...request, status: "stale" as const })
   };
 }
 
-function renderNote(history: boolean): NoteRenderResult {
+type HistoryPageType = typeof HISTORY_PAGE_TYPES[number];
+
+function renderNote(history: boolean, pageType: HistoryPageType = "note"): NoteRenderResult {
   return {
     summary: {
-      pageId: "page_20260731_historyui", title: "History", pageType: "note", status: "active",
+      pageId: "page_20260731_historyui", title: "History", pageType, status: "active",
       pagePath: "wiki/history.md", createdAt: "2026-07-30T00:00:00.000Z",
       updatedAt: "2026-07-31T00:00:00.000Z", language: "en", sourceIds: []
     },

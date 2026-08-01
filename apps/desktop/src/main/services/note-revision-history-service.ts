@@ -30,6 +30,7 @@ const MAX_OPERATION_SCAN_BYTES = 64 * 1024 * 1024;
 const OPERATION_FILE = /^op_\d{8}_[a-z0-9]{8,}\.json$/u;
 const YEAR_DIRECTORY = /^\d{4}$/u;
 const MONTH_DIRECTORY = /^\d{2}$/u;
+const ACTIVE_TYPED_HISTORY_PAGE_TYPES = new Set(["claim", "question", "concept", "entity"]);
 
 export interface NoteRevisionHistoryVaultPort {
   current(): VaultSummary | undefined;
@@ -109,7 +110,8 @@ export class NoteRevisionHistoryService {
     });
     if (opened.status !== "opened") return { ...identity, status: opened.status };
     const parsed = parsePigeFrontmatter(opened.entry.markdown);
-    if (!parsed || parsed.frontmatter.id !== request.pageId || parsed.frontmatter.type !== "note") {
+    if (!parsed || parsed.frontmatter.id !== request.pageId ||
+      !isHistoryPage(parsed.frontmatter.type, parsed.frontmatter.status)) {
       return { ...identity, status: "ineligible" };
     }
     const rendered = await renderPigeMarkdownToHtml(opened.entry.markdown.slice(parsed.bodyStartOffset));
@@ -155,13 +157,13 @@ export class NoteRevisionHistoryService {
     try {
       const current = readCurrentNote(scope.vaultPath, input.pageId);
       if (!current) return { status: "not_found" };
-      if (current.pageType !== "note") return { status: "ineligible" };
+      if (!isHistoryPage(current.pageType, current.pageStatus)) return { status: "ineligible" };
       if (current.privateRevision !== input.expectedRevision) return { status: "stale" };
 
       const byRevision = new Map<string, NoteRevisionHistoryEntry>();
       const currentEntry = createEntry(current.markdown, current.updatedAt, "current", true);
       byRevision.set(currentEntry.revisionId, currentEntry);
-      for (const candidate of readHistoricalCandidates(scope.vaultPath, input.pageId)) {
+      for (const candidate of readHistoricalCandidates(scope.vaultPath, input.pageId, current.pageType)) {
         if (!byRevision.has(candidate.revisionId)) byRevision.set(candidate.revisionId, candidate);
       }
       if (!this.#scopeMatches(scope.activeVaultId, scope.vaultPath)) return { status: "stale" };
@@ -257,6 +259,7 @@ function readCurrentNote(vaultPath: string, pageId: string): {
   readonly markdown: string;
   readonly privateRevision: `sha256:${string}`;
   readonly pageType: string;
+  readonly pageStatus: string;
   readonly updatedAt: string;
 } | undefined {
   const located = findMarkdownPageByIdAtSignature(vaultPath, pageId);
@@ -272,11 +275,12 @@ function readCurrentNote(vaultPath: string, pageId: string): {
     markdown: content.markdown,
     privateRevision: hashMarkdown(content.markdown),
     pageType: String(parsed.type),
+    pageStatus: String(parsed.status),
     updatedAt: String(parsed.updated_at)
   };
 }
 
-function readHistoricalCandidates(vaultPath: string, pageId: string): readonly NoteRevisionHistoryEntry[] {
+function readHistoricalCandidates(vaultPath: string, pageId: string, pageType: string): readonly NoteRevisionHistoryEntry[] {
   const root = resolveVaultRelative(vaultPath, ".pige/operations");
   if (!exists(root)) return [];
   assertSafeDirectory(root);
@@ -294,7 +298,7 @@ function readHistoricalCandidates(vaultPath: string, pageId: string): readonly N
         if (!operation) continue;
         scannedBytes += Buffer.byteLength(JSON.stringify(operation), "utf8");
         if (scannedBytes > MAX_OPERATION_SCAN_BYTES) return entries;
-        const candidate = readOperationBeforeImage(vaultPath, operation, pageId);
+        const candidate = readOperationBeforeImage(vaultPath, operation, pageId, pageType);
         if (candidate) entries.push(candidate);
       }
     }
@@ -305,7 +309,8 @@ function readHistoricalCandidates(vaultPath: string, pageId: string): readonly N
 function readOperationBeforeImage(
   vaultPath: string,
   operation: OperationRecord,
-  pageId: string
+  pageId: string,
+  pageType: string
 ): NoteRevisionHistoryEntry | undefined {
   if (!operation.targetRefs.some((target) => target.kind === "page" && target.id === pageId)) return undefined;
   const before = operation.before;
@@ -315,13 +320,18 @@ function readOperationBeforeImage(
   const markdown = readPrivateText(resolveVaultRelative(vaultPath, before.path), MAX_NOTE_MARKDOWN_EDITOR_BYTES);
   if (markdown === undefined || hashMarkdown(markdown) !== expectedRevision) return undefined;
   const parsed = parsePigeFrontmatter(markdown)?.frontmatter;
-  if (parsed?.id !== pageId || parsed.type !== "note") return undefined;
+  if (parsed?.id !== pageId || parsed.type !== pageType) return undefined;
   return createEntry(
     markdown,
     operation.createdAt,
     operation.kind === "restore_page" ? "restore" : operation.actor.kind === "user" ? "user" : "agent",
     false
   );
+}
+
+function isHistoryPage(pageType: unknown, pageStatus: unknown): boolean {
+  return pageType === "note" ||
+    (pageStatus === "active" && typeof pageType === "string" && ACTIVE_TYPED_HISTORY_PAGE_TYPES.has(pageType));
 }
 
 function createEntry(

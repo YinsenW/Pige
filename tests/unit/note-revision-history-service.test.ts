@@ -8,19 +8,21 @@ import {
   NoteMarkdownEditorActivityAdapter,
   NoteMarkdownEditorService
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
+import { NoteMarkdownEditorRedoService } from "../../apps/desktop/src/main/services/note-markdown-editor-redo-service";
 import { NoteRevisionHistoryService } from "../../apps/desktop/src/main/services/note-revision-history-service";
 
 const VAULT_ID = "vault_20260731_notehistory";
 const PAGE_ID = "page_20260731_notehistory";
 const roots: string[] = [];
+const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity"] as const;
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
 describe("NoteRevisionHistoryService", () => {
-  it("lists and opens immutable before images, then restores one as a forward revision with Undo", () => {
-    const fixture = createFixture();
+  it.each(HISTORY_PAGE_TYPES)("lists and restores immutable %s revisions with Undo and restart adoption", (pageType) => {
+    const fixture = createFixture(pageType);
     const first = requireOpened(fixture.editor);
     const editedMarkdown = first.markdown.replace("Original body.", "Edited body.");
     const edited = fixture.editor.save({
@@ -67,10 +69,11 @@ describe("NoteRevisionHistoryService", () => {
     const operation = readOperation(fixture.vaultPath, restored.operationId);
     expect(operation).toMatchObject({ kind: "restore_page", targetRefs: [{ kind: "page", id: PAGE_ID }] });
     expect(fixture.adapter.activitySummary(operation)).toMatchObject({ kind: "restore_page", canUndo: true });
+
     expect(fixture.adapter.undo(operation, restored.revision)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(editedMarkdown);
 
-    const restartedEditor = new NoteMarkdownEditorService(fixture.vaults, fixture.adapter);
+    const restartedEditor = new NoteMarkdownEditorService(fixture.vaults, fixture.adapter, editableTypes());
     const restarted = new NoteRevisionHistoryService(fixture.vaults, restartedEditor);
     const operationCount = operationFiles(fixture.vaultPath).length;
     expect(restarted.restore({
@@ -81,13 +84,22 @@ describe("NoteRevisionHistoryService", () => {
       revisionId: historical.revisionId
     })).toEqual({ status: "committed", operationId: restored.operationId, revision: restored.revision });
     expect(operationFiles(fixture.vaultPath)).toHaveLength(operationCount);
+
+    expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({ operationId: restored.operationId }))
+      .toMatchObject({ status: "redone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.originalMarkdown);
   });
 
-  it("fails closed for non-note pages, stale current revisions, and tampered private images", () => {
+  it("fails closed for source pages, inactive typed pages, stale revisions, and tampered private images", () => {
     const sourceFixture = createFixture("source");
     const sourceRevision = requireRevision(sourceFixture.pagePath);
     expect(sourceFixture.history.list({
       activeVaultId: VAULT_ID, pageId: PAGE_ID, expectedRevision: sourceRevision
+    })).toEqual({ status: "ineligible" });
+
+    const inactiveFixture = createFixture("claim", "archived");
+    expect(inactiveFixture.history.list({
+      activeVaultId: VAULT_ID, pageId: PAGE_ID, expectedRevision: requireRevision(inactiveFixture.pagePath)
     })).toEqual({ status: "ineligible" });
 
     const fixture = createFixture();
@@ -117,13 +129,13 @@ describe("NoteRevisionHistoryService", () => {
   });
 });
 
-function createFixture(pageType: "note" | "source" = "note") {
+function createFixture(pageType: HistoryFixturePageType = "note", status: "active" | "archived" = "active") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-note-history-"));
   roots.push(root);
   const vaultPath = path.join(root, "vault");
   const pagePath = path.join(vaultPath, "wiki", `${PAGE_ID}.md`);
   fs.mkdirSync(path.dirname(pagePath), { recursive: true });
-  const originalMarkdown = markdown(pageType);
+  const originalMarkdown = markdown(pageType, status);
   fs.writeFileSync(pagePath, originalMarkdown, { mode: 0o600 });
   const vaults = {
     current: () => ({
@@ -141,7 +153,8 @@ function createFixture(pageType: "note" | "source" = "note") {
   const adapter = new NoteMarkdownEditorActivityAdapter(vaults);
   const editor = new NoteMarkdownEditorService(vaults, adapter, {
     now: () => new Date("2026-07-31T12:00:00.000Z"),
-    randomId: () => "note-history-fixture-id"
+    randomId: () => "note-history-fixture-id",
+    ...editableTypes()
   });
   return {
     vaultPath, pagePath, originalMarkdown, vaults, adapter, editor,
@@ -174,6 +187,12 @@ function readOperation(vaultPath: string, operationId: string): OperationRecord 
   ), "utf8")) as OperationRecord;
 }
 
-function markdown(type: "note" | "source"): string {
-  return `---\nid: "${PAGE_ID}"\nschema_version: 1\ntitle: "History fixture"\ntype: "${type}"\ncreated_at: "2026-07-31T10:00:00.000Z"\nupdated_at: "2026-07-31T10:00:00.000Z"\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nsource_ids: []\n---\n\n# History fixture\n\nOriginal body.\n`;
+type HistoryFixturePageType = typeof HISTORY_PAGE_TYPES[number] | "source";
+
+function editableTypes() {
+  return { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true } as const;
+}
+
+function markdown(type: HistoryFixturePageType, status: "active" | "archived" = "active"): string {
+  return `---\nid: "${PAGE_ID}"\nschema_version: 1\ntitle: "History fixture"\ntype: "${type}"\ncreated_at: "2026-07-31T10:00:00.000Z"\nupdated_at: "2026-07-31T10:00:00.000Z"\nstatus: "${status}"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nsource_ids: []\n---\n\n# History fixture\n\nOriginal body.\n`;
 }
