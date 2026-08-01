@@ -170,7 +170,7 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): OcrFailure {
     if (/^ocr\.pdf\.(?:parser_metadata_invalid|source_record_invalid|render_result_invalid|rendered_page_invalid|rendered_pages_too_large|result_invalid)$/u.test(caught.code)) {
       return { final: true, waiting: false, message: "The verified PDF OCR target or derived page data failed validation. Re-parse or re-import the preserved PDF before retrying." };
     }
-    if (/^ocr\.(?:docx|pptx)\.(?:parser_metadata_invalid|source_record_invalid|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
+    if (/^ocr\.(?:docx|pptx)\.(?:parser_metadata_invalid|source_record_invalid|source_missing|file_too_large|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|too_many_entries|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
       return { final: true, waiting: false, message: `The verified ${label} OCR target or embedded media failed validation. Re-parse or re-import the preserved document before retrying.` };
     }
     if ((sourceKind === "docx_file" || sourceKind === "pptx_file") && isDeterministicParserInputFailure(caught.code)) {

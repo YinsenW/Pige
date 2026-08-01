@@ -54,6 +54,11 @@ describe("Office media materializer core", () => {
     expect(result.media).toHaveLength(1);
     expect(result.media[0]).toMatchObject(docxTarget);
     expect(Buffer.from(result.media[0]!.bytes)).toEqual(TINY_PNG);
+    await expect(materializeOfficeMedia({
+      ...request(filePath, [{ ...docxTarget, size: TINY_PNG.length + 1 }]),
+      operation: "materialize_docx_media",
+      sourceKind: "docx_file"
+    })).rejects.toMatchObject({ code: "ocr.docx.media_target_changed" });
   });
 
   it("rejects a target whose parser-recorded size no longer matches the archive", async () => {

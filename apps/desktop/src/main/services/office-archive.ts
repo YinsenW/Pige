@@ -105,12 +105,13 @@ export async function readOpenXmlMedia(
   limits: OfficeMediaMaterializerLimits,
   format: "docx" | "pptx" = "pptx"
 ): Promise<readonly MaterializedOfficeMedia[]> {
+  const label = format.toUpperCase();
   const requested = new Map<string, OfficeMediaTarget[]>();
   for (const target of targets) {
     requested.set(target.packagePath, [...(requested.get(target.packagePath) ?? []), target]);
   }
   if (targets.reduce((total, target) => total + target.size, 0) > limits.maxTotalBytes) {
-    throw new PigeDomainError("ocr.pptx.media_too_large", "Selected PPTX media exceeds the materializer output limit.");
+    throw new PigeDomainError(`ocr.${format}.media_too_large`, `Selected ${label} media exceeds the materializer output limit.`);
   }
   let zipFile;
   try {
@@ -122,12 +123,12 @@ export async function readOpenXmlMedia(
       strictFileNames: true
     });
   } catch {
-    throw new PigeDomainError("ocr.pptx.invalid_archive", "The preserved PPTX file is not a valid OpenXML archive.");
+    throw new PigeDomainError(`ocr.${format}.invalid_archive`, `The preserved ${label} file is not a valid OpenXML archive.`);
   }
 
   try {
     if (zipFile.entryCount > limits.maxEntries) {
-      throw new PigeDomainError("ocr.pptx.too_many_entries", "The PPTX package exceeds the media materializer entry limit.");
+      throw new PigeDomainError(`ocr.${format}.too_many_entries`, `The ${label} package exceeds the media materializer entry limit.`);
     }
     const entryNames = new Set<string>();
     const materialized = new Map<string, Uint8Array>();
@@ -136,27 +137,27 @@ export async function readOpenXmlMedia(
     for await (const entry of zipFile.eachEntry()) {
       entryCount += 1;
       if (entryCount > limits.maxEntries) {
-        throw new PigeDomainError("ocr.pptx.too_many_entries", "The PPTX package exceeds the media materializer entry limit.");
+        throw new PigeDomainError(`ocr.${format}.too_many_entries`, `The ${label} package exceeds the media materializer entry limit.`);
       }
       validateArchiveEntry(entry, format, { maxUncompressedBytes: limits.maxUncompressedBytes });
       if (entryNames.has(entry.fileName)) {
-        throw new PigeDomainError("ocr.pptx.duplicate_entry", "The PPTX package contains duplicate parts.");
+        throw new PigeDomainError(`ocr.${format}.duplicate_entry`, `The ${label} package contains duplicate parts.`);
       }
       entryNames.add(entry.fileName);
       totalUncompressedBytes += entry.uncompressedSize;
       if (totalUncompressedBytes > limits.maxUncompressedBytes) {
-        throw new PigeDomainError("ocr.pptx.expanded_too_large", "The expanded PPTX package exceeds the media materializer limit.");
+        throw new PigeDomainError(`ocr.${format}.expanded_too_large`, `The expanded ${label} package exceeds the media materializer limit.`);
       }
       const pathTargets = requested.get(entry.fileName);
       if (!pathTargets) continue;
       if (pathTargets.some((target) => entry.uncompressedSize !== target.size) || entry.uncompressedSize > limits.maxBytesPerItem) {
-        throw new PigeDomainError("ocr.pptx.media_target_changed", "A selected PPTX media part no longer matches parser metadata.");
+        throw new PigeDomainError(`ocr.${format}.media_target_changed`, `A selected ${label} media part no longer matches parser metadata.`);
       }
       const bytes = await readEntryBytes(zipFile, entry, limits.maxBytesPerItem);
       materialized.set(entry.fileName, bytes);
     }
     if (materialized.size !== requested.size) {
-      throw new PigeDomainError("ocr.pptx.media_target_changed", "A selected PPTX media part is missing from the verified archive.");
+      throw new PigeDomainError(`ocr.${format}.media_target_changed`, `A selected ${label} media part is missing from the verified archive.`);
     }
     return targets.map((target) => ({ ...target, bytes: materialized.get(target.packagePath)! }));
   } finally {
