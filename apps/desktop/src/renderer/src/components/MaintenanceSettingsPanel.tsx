@@ -18,17 +18,14 @@ import {
   type RepairableUnsourcedClaim
 } from "./KnowledgeHealthReadyResult";
 import { KnowledgeHealthClaimSourceRepair } from "./KnowledgeHealthClaimSourceRepair";
+import {
+  KnowledgeHealthOrphanRelationRepair,
+  type OrphanParentPickerState
+} from "./KnowledgeHealthOrphanRelationRepair";
 
 type KnowledgeHealthState =
   | { readonly kind: "not_run" | "checking" | "unavailable" | "failed" }
   | { readonly kind: "ready"; readonly result: Extract<KnowledgeHealthRunResult, { readonly status: "ready" }> };
-
-type OrphanParentPickerState =
-  | { readonly kind: "open" | "searching" | "failed" | "stale";
-    readonly issue: RepairableOrphan; readonly query: string }
-  | { readonly kind: "ready"; readonly issue: RepairableOrphan; readonly query: string;
-    readonly parents: readonly KnowledgeHealthOrphanParentCandidate[]; readonly truncated: boolean }
-  | null;
 
 type KnowledgeHealthRetargetState =
   | { readonly kind: "open" | "searching" | "failed" | "stale"; readonly issue: RepairableBrokenLink; readonly query: string }
@@ -75,6 +72,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const knowledgeHealthRunButtonRef = useRef<HTMLButtonElement>(null);
   const duplicateTopicTriggerRef = useRef<HTMLButtonElement | null>(null);
   const claimSourceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const orphanParentTriggerRef = useRef<HTMLButtonElement | null>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -116,7 +114,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
 
   useEffect(() => {
     if (knowledgeHealthRepairState?.kind !== "committed" ||
-      knowledgeHealthRepairState.issueKind !== "duplicate_topic" || knowledgeHealthState.kind !== "ready") return;
+      !["duplicate_topic", "orphan_page"].includes(knowledgeHealthRepairState.issueKind) ||
+      knowledgeHealthState.kind !== "ready") return;
     const timer = window.setTimeout(() => knowledgeHealthRunButtonRef.current?.focus(), 0);
     return () => window.clearTimeout(timer);
   }, [knowledgeHealthRepairState, knowledgeHealthState]);
@@ -335,8 +334,9 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       : state);
   };
 
-  const openOrphanParentPicker = (issue: RepairableOrphan): void => {
+  const openOrphanParentPicker = (issue: RepairableOrphan, trigger: HTMLButtonElement): void => {
     if (knowledgeHealthRepairBusyRef.current) return;
+    orphanParentTriggerRef.current = trigger;
     orphanParentSearchSequenceRef.current += 1;
     setOrphanParentPickerState({ kind: "open", issue, query: "" });
   };
@@ -497,8 +497,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       if (result.status === "committed") {
         orphanParentSearchSequenceRef.current += 1;
         setOrphanParentPickerState(null);
-        setKnowledgeHealthState({ kind: "not_run" });
         setKnowledgeHealthRepairState({ kind: "committed", issueKind: "orphan_page" });
+        await runKnowledgeHealth(true);
         return;
       }
       setKnowledgeHealthRepairState({ kind: result.status === "failed" ? "failed" : "stale" });
@@ -806,71 +806,19 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
               </div>
             </div>
           ) : null}
-          {orphanParentPickerState ? (
-            <div className="settings-row tall" role="group" aria-labelledby="knowledge-health-orphan-parent-title">
-              <div className="settings-row-copy">
-                <strong id="knowledge-health-orphan-parent-title">
-                  {props.t("maintenance.knowledgeHealth.orphanParentTitle")}
-                </strong>
-                <span>{props.t("maintenance.knowledgeHealth.orphanParentDescription")}</span>
-                <label htmlFor="knowledge-health-orphan-parent-query">
-                  {props.t("maintenance.knowledgeHealth.orphanParentQuery")}
-                </label>
-                <input
-                  id="knowledge-health-orphan-parent-query"
-                  className="settings-input"
-                  value={orphanParentPickerState.query}
-                  maxLength={120}
-                  disabled={orphanParentPickerState.kind === "searching" ||
-                    knowledgeHealthRepairState?.kind === "repairing"}
-                  onChange={(event) => updateOrphanParentQuery(event.target.value)}
-                />
-                {orphanParentPickerState.kind === "ready" ? (
-                  orphanParentPickerState.parents.length > 0 ? (
-                    <span>
-                      {orphanParentPickerState.parents.map((parent) => (
-                        <button
-                          key={parent.sourceContextId}
-                          className="settings-button"
-                          type="button"
-                          disabled={knowledgeHealthRepairState?.kind === "repairing"}
-                          onClick={() => void repairOrphan(orphanParentPickerState.issue, parent)}
-                        >
-                          {parent.page.title}
-                        </button>
-                      ))}
-                    </span>
-                  ) : <span>{props.t("maintenance.knowledgeHealth.noOrphanParents")}</span>
-                ) : orphanParentPickerState.kind === "failed" ? (
-                  <span role="alert">{props.t("maintenance.knowledgeHealth.orphanParentSearchFailed")}</span>
-                ) : orphanParentPickerState.kind === "stale" ? (
-                  <span role="alert">{props.t("maintenance.knowledgeHealth.repairStale")}</span>
-                ) : null}
-                {orphanParentPickerState.kind === "ready" && orphanParentPickerState.truncated
-                  ? <span>{props.t("maintenance.knowledgeHealth.orphanParentResultsTruncated")}</span>
-                  : null}
-              </div>
-              <div className="settings-row-control">
-                <button className="settings-button" type="button" onClick={() => {
-                  orphanParentSearchSequenceRef.current += 1;
-                  setOrphanParentPickerState(null);
-                }}>
-                  {props.t("backup.restoreCancel")}
-                </button>
-                <button
-                  className="settings-button primary"
-                  type="button"
-                  disabled={orphanParentPickerState.kind === "searching" ||
-                    knowledgeHealthRepairState?.kind === "repairing"}
-                  onClick={() => void searchOrphanParents()}
-                >
-                  {props.t(orphanParentPickerState.kind === "searching"
-                    ? "maintenance.knowledgeHealth.orphanParentSearching"
-                    : "maintenance.knowledgeHealth.searchOrphanParents")}
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {orphanParentPickerState ? <KnowledgeHealthOrphanRelationRepair
+            state={orphanParentPickerState}
+            repairState={knowledgeHealthRepairState}
+            onQueryChange={updateOrphanParentQuery}
+            onSearch={searchOrphanParents}
+            onRepair={repairOrphan}
+            onCancel={() => {
+              orphanParentSearchSequenceRef.current += 1;
+              setOrphanParentPickerState(null);
+              window.setTimeout(() => orphanParentTriggerRef.current?.focus(), 0);
+            }}
+            t={props.t}
+          /> : null}
         </div>
         {knowledgeHealthState.kind === "not_run" ? (
           <p className="settings-note" role="status">{props.t("maintenance.knowledgeHealth.notRun")}</p>

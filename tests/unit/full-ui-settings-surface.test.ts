@@ -1159,24 +1159,37 @@ describe("full UI Settings surface", () => {
     const repairContextId = `knowledge_health_repair_context_${"a".repeat(32)}`;
     const targetRevision = `noteeditrev_${"b".repeat(64)}`;
     const targetRenderProof = `knowledge_health_render_${"c".repeat(64)}`;
-    const runKnowledgeHealth = vi.fn(async (request) => ({
+    const runKnowledgeHealth = vi.fn(async (request) => runKnowledgeHealth.mock.calls.length === 1 ? ({
       ...request,
-      status: "ready",
+      status: "ready" as const,
       checkedAt: "2026-07-31T12:00:00.000Z",
       indexGeneration: "index:orphan:4",
-      coverage: "complete",
+      coverage: "complete" as const,
       invalidPageCount: 0,
       counts: {
         totalIssueCount: 1, brokenLinkPageCount: 0, unresolvedLinkCount: 0,
         orphanPageCount: 1, duplicateTopicGroupCount: 0, unsourcedClaimCount: 0
       },
       issues: [{
-        kind: "orphan_page",
+        kind: "orphan_page" as const,
         page: { pageId: "page_health_orphan_target", title: "Orphan target" },
         repairContextId,
         targetRevision,
         targetRenderProof
       }],
+      truncated: false
+    }) : ({
+      ...request,
+      status: "ready" as const,
+      checkedAt: "2026-07-31T12:01:00.000Z",
+      indexGeneration: "index:orphan:5",
+      coverage: "complete" as const,
+      invalidPageCount: 0,
+      counts: {
+        totalIssueCount: 0, brokenLinkPageCount: 0, unresolvedLinkCount: 0,
+        orphanPageCount: 0, duplicateTopicGroupCount: 0, unsourcedClaimCount: 0
+      },
+      issues: [],
       truncated: false
     }));
     const parent = {
@@ -1189,12 +1202,13 @@ describe("full UI Settings surface", () => {
     const searchKnowledgeHealthOrphanParents = vi.fn(async (request) => ({
       ...request, status: "ready", parents: [parent], truncated: false
     }));
-    const repairKnowledgeHealthOrphan = vi.fn(async (request) => ({
-      ...request,
-      status: "committed",
-      revision: `noteeditrev_${"1".repeat(64)}`,
-      operationId: "op_20260731_orphanrepairui"
-    }));
+    const repairKnowledgeHealthOrphan = vi.fn(async (request) =>
+      repairKnowledgeHealthOrphan.mock.calls.length === 1 ? ({ ...request, status: "stale" as const }) : ({
+        ...request,
+        status: "committed" as const,
+        revision: `noteeditrev_${"1".repeat(64)}`,
+        operationId: "op_20260731_orphanrepairui"
+      }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
@@ -1254,7 +1268,22 @@ describe("full UI Settings surface", () => {
       buttonNamed(page, "Entry note").click();
       await settle(dom);
     });
+    expect(repairKnowledgeHealthOrphan).not.toHaveBeenCalled();
+    expect(page.textContent).toContain("Confirm this relationship");
+    expect(page.textContent).toContain("Entry note → Orphan target");
+    expect(dom.window.document.activeElement?.textContent).toBe("Cancel");
+    await act(async () => {
+      buttonNamed(page, "Connect pages").click();
+      await settle(dom);
+    });
     expect(repairKnowledgeHealthOrphan).toHaveBeenCalledOnce();
+    expect(page.textContent).toContain("That issue changed or is no longer available.");
+    expect(dom.window.document.activeElement?.textContent).toBe("Connect pages");
+    await act(async () => {
+      buttonNamed(page, "Connect pages").click();
+      await settle(dom);
+    });
+    expect(repairKnowledgeHealthOrphan).toHaveBeenCalledTimes(2);
     expect(repairKnowledgeHealthOrphan.mock.calls[0]![0]).toMatchObject({
       action: "connect_orphan_to_parent",
       sourcePageId: parent.page.pageId,
@@ -1264,9 +1293,12 @@ describe("full UI Settings surface", () => {
       pageId: "page_health_orphan_target"
     });
     expect(page.textContent).toContain("The parent now links to this page");
-    expect(page.textContent).toContain("No check has been run yet.");
+    expect(page.textContent).toContain("No issues found");
+    expect(runKnowledgeHealth).toHaveBeenCalledTimes(2);
     expect(page.textContent).not.toContain("op_20260731");
     expect(page.textContent).not.toContain("repair_context");
+    await act(async () => { await settle(dom); });
+    expect(dom.window.document.activeElement?.textContent).toBe("Run Check");
 
     await act(async () => root.unmount());
     dom.window.close();
