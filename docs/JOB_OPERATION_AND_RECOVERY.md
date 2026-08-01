@@ -616,7 +616,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `rename_dataset`, `trash_dataset`, `restore_dataset`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation`, `add_collection_lookup`, `update_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `rename_collection_table`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
+- `create_dataset_revision`, `rename_dataset`, `trash_dataset`, `restore_dataset`, `purge_dataset`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation`, `add_collection_lookup`, `update_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `rename_collection_table`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`, `purge_page`.
 - `trash_conversation`, `restore_conversation`, `purge_conversation`.
 - `update_index`.
@@ -636,7 +636,7 @@ Lifecycle coverage:
 | --- | --- |
 | Source record/evidence | create/update/relink source record; copy/move/trash/restore source asset |
 | Durable artifact | create/trash/restore artifact |
-| Dataset revision | create dataset revision with manifest/schema/payload/source hashes |
+| Dataset revision | create dataset revision with manifest/schema/payload/source hashes; trash/restore/purge Dataset Bundle |
 | Markdown page | create/update/rename/archive/trash/restore/purge page |
 | Conversation | trash/restore/purge exact JSONL without replay |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
@@ -664,6 +664,10 @@ Rules:
 - Confirmed conversation purge uses the same ordering for one exact recoverable JSONL: purge intent,
   sync-ready tombstone and irreversible `purge_conversation` Operation are durable before payload and
   receipt removal. Restart finishes only that receipt-bound deletion and never replays a Provider turn.
+- Confirmed managed Dataset purge re-proves the exact trash receipt, immutable Bundle tree and
+  `trash_dataset` Operation, then persists a tombstone and irreversible `purge_dataset` Operation
+  before payload removal. Restart adopts or finishes only that quarantined Bundle; source evidence
+  remains outside the deleted tree.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery
