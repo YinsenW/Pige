@@ -59,6 +59,13 @@ const INCLUDED_CATEGORIES = [
   }
 ] as const;
 
+const PROVIDER_METADATA_CATEGORY = {
+  id: "provider_metadata",
+  label: "Redacted model-provider metadata",
+  included: true,
+  reason: "Aggregate provider types and health only; credentials, URLs, names, and model IDs stay excluded."
+} as const;
+
 const EXCLUDED_CATEGORIES = [
   {
     id: "secrets",
@@ -79,6 +86,13 @@ const EXCLUDED_CATEGORIES = [
     reason: "Large binaries and artifacts are excluded."
   }
 ] as const;
+
+const EXCLUDED_PROVIDER_METADATA_CATEGORY = {
+  id: "provider_metadata",
+  label: "Model-provider metadata",
+  included: false,
+  reason: "Provider metadata is included only after explicit preview selection."
+} as const;
 
 const PRIVACY_WARNINGS = [
   "The bundle is created locally and is not uploaded automatically.",
@@ -177,7 +191,8 @@ export function assertSafeDiagnosticExportText(content: string): void {
       "preview",
       "app",
       "diagnosticsHealth",
-      "recentEvents"
+      "recentEvents",
+      ...(Object.hasOwn(parsed, "providerMetadata") ? ["providerMetadata"] : [])
     ]) ||
     parsed.schemaVersion !== 1 ||
     parsed.localOnly !== true ||
@@ -186,7 +201,8 @@ export function assertSafeDiagnosticExportText(content: string): void {
     !isSupportBundlePreview(parsed.preview) ||
     !isSupportBundleApp(parsed.app) ||
     !isDiagnosticsHealth(parsed.diagnosticsHealth) ||
-    !isRecentEvents(parsed.recentEvents)
+    !isRecentEvents(parsed.recentEvents) ||
+    !providerMetadataMatchesPreview(parsed.preview, parsed.providerMetadata)
   ) {
     throw new DiagnosticsExportBlockedError("Support bundle content has an invalid envelope.");
   }
@@ -542,14 +558,47 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isSupportBundlePreview(value: unknown): boolean {
   if (!isRecord(value) || !hasExactKeys(value, [
-    "previewId", "generatedAt", "includedCategories", "excludedCategories", "privacyWarnings"
+    "previewId", "generatedAt", "selectedOptionalCategories", "includedCategories", "excludedCategories", "privacyWarnings"
   ])) return false;
+  const includesProviderMetadata = Array.isArray(value.selectedOptionalCategories) &&
+    value.selectedOptionalCategories.length === 1 && value.selectedOptionalCategories[0] === "provider_metadata";
+  if (!includesProviderMetadata && (!Array.isArray(value.selectedOptionalCategories) || value.selectedOptionalCategories.length !== 0)) {
+    return false;
+  }
   return typeof value.previewId === "string" &&
     /^(?:support_[0-9]{14}|supportpreview_[a-f0-9]{48})$/u.test(value.previewId) &&
     isIsoDate(value.generatedAt) &&
-    matchesExactRecords(value.includedCategories, INCLUDED_CATEGORIES) &&
-    matchesExactRecords(value.excludedCategories, EXCLUDED_CATEGORIES) &&
+    matchesExactRecords(value.includedCategories, includesProviderMetadata
+      ? [...INCLUDED_CATEGORIES, PROVIDER_METADATA_CATEGORY] : INCLUDED_CATEGORIES) &&
+    matchesExactRecords(value.excludedCategories, includesProviderMetadata
+      ? EXCLUDED_CATEGORIES : [...EXCLUDED_CATEGORIES, EXCLUDED_PROVIDER_METADATA_CATEGORY]) &&
     matchesExactStrings(value.privacyWarnings, PRIVACY_WARNINGS);
+}
+
+function providerMetadataMatchesPreview(preview: unknown, value: unknown): boolean {
+  if (!isRecord(preview) || !Array.isArray(preview.selectedOptionalCategories)) return false;
+  const selected = preview.selectedOptionalCategories.includes("provider_metadata");
+  if (!selected) return value === undefined;
+  if (!isRecord(value) || !hasExactKeys(value, [
+    "schemaVersion", "providerCount", "modelCount", "enabledModelCount", "hasDefaultModel", "providers"
+  ]) || value.schemaVersion !== 1 || typeof value.hasDefaultModel !== "boolean" ||
+    !isBoundedCount(value.providerCount, 32) || !isBoundedCount(value.modelCount, 10_000) ||
+    !isBoundedCount(value.enabledModelCount, 10_000) || value.enabledModelCount > value.modelCount ||
+    !Array.isArray(value.providers) || value.providers.length !== value.providerCount) return false;
+  let observedModels = 0, observedEnabled = 0;
+  for (const provider of value.providers) {
+    if (!isRecord(provider) || !hasExactKeys(provider, [
+      "providerKind", "endpointProtocol", "authRequirement", "modelListStrategy", "cloudBoundary",
+      "discovery", "generation", "modelCount", "enabledModelCount"
+    ]) || ![provider.providerKind, provider.endpointProtocol, provider.authRequirement,
+      provider.modelListStrategy, provider.cloudBoundary].every(isSafeToken) ||
+      !["not_checked", "verified"].includes(String(provider.discovery)) ||
+      !["not_checked", "verified", "failed"].includes(String(provider.generation)) ||
+      !isBoundedCount(provider.modelCount, 10_000) || !isBoundedCount(provider.enabledModelCount, 10_000) ||
+      Number(provider.enabledModelCount) > Number(provider.modelCount)) return false;
+    observedModels += Number(provider.modelCount); observedEnabled += Number(provider.enabledModelCount);
+  }
+  return observedModels === value.modelCount && observedEnabled === value.enabledModelCount;
 }
 
 function isSupportBundleApp(value: unknown): boolean {

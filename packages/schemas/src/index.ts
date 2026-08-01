@@ -4721,6 +4721,7 @@ export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
   .regex(/^supportpreview_[a-f0-9]{32,64}$/u);
+export const DiagnosticsOptionalSupportCategorySchema = z.enum(["provider_metadata"]);
 export const CrashRecoverySummarySchema = z.object({
   recoveryId: z.string().regex(/^crashrecovery_[a-f0-9]{32}$/u),
   status: z.enum(["recovering", "recovered", "needs_attention"]),
@@ -4795,13 +4796,15 @@ export const SupportBundlePreviewSchema = z.object({
   scopeContextId: DiagnosticsScopeContextIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   activeVaultId: VaultIdSchema.nullable(),
+  selectedOptionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(1),
   includedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
   excludedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
   privacyWarnings: z.array(z.string().min(1).max(320)).min(1).max(16)
 }).strict();
 export const DiagnosticsPreviewSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),
-  requestId: DiagnosticsPreviewRequestIdSchema
+  requestId: DiagnosticsPreviewRequestIdSchema,
+  optionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(1).optional()
 }).strict();
 export const DiagnosticsExportSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),

@@ -225,9 +225,49 @@ describe("diagnostics service", () => {
     const preview = service.previewSupportBundle();
 
     expect(preview.localOnly).toBe(true);
+    expect(preview.selectedOptionalCategories).toEqual([]);
     expect(preview.includedCategories.map((category) => category.id)).toContain("recent_errors");
+    expect(preview.excludedCategories.map((category) => category.id)).toContain("provider_metadata");
     expect(preview.excludedCategories.map((category) => category.id)).toContain("secrets");
     expect(preview.privacyWarnings.join(" ")).toContain("not uploaded automatically");
+  });
+
+  it("includes an explicitly previewed provider aggregate without private provider identity", () => {
+    const service = new DiagnosticsService(makeTempRoot());
+    const preview = service.previewSupportBundle({
+      apiVersion: 1,
+      requestId: "diagpreviewreq_providermetadata0",
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      expectedRevision: 3,
+      activeVaultId: null,
+      selectedOptionalCategories: ["provider_metadata"]
+    });
+    const payload = service.createSupportBundlePayload(preview, {
+      providerMetadata: {
+        schemaVersion: 1,
+        providerCount: 1,
+        modelCount: 2,
+        enabledModelCount: 1,
+        hasDefaultModel: true,
+        providers: [{
+          providerKind: "openai_compatible",
+          endpointProtocol: "openai_responses",
+          authRequirement: "api_key",
+          modelListStrategy: "list_models",
+          cloudBoundary: "custom_cloud_endpoint",
+          discovery: "verified",
+          generation: "failed",
+          modelCount: 2,
+          enabledModelCount: 1
+        }]
+      }
+    });
+
+    expect(preview.includedCategories.map((category) => category.id)).toContain("provider_metadata");
+    expect(payload).toContain('"providerKind": "openai_compatible"');
+    expect(payload).not.toContain("providerProfileId");
+    expect(payload).not.toContain("baseUrl");
+    expect(payload).not.toContain("modelId");
   });
 
   it("exports only bounded redacted local support bundle content", async () => {

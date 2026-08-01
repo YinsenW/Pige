@@ -1,10 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiagnosticsLifecycleService } from "../../apps/desktop/src/main/services/diagnostics-lifecycle-service";
 import { DiagnosticsService } from "../../apps/desktop/src/main/services/diagnostics-service";
 import type { DiagnosticsExportPort } from "../../apps/desktop/src/main/services/diagnostics-export-types";
+import type { DiagnosticsProviderMetadata } from "../../apps/desktop/src/main/services/diagnostics-provider-metadata";
 
 const roots: string[] = [];
 const VAULT_ID = "vault_20260730_diagnostics";
@@ -19,11 +20,16 @@ function tempRoot(): string {
   return root;
 }
 
-function lifecycle(userDataPath: string, exporter: DiagnosticsExportPort): DiagnosticsLifecycleService {
+function lifecycle(
+  userDataPath: string,
+  exporter: DiagnosticsExportPort,
+  providerMetadata?: () => DiagnosticsProviderMetadata
+): DiagnosticsLifecycleService {
   return new DiagnosticsLifecycleService({
     userDataPath,
     diagnostics: new DiagnosticsService(userDataPath, { exporter }),
     getActiveVaultId: () => VAULT_ID,
+    providerMetadata,
     now: () => new Date("2026-07-30T12:34:56.000Z")
   });
 }
@@ -68,6 +74,72 @@ function startExport(service: DiagnosticsLifecycleService, destinationPath: stri
 }
 
 describe("durable diagnostics lifecycle", () => {
+  it("binds the explicitly reviewed provider aggregate once and reuses it for durable export", async () => {
+    const root = tempRoot();
+    const destination = path.join(root, "provider-support.json");
+    let generation: DiagnosticsProviderMetadata["providers"][number]["generation"] = "verified";
+    const providerMetadata = vi.fn((): DiagnosticsProviderMetadata => ({
+      schemaVersion: 1,
+      providerCount: 1,
+      modelCount: 1,
+      enabledModelCount: 1,
+      hasDefaultModel: true,
+      providers: [{
+        providerKind: "openai",
+        endpointProtocol: "openai_responses",
+        authRequirement: "api_key",
+        modelListStrategy: "list_models",
+        cloudBoundary: "openai_cloud",
+        discovery: "verified",
+        generation,
+        modelCount: 1,
+        enabledModelCount: 1
+      }]
+    }));
+    const service = lifecycle(path.join(root, "user-data"), writeExporter(), providerMetadata);
+    const initial = service.summary();
+    const preview = service.preview({
+      apiVersion: 1,
+      requestId: ids("diagpreviewreq", "provider"),
+      optionalCategories: ["provider_metadata"]
+    });
+    generation = "failed";
+    const started = service.start({
+      apiVersion: 1,
+      requestId: ids("diagexportreq", "provider"),
+      previewId: preview.previewId,
+      scopeContextId: initial.scopeContextId,
+      expectedRevision: initial.revision
+    }, destination);
+
+    expect(started.status).toBe("started");
+    await waitFor(service, "completed");
+    const exported = fs.readFileSync(destination, "utf8");
+    expect(providerMetadata).toHaveBeenCalledOnce();
+    expect(exported).toContain('"selectedOptionalCategories": [');
+    expect(exported).toContain('"generation": "verified"');
+    expect(exported).not.toContain('"generation": "failed"');
+    service.close();
+  });
+
+  it("fails before creating a preview when selected provider metadata is unavailable", () => {
+    const root = tempRoot();
+    const service = lifecycle(path.join(root, "user-data"), writeExporter());
+
+    try {
+      service.preview({
+        apiVersion: 1,
+        requestId: ids("diagpreviewreq", "missing"),
+        optionalCategories: ["provider_metadata"]
+      });
+      throw new Error("Expected selected provider metadata to fail closed.");
+    } catch (caught) {
+      expect(caught).toMatchObject({ code: "diagnostics.provider_metadata_unavailable" });
+    }
+    expect(service.summary().job).toBeUndefined();
+    service.close();
+  });
+
   it("exports through one pathless durable Job and bounds progress", async () => {
     const root = tempRoot();
     const destination = path.join(root, "selected-support.json");

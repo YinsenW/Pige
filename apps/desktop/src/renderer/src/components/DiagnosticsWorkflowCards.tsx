@@ -7,6 +7,7 @@ const CATEGORY_PROJECTIONS: Readonly<Record<string, CategoryProjection>> = {
   app_runtime: { titleKey: "support.category.appRuntime", descriptionKey: "support.category.appRuntimeDescription" },
   diagnostics_health: { titleKey: "support.category.diagnosticsHealth", descriptionKey: "support.category.diagnosticsHealthDescription" },
   recent_errors: { titleKey: "support.category.recentErrors", descriptionKey: "support.category.recentErrorsDescription" },
+  provider_metadata: { titleKey: "support.category.providerMetadata", descriptionKey: "support.category.providerMetadataDescription" },
   secrets: { titleKey: "support.category.secrets", descriptionKey: "support.category.secretsDescription" },
   content: { titleKey: "support.category.privateContent", descriptionKey: "support.category.privateContentDescription" },
   binaries: { titleKey: "support.category.binaries", descriptionKey: "support.category.binariesDescription" }
@@ -48,6 +49,40 @@ export function DiagnosticsJobCard(props: {
       </div>
     </div>
   );
+}
+
+export function ProviderMetadataSupportOption(props: {
+  readonly checked: boolean;
+  readonly disabled: boolean;
+  readonly onChange: (checked: boolean) => void;
+  readonly t: Translate;
+}): React.JSX.Element {
+  return <div className="settings-row">
+    <div className="settings-row-copy">
+      <strong>{props.t("support.includeProviderMetadata")}</strong>
+      <span id="support-provider-metadata-description">{props.t("support.includeProviderMetadataDescription")}</span>
+    </div>
+    <input type="checkbox" checked={props.checked} disabled={props.disabled}
+      aria-label={props.t("support.includeProviderMetadata")}
+      aria-describedby="support-provider-metadata-description"
+      onChange={(event) => props.onChange(event.currentTarget.checked)} />
+  </div>;
+}
+
+export function SupportBundlePreviewTrigger(props: {
+  readonly disabled: boolean;
+  readonly onPreview: () => void;
+  readonly t: Translate;
+}): React.JSX.Element {
+  return <div className="settings-row tall">
+    <div className="settings-row-copy">
+      <strong>{props.t("system.supportBundle")}</strong>
+      <span>{props.t("system.supportBundleDescription")}</span>
+    </div>
+    <button className="settings-button" type="button" disabled={props.disabled} onClick={props.onPreview}>
+      {props.t("system.previewSupport")}
+    </button>
+  </div>;
 }
 
 export function SupportBundlePreviewCard(props: {

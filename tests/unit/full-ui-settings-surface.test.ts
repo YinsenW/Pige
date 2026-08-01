@@ -4057,7 +4057,8 @@ describe("full UI Settings surface", () => {
       localOnly: true as const,
       ownedArtifactCount: 0
     };
-    const previewSupportBundle = vi.fn(async (request: { apiVersion: 1; requestId: string }) => ({
+    let echoOptionalCategories = true;
+    const previewSupportBundle = vi.fn(async (request: { apiVersion: 1; requestId: string; optionalCategories?: readonly ["provider_metadata"] }) => ({
       ...request,
       previewId: `supportpreview_${"b".repeat(48)}`,
       generatedAt: "2026-07-16T00:00:00.000Z",
@@ -4066,6 +4067,7 @@ describe("full UI Settings surface", () => {
       scopeContextId: workflow.scopeContextId,
       expectedRevision: workflow.revision,
       activeVaultId: workflow.activeVaultId,
+      selectedOptionalCategories: echoOptionalCategories ? request.optionalCategories ?? [] : [],
       includedCategories: [{ id: "app_runtime", label: "/private/raw-label", included: true, reason: "private body" }],
       excludedCategories: [{ id: "content", label: "RAW CONTENT", included: false, reason: "excluded" }],
       privacyWarnings: [
@@ -4115,6 +4117,13 @@ describe("full UI Settings surface", () => {
     expect(panel.querySelector("h1")?.textContent).toBe("Diagnostics");
     expect(panel.textContent).not.toContain("Check for updates");
     expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
+    const providerMetadata = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include provider metadata"]'));
+    expect(providerMetadata.checked).toBe(false);
+
+    await act(async () => {
+      providerMetadata.click();
+      await settle(dom);
+    });
 
     await act(async () => {
       buttonNamed(panel, "Refresh").click();
@@ -4127,6 +4136,9 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(previewSupportBundle).toHaveBeenCalledOnce();
+    expect(previewSupportBundle).toHaveBeenCalledWith(expect.objectContaining({
+      optionalCategories: ["provider_metadata"]
+    }));
     expect(panel.textContent).toContain("Preview ready");
     expect(panel.textContent).toContain("App and platform");
     expect(panel.textContent).toContain("Private knowledge content");
@@ -4135,6 +4147,24 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("/private/raw-label");
     expect(panel.textContent).not.toContain("private body");
     expect(panel.textContent).not.toContain("RAW CONTENT");
+
+    await act(async () => {
+      providerMetadata.click();
+      await settle(dom);
+    });
+    expect(panel.textContent).not.toContain("Preview ready");
+
+    await act(async () => {
+      providerMetadata.click();
+      await settle(dom);
+    });
+    echoOptionalCategories = false;
+    await act(async () => {
+      buttonNamed(panel, "Preview and export…").click();
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Pige could not prepare a safe support bundle preview.");
+    expect(panel.textContent).not.toContain("Preview ready");
 
     await act(async () => root.unmount());
     dom.window.close();

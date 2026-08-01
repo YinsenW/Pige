@@ -26,6 +26,7 @@ import {
   type SupportBundlePreview
 } from "@pige/schemas";
 import { DiagnosticsService } from "./diagnostics-service";
+import type { DiagnosticsProviderMetadata } from "./diagnostics-provider-metadata";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 import { acquireVaultWriterLease, type VaultWriterLease } from "./vault-writer-lease";
@@ -78,12 +79,14 @@ export interface DiagnosticsLifecycleOptions {
   readonly userDataPath: string;
   readonly diagnostics: DiagnosticsService;
   readonly getActiveVaultId: () => string | undefined;
+  readonly providerMetadata?: () => DiagnosticsProviderMetadata;
   readonly now?: () => Date;
 }
 
 export class DiagnosticsLifecycleService {
   readonly #diagnostics: DiagnosticsService;
   readonly #getActiveVaultId: () => string | undefined;
+  readonly #providerMetadata: (() => DiagnosticsProviderMetadata) | undefined;
   readonly #now: () => Date;
   readonly #root: string;
   readonly #jobsRoot: string;
@@ -94,12 +97,14 @@ export class DiagnosticsLifecycleService {
   readonly #jobs: JobRecordStore;
   readonly #coordinator: JobExecutionCoordinator;
   readonly #previews = new Map<string, SupportBundlePreview>();
+  readonly #previewProviderMetadata = new Map<string, DiagnosticsProviderMetadata>();
   readonly #executions = new Map<string, AbortController>();
   #closed = false;
 
   constructor(options: DiagnosticsLifecycleOptions) {
     this.#diagnostics = options.diagnostics;
     this.#getActiveVaultId = options.getActiveVaultId;
+    this.#providerMetadata = options.providerMetadata;
     this.#now = options.now ?? (() => new Date());
     const userData = privateDirectory(options.userDataPath, true);
     this.#root = privateChild(userData, "diagnostics-workflow");
@@ -131,6 +136,7 @@ export class DiagnosticsLifecycleService {
 
   preview(requestInput: DiagnosticsPreviewSupportBundleRequest): SupportBundlePreview {
     const request = DiagnosticsPreviewSupportBundleRequestSchema.parse(requestInput);
+    const selectedOptionalCategories = request.optionalCategories ?? [];
     const registry = this.#readRegistry();
     const activeVaultId = this.#getActiveVaultId() ?? null;
     const preview = SupportBundlePreviewSchema.parse(this.#diagnostics.previewSupportBundle({
@@ -138,8 +144,13 @@ export class DiagnosticsLifecycleService {
       requestId: request.requestId,
       scopeContextId: scopeContextId(registry.machineScopeId, activeVaultId),
       expectedRevision: registry.revision,
-      activeVaultId
+      activeVaultId,
+      selectedOptionalCategories
     }));
+    if (selectedOptionalCategories.includes("provider_metadata")) {
+      if (!this.#providerMetadata) throw lifecycleError("diagnostics.provider_metadata_unavailable");
+      this.#previewProviderMetadata.set(preview.previewId, this.#providerMetadata());
+    }
     this.#previews.set(preview.previewId, preview);
     return preview;
   }
@@ -209,7 +220,11 @@ export class DiagnosticsLifecycleService {
       registry = this.#writeRegistry({ ...registry, revision: nextRevision(registry.revision), jobIds: [...registry.jobIds, jobId] });
       let content: string;
       try {
-        content = this.#diagnostics.createSupportBundlePayload(preview);
+        const providerMetadata = this.#previewProviderMetadata.get(preview.previewId);
+        if (preview.selectedOptionalCategories.includes("provider_metadata") && !providerMetadata) {
+          throw lifecycleError("diagnostics.provider_metadata_unavailable");
+        }
+        content = this.#diagnostics.createSupportBundlePayload(preview, { ...(providerMetadata ? { providerMetadata } : {}) });
         if (Buffer.byteLength(content, "utf8") > MAX_PAYLOAD_BYTES) throw lifecycleError("diagnostics.export_blocked");
       }
       catch (caught) {
@@ -291,6 +306,7 @@ export class DiagnosticsLifecycleService {
       const clearedArtifactCount = this.#completeClear(receipt);
       registry = this.#readRegistry();
       this.#previews.clear();
+      this.#previewProviderMetadata.clear();
       return DiagnosticsClearLocalResultSchema.parse({
         ...identity,
         status: "cleared",
