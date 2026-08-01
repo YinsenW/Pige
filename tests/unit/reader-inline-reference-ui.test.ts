@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReaderInlineReferenceSurface } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 
-const globals = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLButtonElement", "Element", "MouseEvent"] as const;
+const globals = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLButtonElement", "Element", "MouseEvent", "KeyboardEvent"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
 const labels: Record<string, string> = {
   "conversation.code": "Code",
@@ -14,7 +14,10 @@ const labels: Record<string, string> = {
   "conversation.codeCopied": "Copied",
   "conversation.copyCodeFailed": "Copy failed — retry",
   "note.readerLinkReady": "Open this reference",
-  "note.readerLinkUnavailable": "Reference unavailable"
+  "note.readerLinkUnavailable": "Reference unavailable",
+  "note.outline.title": "On this page",
+  "note.outline.expand": "Show page outline",
+  "note.outline.collapse": "Hide page outline"
 };
 
 afterEach(() => {
@@ -95,6 +98,59 @@ describe("Reader inline reference surface", () => {
     expect(writeText).toHaveBeenCalledTimes(2);
     expect(button.textContent).toBe("Copied");
     expect(harness.dom.window.document.activeElement).toBe(button);
+    await harness.unmount();
+  });
+
+  it("derives a bounded H2/H3 outline and moves keyboard focus to the exact visible heading", async () => {
+    const harness = mount();
+    const extraHeadings = Array.from({ length: 34 }, (_, index) => `<h2>Section ${index + 1}</h2>`).join("");
+    render(harness.root, "page-outline-a", `<h1>Hidden title</h1><h2>Overview</h2><h3>Details</h3>${extraHeadings}`);
+    const toggle = required(harness.container.querySelector<HTMLButtonElement>(".reader-document-outline-toggle"));
+    expect(toggle.textContent).toContain("On this page");
+    expect(toggle.title).toBe("Show page outline");
+    expect(harness.container.querySelector(".reader-document-outline-list")).toBeNull();
+
+    await act(async () => toggle.click());
+    const buttons = Array.from(harness.container.querySelectorAll<HTMLButtonElement>(".reader-document-outline-list button"));
+    expect(buttons).toHaveLength(32);
+    expect(buttons.slice(0, 3).map((button) => button.textContent)).toEqual(["Overview", "Details", "Section 1"]);
+    expect(buttons.some((button) => button.textContent === "Hidden title")).toBe(false);
+    expect(buttons[0]?.tabIndex).toBe(0);
+    expect(buttons[1]?.tabIndex).toBe(-1);
+
+    buttons[0]?.focus();
+    await act(async () => buttons[0]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", {
+      key: "ArrowDown",
+      bubbles: true
+    })));
+    expect(harness.dom.window.document.activeElement).toBe(buttons[1]);
+    expect(buttons[0]?.tabIndex).toBe(-1);
+    expect(buttons[1]?.tabIndex).toBe(0);
+
+    await act(async () => buttons[1]?.click());
+    const detailsHeading = required(harness.container.querySelector<HTMLHeadingElement>('h3[data-reader-outline-heading="reader-outline-heading-1"]'));
+    expect(harness.dom.window.document.activeElement).toBe(detailsHeading);
+    expect(detailsHeading.tabIndex).toBe(-1);
+    await harness.unmount();
+  });
+
+  it("rebuilds the closed outline for the current Reader identity and omits short pages", async () => {
+    const harness = mount();
+    render(harness.root, "page-outline-a", "<h2>First page</h2><h2>Second section</h2>");
+    const firstToggle = required(harness.container.querySelector<HTMLButtonElement>(".reader-document-outline-toggle"));
+    await act(async () => firstToggle.click());
+    expect(harness.container.querySelector(".reader-document-outline-list")).not.toBeNull();
+
+    render(harness.root, "page-outline-b", "<h2>Replacement page</h2><h3>Current section</h3>");
+    const currentToggle = required(harness.container.querySelector<HTMLButtonElement>(".reader-document-outline-toggle"));
+    expect(currentToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(harness.container.querySelector(".reader-document-outline-list")).toBeNull();
+    await act(async () => currentToggle.click());
+    expect(Array.from(harness.container.querySelectorAll(".reader-document-outline-list button"), (button) => button.textContent))
+      .toEqual(["Replacement page", "Current section"]);
+
+    render(harness.root, "page-outline-c", "<h2>Only section</h2>");
+    expect(harness.container.querySelector(".reader-document-outline")).toBeNull();
     await harness.unmount();
   });
 });
