@@ -657,6 +657,9 @@ Startup recovery flow:
 1. Load active vault manifest and app-local active vault path.
 2. Acquire the fenced per-vault writer lease under `.pige/runtime/` or fail closed when another owner is active; stale recovery must revalidate canonical vault/root and lock directory identity, current mtime/freshness, and the sentinel generation, bounded content hash and named-path metadata twice around the cleanup commit boundary before mutable services start. Same-name inode reuse is not accepted as identity.
 3. Scan durable Jobs/proposals/Operations/source records/private ingress snapshots/conversations/log, rebuilding dirty SQLite projections and reconciling checkpoint refs/hashes.
+   For a `capturing_source` Agent Job, publish a complete accepted-file set only from its
+   verified parent/source/ordinal snapshots before ordinary SourceRecord reconciliation;
+   missing members remain waiting and the original pathname is never retry authority.
 4. Reclassify running/cancel/waiting/partial or legacy states as proven resumable, retryable, warning-complete, or body-free `failed_retryable`/repair; unpublished approval states may be cleared rather than migrated.
 5. Resume queued priority work only after Home is usable.
 

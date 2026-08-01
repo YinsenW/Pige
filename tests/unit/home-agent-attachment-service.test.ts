@@ -11,6 +11,7 @@ import {
   createPigeAgentToolCatalogHash,
   createPigeTextToolResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
+import type { IngressSnapshotDescriptor } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 
 const roots: string[] = [];
 
@@ -19,6 +20,87 @@ afterEach(() => {
 });
 
 describe("HomeAgentAttachmentService", () => {
+  it("freezes every accepted file after the parent identity exists and before publishing any source", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-freeze-"));
+    roots.push(root);
+    const files = ["first.md", "second.txt"].map((name) => {
+      const filePath = path.join(root, name);
+      fs.writeFileSync(filePath, name, "utf8");
+      return filePath;
+    });
+    const events: string[] = [];
+    const freeze = vi.fn(async (_filePath: string, binding: { readonly ordinal?: number; readonly sourceId: string }) => {
+      events.push(`freeze:${binding.ordinal}`);
+      return { sourceId: binding.sourceId, descriptorDigest: `digest-${binding.ordinal}` } as unknown as IngressSnapshotDescriptor;
+    });
+    const preserve = vi.fn(async (_request, binding: { readonly ordinal?: number; readonly sourceId: string }) => {
+      events.push(`preserve:${binding.ordinal}`);
+      return {
+        status: "queued" as const,
+        captureId: "cap_20260801_freeze001",
+        sourceIds: [binding.sourceId],
+        jobIds: [], conversationEventIds: [], rejectedFiles: [], preservedAt: "2026-08-01T00:00:00.000Z"
+      };
+    });
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    }, {
+      freeze,
+      discard: vi.fn()
+    });
+    const prepared = await service.prepare(files.map((internalPath) => ({
+      displayName: path.basename(internalPath), internalPath
+    })));
+
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en" },
+      jobId: "job_20260801_freeze001",
+      firstSourceId: "src_20260801_freeze001"
+    });
+
+    expect(result.status).toBe("preserved");
+    expect(events).toEqual(["freeze:0", "freeze:1", "preserve:0", "preserve:1"]);
+  });
+
+  it("releases every unpublished snapshot when freezing the accepted set cannot complete", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-freeze-fail-"));
+    roots.push(root);
+    const files = ["first.md", "second.md"].map((name) => {
+      const filePath = path.join(root, name);
+      fs.writeFileSync(filePath, name, "utf8");
+      return filePath;
+    });
+    const first = { sourceId: "src_20260801_freezefail", descriptorDigest: "digest" } as unknown as IngressSnapshotDescriptor;
+    const discard = vi.fn();
+    const preserve = vi.fn();
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: preserve,
+      preserveTextForAgentTurn: vi.fn()
+    }, {
+      freeze: vi.fn(async (_filePath, binding) => {
+        if (binding.ordinal === 1) throw new Error("synthetic freeze failure");
+        return first;
+      }),
+      discard
+    });
+    const prepared = await service.prepare(files.map((internalPath) => ({
+      displayName: path.basename(internalPath), internalPath
+    })));
+
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en" },
+      jobId: "job_20260801_freezefail",
+      firstSourceId: "src_20260801_freezefail"
+    });
+
+    expect(result.status).toBe("failed");
+    expect(discard).toHaveBeenCalledWith(first);
+    expect(preserve).not.toHaveBeenCalled();
+  });
+
   it("preserves one ordered attachment set once under deterministic source identities", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-owner-"));
     roots.push(root);

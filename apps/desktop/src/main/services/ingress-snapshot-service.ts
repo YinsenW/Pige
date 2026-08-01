@@ -5,6 +5,8 @@ import { PigeDomainError } from "@pige/domain";
 
 const SNAPSHOT_SCHEMA_VERSION = 1;
 const PRIVATE_ROOT = [".pige", "private", "ingress-snapshots"] as const;
+const STAGING_DIRECTORY_PATTERN = /^snap_[a-f0-9]{40}\.staging-[a-f0-9-]{36}$/u;
+const activeStagingDirectories = new Set<string>();
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,191}$/u;
 const MAX_SOURCE_BYTES = 4 * 1024 * 1024 * 1024;
@@ -99,8 +101,9 @@ export class IngressSnapshotService {
     if (existing) return await this.#adoptExact(existing, input, finalDirectory);
 
     const stagingDirectory = `${finalDirectory}.staging-${randomUUID()}`;
-    await fs.promises.mkdir(stagingDirectory, { recursive: false, mode: 0o700 });
+    activeStagingDirectories.add(stagingDirectory);
     try {
+      await fs.promises.mkdir(stagingDirectory, { recursive: false, mode: 0o700 });
       const snapshotFileName = `snapshot${safeExtension(input.sourcePath)}`;
       const snapshotPath = path.join(stagingDirectory, snapshotFileName);
       await copyExactSourceToSnapshot(input, snapshotPath);
@@ -121,7 +124,26 @@ export class IngressSnapshotService {
       await fs.promises.rm(stagingDirectory, { recursive: true, force: true }).catch(() => undefined);
       if (caught instanceof PigeDomainError) throw caught;
       throw snapshotError("ingress_snapshot.create_failed", "The private ingress snapshot could not be created.");
+    } finally {
+      activeStagingDirectories.delete(stagingDirectory);
     }
+  }
+
+  async listForParent(vaultPath: string, parentJobId: string): Promise<readonly IngressSnapshotDescriptor[]> {
+    if (!ID_PATTERN.test(parentJobId)) throw descriptorMismatch();
+    const root = await privateRootOptional(vaultPath);
+    if (!root) return [];
+    const entries = await fs.promises.readdir(root, { withFileTypes: true });
+    const descriptors: IngressSnapshotDescriptor[] = [];
+    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.includes(".staging-")) continue;
+      const directory = path.join(root, entry.name);
+      const descriptor = await readDescriptorOptional(directory);
+      if (!descriptor || descriptor.parentJobId !== parentJobId) continue;
+      await verifySnapshot(directory, descriptor);
+      descriptors.push(descriptor);
+    }
+    return descriptors.sort((left, right) => left.ordinal - right.ordinal || left.sourceId.localeCompare(right.sourceId));
   }
 
   read(vaultPath: string, binding: IngressSnapshotBinding): IngressSnapshotDescriptor | undefined {
@@ -292,8 +314,24 @@ export class IngressSnapshotService {
     let released = 0;
     let retained = 0;
     for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-      if (!entry.isDirectory() || entry.isSymbolicLink() || entry.name.includes(".staging-")) continue;
+      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
       const directory = path.join(root, entry.name);
+      if (entry.name.includes(".staging-")) {
+        if (!STAGING_DIRECTORY_PATTERN.test(entry.name)) continue;
+        scanned += 1;
+        if (activeStagingDirectories.has(directory)) {
+          retained += 1;
+          continue;
+        }
+        const real = await fs.promises.realpath(directory).catch(() => undefined);
+        if (!real || real !== directory || !isContained(real, root)) {
+          retained += 1;
+          continue;
+        }
+        await fs.promises.rm(directory, { recursive: true, force: false });
+        released += 1;
+        continue;
+      }
       const descriptor = await readDescriptorOptional(directory);
       if (!descriptor) { retained += 1; continue; }
       scanned += 1;

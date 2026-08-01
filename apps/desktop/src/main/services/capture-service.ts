@@ -26,6 +26,7 @@ import {
   ingressSnapshotService,
   type IngressSnapshotDescriptor
 } from "./ingress-snapshot-service";
+import { freezeAcceptedFileIngress, resolveAcceptedFileIngress } from "./accepted-file-ingress-service";
 import { redactSensitiveUrl, SourceFetchService, type SourceFetchSnapshot } from "./source-fetch-service";
 import { observedLanguageFact, unknownLanguageFact } from "./durable-language";
 import { readBoundedSourceFileNoFollow, verifyReadableSourceFile } from "./source-file-access";
@@ -338,7 +339,17 @@ export class CaptureService {
     const rejectedFiles: CaptureFileRejection[] = [];
 
     for (const filePath of uniqueFilePaths) {
-      const displayName = safeAttachmentDisplayName(filePath);
+      let existingSnapshot: IngressSnapshotDescriptor | undefined;
+      try {
+        existingSnapshot = await resolveAcceptedFileIngress({
+          vaultPath, vaultId: vault.vaultId, filePath, binding: agentTurnBinding
+        });
+      } catch {
+        rejectedFiles.push({ displayName: safeAttachmentDisplayName(filePath), reason: "copy_failed" });
+        continue;
+      }
+      const boundSourcePath = existingSnapshot?.sourceProvenance.originalPath ?? filePath;
+      const displayName = safeAttachmentDisplayName(boundSourcePath);
       const extension = path.extname(displayName).toLowerCase();
       const sourceKind = supportedFileSourceKind(displayName);
       if (!sourceKind) {
@@ -346,16 +357,19 @@ export class CaptureService {
         continue;
       }
 
-      const fileState = inspectRegularFile(filePath);
-      if (fileState !== "ok") {
-        rejectedFiles.push({ displayName, reason: fileState });
-        continue;
-      }
-
-      const sqliteSidecars = sourceKind === "sqlite_file" ? detectSqliteSidecars(filePath) : [];
-      if (storageStrategy === "copy_to_source_library" && sqliteSidecars.length > 0) {
-        rejectedFiles.push({ displayName, reason: "copy_failed" });
-        continue;
+      const sqliteSidecars = existingSnapshot || sourceKind !== "sqlite_file"
+        ? []
+        : detectSqliteSidecars(boundSourcePath);
+      if (!existingSnapshot) {
+        const fileState = inspectRegularFile(boundSourcePath);
+        if (fileState !== "ok") {
+          rejectedFiles.push({ displayName, reason: fileState });
+          continue;
+        }
+        if (storageStrategy === "copy_to_source_library" && sqliteSidecars.length > 0) {
+          rejectedFiles.push({ displayName, reason: "copy_failed" });
+          continue;
+        }
       }
 
       const sourceId = agentTurnBinding.sourceId;
@@ -364,26 +378,11 @@ export class CaptureService {
       let unpublishedSnapshot: IngressSnapshotDescriptor | undefined;
 
       try {
-        const sourceStat = fs.lstatSync(filePath);
-        const checksum = agentTurnBinding.inputChecksum
-          ? agentTurnBinding.inputChecksum as `sha256:${string}`
-          : (await checksumFileWithSize(filePath)).checksum;
-        const snapshot = await ingressSnapshotService.createOrAdopt({
+        const snapshot = existingSnapshot ?? await freezeAcceptedFileIngress({
           vaultPath,
           vaultId: vault.vaultId,
-          parentJobId: agentTurnBinding.jobId,
-          sourceId,
-          ordinal: agentTurnBinding.snapshotOrdinal ?? agentTurnBinding.ordinal ?? 0,
-          sourcePath: filePath,
-          checksum,
-          size: sourceStat.size,
-          noFollowIdentity: {
-            device: sourceStat.dev,
-            inode: sourceStat.ino,
-            size: sourceStat.size,
-            modifiedAtMs: sourceStat.mtimeMs,
-            changedAtMs: sourceStat.ctimeMs
-          }
+          filePath: boundSourcePath,
+          binding: agentTurnBinding
         });
         unpublishedSnapshot = snapshot;
         const selectedRoot = selectCaptureManagedCopyRoot(this.#managedRoots, vault, vaultPath);
@@ -402,7 +401,7 @@ export class CaptureService {
         unpublishedSnapshot = adoptedSnapshot;
         if (adoptExistingAgentTurnFileSource(
           vaultPath,
-          filePath,
+          boundSourcePath,
           displayName,
           sourceKind,
           agentTurnBinding,
@@ -419,8 +418,8 @@ export class CaptureService {
           storageStrategy,
           semanticOrchestration: "agent_turn",
           original: {
-            uri: pathToFileURL(filePath).href,
-            path: filePath,
+            uri: pathToFileURL(boundSourcePath).href,
+            path: boundSourcePath,
             displayName,
             lastKnownMtime: new Date(adoptedSnapshot.sourceProvenance.identity.modifiedAtMs).toISOString(),
             lastKnownSize: adoptedSnapshot.size,

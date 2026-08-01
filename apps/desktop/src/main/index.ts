@@ -215,6 +215,9 @@ import { PigePolicyService } from "./services/pige-policy-service";
 import { BackupTrashPreferenceService } from "./services/backup-trash-preference-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
 import { CaptureService } from "./services/capture-service";
+import { AcceptedFileIngressService } from "./services/accepted-file-ingress-service";
+import { AgentFileIngressRecoveryService } from "./services/agent-file-ingress-recovery-service";
+import { AgentTurnConversationStore } from "./services/agent-turn-conversation-store";
 import { ManagedCopyRootService } from "./services/managed-copy-root-service";
 import { configureManagedCopyLocatorResolver } from "./services/source-file-access";
 import { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
@@ -462,6 +465,7 @@ let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let toolchainRepairService: ToolchainRepairService | undefined;
 let captureService: CaptureService | undefined;
+let agentFileIngressRecoveryService: AgentFileIngressRecoveryService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
@@ -480,6 +484,7 @@ let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
 const homeConversationHistory = new AgentConversationHistory();
+const homeAgentConversationStore = new AgentTurnConversationStore();
 let libraryService: LibraryService | undefined;
 let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
@@ -1154,6 +1159,16 @@ const getCaptureService = (): CaptureService => {
   return captureService;
 };
 
+const getAgentFileIngressRecoveryService = (): AgentFileIngressRecoveryService => {
+  agentFileIngressRecoveryService ??= new AgentFileIngressRecoveryService(
+    getVaultService(),
+    getJobsService(),
+    getCaptureService(),
+    homeAgentConversationStore
+  );
+  return agentFileIngressRecoveryService;
+};
+
 const getManagedCopyRootService = (): ManagedCopyRootService => {
   if (!managedCopyRootService) {
     managedCopyRootService = new ManagedCopyRootService(app.getPath("userData"));
@@ -1167,7 +1182,10 @@ const getManagedCopyRootService = (): ManagedCopyRootService => {
 
 const getHomeAgentAttachmentService = (): HomeAgentAttachmentService => {
   if (!homeAgentAttachmentService) {
-    homeAgentAttachmentService = new HomeAgentAttachmentService(getCaptureService());
+    homeAgentAttachmentService = new HomeAgentAttachmentService(
+      getCaptureService(),
+      new AcceptedFileIngressService(getVaultService())
+    );
   }
   return homeAgentAttachmentService;
 };
@@ -1600,7 +1618,7 @@ const getHomeAgentService = (): HomeAgentService => {
       getJobsService(),
       undefined,
       { snapshot: getAgentCapabilitySnapshot },
-      undefined,
+      homeAgentConversationStore,
       getHomeAgentUrlService(),
       getDatasetQueryService(),
       getPermissionedExternalCapabilityRegistry(),
@@ -2602,6 +2620,18 @@ const resumeBackgroundJobs = async (): Promise<void> => {
     );
   }
   try {
+    const fileIngressRecovery = await getAgentFileIngressRecoveryService().recover();
+    if (fileIngressRecovery.recovered > 0 || fileIngressRecovery.failed > 0) {
+      getDiagnosticsService().recordEvent({
+        level: fileIngressRecovery.failed > 0 ? "warning" : "info",
+        code: fileIngressRecovery.failed > 0
+          ? "ingress_snapshot.recovery_incomplete"
+          : "ingress_snapshot.recovery_completed",
+        message: fileIngressRecovery.failed > 0
+          ? "Some accepted-file snapshots could not be published safely after restart."
+          : "Accepted-file snapshots were published from their immutable restart state."
+      });
+    }
     const urlSourceHandoffs = getJobsService().reconcilePendingAgentTurnUrlSources();
     if (urlSourceHandoffs.linked > 0 || urlSourceHandoffs.failed > 0) {
       getDiagnosticsService().recordEvent({
@@ -2616,8 +2646,8 @@ const resumeBackgroundJobs = async (): Promise<void> => {
     }
     const sourceHandoffs = getJobsService().reconcilePendingAgentTurnSources();
     getCrashRecoveryService().observe({
-      capturesPreserved: urlSourceHandoffs.linked + sourceHandoffs.linked,
-      sourcesNeedRepair: urlSourceHandoffs.failed + sourceHandoffs.failed
+      capturesPreserved: fileIngressRecovery.recovered + urlSourceHandoffs.linked + sourceHandoffs.linked,
+      sourcesNeedRepair: fileIngressRecovery.failed + urlSourceHandoffs.failed + sourceHandoffs.failed
     });
     if (sourceHandoffs.linked > 0 || sourceHandoffs.failed > 0) {
       getDiagnosticsService().recordEvent({
@@ -4032,8 +4062,12 @@ app.whenReady().then(async () => {
   paddleRuntime.recoverStaging();
   ocrService = new OcrService(paddleRuntime.adapter);
   toolchainService = new ToolchainService(resolveToolchainManifestPath());
+  agentFileIngressRecoveryService = undefined;
   captureService = new CaptureService(getVaultService(), undefined, getManagedCopyRootService());
-  homeAgentAttachmentService = new HomeAgentAttachmentService(captureService);
+  homeAgentAttachmentService = new HomeAgentAttachmentService(
+    captureService,
+    new AcceptedFileIngressService(getVaultService())
+  );
   jobsService = new JobsService(
     getVaultService(),
     getAgentIngestService(),

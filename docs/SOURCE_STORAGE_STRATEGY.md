@@ -121,6 +121,11 @@ proven terminal/orphan ownership. Pre-Send/rejected items create none. It grants
 source access only; attachments grant no ambient authority but do not veto a separately
 explicit confirmed/reviewed task.
 
+For one accepted Send, Main freezes every accepted file ordinal before publishing any
+SourceRecord or managed copy. Restart recovery republishes only from those verified
+descriptors—never by rereading a changed or missing live pathname—and removes an exact
+interrupted staging directory or failed unpublished set without touching user files.
+
 ## 5. Source Record Contract
 
 Every captured source receives a stable source ID and a source record.
