@@ -125,7 +125,7 @@ export class SkillRegistryService {
     this.#lifecycleStore = new SkillRegistryLifecycleStore(canonicalRoot);
     this.#sourceUpdate = new SkillSourceUpdateRegistry({
       readRegistry: () => this.#readRegistry(), readManifest: (skillId) => this.#readManifest(skillId),
-      isLifecycleEligible: (record) => this.#isLifecycleEligible(record), project: (registry) => this.#project(registry),
+      isLifecycleEligible: (record) => this.#isLifecycleEligible(record) && this.#readManifest(record.id).manifest.kind === "pure", project: (registry) => this.#project(registry),
       nextRegistry: (current, skills) => this.#nextRegistry(current, skills), writeRegistry: (registry) => this.#writeRegistry(registry),
       lifecycleStore: this.#lifecycleStore
     });
