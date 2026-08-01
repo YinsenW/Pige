@@ -2251,7 +2251,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain('| "restore_memory"');
     expect(contractsSource).toContain("export interface KnowledgeActivityCollectionTarget");
     expect(contractsSource).toContain("readonly expectedRevisionId?: string;");
-    expect(rendererSource).toContain('window.pige.activity.list({ limit: 20 })');
+    expect(rendererSource).toContain('window.pige.activity.list({ limit: 20, ...activityFilter })');
+    expect(activityPanelSource).toContain('window.pige.activity.list({ limit: 20, ...filter })');
     expect(activityPanelSource).toContain('className="settings-page settings-history-page"');
     expect(activityPanelSource).toContain('activity.kind === "update_page"');
     expect(activityPanelSource).toContain('"activity.updatedPage"');
@@ -2261,7 +2262,7 @@ describe("desktop shell build contract", () => {
     expect(activityPanelSource).toContain('"activity.createdMemory"');
     expect(activityPanelSource).toContain('"activity.createdPage"');
     expect(rendererSource).toContain('onUndo={undoActivity}');
-    expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');
+    expect(undoHandler).toContain('window.pige.activity.list({ limit: 20, ...activityHistoryFilterRef.current })');
     expect(undoHandler).toContain('t("activity.undoStateUnknown")');
     expect(undoHandler).toContain("restoreActivityFocus(operationId)");
     expect(rendererSource).toContain('aria-live={captureToast.kind === "error" ? "assertive" : "polite"}');

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import type { JobSummary, KnowledgeActivitySummary } from "@pige/contracts";
+import type { JobSummary, KnowledgeActivityListResult, KnowledgeActivitySummary } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
 import { collectionViewActivityMessageKey } from "../collection-view-lifecycle";
 import { NoteTrashRestorePanel } from "./NoteTrashRestorePanel";
@@ -7,6 +7,11 @@ import { NoteTrashRestorePanel } from "./NoteTrashRestorePanel";
 export function ActivityHistorySettingsPanel(props: {
   readonly activeVaultId?: string | null;
   readonly activities: readonly KnowledgeActivitySummary[];
+  readonly total?: number;
+  readonly filter?: {
+    readonly query?: string;
+    readonly status?: "applied" | "undone";
+  };
   readonly jobs?: readonly JobSummary[];
   readonly hasMore: boolean;
   readonly loadingMore: boolean;
@@ -21,6 +26,10 @@ export function ActivityHistorySettingsPanel(props: {
   readonly onUndo: (operationId: string) => Promise<void>;
   readonly onRedo: (operationId: string) => Promise<void>;
   readonly onLoadMore: () => Promise<boolean>;
+  readonly onSearchResult?: (
+    result: KnowledgeActivityListResult,
+    filter: { readonly query?: string; readonly status?: "applied" | "undone" }
+  ) => void;
   readonly onCancelJob?: (jobId: string) => Promise<unknown>;
   readonly onRetryJob?: (jobId: string) => Promise<unknown>;
   readonly onRefreshJobs?: () => Promise<boolean>;
@@ -37,6 +46,19 @@ export function ActivityHistorySettingsPanel(props: {
   const [jobActionFailure, setJobActionFailure] = useState<{ readonly jobId: string; readonly kind: "cancel" | "retry" } | null>(null);
   const [jobsRefreshing, setJobsRefreshing] = useState(false);
   const [jobsRefreshFailed, setJobsRefreshFailed] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState(props.filter?.query ?? "");
+  const [historyStatus, setHistoryStatus] = useState<"all" | "applied" | "undone">(props.filter?.status ?? "all");
+  const [historySearching, setHistorySearching] = useState(false);
+  const [historySearchFailed, setHistorySearchFailed] = useState(false);
+  const [historyAppliedFilter, setHistoryAppliedFilter] = useState<{
+    readonly query: string;
+    readonly status: "all" | "applied" | "undone";
+  }>({ query: props.filter?.query ?? "", status: props.filter?.status ?? "all" });
+  const historySearchInFlightRef = useRef(false);
+  const historySearchSequenceRef = useRef(0);
+  const historyOwnerRef = useRef(props.activeVaultId);
+  const historySearchReturnFocusRef = useRef<HTMLElement | null>(null);
+  historyOwnerRef.current = props.activeVaultId;
   const backgroundJobs = (props.jobs ?? []).filter((job) => job.class !== "agent_turn");
   const activeJobs = backgroundJobs.filter(isActivityJob);
   const recentJobs = backgroundJobs.filter(isTerminalActivityJob).slice(0, 20);
@@ -44,6 +66,15 @@ export function ActivityHistorySettingsPanel(props: {
     if (focusEpoch === 0) return;
     requestAnimationFrame(() => (loadTriggerRef.current ?? historyTitleRef.current)?.focus({ preventScroll: true }));
   }, [focusEpoch]);
+  useLayoutEffect(() => {
+    setHistoryQuery(props.filter?.query ?? "");
+    setHistoryStatus(props.filter?.status ?? "all");
+    setHistorySearching(false);
+    setHistorySearchFailed(false);
+    setHistoryAppliedFilter({ query: props.filter?.query ?? "", status: props.filter?.status ?? "all" });
+    historySearchInFlightRef.current = false;
+    historySearchSequenceRef.current += 1;
+  }, [props.activeVaultId]);
   const loadMore = async (): Promise<void> => {
     if (loadInFlightRef.current || props.loadingMore) return;
     loadInFlightRef.current = true;
@@ -52,6 +83,35 @@ export function ActivityHistorySettingsPanel(props: {
     } finally {
       loadInFlightRef.current = false;
       setFocusEpoch((current) => current + 1);
+    }
+  };
+  const searchHistory = async (): Promise<void> => {
+    if (!props.onSearchResult || historySearchInFlightRef.current || !props.activeVaultId) return;
+    historySearchInFlightRef.current = true;
+    setHistorySearching(true);
+    setHistorySearchFailed(false);
+    const query = historyQuery.trim();
+    const status = historyStatus;
+    const owner = props.activeVaultId;
+    const sequence = ++historySearchSequenceRef.current;
+    const returnFocus = historySearchReturnFocusRef.current;
+    try {
+      const filter = { ...(query ? { query } : {}), ...(status === "all" ? {} : { status }) };
+      const result = await window.pige.activity.list({ limit: 20, ...filter });
+      if (sequence !== historySearchSequenceRef.current || historyOwnerRef.current !== owner || result.activeVaultId !== owner) return;
+      props.onSearchResult(result, filter);
+      setHistoryAppliedFilter({ query, status });
+    } catch {
+      if (sequence === historySearchSequenceRef.current && historyOwnerRef.current === owner)
+        setHistorySearchFailed(true);
+    } finally {
+      if (sequence === historySearchSequenceRef.current && historyOwnerRef.current === owner) {
+        historySearchInFlightRef.current = false;
+        setHistorySearching(false);
+        requestAnimationFrame(() => returnFocus?.isConnected
+          ? returnFocus.focus({ preventScroll: true })
+          : historyTitleRef.current?.focus({ preventScroll: true }));
+      }
     }
   };
   const restoreJobFocus = (jobId?: string, fallback?: HTMLElement | null): void => {
@@ -173,10 +233,34 @@ export function ActivityHistorySettingsPanel(props: {
       <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
       <section className="settings-section" aria-labelledby="activity-recent-title">
         <h2 className="settings-section-title" id="activity-recent-title">{props.t("activity.recent")}</h2>
+        {props.onSearchResult ? <form className="settings-inline-actions" role="search"
+          aria-label={props.t("activity.search.title")} onSubmit={(event) => {
+            event.preventDefault();
+            historySearchReturnFocusRef.current = event.currentTarget.ownerDocument.activeElement as HTMLElement | null;
+            void searchHistory();
+          }}>
+          <label className="settings-search-wrap"><span className="sr-only">{props.t("activity.search.label")}</span>
+            <input className="settings-search" type="search" maxLength={120} value={historyQuery}
+              placeholder={props.t("activity.search.placeholder")} aria-label={props.t("activity.search.label")}
+              disabled={historySearching} onInput={(event) => setHistoryQuery(event.currentTarget.value)} />
+          </label>
+          <select className="settings-select" value={historyStatus} aria-label={props.t("activity.search.status")}
+            disabled={historySearching} onChange={(event) => setHistoryStatus(event.currentTarget.value as typeof historyStatus)}>
+            <option value="all">{props.t("activity.search.all")}</option>
+            <option value="applied">{props.t("activity.statusApplied")}</option>
+            <option value="undone">{props.t("activity.statusUndone")}</option>
+          </select>
+          <button type="submit" className="settings-button" disabled={historySearching}>
+            {props.t(historySearching ? "activity.search.searching" : "activity.search.submit")}
+          </button>
+        </form> : null}
+        {props.onSearchResult ? <p className="settings-note">{props.t("activity.search.count")
+          .replace("{visible}", String(props.activities.length)).replace("{total}", String(props.total ?? props.activities.length))}</p> : null}
+        {historySearchFailed ? <p className="settings-note" role="alert">{props.t("activity.search.failed")}</p> : null}
         {props.activities.length === 0 ? (
           <div className="settings-state-copy">
-            <strong>{props.t("activity.empty")}</strong>
-            <span>{props.t("activity.emptyDescription")}</span>
+            <strong>{props.t(historyAppliedFilter.query || historyAppliedFilter.status !== "all" ? "activity.search.empty" : "activity.empty")}</strong>
+            <span>{props.t(historyAppliedFilter.query || historyAppliedFilter.status !== "all" ? "activity.search.emptyDescription" : "activity.emptyDescription")}</span>
           </div>
         ) : (
           <div className="settings-card activity-history-list">

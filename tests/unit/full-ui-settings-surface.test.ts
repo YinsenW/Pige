@@ -332,6 +332,88 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("searches authoritative Activity history once and keeps visible results on failure", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const matching = { ...activitySummary("op_20260731_activitysearch01", "2026-07-31T10:00:00.000Z"),
+      targetLabel: "Quarterly outline", status: "undone" as const, canUndo: false };
+    const search = vi.fn(async (request: { readonly query?: string; readonly status?: "applied" | "undone" }) => {
+      if (search.mock.calls.length === 1) await pending;
+      else throw new Error("redacted activity search failure");
+      const found = request.query === "quarterly" && request.status === "undone";
+      return { scannedAt: "2026-07-31T12:00:00.000Z", activeVaultId: "vlt_20260731_activitysearch",
+        total: found ? 1 : 0, invalidOperationCount: 0, activities: found ? [matching] : [], hasMore: false };
+    });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      activity: { list: search },
+      notes: { listTrash: vi.fn(async (request: { apiVersion: 1; requestId: string; activeVaultId: string }) =>
+        ({ ...request, status: "ready", notes: [] })) }
+    } });
+    function Harness(): React.JSX.Element {
+      const [activities, setActivities] = useState<readonly KnowledgeActivitySummary[]>([
+        activitySummary("op_20260731_activityvisible01", "2026-07-31T11:00:00.000Z")
+      ]);
+      return createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: "vlt_20260731_activitysearch",
+        activities,
+        total: activities.length,
+        hasMore: false,
+        loadingMore: false,
+        loadMoreFailed: false,
+        undoingId: null,
+        redoingId: null,
+        openingId: null,
+        blockedIds: [],
+        locale: "en",
+        onOpen: async () => undefined,
+        onUndo: async () => undefined,
+        onRedo: async () => undefined,
+        onLoadMore: async () => false,
+        onSearchResult: (result) => setActivities(result.activities),
+        t
+      });
+    }
+    await act(async () => { root.render(createElement(Harness)); await settle(dom); });
+    const input = requireElement(dom.window.document.querySelector<HTMLInputElement>('[aria-label="Search changes"]'));
+    const status = requireElement(dom.window.document.querySelector<HTMLSelectElement>('[aria-label="Filter by status"]'));
+    await act(async () => {
+      inputValue(dom, input, " quarterly ");
+      selectValue(dom, status, "undone");
+      await settle(dom);
+    });
+    input.focus();
+    const submit = buttonNamed(dom.window.document, "Search");
+    await act(async () => { submit.click(); submit.click(); await settle(dom); });
+    expect(search).toHaveBeenCalledOnce();
+    await act(async () => {
+      release();
+      await pending;
+      await settle(dom);
+      await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+      await settle(dom);
+    });
+    expect(search).toHaveBeenCalledWith({ limit: 20, query: "quarterly", status: "undone" });
+    expect(dom.window.document.body.textContent).toContain("Quarterly outline");
+    expect(dom.window.document.activeElement).toBe(input);
+
+    await act(async () => { inputValue(dom, input, "missing"); await settle(dom); });
+    await act(async () => {
+      submit.click();
+      await settle(dom);
+      await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+      await settle(dom);
+    });
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(dom.window.document.body.textContent).toContain("Quarterly outline");
+    expect(dom.window.document.body.textContent).toContain("visible history was kept");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps the always-on-top control inert until window truth is known", async () => {
     const dom = createDom();
     const onAlwaysOnTopChange = vi.fn(async () => undefined);

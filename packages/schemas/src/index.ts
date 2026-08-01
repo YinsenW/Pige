@@ -1338,7 +1338,9 @@ export const KnowledgeActivityCursorSchema = z.string()
 
 export const KnowledgeActivityListRequestSchema = z.object({
   limit: z.number().int().min(1).max(20).optional(),
-  cursor: KnowledgeActivityCursorSchema.optional()
+  cursor: KnowledgeActivityCursorSchema.optional(),
+  query: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(["applied", "undone"]).optional()
 }).strict();
 
 export const KnowledgeActivitySummarySchema = z.object({

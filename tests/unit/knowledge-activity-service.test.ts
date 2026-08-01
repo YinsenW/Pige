@@ -254,6 +254,44 @@ describe("Knowledge Activity and Undo", () => {
     expect(() => service.list({ cursor: first.nextCursor! })).toThrowError(PigeDomainError);
   });
 
+  it("searches safe summaries across the full Activity history and binds filters into cursors", () => {
+    const fixture = createFixture();
+    for (const [id, createdAt] of [
+      ["op_20260712_activitysearch02", "2026-07-12T12:00:02.000Z"],
+      ["op_20260712_activitysearch03", "2026-07-12T12:00:03.000Z"]
+    ] as const) {
+      writeOperation(fixture.vaultPath, OperationRecordSchema.parse({
+        ...fixture.operation,
+        id,
+        createdAt
+      }));
+    }
+    const service = new KnowledgeActivityService(fixture.vaults);
+
+    const first = service.list({ limit: 1, query: "ＡＣＴＩＶＩＴＹ fixture", status: "applied" });
+    expect(first).toMatchObject({ total: 3, hasMore: true });
+    expect(first.activities[0]).toMatchObject({ targetLabel: "Activity fixture", status: "applied" });
+    expect(service.list({
+      limit: 1,
+      cursor: first.nextCursor!,
+      query: "activity fixture",
+      status: "applied"
+    }).activities).toHaveLength(1);
+    expect(() => service.list({ limit: 1, cursor: first.nextCursor!, query: "create_page", status: "applied" }))
+      .toThrowError(PigeDomainError);
+
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    expect(service.list({ query: "activity fixture", status: "undone" })).toMatchObject({
+      total: 1,
+      activities: [{ operationId: fixture.operation.id, status: "undone" }]
+    });
+    expect(service.list({ query: "missing target" })).toMatchObject({
+      total: 0,
+      activities: [],
+      hasMore: false
+    });
+  });
+
   it("delegates body-free Memory Activity, Undo, and recovery to the Memory owner", () => {
     const fixture = createFixture();
     const memoryId = "memory_20260712_activitymemory";
