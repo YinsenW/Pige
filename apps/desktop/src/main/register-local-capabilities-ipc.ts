@@ -135,6 +135,7 @@ export interface RegisterLocalCapabilitiesIpcOptions {
   readonly repairToolchain: (
     request: ToolchainRepairRequest
   ) => Awaitable<ToolchainRepairResult>;
+  readonly onPaddleOcrReady?: () => Awaitable<void>;
 }
 
 type MutationRequest = PaddleOcrInstallRequest;
@@ -263,11 +264,18 @@ export function registerLocalCapabilitiesIpc(
     "localCapabilities.enablePaddleOcr",
     async (_event, request: unknown) => {
       const parsed = PaddleOcrEnableRequestSchema.parse(request);
-      return invokeMutation(
+      const result = await invokeMutation(
         parsed,
         PaddleOcrEnableResultSchema,
         () => options.enablePaddleOcr(parsed)
       );
+      if (
+        (result.status === "committed" || result.status === "already_enabled") &&
+        result.summary.state === "ready"
+      ) {
+        try { await options.onPaddleOcrReady?.(); } catch { /* Enabled state remains authoritative. */ }
+      }
+      return result;
     }
   );
 

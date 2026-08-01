@@ -6693,6 +6693,12 @@ describe("schemas", () => {
         canContinueIncomplete: false,
         canCancel: true,
         canRetry: false,
+        waitingDependency: {
+          dependencyKind: "local_tool",
+          dependencyId: "paddleocr-local",
+          requiredAction: "repair_tool",
+          messageKey: "errors.agent_runtime.tool_dependency_waiting"
+        },
         message: "Dataset import running.",
         createdAt: "2026-07-09T00:00:00.000Z",
         updatedAt: "2026-07-09T00:00:01.000Z"
@@ -6700,6 +6706,7 @@ describe("schemas", () => {
     });
 
     expect(event.job.progress).toEqual({ completedUnits: 12, totalUnits: 20, unit: "row" });
+    expect(event.job.waitingDependency?.dependencyId).toBe("paddleocr-local");
     expect(() => JobChangedEventSchema.parse({
       ...event,
       job: { ...event.job, path: "/private/vault/.pige/jobs/job.json" }

@@ -18,6 +18,7 @@ export function HomeJobAction(props: {
   readonly retryEligible: boolean;
   readonly repair?: HomeJobRepairAction;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void> | void;
+  readonly onOpenLocalCapabilities: (opener: HTMLButtonElement) => Promise<void> | void;
   readonly onCancelJob: (jobId: string) => Promise<unknown> | void;
   readonly onRetryJob: (jobId: string) => Promise<unknown> | void;
   readonly t: (key: string) => string;
@@ -48,6 +49,13 @@ export function HomeJobAction(props: {
     </button>;
   }
   if (props.sourceWaitingForModel) return null;
+  if (props.job.state === "waiting_dependency" &&
+    props.job.waitingDependency?.dependencyKind === "local_tool" &&
+    props.job.waitingDependency.requiredAction === "repair_tool") {
+    return <button className="job-action" type="button" onClick={(event) => void props.onOpenLocalCapabilities(event.currentTarget)}>
+      {props.t("settings.section.capabilities")}
+    </button>;
+  }
   if (props.repair) {
     const pending = repairPending || props.repair.pending === true;
     return <button

@@ -201,6 +201,7 @@ describe("Home durable Agent conversation UI", () => {
       job: sourceWaitingForModelJob(),
       sourceWaitingForModel: false,
       ownsSourceModelAction: false,
+      localToolRepair: false,
       repair: {
         label: "Reconnect source",
         pendingLabel: "Checking source…",
@@ -208,6 +209,7 @@ describe("Home durable Agent conversation UI", () => {
         returnFocusRef
       },
       onOpenModels: () => undefined,
+      onOpenLocalCapabilities: () => undefined,
       onCancelJob: () => undefined,
       onRetryJob: () => undefined,
       t: (key: string) => key
@@ -242,6 +244,45 @@ describe("Home durable Agent conversation UI", () => {
     expect(calls).toBe(2);
     await waitFor(dom, () => dom.window.document.activeElement === fallback);
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("routes a structured local-tool wait to Local Capabilities instead of blind retry", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const root = createRoot(container);
+    let opened = 0;
+    await act(async () => {
+      root.render(createElement(HomeJobAction, {
+        job: {
+          ...sourceWaitingForModelJob(),
+          stage: "waiting_for_tool",
+          waitingDependency: {
+            dependencyKind: "local_tool",
+            dependencyId: "paddleocr-local",
+            requiredAction: "repair_tool",
+            messageKey: "errors.agent_runtime.tool_dependency_waiting"
+          }
+        },
+        sourceWaitingForModel: false,
+        ownsSourceModelAction: false,
+        localToolRepair: true,
+        retryEligible: false,
+        onOpenModels: () => undefined,
+        onOpenLocalCapabilities: () => { opened += 1; },
+        onCancelJob: () => undefined,
+        onRetryJob: () => undefined,
+        t: (key: string) => key
+      }));
+      await settle(dom);
+    });
+    await act(async () => {
+      buttons(container, "settings.section.capabilities")[0]!.click();
+      await settle(dom);
+    });
+    expect(opened).toBe(1);
     await act(async () => root.unmount());
     dom.window.close();
   });

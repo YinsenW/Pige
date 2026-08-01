@@ -5523,6 +5523,40 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Local-Tool-Waits-Resume-In-Session
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Project the strict body/path-free dependency summary for waiting Jobs, route local-tool
+repair to Local Capabilities, and after an explicit healthy PaddleOCR enable run the same
+exact requeue and scheduling convergence used by startup recovery.
+
+Rationale:
+
+A generic Retry action cannot repair an unavailable managed tool, while requiring an app
+restart after the user explicitly enables a verified tool leaves the durable Job in a
+misleading waiting state. The structured dependency record already owns the repair route
+and exact Job identity.
+
+Consequences:
+
+- Renderer repair routing receives no tool path, source body, credential, or private Job
+  payload.
+- Only exact durable OCR and downstream Agent-ingest waits are requeued, with existing
+  scheduler deduplication and currentness checks.
+- A recovery callback failure does not roll back the authoritative enabled state; startup
+  recovery remains the fail-safe convergence path.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

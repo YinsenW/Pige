@@ -8,10 +8,12 @@ import { toolchainRepairEligibility } from "./toolchain-repair-service";
 export interface ToolchainRecoveryDependencies {
   readonly hasActiveVault: () => boolean;
   readonly requeueWaitingParses: () => { readonly requeued: number };
+  readonly requeueWaitingOcr: () => { readonly requeued: number };
   readonly requeueWaitingAgentIngest: () => { readonly requeued: number };
   readonly scheduleParseProcessing: () => void;
+  readonly scheduleOcrProcessing: () => void;
   readonly scheduleAgentIngestProcessing: () => void;
-  readonly onRecoveryFailure: (owner: "parse" | "ingest") => void;
+  readonly onRecoveryFailure: (owner: "parse" | "ocr" | "ingest") => void;
 }
 
 export class ToolchainService {
@@ -63,6 +65,11 @@ export class ToolchainService {
       if (dependencies.requeueWaitingParses().requeued > 0) dependencies.scheduleParseProcessing();
     } catch {
       dependencies.onRecoveryFailure("parse");
+    }
+    try {
+      if (dependencies.requeueWaitingOcr().requeued > 0) dependencies.scheduleOcrProcessing();
+    } catch {
+      dependencies.onRecoveryFailure("ocr");
     }
     try {
       if (dependencies.requeueWaitingAgentIngest().requeued > 0) dependencies.scheduleAgentIngestProcessing();

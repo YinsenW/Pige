@@ -2987,7 +2987,7 @@ export function App(): React.JSX.Element {
             onHomeStateChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
             onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
-            onOpenModels={openModelsFromHome}
+            onOpenModels={openModelsFromHome} onOpenLocalCapabilities={(opener) => openSettings("capabilities", opener)}
             onDismissFirstHome={dismissFirstHomeGuide}
             developmentNotice={developmentNotice?.surface === "home" ? developmentNotice : null}
             onDevelopment={(capability) => showDevelopmentCapability("home", capability)}
@@ -4684,7 +4684,7 @@ function HomeComposer(props: {
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
-  readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>;
+  readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void>; readonly onOpenLocalCapabilities: (opener: HTMLButtonElement) => Promise<void> | void;
   readonly onDismissFirstHome: () => Promise<void>;
   readonly developmentNotice: DevelopmentNotice | null;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
@@ -6454,7 +6454,7 @@ function HomeComposer(props: {
                 ownsSourceModelAction={ownsSourceModelAction}
                 retryEligible={currentJob.state === "failed_retryable" && currentJob.class !== "retrieval_query"}
                 {...(repair ? { repair } : {})}
-                onOpenModels={props.onOpenModels}
+                onOpenModels={props.onOpenModels} onOpenLocalCapabilities={props.onOpenLocalCapabilities}
                 onCancelJob={props.onCancelJob}
                 onRetryJob={props.onRetryJob}
                 t={props.t}
@@ -6519,7 +6519,7 @@ function HomeComposer(props: {
                   ownsSourceModelAction={ownsSourceModelAction}
                   retryEligible={job.state === "failed_retryable" && job.class !== "retrieval_query"}
                   {...(repair ? { repair } : {})}
-                  onOpenModels={props.onOpenModels}
+                  onOpenModels={props.onOpenModels} onOpenLocalCapabilities={props.onOpenLocalCapabilities}
                   onCancelJob={props.onCancelJob}
                   onRetryJob={props.onRetryJob}
                   t={props.t}

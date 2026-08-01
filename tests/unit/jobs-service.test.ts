@@ -334,6 +334,12 @@ describe("jobs service", () => {
       ["job_20260710_backupother1", "user_backup"]
     ]));
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canReconnectDependency).toBe(true);
+    expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.waitingDependency).toEqual({
+      dependencyKind: "vault_binding",
+      dependencyId: "root_20260710_hiddenwait01",
+      requiredAction: "reconnect_path",
+      messageKey: "errors.backup.external_managed_copy_root_missing"
+    });
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canContinueIncomplete).toBe(true);
     expect(summaries.every((job) => job.canCancel === false)).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupdest1")?.canReconnectBackupDestination).toBe(true);

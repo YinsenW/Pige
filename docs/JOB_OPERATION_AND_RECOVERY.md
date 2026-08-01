@@ -412,6 +412,12 @@ Required `JobSummary.canReconnectDependency` is true only for parsed current
 `backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
 otherwise fail closed; no private wait field crosses and Main re-proves the record.
 
+Renderer Job summaries may project the strict body/path-free `waitingDependency` shape.
+Home routes `local_tool + repair_tool` to Local Capabilities. After an explicit healthy
+PaddleOCR enable, Main rechecks the toolchain and requeues the exact preserved OCR and
+downstream Agent-ingest Jobs without duplicate scheduling; startup recovery retains the
+same convergence path if in-session scheduling is interrupted.
+
 Referenced-original repair is separate from generic retry: Main binds an unavailable `reference_original` proof to the current Source revision and exact selected bytes/format.
 After atomic relink, one path-free `relink_source` Operation and private receipt let restart converge publication; only Jobs whose current `external_source` wait still names that Source and revision resume.
 Stale, cancelled, or mismatched repairs do not clear waiting metadata.
