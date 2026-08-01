@@ -23,6 +23,7 @@ import {
   type JobRecord,
   type JobStage,
   type JobState,
+  type OperationRecord,
   type PigeErrorSummary,
   type SourceKind,
   type SourceRecord
@@ -88,6 +89,10 @@ import {
   type JobProgressUpdate
 } from "./job-execution-control";
 import { ProposalService } from "./proposal-service";
+import {
+  isSupportedRelationshipProposal,
+  relationshipProposalOperationId
+} from "./agent-relationship-proposal-service";
 import {
   JobRecordStore,
   type JobRecordSnapshot
@@ -411,7 +416,7 @@ export class JobsService {
       this.#finalizeConflictedProposalJob(current);
       return { status: "conflicted", proposal: current };
     }
-    if (!isSupportedAgentCreateProposal(current)) {
+    if (!isSupportedAgentProposal(current)) {
       return {
         status: "not_allowed",
         reason: "Only the current Agent-generated create-note proposal can be applied.",
@@ -437,7 +442,7 @@ export class JobsService {
     const current = readProposalForDecision(proposals, request.proposalId);
     if (!current) return { status: "not_found", reason: "Proposal record was not found." };
     if (current.state === "rejected") {
-      if (isSupportedAgentCreateProposal(current)) this.#finalizeProposalJob(current, "rejected");
+      if (isSupportedAgentProposal(current)) this.#finalizeProposalJob(current, "rejected");
       return { status: "rejected", proposal: current };
     }
     if (current.state !== "ready") {
@@ -447,12 +452,12 @@ export class JobsService {
         proposal: current
       };
     }
-    if (isSupportedAgentCreateProposal(current)) this.#assertProposalParentReady(current);
+    if (isSupportedAgentProposal(current)) this.#assertProposalParentReady(current);
     const rejected = proposals.reject(request);
     if (
       rejected.status === "rejected" &&
       rejected.proposal &&
-      isSupportedAgentCreateProposal(rejected.proposal)
+      isSupportedAgentProposal(rejected.proposal)
     ) {
       this.#finalizeProposalJob(rejected.proposal, "rejected");
     }
@@ -465,7 +470,7 @@ export class JobsService {
     let conflicted = 0;
     let failed = 0;
     for (const proposal of proposals.recoveryCandidates()) {
-      if (!isSupportedAgentCreateProposal(proposal)) continue;
+      if (!isSupportedAgentProposal(proposal)) continue;
       try {
         if (proposal.state === "approved") {
           const result = await this.#applyApprovedProposal(proposals, proposal);
@@ -2065,7 +2070,7 @@ export class JobsService {
     };
     assertActiveVault();
     const jobId = proposal.jobId;
-    if (!jobId || !isSupportedAgentCreateProposal(proposal)) {
+    if (!jobId || !isSupportedAgentProposal(proposal)) {
       return {
         status: "not_allowed",
         reason: "Only the current Agent-generated create-note proposal can be applied.",
@@ -2105,7 +2110,7 @@ export class JobsService {
               );
             }
           },
-          onPublicationStart: (checkpointId) => {
+          onPublicationStart: (checkpointId, publicationBinding) => {
             markProposalApplyStarted(
               this.#jobRecordStore(vaultPath),
               this.#jobExecutionCoordinator(vaultPath),
@@ -2114,6 +2119,16 @@ export class JobsService {
               proposal.id,
               checkpointId
             );
+            if (publicationBinding) {
+              recordAgentNotePublicationCheckpoint(
+                this.#jobRecordStore(vaultPath),
+                this.#jobExecutionCoordinator(vaultPath),
+                vaultPath,
+                jobFile.path,
+                checkpointId,
+                publicationBinding
+              );
+            }
           }
         }
       );
@@ -2157,7 +2172,7 @@ export class JobsService {
   #finalizeConflictedProposalJob(proposal: ConfirmationProposal): JobRecord {
     const vaultPath = this.#requireActiveVaultPath();
     const activeVault = this.#vaults.current();
-    if (!activeVault || !proposal.jobId || !isSupportedAgentCreateProposal(proposal)) {
+    if (!activeVault || !proposal.jobId || !isSupportedAgentProposal(proposal)) {
       throw new PigeDomainError(
         "proposal.parent_job_missing",
         "The conflicted proposal parent Job was not found."
@@ -2220,15 +2235,20 @@ export class JobsService {
     }
     assertProposalParentJob(jobFile.job, proposal, activeVault.vaultId, true);
     const target = outcome === "applied" ? requireProposalPageTarget(proposal) : undefined;
+    let verifiedOperation: OperationRecord | undefined;
     if (outcome === "applied") {
       if (!this.#agentIngest) {
         throw new PigeDomainError("proposal.runtime_unavailable", "Proposal recovery is unavailable.");
       }
-      this.#agentIngest.verifyAppliedProposalEffects(vaultPath, jobFile.job, proposal);
+      const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
+      verifiedOperation = this.#agentIngest.verifyAppliedProposalEffects(
+        vaultPath,
+        jobFile.job,
+        proposal,
+        sourceRecord
+      );
     }
-    const recoveredOperationId = outcome === "applied"
-      ? requireProposalApplyOperation(vaultPath, proposal, jobFile.job).id
-      : undefined;
+    const recoveredOperationId = verifiedOperation?.id;
     const reviewRequired = publication?.reviewRequired ?? proposalContentNeedsReview(proposal);
     const desiredState = outcome === "applied"
       ? reviewRequired ? "completed_with_warnings" : "completed"
@@ -2273,9 +2293,16 @@ export class JobsService {
     const proposalCheckpoint = jobFile.job.checkpoints?.find(
       (checkpoint) => checkpoint.id === proposalCheckpointId
     );
+    const existingCheckpoints = (jobFile.job.checkpoints ?? []).map((checkpoint) =>
+      outcome === "applied" &&
+      isSupportedRelationshipProposal(proposal) &&
+      checkpoint.id === "agent_existing_note_update_started"
+        ? { ...checkpoint, state: "done" as const, finishedAt: checkpoint.finishedAt ?? now }
+        : checkpoint
+    );
     const checkpoints = outcome === "applied"
       ? [
-          ...(jobFile.job.checkpoints ?? []).filter((checkpoint) => checkpoint.id !== proposalCheckpointId),
+          ...existingCheckpoints.filter((checkpoint) => checkpoint.id !== proposalCheckpointId),
           {
             id: proposalCheckpointId,
             step: proposalCheckpoint?.step ?? "agent_proposal_apply_started",
@@ -4365,11 +4392,15 @@ function isSupportedAgentCreateProposal(proposal: ConfirmationProposal): boolean
   );
 }
 
+function isSupportedAgentProposal(proposal: ConfirmationProposal): boolean {
+  return isSupportedAgentCreateProposal(proposal) || isSupportedRelationshipProposal(proposal);
+}
+
 function requireProposalPageTarget(
   proposal: ConfirmationProposal
 ): ConfirmationProposal["targetRefs"][number] {
   const target = proposal.targetRefs[0];
-  if (!isSupportedAgentCreateProposal(proposal) || !target) {
+  if (!isSupportedAgentProposal(proposal) || !target) {
     throw new PigeDomainError("proposal.not_allowed", "The proposal does not have one supported page target.");
   }
   return target;
@@ -4520,7 +4551,7 @@ function recordAgentPageUpdateCheckpoint(
   if (
     checkpointId !== "agent_existing_note_update_started" ||
     !current ||
-    current.state !== "running" ||
+    !["running", "awaiting_review"].includes(current.state) ||
     current.sourceId !== binding.sourceId ||
     current.policyContextId !== binding.policyContextId ||
     current.policyHash !== binding.policyHash
@@ -4658,10 +4689,14 @@ function recordAgentPageUpdateCheckpoint(
     checksumAfter: binding.contentHash,
     resumeHint: "Verify the exact target, before-image, staged result, and update Operation before adoption."
   };
-  coordinator.markDurableBoundary(snapshot, {
-    checkpointId,
-    facts: { checkpoints: [checkpoint] }
-  });
+  if (current.state === "awaiting_review") {
+    coordinator.patch(snapshot, { checkpoints: [checkpoint] });
+  } else {
+    coordinator.markDurableBoundary(snapshot, {
+      checkpointId,
+      facts: { checkpoints: [checkpoint] }
+    });
+  }
 }
 
 function readCheckpointFileHash(vaultPath: string, relativePath: string, maximumBytes: number): string | undefined {
@@ -4918,56 +4953,6 @@ function proposalConflictMessage(): string {
   return "The approved proposal conflicts with current source evidence or its target. Existing bytes were preserved.";
 }
 
-function requireProposalApplyOperation(
-  vaultPath: string,
-  proposal: ConfirmationProposal,
-  job: JobRecord
-): ReturnType<typeof OperationRecordSchema.parse> {
-  const target = requireProposalPageTarget(proposal);
-  const operationId = createProposalApplyOperationId(proposal.id);
-  const dateKey = /^op_(\d{8})_/.exec(operationId)?.[1];
-  if (!dateKey) {
-    throw new PigeDomainError("proposal.operation_conflict", "The proposal Operation identity is invalid.");
-  }
-  const operationPath = path.join(
-    vaultPath,
-    ".pige",
-    "operations",
-    dateKey.slice(0, 4),
-    dateKey.slice(4, 6),
-    `${operationId}.json`
-  );
-  const bytes = readConfinedDurableRecord(
-    vaultPath,
-    path.join(vaultPath, ".pige", "operations"),
-    operationPath,
-    256 * 1024,
-    "proposal.operation_conflict"
-  );
-  if (!bytes) {
-    throw new PigeDomainError("proposal.operation_missing", "The applied proposal Operation is missing.");
-  }
-  let operation: ReturnType<typeof OperationRecordSchema.parse>;
-  try {
-    operation = OperationRecordSchema.parse(JSON.parse(bytes));
-  } catch {
-    throw new PigeDomainError("proposal.operation_conflict", "The applied proposal Operation is invalid.");
-  }
-  if (
-    operation.id !== operationId ||
-    operation.jobId !== job.id ||
-    operation.proposalId !== proposal.id ||
-    operation.kind !== "create_page" ||
-    !operation.targetRefs.some((ref) => ref.kind === "page" && ref.id === target.id && ref.path === target.path)
-  ) {
-    throw new PigeDomainError(
-      "proposal.operation_conflict",
-      "The applied proposal Operation does not match its Job, proposal, or page target."
-    );
-  }
-  return operation;
-}
-
 function proposalResolutionMessage(outcome: "applied" | "rejected", reviewRequired: boolean): string {
   if (outcome === "rejected") {
     return "The user rejected the staged knowledge proposal. Preserved source evidence remains unchanged.";
@@ -4978,6 +4963,7 @@ function proposalResolutionMessage(outcome: "applied" | "rejected", reviewRequir
 }
 
 function proposalContentNeedsReview(proposal: ConfirmationProposal): boolean {
+  if (isSupportedRelationshipProposal(proposal)) return false;
   const operation = proposal.proposedOperations[0];
   if (operation?.kind !== "create") return true;
   return parsePigeFrontmatter(operation.content)?.frontmatter.status === "needs_review";
@@ -5002,7 +4988,9 @@ function appendProposalApplyLog(vaultPath: string, proposal: ConfirmationProposa
   if (!sourceId) {
     throw new PigeDomainError("proposal.binding_changed", "The applied proposal source reference is missing.");
   }
-  const operationId = createProposalApplyOperationId(proposal.id);
+  const operationId = proposal.jobId
+    ? relationshipProposalOperationId(proposal, proposal.jobId) ?? createProposalApplyOperationId(proposal.id)
+    : createProposalApplyOperationId(proposal.id);
   const marker = `<!-- operation:${operationId} -->`;
   const logPath = path.join(vaultPath, "log.md");
   if (fs.existsSync(logPath) && fileContainsMarker(vaultPath, logPath, marker)) return;
