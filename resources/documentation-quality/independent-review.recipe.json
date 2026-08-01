@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T17:42:27.000Z",
+  "reviewedAt": "2026-08-02T08:00:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Reference-only Home/current-note Context Packs close mixed attachment, memory, compaction and restart acceptance for PIGE-CONTEXT-001/002.",
+    "scope": "Vault & Note Storage reconnects an unavailable external managed-copy default under the same stable root identity and closes PIGE-VAULT-005/E1.04.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "d94080e9cfa524285508f14c83467abb7dec8bfd1d917040e40c8e28adba7754"
+    "reviewedSha256": "08a3acdc0eb2db396b4fbccd08a0ee0a55f59f6dbcd3b311efa51a393f167559"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-context-pack-review",
-      "task": "Review bounded local Agent Context Pack ownership and acceptance",
+      "reviewerId": "managed-copy-root-reconnect-review",
+      "task": "Review stable external managed-copy default reconnect and Vault Settings acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews Context Pack contracts and acceptance; Development supplies a separate bounded pack owner and Home integration evidence."
+      "independence": "Planning reviews storage identity and acceptance facts; Development supplies separate binding, Vault orchestration and renderer evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-context-pack-review",
+      "reviewerId": "managed-copy-root-reconnect-review",
       "blockerCount": 0,
-      "summary": "Home and current-note turns reuse existing user surfaces while Main alone owns the reference pack and never projects prompt or body authority."
+      "summary": "Vault & Note Storage reuses its pathless configure action and presents Reconnect only when the external default is unavailable."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-context-pack-review",
+      "reviewerId": "managed-copy-root-reconnect-review",
       "blockerCount": 0,
-      "summary": "Policy, Job, Context Pack, citation, memory and conversation contracts agree on one bounded reference-only pre-model authority set."
+      "summary": "Source storage, Settings, IPC, UI and the accepted decision consistently preserve the same stable root ID after exact evidence proof."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-context-pack-review",
+      "reviewerId": "managed-copy-root-reconnect-review",
       "blockerCount": 0,
-      "summary": "PIGE-CONTEXT-001/002 and E6.03 are backed by mixed attachment, memory, compaction, restart and body-absence evidence."
+      "summary": "PIGE-VAULT-005 and E1.04 cite current create, reveal, recent-vault, external-root setup, future-capture and stable reconnect tests."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-context-pack-review",
+      "reviewerId": "managed-copy-root-reconnect-review",
       "blockerCount": 0,
-      "summary": "One bounded Context Pack owner isolates schema, hashing and durable refs while the frozen Home owner retains turn orchestration."
+      "summary": "ManagedCopyRootService delegates exact dependency proof to the existing backup binding validator while VaultService retains picker and revision fencing."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-context-pack-review",
+      "reviewerId": "managed-copy-root-reconnect-review",
       "blockerCount": 0,
-      "summary": "Existing context, playbook, decision, acceptance, semantic-claim and responsibility owners contain the delta without a new design document."
+      "summary": "Existing storage, API, Settings, UI, playbook, decision and acceptance owners contain the complete delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-context-pack.test.ts tests/unit/home-agent-service.test.ts tests/unit/job-execution-coordinator.test.ts tests/unit/schemas.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/managed-copy-root-service.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/restore-ui.test.ts tests/unit/capture-service.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Focused Context Pack, Home, Job and schema tests cover mixed evidence, body absence, compaction, memory and restart."
+      "evidence": "Focused service, Vault, renderer, capture and shell tests cover exact stable-root repair, mismatch closure, restart and pathless UI."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with the bounded Context Pack owner recorded inside protected architecture boundaries."
+      "evidence": "The candidate compiles and builds with existing storage owners and the mechanically corrected protected owner count."
     },
     {
       "command": "npm run verify:traceability && npm run verify:documentation-quality",
       "status": "passed",
-      "evidence": "Context policy, playbook, decision, acceptance, semantic-claim and responsibility owners agree on the verified local pack lifecycle."
+      "evidence": "Storage, API, UI, playbook, decision, acceptance, semantic-claim and responsibility owners agree on the verified Vault workflow."
     }
   ],
   "coordination": {
-    "taskId": "agent-context-pack-bind-20260802",
-    "taskTitle": "Bind bounded local Agent Context Packs and current acceptance",
+    "taskId": "managed-copy-root-reconnect-bind-20260802",
+    "taskTitle": "Bind stable external managed-copy root reconnect and Vault Settings acceptance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing prompts, retrieval tools, renderer contracts and durable content owners remain unchanged; the pack records only safe refs and hashes.",
-    "acknowledgement": "Planning records complete v0.1 local Context Pack coverage and promotes PIGE-CONTEXT-001/002 without claiming deferred remote runtimes."
+    "compatibility": "The public configure request/result stays unchanged; available-root setup and changes keep their current behavior while only unavailable external defaults reconnect.",
+    "acknowledgement": "Planning records complete current Vault Settings storage control coverage and promotes PIGE-VAULT-005 plus E1.04 without claiming unrelated storage adapters."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

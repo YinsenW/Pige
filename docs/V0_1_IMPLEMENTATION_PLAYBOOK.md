@@ -206,7 +206,7 @@ Exit criteria:
 - [E1.01] User can create and open a vault through validated paths.
 - [E1.02] User can skip model setup without losing submitted sources; unavailable Agent work remains explicit without a second product mode.
 - [E1.03] Default vault files are visible, human-readable, schema-valid, and free of machine-local active paths.
-- [E1.04] User can find and reveal note/source storage, switch or create vaults, and reach backup/restore without entering diagnostics or maintenance surfaces.
+- [E1.04] User can find and reveal note/source storage, switch or create vaults, configure the future managed-copy location, reconnect the same unavailable external root after exact evidence proof, and reach backup/restore without entering diagnostics or maintenance surfaces.
 - [E1.05] Every exposed setting is registered; machine-local values and secrets are absent from the vault manifest and default backup inputs.
 - [E1.06] Agent-affecting settings have typed policy effects and owning-service enforcement rather than prompt-only behavior.
 - [E1.07] Diagnostics export is redacted, previewed, cancelable, local-only, bounded, and free of raw secrets or source/note bodies by default.

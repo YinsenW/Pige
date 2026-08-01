@@ -312,7 +312,8 @@ Rules:
 - `vault.create` validates a complete private sibling staging tree before atomically publishing the named Vault; creation failure does not publish a partial Vault or replace the current binding.
 - `vault.open` takes a folder selected through a trusted OS file dialog and validates Pige compatibility, including bounded no-follow validation of the required human-readable root Markdown. A root-document failure occurs before writer-lease acquisition or active-binding replacement; startup restoration clears only the invalid machine-local binding.
 - Active vault path and recent vault list are machine-local settings; they are not written into `.pige/manifest.json`.
-- Updating an external managed-copy root creates/selects a machine-local binding keyed by `vaultId` plus stable `rootId`; in-vault managed-copy roots use relative vault preferences. Existing source records retain their recorded root ID.
+- Updating an available external managed-copy root creates/selects a machine-local binding keyed by `vaultId` plus stable `rootId`; in-vault managed-copy roots use relative vault preferences. Existing source records retain their recorded root ID.
+- If the configured external default becomes unavailable, the same pathless configure channel changes to a reconnect action. Main resolves the existing root ID privately and repairs that exact binding only after re-proving every bound Source Record and managed copy by identity, size, and checksum. Cancel, mismatch, stale state, or filesystem failure leaves the binding unavailable; reconnect never mints a successor root or retargets existing records.
 - `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job, rebuilds SQLite
   metadata/FTS from Markdown, and returns counts plus the completed Job ID. The current
   body may run synchronously; release scale still requires worker progress/cancellation.

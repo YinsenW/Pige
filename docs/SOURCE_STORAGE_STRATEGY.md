@@ -255,6 +255,7 @@ Storage ownership rules:
 - Vault identity, schema version, and portable non-secret vault settings live inside the vault.
 - An in-vault managed-copy root can be stored as a relative portable setting.
 - An external managed-copy root is a machine-local `root_` binding keyed by `vault_id`; source records keep the root ID, and backup/restore manifests disclose it as an external dependency.
+- Initial external-root setup and a deliberate available-root change affect only future managed copies. If the configured external default is unavailable, Vault & Note Storage instead reconnects the same stable `root_` identity: Main validates every bound Source Record and checksummed managed copy before atomically repairing the machine binding. It never silently creates a replacement identity or retargets existing evidence.
 
 ## 9. Safety Rules
 

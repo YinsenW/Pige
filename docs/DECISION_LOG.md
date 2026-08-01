@@ -5138,6 +5138,40 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260802-Stable-External-Managed-Copy-Default-Reconnect
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+When the configured external managed-copy default becomes unavailable, Vault & Note Storage repairs
+the same stable root binding after Main re-proves every bound Source Record and managed-copy byte.
+Initial setup or a deliberate change while the current root is available may select a new root for
+future copies; reconnect never mints a successor identity or retargets existing evidence.
+
+Rationale:
+
+Existing Source Records resolve managed copies through their recorded root ID. Treating reconnect as
+ordinary configuration would strand those records while presenting a superficially healthy default.
+Reusing the backup dependency validator keeps the proof and atomic binding writer single-owned.
+
+Consequences:
+
+- The renderer sends only vault, request, and storage-revision identity and never receives a path,
+  root ID, Source ID, checksum, or file body.
+- Cancel, stale state, symlink/path drift, checksum mismatch, or filesystem failure leaves the current
+  binding unavailable and preserves all durable evidence.
+- A root with no bound Source Records may still repair its same stable identity because no existing
+  evidence can be retargeted.
+
+References:
+
+- `docs/SOURCE_STORAGE_STRATEGY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/UI_PROTOTYPE.md`
+
 ### D-20260802-Library-Typed-Knowledge-Browse
 
 Status: Accepted
