@@ -159,6 +159,8 @@ import type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteSetQuestionStateRequest,
+  NoteSetQuestionStateResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -599,6 +601,9 @@ import {
   NOTE_RESTORE_ARCHIVED_CHANNEL,
   NoteRestoreArchivedRequestSchema,
   NoteRestoreArchivedResultSchema,
+  NOTE_SET_QUESTION_STATE_CHANNEL,
+  NoteSetQuestionStateRequestSchema,
+  NoteSetQuestionStateResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -2012,6 +2017,13 @@ const api: PigeDesktopApi = {
     restoreArchived: async (request: NoteRestoreArchivedRequest): Promise<NoteRestoreArchivedResult> =>
       NoteRestoreArchivedResultSchema.parse(
         await ipcRenderer.invoke(NOTE_RESTORE_ARCHIVED_CHANNEL, NoteRestoreArchivedRequestSchema.parse(request))
+      ),
+    setQuestionState: async (request: NoteSetQuestionStateRequest): Promise<NoteSetQuestionStateResult> =>
+      NoteSetQuestionStateResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_SET_QUESTION_STATE_CHANNEL,
+          NoteSetQuestionStateRequestSchema.parse(request)
+        )
       ),
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(

@@ -288,6 +288,28 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes one pathless current-Reader question-state mutation", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const questionSchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState"'),
+      schemasSource.indexOf("export const NoteAddTagRequestSchema")
+    );
+    expect(questionSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(questionSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(schemasSource).toContain('NoteQuestionStateSchema = z.enum(["open", "partially_answered", "answered", "stale"])');
+    expect(contractsSource).toContain("readonly setQuestionState: (");
+    expect(preloadSource).toContain("NoteSetQuestionStateRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteSetQuestionStateResultSchema.parse(");
+    expect(appSource.match(/onSetQuestionState=\{\(request\) => window\.pige\.notes\.setQuestionState\(request\)\}/gu))
+      .toHaveLength(2);
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(questionSchemas).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

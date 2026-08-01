@@ -16,17 +16,26 @@ export function preservesEditableMarkdownOwnership(before: string, after: string
   return beforeParsed.raw === afterParsed.raw;
 }
 
-export function isEditableMarkdownPageType(markdown: string, allowClaim: boolean): boolean {
+export function isEditableMarkdownPageType(
+  markdown: string,
+  allowClaim: boolean,
+  allowQuestion = false
+): boolean {
+  const pageType = parsePigeFrontmatter(markdown)?.frontmatter.type;
   return isEditableMarkdownPage(markdown) ||
-    (allowClaim && parsePigeFrontmatter(markdown)?.frontmatter.type === "claim");
+    (allowClaim && pageType === "claim") ||
+    (allowQuestion && pageType === "question");
 }
 
 export function preservesEditableMarkdownPageOwnership(
   before: string,
   after: string,
-  allowClaim: boolean
+  allowClaim: boolean,
+  allowQuestion = false
 ): boolean {
   if (preservesEditableMarkdownOwnership(before, after)) return true;
-  return allowClaim && parsePigeFrontmatter(before)?.frontmatter.type === "claim" &&
-    parsePigeFrontmatter(after)?.frontmatter.type === "claim";
+  const beforeType = parsePigeFrontmatter(before)?.frontmatter.type;
+  const afterType = parsePigeFrontmatter(after)?.frontmatter.type;
+  return (allowClaim && beforeType === "claim" && afterType === "claim") ||
+    (allowQuestion && beforeType === "question" && afterType === "question");
 }

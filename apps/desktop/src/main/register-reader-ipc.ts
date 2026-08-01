@@ -26,6 +26,8 @@ import type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteSetQuestionStateRequest,
+  NoteSetQuestionStateResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -96,6 +98,9 @@ import {
   NOTE_RESTORE_ARCHIVED_CHANNEL,
   NoteRestoreArchivedRequestSchema,
   NoteRestoreArchivedResultSchema,
+  NOTE_SET_QUESTION_STATE_CHANNEL,
+  NoteSetQuestionStateRequestSchema,
+  NoteSetQuestionStateResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -163,6 +168,7 @@ import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
+import type { QuestionStateService } from "./services/question-state-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -180,6 +186,7 @@ interface RegisterReaderIpcOptions {
   }>;
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
+  readonly getQuestionStateService: () => QuestionStateService;
   readonly getNoteTagService: () => NoteTagService;
   readonly getNoteRenameService: () => NoteRenameService;
   readonly getNoteAliasService: () => NoteAliasService;
@@ -426,6 +433,25 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteRestoreArchivedResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    return result;
+  });
+  options.ipcMain.handle(NOTE_SET_QUESTION_STATE_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSetQuestionStateRequestSchema.parse(request) as NoteSetQuestionStateRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteSetQuestionStateResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteSetQuestionStateResult;
+    try {
+      rawResult = await options.getQuestionStateService().setState(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteSetQuestionStateResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteSetQuestionStateResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
   });

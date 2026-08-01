@@ -249,6 +249,10 @@ import type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteQuestionState,
+  NoteQuestionStateSummary,
+  NoteSetQuestionStateRequest,
+  NoteSetQuestionStateResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -667,6 +671,10 @@ export type {
   NoteArchiveCurrentResult,
   NoteRestoreArchivedRequest,
   NoteRestoreArchivedResult,
+  NoteQuestionState,
+  NoteQuestionStateSummary,
+  NoteSetQuestionStateRequest,
+  NoteSetQuestionStateResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -2322,6 +2330,9 @@ export interface PigeDesktopApi {
     readonly restoreArchived: (
       request: NoteRestoreArchivedRequest
     ) => Promise<NoteRestoreArchivedResult>;
+    readonly setQuestionState: (
+      request: NoteSetQuestionStateRequest
+    ) => Promise<NoteSetQuestionStateResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
     readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;
