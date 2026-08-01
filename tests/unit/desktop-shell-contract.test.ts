@@ -1264,7 +1264,11 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.deleteProvider"'),
       mainSource.indexOf('ipcMain.handle("models.addManualModel"')
     );
-    expect(resetHandler.indexOf("confirmSettingAction")).toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase()"));
+    expect(resetHandler.indexOf("const expectedBinding")).toBeLessThan(resetHandler.indexOf("confirmSettingAction"));
+    expect(resetHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase(expectedBinding)"));
+    expect(resetHandler.indexOf("getVaultService().resetLocalDatabase(expectedBinding)"))
+      .toBeLessThan(resetHandler.indexOf("getIndexRebuildJobExecutor().request()"));
     expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)"))
       .toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
     expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)"))

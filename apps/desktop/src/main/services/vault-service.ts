@@ -346,8 +346,21 @@ export class VaultService {
     }
   }
 
-  resetLocalDatabase() {
-    return resetRebuildableVaultStorage(this.#requireActiveVaultPath());
+  resetLocalDatabase(expected: { readonly activeVaultId: string; readonly vaultPath: string }) {
+    const activeVault = this.#requireActiveVault();
+    const activeVaultPath = this.#requireActiveVaultPath();
+    if (
+      activeVault.vaultId !== expected.activeVaultId ||
+      activeVaultPath !== path.resolve(expected.vaultPath)
+    ) {
+      throw new PigeDomainError(
+        "vault.binding_changed",
+        "The active vault changed while local database reset confirmation was open."
+      );
+    }
+    const result = resetRebuildableVaultStorage(activeVaultPath);
+    this.assertWriterLease(activeVaultPath);
+    return result;
   }
 
   forgetRecent(request: RecentVaultForgetRequest): RecentVaultForgetResult {

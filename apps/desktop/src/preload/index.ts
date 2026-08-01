@@ -167,7 +167,7 @@ import type {
   PaddleOcrTestResult,
   LocalDatabaseRebuildResult,
   LocalDatabaseStatus,
-  LocalDatabaseResetResult,
+  LocalDatabaseResetAndRebuildResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
   ProviderApiKeyManagementRequest,
@@ -2832,8 +2832,8 @@ const api: PigeDesktopApi = {
   maintenance: {
     rebuildLocalDatabase: async (): Promise<LocalDatabaseRebuildResult> =>
       ipcRenderer.invoke("maintenance.rebuildLocalDatabase") as Promise<LocalDatabaseRebuildResult>,
-    resetLocalDatabase: async (): Promise<LocalDatabaseResetResult> =>
-      ipcRenderer.invoke("maintenance.resetLocalDatabase") as Promise<LocalDatabaseResetResult>,
+    resetLocalDatabase: async (): Promise<LocalDatabaseResetAndRebuildResult> =>
+      ipcRenderer.invoke("maintenance.resetLocalDatabase") as Promise<LocalDatabaseResetAndRebuildResult>,
     localDatabaseStatus: async (): Promise<LocalDatabaseStatus> =>
       ipcRenderer.invoke("maintenance.localDatabaseStatus") as Promise<LocalDatabaseStatus>,
     runKnowledgeHealth: async (request: KnowledgeHealthRunRequest): Promise<KnowledgeHealthRunResult> => {

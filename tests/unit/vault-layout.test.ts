@@ -214,7 +214,20 @@ describe("vault layout", () => {
     const vaultPath = path.join(root, "Safe Reset");
     fs.writeFileSync(path.join(vaultPath, "raw/source.txt"), "durable source", "utf8");
     fs.writeFileSync(path.join(vaultPath, "wiki/note.md"), "# durable note", "utf8");
-    fs.writeFileSync(path.join(vaultPath, ".pige/source-records/src.json"), "{}", "utf8");
+    const durablePrivateFiles = [
+      ".pige/source-records/src.json",
+      ".pige/memory/memory.json",
+      ".pige/conversations/conversation.jsonl",
+      ".pige/jobs/job.json",
+      ".pige/proposals/proposal.json",
+      ".pige/operations/operation.json",
+      ".pige/trash/receipt.json"
+    ];
+    for (const relative of durablePrivateFiles) {
+      const absolute = path.join(vaultPath, relative);
+      fs.mkdirSync(path.dirname(absolute), { recursive: true });
+      fs.writeFileSync(absolute, `durable:${relative}`, "utf8");
+    }
     fs.writeFileSync(path.join(vaultPath, ".pige/db/vault.sqlite"), "cache", "utf8");
     fs.writeFileSync(path.join(vaultPath, ".pige/runtime/lease-owner.json"), "runtime", "utf8");
 
@@ -223,7 +236,9 @@ describe("vault layout", () => {
     expect(result.recreatedRoots).toEqual([".pige/db", ".pige/indexes", ".pige/cache"]);
     expect(fs.existsSync(path.join(vaultPath, "raw/source.txt"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, "wiki/note.md"))).toBe(true);
-    expect(fs.existsSync(path.join(vaultPath, ".pige/source-records/src.json"))).toBe(true);
+    for (const relative of durablePrivateFiles) {
+      expect(fs.readFileSync(path.join(vaultPath, relative), "utf8")).toBe(`durable:${relative}`);
+    }
     expect(fs.existsSync(path.join(vaultPath, ".pige/db"))).toBe(true);
     expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(false);
     expect(fs.readFileSync(path.join(vaultPath, ".pige/runtime/lease-owner.json"), "utf8")).toBe("runtime");
