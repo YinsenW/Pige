@@ -2435,6 +2435,8 @@
   "system.crashRecovery.sources": "需修复来源",
   "system.crashRecovery.history": "最近的启动恢复",
   "system.crashRecovery.historySummary": "显示恢复记录",
+  "system.crashRecovery.reviewActivity": "查看活动",
+  "system.crashRecovery.repairSources": "修复来源",
   "pigePolicy.title": "仓库 Agent 策略",
   "pigePolicy.description": "查看并编辑 PIGE.md，它规定 Agent 如何维护此仓库。",
   "pigePolicy.edit": "编辑策略",

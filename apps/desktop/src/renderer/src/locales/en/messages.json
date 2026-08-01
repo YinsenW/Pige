@@ -2435,6 +2435,8 @@
   "system.crashRecovery.sources": "Sources needing repair",
   "system.crashRecovery.history": "Recent startup recoveries",
   "system.crashRecovery.historySummary": "Show recoveries",
+  "system.crashRecovery.reviewActivity": "Review activity",
+  "system.crashRecovery.repairSources": "Repair sources",
   "pigePolicy.title": "Vault Agent policy",
   "pigePolicy.description": "Review and edit PIGE.md, the validated instructions for how the Agent maintains this vault.",
   "pigePolicy.edit": "Edit policy",

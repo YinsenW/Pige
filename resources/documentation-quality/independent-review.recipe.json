@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Diagnostics support export accepts only an explicitly entered bounded private excerpt, redacts it before preview, and exports exactly the reviewed redacted text without automatic vault reads or uploads.",
+    "scope": "Diagnostics support export binds only an explicitly entered redacted private excerpt, while pathless crash-recovery counts route into existing Activity and referenced-source repair owners without carrying effect authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "99dff7b9b31dc5beae7f49179609b1256042a7af300cd521562b5f1cc90f307f"
+    "reviewedSha256": "bfca812a92b2cf3f1424cc22f4c2953cdef4850165b0a898488e5da22ce21427"
   },
   "reviewers": [
     {
-      "reviewerId": "diagnostics-private-excerpt-review",
-      "task": "Review explicit private support excerpt preview, redaction and exact export binding",
+      "reviewerId": "diagnostics-recovery-combined-review",
+      "task": "Review explicit private support excerpt handling and pathless recovery routing",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,51 +70,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the user-visible preview and privacy boundary separately from the Main implementation and direct service tests."
+      "independence": "Project review checks the user-visible privacy and recovery boundaries separately from the Main implementation and direct service tests."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "diagnostics-private-excerpt-review",
+      "reviewerId": "diagnostics-recovery-combined-review",
       "blockerCount": 0,
-      "summary": "The user explicitly enters and selects one bounded excerpt and sees the exact redacted text before any local export."
+      "summary": "The user explicitly reviews one redacted excerpt before export and recovery counts expose only navigation into current owner state."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "diagnostics-private-excerpt-review",
+      "reviewerId": "diagnostics-recovery-combined-review",
       "blockerCount": 0,
-      "summary": "Schemas, Main lifecycle, export envelope and Settings use one paired optional-category and reviewed-excerpt contract."
+      "summary": "Schemas, Main lifecycle, export envelope, diagnostics owner and Settings agree on excerpt review and authority-free recovery routing."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "diagnostics-private-excerpt-review",
+      "reviewerId": "diagnostics-recovery-combined-review",
       "blockerCount": 0,
-      "summary": "PIGE-DIAG-002 cites direct redaction/export and Settings evidence while broader selectors and platform evidence remain open."
+      "summary": "PIGE-DIAG-002 cites direct redaction/export evidence and E1.19 cites recovery routing while their broader gaps remain explicit."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "diagnostics-private-excerpt-review",
+      "reviewerId": "diagnostics-recovery-combined-review",
       "blockerCount": 0,
-      "summary": "A private preview owner keeps diagnostics storage below budget and preserves legacy safe-bundle restart compatibility."
+      "summary": "Bounded preview and recovery components reuse existing storage and repair owners without duplicate IPC or effect logic."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "diagnostics-private-excerpt-review",
+      "reviewerId": "diagnostics-recovery-combined-review",
       "blockerCount": 0,
-      "summary": "The existing diagnostics and privacy contracts already define reviewed optional excerpts, so no new design document is introduced."
+      "summary": "Existing diagnostics, privacy and acceptance owners contain both deltas without a new design document or recovery channel."
     }
   ],
   "verification": [
     {
       "command": "npx vitest run tests/unit/diagnostics-export-core.test.ts tests/unit/diagnostics-lifecycle-service.test.ts tests/unit/full-ui-settings-surface.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct tests prove legacy envelope compatibility, raw-text redaction, exact preview-bound export, and explicit Settings selection."
+      "evidence": "Direct tests prove legacy envelope compatibility, raw-text redaction, exact preview-bound export, and both recovery-action routes."
     },
     {
       "command": "npx vitest run tests/unit/schemas.test.ts -t \"bounds optional diagnostics support categories\" --maxWorkers=1",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "diagnostics-private-excerpt-bind-20260802",
-    "taskTitle": "Bind explicit reviewed diagnostics private excerpt",
+    "taskId": "diagnostics-recovery-combined-bind-20260802",
+    "taskTitle": "Bind reviewed diagnostics excerpt and actionable recovery routing",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy safe support bundles without a private-excerpt exclusion row remain valid for restart reconciliation; no raw excerpt is retained.",
-    "acknowledgement": "The optional private excerpt closes one PIGE-DIAG-002 slice while broader private-content selectors and platform/path evidence remain open."
+    "compatibility": "Legacy safe support bundles remain valid, no raw excerpt is retained, and absent recovery callbacks preserve the prior read-only summary.",
+    "acknowledgement": "The private excerpt and actionable recovery slices are bound while broader private selectors, crash-hook review and diagnostic-store breadth remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

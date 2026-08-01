@@ -2435,6 +2435,8 @@
   "system.crashRecovery.sources": "Quellen zur Reparatur",
   "system.crashRecovery.history": "Letzte Startwiederherstellungen",
   "system.crashRecovery.historySummary": "Wiederherstellungen anzeigen",
+  "system.crashRecovery.reviewActivity": "Aktivität prüfen",
+  "system.crashRecovery.repairSources": "Quellen reparieren",
   "pigePolicy.title": "Agent-Richtlinie des Vaults",
   "pigePolicy.description": "PIGE.md prüfen und bearbeiten – die validierten Anweisungen zur Pflege dieses Vaults.",
   "pigePolicy.edit": "Richtlinie bearbeiten",
