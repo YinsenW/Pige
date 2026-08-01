@@ -202,10 +202,9 @@ export class NotesService {
         ownerId === undefined ? undefined : this.#sourceRefresh?.refreshableSourceIds(stable.document.summary.sourceIds)),
       ...(renderContextId ? {
         renderContextId,
-        ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status)
-          ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } }
-          : {}),
+        ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(isRenamableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { renameEligibility: { canRename: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(stable.document.summary.pageType !== "note" && isRenamableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(stable.document.summary.pageType === "note"
           ? {
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },

@@ -1861,7 +1861,9 @@ const getNotesService = (): NotesService => {
 const getNoteRevisionHistoryService = (): NoteRevisionHistoryService => {
   noteRevisionHistoryService ??= new NoteRevisionHistoryService(
     getVaultService(),
-    getNoteMarkdownEditorService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+    }),
     getNotesService()
   );
   return noteRevisionHistoryService;
@@ -3899,7 +3901,9 @@ app.whenReady().then(async () => {
   notesService = undefined;
   noteRevisionHistoryService = new NoteRevisionHistoryService(
     getVaultService(),
-    noteMarkdownEditorService,
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+    }),
     getNotesService()
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
