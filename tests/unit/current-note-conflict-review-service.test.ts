@@ -49,6 +49,18 @@ describe("CurrentNoteConflictReviewService", () => {
     const applied = { ...input, proposalId: "proposal_20260801_conflict003", decision: "apply_proposed" as const, operationId: "op_20260801_conflictapply01" };
     expect(service.resolve(applied)).toMatchObject({ decision: "apply_proposed", operationId: applied.operationId });
     expect(() => service.resolve({ ...applied, operationId: undefined })).toThrow("outside its safe bound");
+    const saved = {
+      ...input,
+      proposalId: "proposal_20260801_conflict004",
+      decision: "save_proposed_as_note" as const,
+      operationId: "op_20260801_conflictsave001",
+      createdPageId: "page_20260801_conflictsave001"
+    };
+    expect(service.resolve(saved)).toMatchObject({
+      decision: "save_proposed_as_note",
+      operationId: saved.operationId,
+      createdPageId: saved.createdPageId
+    });
   });
 
   it.skipIf(process.platform === "win32")("fails closed when the private proposal parent is a symlink", () => {

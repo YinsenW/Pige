@@ -86,14 +86,15 @@ export function registerCurrentNoteAppendIpc(options: RegisterCurrentNoteAppendI
           ...(result.proposal ? { proposal: result.proposal } : {})
         });
       }
-      if (!reconcileReview(jobs, result.proposal, parsed.proposalId, result.status === "applied"
+      if (!reconcileReview(jobs, result.proposal, parsed.proposalId, result.status === "applied" || result.status === "saved"
         ? result.operation.id
         : undefined)) throw new Error("The reviewed append Job did not converge.");
       return CurrentNoteAppendProposalDecisionResultSchema.parse({
         apiVersion: 1,
         status: result.status,
         proposal: result.proposal,
-        ...(result.status === "applied" ? { operationId: result.operation.id } : {})
+        ...(result.status === "applied" ? { operationId: result.operation.id } : {}),
+        ...(result.status === "saved" ? { operationId: result.operation.id, createdPageId: result.createdPageId } : {})
       });
     } catch {
       return CurrentNoteAppendProposalDecisionResultSchema.parse({
@@ -126,7 +127,7 @@ function reconcileReview(
   proposal: {
     readonly proposalId: string;
     readonly jobId: string;
-    readonly state: "ready" | "resolving" | "applied" | "rejected" | "conflicted";
+    readonly state: "ready" | "resolving" | "applied" | "saved_as_note" | "rejected" | "conflicted";
   },
   expectedProposalId: string,
   operationId?: string
@@ -159,9 +160,9 @@ function reconcileReview(
 }
 
 function isResolvedProposalState(
-  state: "ready" | "resolving" | "applied" | "rejected" | "conflicted"
-): state is "applied" | "rejected" {
-  return state === "applied" || state === "rejected";
+  state: "ready" | "resolving" | "applied" | "saved_as_note" | "rejected" | "conflicted"
+): state is "applied" | "saved_as_note" | "rejected" {
+  return state === "applied" || state === "saved_as_note" || state === "rejected";
 }
 
 function isExactWaitingReview(job: JobRecord, proposalId: string): boolean {
@@ -186,7 +187,7 @@ function isExactWaitingReviewBinding(job: JobRecord, input: {
 function reviewJobConverged(
   job: JobRecord,
   proposalId: string,
-  proposalState: "applied" | "rejected" | "conflicted",
+  proposalState: "applied" | "saved_as_note" | "rejected" | "conflicted",
   operationId: string | undefined
 ): boolean {
   if (!job.proposalIds?.includes(proposalId)) return false;

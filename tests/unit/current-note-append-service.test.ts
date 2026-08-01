@@ -324,6 +324,49 @@ describe("CurrentNoteAppendService", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(reviewedLive);
   });
 
+  it("saves an exact conflicted proposal as one new note without changing the current note", () => {
+    const fixture = createFixture();
+    fs.writeFileSync(fixture.pagePath, fixture.initialMarkdown.replace("Initial durable body.", "First drift."), "utf8");
+    const staged = requireReview(fixture.service.append(fixture.request));
+    const reviewedLive = fixture.initialMarkdown.replace("Initial durable body.", "Second drift.");
+    fs.writeFileSync(fixture.pagePath, reviewedLive, "utf8");
+    const conflicted = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: staged.proposal.revision, decision: "approve"
+    });
+    if (conflicted.status !== "conflicted" || !conflicted.proposal.currentRevision) throw new Error("Expected an exact conflict review.");
+
+    const saved = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: conflicted.proposal.revision,
+      decision: "save_proposed_as_note", expectedCurrentRevision: conflicted.proposal.currentRevision
+    });
+    expect(saved).toMatchObject({
+      status: "saved",
+      proposal: { state: "saved_as_note", revision: 4 },
+      createdPageId: expect.stringMatching(/^page_20260728_[a-f0-9]{16}$/u),
+      operation: { kind: "create_page", proposalId: staged.proposal.proposalId, reversible: "best_effort" }
+    });
+    if (saved.status !== "saved") throw new Error("Expected the proposal to be saved separately.");
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(reviewedLive);
+    const target = saved.operation.targetRefs[0];
+    if (!target?.path) throw new Error("Expected a generated note path.");
+    const generated = fs.readFileSync(path.join(fixture.vaultPath, ...target.path.split("/")), "utf8");
+    expect(generated).toContain("A concise durable conclusion.");
+    expect(generated).toContain(`related_page_ids: [\"${PAGE_ID}\"]`);
+
+    const resolutionFile = listPrivateFiles(fixture.vaultPath).find((file) => file.endsWith(".conflict-resolution.json"));
+    if (!resolutionFile) throw new Error("Expected a durable save resolution.");
+    fs.unlinkSync(resolutionFile);
+    fs.unlinkSync(operationFile(fixture.vaultPath, saved.operation.id));
+    expect(new CurrentNoteAppendService().decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: conflicted.proposal.revision,
+      decision: "save_proposed_as_note", expectedCurrentRevision: conflicted.proposal.currentRevision
+    })).toMatchObject({ status: "saved", createdPageId: saved.createdPageId, operation: { id: saved.operation.id } });
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+  });
+
   it("rejects missing inspect authority, invented evidence, secrets, controls, and oversized text before persistence", () => {
     const fixture = createFixture();
     const invalidRequests: CurrentNoteAppendRequest[] = [

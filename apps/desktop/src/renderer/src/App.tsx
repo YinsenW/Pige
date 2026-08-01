@@ -3020,6 +3020,14 @@ export function App(): React.JSX.Element {
               if (pageId !== noteAgentContext.pageId) return;
               void openNote(pageId);
             }}
+            onOpenCreatedNote={async (pageId) => {
+              const opened = await openNoteTarget(pageId, false, "note");
+              if (opened) {
+                setView("library");
+                await closeNoteAgent();
+              }
+              return opened;
+            }}
             t={t}
           />
         ) : null}

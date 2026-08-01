@@ -342,6 +342,37 @@ describe("CurrentNoteReplaceService", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(reviewedLive);
   });
 
+  it("saves a conflicted replacement as one new note and adopts the exact replay", () => {
+    const fixture = createFixture();
+    fs.writeFileSync(fixture.pagePath, fixture.initialMarkdown.replace("Initial durable body.", "First drift."), "utf8");
+    const staged = requireReview(fixture.service.replace(fixture.request));
+    const reviewedLive = fixture.initialMarkdown.replace("Initial durable body.", "Second drift.");
+    fs.writeFileSync(fixture.pagePath, reviewedLive, "utf8");
+    const conflicted = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: staged.proposal.revision, decision: "approve"
+    });
+    if (conflicted.status !== "conflicted" || !conflicted.proposal.currentRevision) throw new Error("Expected an exact conflict review.");
+    const saved = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: conflicted.proposal.revision,
+      decision: "save_proposed_as_note", expectedCurrentRevision: conflicted.proposal.currentRevision
+    });
+    expect(saved).toMatchObject({
+      status: "saved",
+      proposal: { state: "saved_as_note", revision: 4 },
+      operation: { kind: "create_page", proposalId: staged.proposal.proposalId }
+    });
+    if (saved.status !== "saved") throw new Error("Expected a separately saved replacement.");
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(reviewedLive);
+    expect(new CurrentNoteReplaceService().decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: conflicted.proposal.revision,
+      decision: "save_proposed_as_note", expectedCurrentRevision: conflicted.proposal.currentRevision
+    })).toMatchObject({ status: "saved", createdPageId: saved.createdPageId, operation: { id: saved.operation.id } });
+    expect(listOperationFiles(fixture.vaultPath)).toHaveLength(1);
+  });
+
   it("rejects missing inspect authority, invented evidence, secrets, controls, and oversized text before persistence", () => {
     const fixture = createFixture();
     const invalidRequests: CurrentNoteReplaceRequest[] = [

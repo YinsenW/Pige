@@ -378,11 +378,13 @@ describe("Note Agent production UI", () => {
     const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
     const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
       apiVersion: 1,
-      status: "applied",
-      proposal: { ...preview, state: "applied", revision: 4, currentRevision: undefined },
-      operationId: "op_20260801_currentnoteconflict01"
+      status: "saved",
+      proposal: { ...preview, state: "saved_as_note", revision: 4, currentRevision: undefined },
+      operationId: "op_20260801_currentnoteconflict01",
+      createdPageId: "page_20260801_currentnoteconflict01"
     });
     const onClose = vi.fn();
+    const onOpenCreatedNote = vi.fn().mockResolvedValue(true);
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
@@ -401,7 +403,7 @@ describe("Note Agent production UI", () => {
     const { createRoot } = await import("react-dom/client");
     const root = createRoot(container);
     await act(async () => {
-      root.render(createElement(CurrentNoteAgent, { ...currentNoteAgentProps(pageId, vaultId), onClose }));
+      root.render(createElement(CurrentNoteAgent, { ...currentNoteAgentProps(pageId, vaultId), onClose, onOpenCreatedNote }));
       await settle(dom);
     });
 
@@ -409,11 +411,12 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-kind="removed"]')?.textContent).toContain("Reviewed base line");
     expect(buttonNamed(container, t("note.proposal.manual_edit"))).toBeTruthy();
     expect(buttonNamed(container, t("note.proposal.keep_current"))).toBeTruthy();
+    expect(buttonNamed(container, t("note.proposal.save_proposed_as_note"))).toBeTruthy();
     expect(buttonNamed(container, t("note.proposal.apply_proposed"))).toBeTruthy();
     await click(dom, required(buttonNamed(container, t("note.proposal.manual_edit"))));
     expect(onClose).toHaveBeenCalledOnce();
-    await click(dom, required(buttonNamed(container, t("note.proposal.apply_proposed"))));
-    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.status.applied")) === true);
+    await click(dom, required(buttonNamed(container, t("note.proposal.save_proposed_as_note"))));
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.status.saved_as_note")) === true);
     expect(decideCurrentNoteAppendProposal).toHaveBeenCalledWith({
       apiVersion: 1,
       activeVaultId: vaultId,
@@ -421,9 +424,10 @@ describe("Note Agent production UI", () => {
       jobId,
       proposalId,
       expectedRevision: 3,
-      decision: "apply_proposed",
+      decision: "save_proposed_as_note",
       expectedCurrentRevision: currentRevision
     });
+    expect(onOpenCreatedNote).toHaveBeenCalledWith("page_20260801_currentnoteconflict01");
     await unmount(dom, root);
   });
 

@@ -10092,6 +10092,7 @@ export const CurrentNoteAppendProposalStateSchema = z.enum([
   "ready",
   "resolving",
   "applied",
+  "saved_as_note",
   "rejected",
   "conflicted"
 ]);
@@ -10131,10 +10132,10 @@ export const CurrentNoteAppendProposalGetResultSchema = z.discriminatedUnion("st
 ]);
 export const CurrentNoteAppendProposalDecisionRequestSchema = CurrentNoteAppendProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed"]),
+  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed", "save_proposed_as_note"]),
   expectedCurrentRevision: NoteEditorRevisionSchema.optional()
 }).strict().superRefine((value, context) => {
-  if ((value.decision === "keep_current" || value.decision === "apply_proposed") !== (value.expectedCurrentRevision !== undefined)) {
+  if ((value.decision === "keep_current" || value.decision === "apply_proposed" || value.decision === "save_proposed_as_note") !== (value.expectedCurrentRevision !== undefined)) {
     context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Conflict resolution requires the exact reviewed note revision." });
   }
 });
@@ -10144,6 +10145,13 @@ export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnio
     status: z.literal("applied"),
     proposal: CurrentNoteAppendProposalPreviewSchema.extend({ state: z.literal("applied") }),
     operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("saved"),
+    proposal: CurrentNoteAppendProposalPreviewSchema.extend({ state: z.literal("saved_as_note") }),
+    operationId: OperationIdSchema,
+    createdPageId: PageIdSchema
   }).strict(),
   z.object({
     apiVersion: z.literal(1),
@@ -10172,6 +10180,7 @@ export const CurrentNoteReplaceProposalStateSchema = z.enum([
   "ready",
   "resolving",
   "applied",
+  "saved_as_note",
   "rejected",
   "conflicted"
 ]);
@@ -10217,10 +10226,10 @@ export const CurrentNoteReplaceProposalGetResultSchema = z.discriminatedUnion("s
 ]);
 export const CurrentNoteReplaceProposalDecisionRequestSchema = CurrentNoteReplaceProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed"]),
+  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed", "save_proposed_as_note"]),
   expectedCurrentRevision: NoteEditorRevisionSchema.optional()
 }).strict().superRefine((value, context) => {
-  if ((value.decision === "keep_current" || value.decision === "apply_proposed") !== (value.expectedCurrentRevision !== undefined)) {
+  if ((value.decision === "keep_current" || value.decision === "apply_proposed" || value.decision === "save_proposed_as_note") !== (value.expectedCurrentRevision !== undefined)) {
     context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Conflict resolution requires the exact reviewed note revision." });
   }
 });
@@ -10230,6 +10239,13 @@ export const CurrentNoteReplaceProposalDecisionResultSchema = z.discriminatedUni
     status: z.literal("applied"),
     proposal: CurrentNoteReplaceProposalPreviewSchema.extend({ state: z.literal("applied") }),
     operationId: OperationIdSchema
+  }).strict(),
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("saved"),
+    proposal: CurrentNoteReplaceProposalPreviewSchema.extend({ state: z.literal("saved_as_note") }),
+    operationId: OperationIdSchema,
+    createdPageId: PageIdSchema
   }).strict(),
   z.object({
     apiVersion: z.literal(1),

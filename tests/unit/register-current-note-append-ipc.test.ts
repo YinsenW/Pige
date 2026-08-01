@@ -87,6 +87,56 @@ describe("registerCurrentNoteAppendIpc", () => {
     expect(JSON.stringify(decision)).not.toContain("/synthetic/vault");
   });
 
+  it("returns only the authoritative created page identity for a separately saved proposal", async () => {
+    const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
+    const preview = {
+      ...appendPreview(),
+      state: "conflicted" as const,
+      revision: 3,
+      currentRevision: `noteeditrev_${"a".repeat(64)}`
+    };
+    let job = waitingJob();
+    const jobs = {
+      readAgentTurnJob: vi.fn(() => job),
+      resolveAgentTurnReview: vi.fn((input: any) => {
+        job = { ...input.job, state: "completed", operationIds: input.facts.operationIds, outputRefs: input.facts.outputRefs };
+        return job;
+      })
+    } as unknown as JobsService;
+    registerCurrentNoteAppendIpc({
+      ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler); } },
+      currentVault: () => ({ vaultId: VAULT_ID } as VaultSummary),
+      activeVaultPath: () => "/synthetic/vault",
+      getService: () => ({
+        decideProposal: () => ({
+          status: "saved",
+          proposal: { ...preview, state: "saved_as_note", revision: 4, currentRevision: undefined },
+          operation: { id: "op_20260728_appendipcsave01" },
+          createdPageId: "page_20260728_appendipcsave01"
+        })
+      } as unknown as CurrentNoteAppendService),
+      getJobsService: () => jobs
+    });
+    const result = await handlers.get("agent.decideCurrentNoteAppendProposal")?.({}, {
+      apiVersion: 1,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: PROPOSAL_ID,
+      expectedRevision: 3,
+      decision: "save_proposed_as_note",
+      expectedCurrentRevision: preview.currentRevision
+    });
+    expect(result).toEqual({
+      apiVersion: 1,
+      status: "saved",
+      proposal: { ...preview, state: "saved_as_note", revision: 4, currentRevision: undefined },
+      operationId: "op_20260728_appendipcsave01",
+      createdPageId: "page_20260728_appendipcsave01"
+    });
+    expect(JSON.stringify(result)).not.toContain("/synthetic/vault");
+  });
+
   it("rejects a stale Job before the proposal service can mutate", async () => {
     const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
     const decideProposal = vi.fn();

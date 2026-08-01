@@ -765,6 +765,23 @@ describe("schemas", () => {
       decision: "apply_proposed",
       expectedCurrentRevision: conflictRevision
     })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: conflictRevision });
+    expect(CurrentNoteAppendProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId: proposal.activeVaultId,
+      pageId: proposal.pageId,
+      jobId: proposal.jobId,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "save_proposed_as_note",
+      expectedCurrentRevision: conflictRevision
+    })).toMatchObject({ decision: "save_proposed_as_note" });
+    expect(CurrentNoteAppendProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "saved",
+      proposal: { ...proposal, state: "saved_as_note", revision: 4 },
+      operationId: "op_20260728_schemaappendsave",
+      createdPageId: "page_20260728_schemaappendsave"
+    })).toMatchObject({ status: "saved", proposal: { state: "saved_as_note" } });
     expect(() => CurrentNoteAppendProposalDecisionRequestSchema.parse({
       apiVersion: 1,
       activeVaultId: proposal.activeVaultId,
@@ -837,6 +854,12 @@ describe("schemas", () => {
       decision: "apply_proposed",
       expectedCurrentRevision: keepCurrent.expectedCurrentRevision
     })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: keepCurrent.expectedCurrentRevision });
+    expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse({
+      ...request,
+      expectedRevision: 3,
+      decision: "save_proposed_as_note",
+      expectedCurrentRevision: keepCurrent.expectedCurrentRevision
+    })).toMatchObject({ decision: "save_proposed_as_note" });
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({ ...keepCurrent, expectedCurrentRevision: undefined })).toThrow();
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({
       ...decision,
@@ -854,6 +877,13 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260730_schemareplace01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+    expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "saved",
+      proposal: { ...proposal, state: "saved_as_note", revision: 4 },
+      operationId: "op_20260730_schemareplacesave",
+      createdPageId: "page_20260730_schemareplacesave"
+    })).toMatchObject({ status: "saved", proposal: { state: "saved_as_note" } });
     expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
       apiVersion: 1,
       status: "not_found"

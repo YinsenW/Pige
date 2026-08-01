@@ -52,6 +52,7 @@ export function CurrentNoteAgent(props: {
     readonly jobId: string;
   }) => void;
   readonly onOpenCitation: (pageId: string) => void;
+  readonly onOpenCreatedNote?: (pageId: string) => Promise<boolean>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [timeline, setTimeline] = useState<AgentConversationInitialTimeline | undefined>();
@@ -411,7 +412,7 @@ export function CurrentNoteAgent(props: {
 
   const decideAppendProposal = async (
     proposalId: string,
-    action: "reject" | "later" | "apply" | "keep_current" | "apply_proposed" | "manual_edit"
+    action: "reject" | "later" | "apply" | "keep_current" | "apply_proposed" | "save_proposed_as_note" | "manual_edit"
   ): Promise<void> => {
     const current = appendProposal;
     if (!current || current.preview.proposalId !== proposalId) return;
@@ -425,7 +426,7 @@ export function CurrentNoteAgent(props: {
       props.onClose();
       return;
     }
-    const resolvingConflict = (action === "keep_current" || action === "apply_proposed") &&
+    const resolvingConflict = (action === "keep_current" || action === "apply_proposed" || action === "save_proposed_as_note") &&
       current.preview.state === "conflicted" && current.preview.currentRevision;
     if (appendProposalDecisionInFlightRef.current || (current.preview.state !== "ready" && !resolvingConflict)) return;
     const vaultId = props.vaultId;
@@ -442,7 +443,7 @@ export function CurrentNoteAgent(props: {
     setAppendProposal({ preview: { ...current.preview, state: "resolving" } });
     let result: CurrentNoteMutationProposalDecisionResult;
     try {
-      const decision = action === "apply" ? "approve" as const : action === "keep_current" || action === "apply_proposed" ? action : "reject" as const;
+      const decision = action === "apply" ? "approve" as const : action === "keep_current" || action === "apply_proposed" || action === "save_proposed_as_note" ? action : "reject" as const;
       result = current.preview.kind === "append_current_note"
         ? await window.pige.agent.decideCurrentNoteAppendProposal({
             apiVersion: 1,
@@ -452,7 +453,7 @@ export function CurrentNoteAgent(props: {
             proposalId,
             expectedRevision: current.preview.revision,
             decision,
-            ...(decision === "keep_current" || decision === "apply_proposed" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
+            ...(decision === "keep_current" || decision === "apply_proposed" || decision === "save_proposed_as_note" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           })
         : await window.pige.agent.decideCurrentNoteReplaceProposal({
             apiVersion: 1,
@@ -461,7 +462,7 @@ export function CurrentNoteAgent(props: {
             proposalId,
             expectedRevision: current.preview.revision,
             decision,
-            ...(decision === "keep_current" || decision === "apply_proposed" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
+            ...(decision === "keep_current" || decision === "apply_proposed" || decision === "save_proposed_as_note" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           });
     } catch {
       if (sequence === appendProposalSequenceRef.current) {
@@ -477,10 +478,16 @@ export function CurrentNoteAgent(props: {
       activePageIdRef.current !== pageId
     ) return;
     applyMutationProposalDecisionResult(result, current, vaultId, pageId, setAppendProposal);
+    if (result.status === "saved") {
+      const opened = await props.onOpenCreatedNote?.(result.createdPageId) ?? false;
+      if (!opened && sequence === appendProposalSequenceRef.current) {
+        setAppendProposal({ ...current, errorMessageKey: "note.proposal.savedOpenFailed" });
+      }
+    }
     if (result.status === "applied") {
       resolvedMutationRef.current = { jobId: current.preview.jobId, kind: current.preview.kind };
     }
-    if (result.status === "applied" || result.status === "rejected") await refreshTimeline();
+    if (result.status === "applied" || result.status === "saved" || result.status === "rejected") await refreshTimeline();
   };
 
   const visibleProposal = appendProposal?.preview ?? props.proposal ?? null;
