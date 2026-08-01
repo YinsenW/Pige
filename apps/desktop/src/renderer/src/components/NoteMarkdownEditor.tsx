@@ -87,6 +87,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   const [renderedDraft, setRenderedDraft] = useState<RenderedDraft | null>(null);
   const requestSequenceRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewPanelRef = useRef<HTMLElement>(null);
+  const pendingScrollRatioRef = useRef(0);
   const currentFileRef = useRef<HTMLTextAreaElement>(null);
   const focusEditorAfterReviewRef = useRef(false);
 
@@ -99,7 +101,12 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setPending(null);
     setMode("source");
     setRenderedDraft(null);
+    pendingScrollRatioRef.current = 0;
     focusEditorAfterReviewRef.current = false;
+    window.requestAnimationFrame(() => {
+      restoreScrollRatio(textareaRef.current, 0);
+      restoreScrollRatio(previewPanelRef.current, 0);
+    });
   }, [propIdentityKey]);
 
   useEffect(() => {
@@ -118,6 +125,12 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
       current = false;
     };
   }, [conflictReview, draft, mode, propIdentityKey]);
+
+  useEffect(() => {
+    if (mode !== "preview" || renderedDraft?.source !== draft) return;
+    const ratio = pendingScrollRatioRef.current;
+    window.requestAnimationFrame(() => restoreScrollRatio(previewPanelRef.current, ratio));
+  }, [draft, mode, renderedDraft]);
 
   useEffect(() => {
     if (conflictReview) {
@@ -230,8 +243,18 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
 
   const showSource = (): void => {
     if (pending || conflictReview) return;
+    pendingScrollRatioRef.current = readScrollRatio(previewPanelRef.current);
     setMode("source");
-    window.requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+    window.requestAnimationFrame(() => {
+      restoreScrollRatio(textareaRef.current, pendingScrollRatioRef.current);
+      textareaRef.current?.focus({ preventScroll: true });
+    });
+  };
+
+  const showPreview = (): void => {
+    if (pending || conflictReview) return;
+    pendingScrollRatioRef.current = readScrollRatio(textareaRef.current);
+    setMode("preview");
   };
 
   const cancel = (): void => {
@@ -289,7 +312,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
               aria-pressed={mode === "preview"}
               className={mode === "preview" ? "primary" : "settings-button"}
               disabled={pending !== null}
-              onClick={() => setMode("preview")}
+              onClick={showPreview}
             >
               {props.labels.preview}
             </button>
@@ -316,7 +339,9 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
           </div>
         ) : (
           <section
+            ref={previewPanelRef}
             id="note-markdown-editor-preview-panel"
+            className="note-markdown-editor-preview-panel"
             aria-label={props.labels.preview}
             aria-busy={renderedDraft === null ? "true" : undefined}
           >
@@ -392,6 +417,18 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
       </form>
     </section>
   );
+}
+
+function readScrollRatio(element: HTMLElement | null): number {
+  if (!element) return 0;
+  const maximum = element.scrollHeight - element.clientHeight;
+  return maximum > 0 ? Math.min(1, Math.max(0, element.scrollTop / maximum)) : 0;
+}
+
+function restoreScrollRatio(element: HTMLElement | null, ratio: number): void {
+  if (!element) return;
+  const maximum = element.scrollHeight - element.clientHeight;
+  element.scrollTop = maximum > 0 ? Math.round(maximum * Math.min(1, Math.max(0, ratio))) : 0;
 }
 
 function createNoteEditorRequestId(): `noteeditreq_${string}` {

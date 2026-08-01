@@ -7240,6 +7240,12 @@ dd {
   .knowledge-map-status { left: 10px; bottom: 18px; max-width: calc(100% - 140px); }
 }
 
+.note-markdown-editor-preview-panel {
+  max-height: min(29rem, 64vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
 @media (min-width: 680px) and (max-width: 760px) {
   .settings-surface,
   .settings-surface-body { grid-template-columns: 170px minmax(0, 1fr); }
