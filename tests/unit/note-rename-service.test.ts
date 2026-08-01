@@ -16,7 +16,7 @@ const request = { apiVersion: 1 as const, requestId: "noterenamereq_abcdefghijkl
   expectedRevision: `noteeditrev_${"a".repeat(64)}`, title: "Renamed Note" };
 
 describe("NoteRenameService", () => {
-  it("renames one exact note and Git-friendly filename, preserves old-title links, and survives Activity Undo/restart", async () => {
+  it("renames one exact note and Git-friendly filename, preserves old-title links, and supports repeatable Activity Undo/Redo", async () => {
     const fixture = makeFixture();
     const before = noteMarkdown("Original Note", ["Existing alias"]);
     write(fixture.vaultPath, "wiki/original.md", before);
@@ -46,8 +46,39 @@ describe("NoteRenameService", () => {
 
     const restarted = makeService(fixture, before);
     const undo = readOperation(fixture.vaultPath, `${result.operationId}undo`);
-    expect(restarted.activitySummary(operation, undo)).toMatchObject({ status: "undone", canUndo: false });
-    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+    expect(restarted.activitySummary(operation, undo)).toMatchObject({ status: "undone", canUndo: false, canRedo: true });
+    const redone = restarted.redo({ operationId: operation.id });
+    expect(redone).toMatchObject({ status: "redone", operationId: operation.id, undoOperationId: undo.id,
+      redoOperationId: expect.stringMatching(/^op_/u), revisionId: sha(renamed) });
+    if (redone.status !== "redone") throw new Error("expected Redo");
+    expect(fs.readFileSync(renamedPath, "utf8")).toBe(renamed);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "wiki/original.md"))).toBe(false);
+    expect(restarted.redo({ operationId: operation.id })).toEqual({ ...redone, status: "already_redone" });
+
+    fs.unlinkSync(operationPath(fixture.vaultPath, redone.redoOperationId));
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const redoOperation = readOperation(fixture.vaultPath, redone.redoOperationId);
+    expect(restarted.undo(redoOperation)).toMatchObject({ status: "undone", operationId: redoOperation.id });
+    const redoUndo = readOperation(fixture.vaultPath, `${redoOperation.id}undo`);
+    expect(restarted.activitySummary(redoOperation, redoUndo)).toMatchObject({ status: "undone", canRedo: true });
+    expect(restarted.redo({ operationId: redoOperation.id })).toMatchObject({ status: "redone" });
+    expect(fs.readFileSync(renamedPath, "utf8")).toBe(renamed);
+  });
+
+  it("fails Redo closed when the restored note changes after Undo", async () => {
+    const fixture = makeFixture(), before = noteMarkdown("Original Note");
+    write(fixture.vaultPath, "wiki/original.md", before);
+    const service = makeService(fixture, before);
+    const result = await service.rename("reader_owner", request);
+    if (result.status !== "committed") throw new Error("expected commit");
+    const operation = readOperation(fixture.vaultPath, result.operationId);
+    expect(service.undo(operation)).toMatchObject({ status: "undone" });
+    const original = path.join(fixture.vaultPath, "wiki/original.md");
+    fs.appendFileSync(original, "\nExternal edit\n", "utf8");
+    const changed = fs.readFileSync(original, "utf8");
+    expect(service.redo({ operationId: operation.id })).toMatchObject({ status: "stale", operationId: operation.id });
+    expect(fs.readFileSync(original, "utf8")).toBe(changed);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "wiki/renamed-note--rename12345678.md"))).toBe(false);
   });
 
   it("fails closed before writing for stale identity, source/non-note/inactive pages, invalid aliases, and filename conflicts", async () => {

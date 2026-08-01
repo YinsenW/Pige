@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
-  KnowledgeActivitySummary, KnowledgeActivityUndoResult, NoteRenameRequest,
+  KnowledgeActivityRedoRequest, KnowledgeActivityRedoResult, KnowledgeActivitySummary, KnowledgeActivityUndoResult, NoteRenameRequest,
   NoteRenameResult, NoteRenderResult, VaultSummary
 } from "@pige/contracts";
 import { parsePigeFrontmatter } from "@pige/markdown";
@@ -21,6 +21,7 @@ interface RenameReceipt {
   readonly beforePath: string; readonly afterPath: string; readonly beforeImagePath: string;
   readonly afterImagePath: string; readonly beforeHash: string; readonly afterHash: string;
   readonly beforeTitle: string; readonly afterTitle: string; readonly operationId: string; readonly createdAt: string;
+  readonly redoOfOperationId?: string; readonly undoOperationId?: string;
 }
 
 export class NoteRenameService {
@@ -78,16 +79,22 @@ export class NoteRenameService {
     if (!vaultPath || operation.kind !== "rename_page") return undefined;
     const receipt = findReceipt(vaultPath, operation.id);
     if (!receipt || !matchesOperation(receipt, operation)) return undefined;
-    const undone = !!undo && undo.id === undoOperationId(operation.id);
+    const undone = !!undo && matchesUndoOperation(operation, undo);
     const current = undone ? beforeStateMatches(vaultPath, receipt) : afterStateMatches(vaultPath, receipt);
+    const redo = undone ? findRedoReceipt(vaultPath, operation.id) : undefined;
+    const canRedo = undone && !redo && current;
     return { operationId: operation.id, kind: "rename_page", createdAt: operation.createdAt,
       targetLabel: receipt.afterTitle, target: { kind: "page", pageId: receipt.pageId },
       status: undone ? "undone" : "applied", canUndo: !undone && current,
+      ...(undone ? { canRedo,
+        ...(!canRedo ? { redoUnavailableReason: redo ? "already_redone" as const : "content_changed" as const } : {}) } : {}),
       ...(undone ? { undoUnavailableReason: "already_undone" as const } : current ? {} : { undoUnavailableReason: "content_changed" as const }) };
   }
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
-    return operations.find((candidate) => candidate.id === undoOperationId(operation.id));
+    const vaultPath = this.#vaults.activeVaultPath(), receipt = vaultPath && findReceipt(vaultPath, operation.id);
+    if (!receipt || !matchesOperation(receipt, operation)) return undefined;
+    return operations.find((candidate) => candidate.id === undoOperationId(operation.id) && matchesUndoOperation(operation, candidate));
   }
 
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
@@ -100,6 +107,45 @@ export class NoteRenameService {
     if (!afterStateMatches(vaultPath, receipt)) return { status: "stale", operationId: operation.id };
     completeUndo(vaultPath, receipt, operation);
     return { status: "undone", operationId: operation.id, undoOperationId: undoId };
+  }
+
+  redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return { status: "not_found", operationId: request.operationId };
+    try {
+      const operation = readOperation(vaultPath, request.operationId);
+      const receipt = operation && findReceipt(vaultPath, operation.id);
+      if (!operation || !receipt || !matchesOperation(receipt, operation)) {
+        return { status: "not_found", operationId: request.operationId };
+      }
+      const undo = readOperation(vaultPath, undoOperationId(operation.id));
+      if (!undo || !matchesUndoOperation(operation, undo)) {
+        return { status: "not_found", operationId: operation.id };
+      }
+      if (request.expectedRevisionId !== undefined && request.expectedRevisionId !== receipt.beforeHash) {
+        return { status: "stale", operationId: operation.id,
+          ...(currentHash(vaultPath, receipt) ? { currentRevisionId: currentHash(vaultPath, receipt)! } : {}) };
+      }
+      const existing = findRedoReceipt(vaultPath, operation.id);
+      if (existing) {
+        if (!matchesRedoReceipt(existing, receipt, undo)) throw new RenameConflictError();
+        const existed = Boolean(readOperation(vaultPath, existing.operationId));
+        completeForward(vaultPath, existing);
+        return { status: existed ? "already_redone" : "redone", operationId: operation.id,
+          undoOperationId: undo.id, redoOperationId: existing.operationId, revisionId: existing.afterHash };
+      }
+      if (!beforeStateMatches(vaultPath, receipt)) {
+        const revision = currentHash(vaultPath, receipt);
+        return { status: "stale", operationId: operation.id, ...(revision ? { currentRevisionId: revision } : {}) };
+      }
+      const redoReceipt = createRedoReceipt(receipt, undo, this.#now().toISOString());
+      writeExclusive(receiptPath(vaultPath, redoReceipt.requestId), Buffer.from(JSON.stringify(redoReceipt), "utf8"));
+      completeForward(vaultPath, redoReceipt);
+      return { status: "redone", operationId: operation.id, undoOperationId: undo.id,
+        redoOperationId: redoReceipt.operationId, revisionId: redoReceipt.afterHash };
+    } catch {
+      return { status: "stale", operationId: request.operationId };
+    }
   }
 
   recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number } {
@@ -181,6 +227,13 @@ function createReceipt(vaultPath: string, request: NoteRenameRequest, target: Ex
     beforeHash: target.pageContentHash, afterHash: hash(after), beforeTitle: target.title, afterTitle: request.title, operationId, createdAt };
 }
 
+function createRedoReceipt(parent: RenameReceipt, undo: OperationRecord, createdAt: string): RenameReceipt {
+  const operationId = redoOperationId(parent.operationId);
+  return { ...parent, requestId: `noterenameredoreq_${createHash("sha256").update(parent.operationId).digest("hex").slice(0, 32)}`,
+    requestDigest: hash(Buffer.from(`${parent.operationId}\0${undo.id}\0${parent.beforeHash}\0${parent.afterHash}`, "utf8")),
+    operationId, createdAt, redoOfOperationId: parent.operationId, undoOperationId: undo.id };
+}
+
 function persistIntent(vaultPath: string, receipt: RenameReceipt, before: Buffer, after: Buffer): void {
   writeExclusive(resolve(vaultPath, receipt.beforeImagePath), before); writeExclusive(resolve(vaultPath, receipt.afterImagePath), after);
   writeExclusive(receiptPath(vaultPath, receipt.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
@@ -245,8 +298,24 @@ function matchesOperation(receipt: RenameReceipt, operation: OperationRecord): b
   return operation.id === receipt.operationId && operation.kind === "rename_page" && operation.targetRefs[0]?.id === receipt.pageId &&
     operation.before?.checksum === receipt.beforeHash && operation.after?.checksum === receipt.afterHash;
 }
+function matchesUndoOperation(operation: OperationRecord, undo: OperationRecord): boolean {
+  return undo.id === undoOperationId(operation.id) && undo.kind === "rename_page" &&
+    undo.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === operation.id) &&
+    undo.before?.checksum === operation.after?.checksum && undo.after?.checksum === operation.before?.checksum;
+}
+function matchesRedoReceipt(child: RenameReceipt, parent: RenameReceipt, undo: OperationRecord): boolean {
+  return child.redoOfOperationId === parent.operationId && child.undoOperationId === undo.id &&
+    child.operationId === redoOperationId(parent.operationId) && child.activeVaultId === parent.activeVaultId &&
+    child.pageId === parent.pageId && child.beforePath === parent.beforePath && child.afterPath === parent.afterPath &&
+    child.beforeImagePath === parent.beforeImagePath && child.afterImagePath === parent.afterImagePath &&
+    child.beforeHash === parent.beforeHash && child.afterHash === parent.afterHash &&
+    child.beforeTitle === parent.beforeTitle && child.afterTitle === parent.afterTitle;
+}
 function afterStateMatches(vaultPath: string, receipt: RenameReceipt): boolean { return receipt.beforePath === receipt.afterPath ? pathState(resolve(vaultPath, receipt.afterPath)) === receipt.afterHash : pathState(resolve(vaultPath, receipt.beforePath)) === undefined && pathState(resolve(vaultPath, receipt.afterPath)) === receipt.afterHash; }
 function beforeStateMatches(vaultPath: string, receipt: RenameReceipt): boolean { return receipt.beforePath === receipt.afterPath ? pathState(resolve(vaultPath, receipt.beforePath)) === receipt.beforeHash : pathState(resolve(vaultPath, receipt.afterPath)) === undefined && pathState(resolve(vaultPath, receipt.beforePath)) === receipt.beforeHash; }
+function currentHash(vaultPath: string, receipt: RenameReceipt): string | undefined {
+  return pathState(resolve(vaultPath, receipt.beforePath)) ?? pathState(resolve(vaultPath, receipt.afterPath));
+}
 function undoStarted(vaultPath: string, receipt: RenameReceipt): boolean {
   const before = resolve(vaultPath, receipt.beforePath), after = resolve(vaultPath, receipt.afterPath);
   if (receipt.beforePath === receipt.afterPath) return pathState(before) === receipt.beforeHash;
@@ -263,6 +332,11 @@ function listReceipts(vaultPath: string): RenameReceipt[] {
   });
 }
 function findReceipt(vaultPath: string, operationId: string): RenameReceipt | undefined { return listReceipts(vaultPath).find((receipt) => receipt.operationId === operationId); }
+function findRedoReceipt(vaultPath: string, operationId: string): RenameReceipt | undefined {
+  const matches = listReceipts(vaultPath).filter((receipt) => receipt.redoOfOperationId === operationId);
+  if (matches.length > 1) throw new RenameConflictError();
+  return matches[0];
+}
 function readReceipt(vaultPath: string, requestId: string): RenameReceipt | undefined {
   const file = receiptPath(vaultPath, requestId); if (!fs.existsSync(file)) return undefined;
   const value = JSON.parse(readExact(file, 64 * 1024).toString("utf8")) as Partial<RenameReceipt>;
@@ -292,6 +366,11 @@ function hash(bytes: Buffer): `sha256:${string}` { return `sha256:${createHash("
 function digestRequest(request: NoteRenameRequest): string { return hash(Buffer.from(JSON.stringify(request), "utf8")); }
 function createOperationId(createdAt: string, request: NoteRenameRequest, randomId: string): string { return `op_${createdAt.slice(0, 10).replace(/-/gu, "")}_${createHash("sha256").update(`${request.requestId}\0${randomId}`).digest("hex").slice(0, 16)}`; }
 function undoOperationId(operationId: string): string { return `${operationId}undo`; }
+function redoOperationId(operationId: string): string {
+  const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!date) throw new RenameConflictError();
+  return `op_${date}_${createHash("sha256").update(`pige.note-rename-redo.v1\0${operationId}`).digest("hex").slice(0, 16)}`;
+}
 function bounded(value: string): string { return value.replace(/[\r\n]/gu, " ").slice(0, 120); }
 function canonicalTitle(value: string): string | undefined {
   const normalized = value.normalize("NFKC").replace(/\s+/gu, " ").trim();
