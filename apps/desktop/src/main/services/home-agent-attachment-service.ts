@@ -26,6 +26,7 @@ import {
   type AgentTurnTextPreservationRequest,
   type AgentTurnTextPreservationResult
 } from "./capture-service";
+import type { IngressSnapshotDescriptor } from "./ingress-snapshot-service";
 import { sourcePageIdForSourceId } from "./source-page-service";
 
 export const HOME_AGENT_ATTACHMENT_POLICY = Object.freeze({
@@ -43,6 +44,11 @@ interface HomeAgentAttachmentCapturePort {
     request: AgentTurnTextPreservationRequest,
     binding: AgentTurnTextPreservationBinding
   ): AgentTurnTextPreservationResult;
+}
+
+interface HomeAgentAcceptedFileIngressPort {
+  freeze(filePath: string, binding: AgentTurnFilePreservationBinding): Promise<IngressSnapshotDescriptor>;
+  discard(descriptor: IngressSnapshotDescriptor): void;
 }
 
 interface PreparedFileInput {
@@ -109,13 +115,15 @@ interface PreserveHomeAgentAttachmentsRequest {
 
 export class HomeAgentAttachmentService {
   readonly #capture: HomeAgentAttachmentCapturePort;
+  readonly #fileIngress: HomeAgentAcceptedFileIngressPort | undefined;
   readonly #inFlight = new Map<string, {
     readonly attachmentSetHash: string;
     readonly result: Promise<PreservedHomeAgentAttachments>;
   }>();
 
-  constructor(capture: HomeAgentAttachmentCapturePort) {
+  constructor(capture: HomeAgentAttachmentCapturePort, fileIngress?: HomeAgentAcceptedFileIngressPort) {
     this.#capture = capture;
+    this.#fileIngress = fileIngress;
   }
 
   async prepare(
@@ -257,6 +265,19 @@ export class HomeAgentAttachmentService {
   async #preserve(request: PreserveHomeAgentAttachmentsRequest): Promise<PreservedHomeAgentAttachments> {
     const sourceIds: string[] = [];
     const captureReferences: Array<PreservedHomeAgentAttachments["captureReferences"][number]> = [];
+    const frozen = new Map<number, IngressSnapshotDescriptor>();
+    if (this.#fileIngress) {
+      try {
+        for (const [acceptedIndex, entry] of request.prepared.entries.entries()) {
+          if (entry.kind !== "file") continue;
+          const binding = createFilePreservationBinding(request, acceptedIndex, entry);
+          frozen.set(acceptedIndex, await this.#fileIngress.freeze(entry.filePath, binding));
+        }
+      } catch {
+        this.#discardFrozen(frozen.values());
+        return failedPreservation(request, [], [], [], []);
+      }
+    }
     for (const [acceptedIndex, entry] of request.prepared.entries.entries()) {
       const sourceId = acceptedIndex === 0
         ? request.firstSourceId
@@ -280,6 +301,7 @@ export class HomeAgentAttachmentService {
           captureReferences.push({ sourceId, captureId: preserved.captureId, displayName: entry.displayName, sourceKind: "text" });
           continue;
         } catch {
+          this.#discardFrozen(frozen.values());
           return {
             status: "failed",
             attachmentSetHash: request.prepared.attachmentSetHash,
@@ -297,15 +319,9 @@ export class HomeAgentAttachmentService {
           inputKind: request.turn.inputKind === "file_drop" ? "file_drop" : "file_picker",
           userIntent: "unknown",
           locale: request.turn.locale
-        }, {
-          jobId: request.jobId,
-          sourceId,
-          inputChecksum: entry.inputChecksum,
-          ordinal: acceptedIndex,
-          snapshotOrdinal: entry.ordinal,
-          attachmentSetHash: request.prepared.attachmentSetHash
-        });
+        }, createFilePreservationBinding(request, acceptedIndex, entry));
       } catch {
+        this.#discardFrozen(frozen.values());
         const rejection = { displayName: entry.displayName, reason: "copy_failed" as const };
         return {
           status: "failed",
@@ -324,6 +340,7 @@ export class HomeAgentAttachmentService {
         preserved.sourceIds.length !== 1 ||
         preserved.sourceIds[0] !== sourceId
       ) {
+        this.#discardFrozen(frozen.values());
         const rejection = {
           displayName: entry.displayName,
           reason: preserved.rejectedFiles[0]?.reason ?? "copy_failed"
@@ -339,6 +356,7 @@ export class HomeAgentAttachmentService {
             : {})
         };
       }
+      frozen.delete(acceptedIndex);
       sourceIds.push(sourceId);
       const sourceKind = supportedFileSourceKind(entry.filePath)!;
       captureReferences.push({
@@ -360,6 +378,51 @@ export class HomeAgentAttachmentService {
       ...(request.prepared.usesStagedItems ? { rejectedItems: [] } : {})
     };
   }
+
+  #discardFrozen(descriptors: Iterable<IngressSnapshotDescriptor>): void {
+    if (!this.#fileIngress) return;
+    for (const descriptor of descriptors) {
+      try {
+        this.#fileIngress.discard(descriptor);
+      } catch {
+        // Restart recovery or bounded orphan reaping owns any snapshot whose exact cleanup cannot complete now.
+      }
+    }
+  }
+}
+
+function createFilePreservationBinding(
+  request: PreserveHomeAgentAttachmentsRequest,
+  acceptedIndex: number,
+  entry: PreparedFileInput
+): AgentTurnFilePreservationBinding {
+  return {
+    jobId: request.jobId,
+    sourceId: acceptedIndex === 0
+      ? request.firstSourceId
+      : createAttachmentSourceId(request.jobId, acceptedIndex),
+    inputChecksum: entry.inputChecksum,
+    ordinal: acceptedIndex,
+    snapshotOrdinal: entry.ordinal,
+    attachmentSetHash: request.prepared.attachmentSetHash
+  };
+}
+
+function failedPreservation(
+  request: PreserveHomeAgentAttachmentsRequest,
+  sourceIds: readonly string[],
+  captureReferences: PreservedHomeAgentAttachments["captureReferences"],
+  rejectedFiles: readonly CaptureFileRejection[],
+  rejectedItems: PreparedHomeAgentAttachments["rejectedItems"]
+): PreservedHomeAgentAttachments {
+  return {
+    status: "failed",
+    attachmentSetHash: request.prepared.attachmentSetHash,
+    sourceIds,
+    captureReferences,
+    rejectedFiles,
+    ...(request.prepared.usesStagedItems ? { rejectedItems } : {})
+  };
 }
 
 export function createAttachmentSetToolSession(

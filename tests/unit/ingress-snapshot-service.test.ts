@@ -183,6 +183,47 @@ describe("IngressSnapshotService", () => {
     expect(second.descriptorDigest).toMatch(/^sha256:/u);
   });
 
+  it("reaps only interrupted private staging after restart and retains the user-owned source", async () => {
+    const fixture = makeFixture("restart-owned source");
+    const privateRoot = path.join(fixture.vaultPath, ".pige", "private", "ingress-snapshots");
+    const interrupted = path.join(
+      privateRoot,
+      `snap_${"a".repeat(40)}.staging-00000000-0000-4000-8000-000000000001`
+    );
+    fs.mkdirSync(interrupted, { recursive: true });
+    fs.writeFileSync(path.join(interrupted, "snapshot.txt"), "unpublished partial bytes", "utf8");
+    const service = new IngressSnapshotService();
+
+    expect(await service.reap(fixture.vaultPath, () => {
+      throw new Error("Interrupted staging is not a published descriptor candidate.");
+    })).toEqual({ scanned: 1, released: 1, retained: 0 });
+    expect(fs.existsSync(interrupted)).toBe(false);
+    expect(fs.readFileSync(fixture.sourcePath, "utf8")).toBe("restart-owned source");
+  });
+
+  it("lists only verified immutable descriptors for one exact parent Job", async () => {
+    const fixture = makeFixture("first parent source");
+    const secondSource = path.join(fixture.root, "second.txt");
+    fs.writeFileSync(secondSource, "second parent source", "utf8");
+    const second = createInput(
+      fixture.vaultPath,
+      secondSource,
+      "second parent source",
+      2,
+      "src_20260727_snapshot0002"
+    );
+    const service = new IngressSnapshotService();
+    await service.createOrAdopt(second);
+    await service.createOrAdopt(fixture.input);
+
+    expect(await service.listForParent(fixture.vaultPath, fixture.input.parentJobId))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceId: fixture.input.sourceId, ordinal: fixture.input.ordinal }),
+        expect.objectContaining({ sourceId: second.sourceId, ordinal: second.ordinal })
+      ]));
+    expect(await service.listForParent(fixture.vaultPath, "job_20260727_other0001")).toEqual([]);
+  });
+
   it("discards only the exact unpublished descriptor and its integrity-matching managed copy", async () => {
     const fixture = makeFixture("unpublished managed bytes");
     const managedRoot = path.join(fixture.root, "managed");

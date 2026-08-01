@@ -383,7 +383,7 @@ describe("Agent-turn source preservation", () => {
     lease.release();
   });
 
-  it("rejects retry adoption after the exact local file identity is replaced without duplicating durable state", async () => {
+  it("adopts the immutable snapshot on retry without rereading a replaced original path", async () => {
     const { vaultPath, vault } = makeVault();
     const sourcePath = path.join(path.dirname(vaultPath), "identity-bound.md");
     const displacedPath = path.join(path.dirname(vaultPath), "identity-bound-original.md");
@@ -405,10 +405,55 @@ describe("Agent-turn source preservation", () => {
     const retry = await service.preserveFilesForAgentTurn(request, binding);
 
     expect(first.sourceIds).toEqual([binding.sourceId]);
-    expect(retry).toMatchObject({ status: "rejected", sourceIds: [], rejectedFiles: [{ reason: "copy_failed" }] });
+    expect(retry).toMatchObject({ status: "queued", sourceIds: [binding.sourceId], rejectedFiles: [] });
     expect(findFiles(path.join(vaultPath, ".pige/private/ingress-snapshots"), "descriptor.json")).toHaveLength(1);
     expect(findFiles(path.join(vaultPath, ".pige/source-records"), `${binding.sourceId}.json`)).toHaveLength(1);
     expect(findFiles(path.join(vaultPath, "raw/files"), `${binding.sourceId}.md`)).toHaveLength(1);
+  });
+
+  it("publishes a restart-retained snapshot after the original path disappears", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourcePath = path.join(path.dirname(vaultPath), "restart-retained.md");
+    const body = "immutable restart bytes";
+    fs.writeFileSync(sourcePath, body, "utf8");
+    const stat = fs.lstatSync(sourcePath);
+    const binding = {
+      jobId: "job_20260727_restart01",
+      sourceId: "src_20260727_restart01",
+      inputChecksum: digest(body),
+      ordinal: 0,
+      attachmentSetHash: `sha256:${"d".repeat(64)}`
+    };
+    await ingressSnapshotService.createOrAdopt({
+      vaultPath,
+      vaultId: vault.vaultId,
+      parentJobId: binding.jobId,
+      sourceId: binding.sourceId,
+      ordinal: binding.ordinal,
+      sourcePath,
+      checksum: digest(body),
+      size: stat.size,
+      noFollowIdentity: {
+        device: stat.dev,
+        inode: stat.ino,
+        size: stat.size,
+        modifiedAtMs: stat.mtimeMs,
+        changedAtMs: stat.ctimeMs
+      }
+    });
+    fs.rmSync(sourcePath);
+
+    const result = await makeService(vaultPath, vault).preserveFilesForAgentTurn({
+      filePaths: [sourcePath],
+      inputKind: "file_picker",
+      userIntent: "unknown",
+      locale: "en"
+    }, binding);
+    const record = readSourceRecord(vaultPath, binding.sourceId);
+
+    expect(result).toMatchObject({ status: "queued", sourceIds: [binding.sourceId], rejectedFiles: [] });
+    expect(fs.readFileSync(path.join(vaultPath, record.managedCopy!.path), "utf8")).toBe(body);
+    expect(record.original).toMatchObject({ path: sourcePath, checksum: digest(body) });
   });
 
   it.each([
