@@ -114,14 +114,15 @@ export function isSupportedExternalWebRuntime(manifest: SkillManifest): manifest
 
 export function readSkillEnableEligibility(
   record: SkillRegistryRecord,
-  readManifest: (skillId: string) => { readonly manifest: SkillManifest; readonly sha256: string }
+  readManifest: (skillId: string) => { readonly manifest: SkillManifest; readonly sha256: string },
+  scope: "machine_local" | "vault" = "machine_local"
 ): boolean {
   try {
     const loaded = readManifest(record.id);
     return record.trust === "user_confirmed" && loaded.sha256 === record.manifestSha256 &&
       loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
-      loaded.manifest.scope === "machine_local" &&
-      (loaded.manifest.kind === "pure" || isSupportedExternalWebRuntime(loaded.manifest));
+      loaded.manifest.scope === scope &&
+      (loaded.manifest.kind === "pure" || (scope === "machine_local" && isSupportedExternalWebRuntime(loaded.manifest)));
   } catch { return false; }
 }
 

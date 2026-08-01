@@ -33,19 +33,22 @@ const MAX_RECEIPT_BYTES = 16 * 1024;
 export interface RestoreSkillRequestBinding {
   readonly requestId: string;
   readonly activeVaultId: string;
+  readonly scope: "machine_local" | "vault";
   readonly restoreContextId: string;
   readonly skillId: string;
   readonly expectedRegistryRevision: number;
 }
 
 export function lifecycleRequestIdentity(request: {
-  readonly requestId: string; readonly activeVaultId: string; readonly skillId: string;
+  readonly requestId: string; readonly activeVaultId: string; readonly scope: "machine_local" | "vault"; readonly skillId: string;
 }) {
-  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId, skillId: request.skillId };
+  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    scope: request.scope, skillId: request.skillId };
 }
 
 export function matchesUninstallRequest(receipt: SkillUninstallReceipt, request: {
   readonly requestId: string; readonly activeVaultId: string; readonly skillId: string;
+  readonly scope: "machine_local" | "vault";
   readonly expectedRegistryRevision: number;
 }): boolean {
   return receipt.requestId === request.requestId && receipt.activeVaultId === request.activeVaultId &&
@@ -58,6 +61,7 @@ export type RestoreSkillOutcome =
 
 interface RegistryPorts {
   readonly appDataRoot: string;
+  readonly scope: "machine_local" | "vault";
   readonly readRegistry: () => SkillRegistryFile;
   readonly parseManifest: (source: string) => SkillManifest;
   readonly project: (registry: SkillRegistryFile) => SkillRegistrySummary;
@@ -193,7 +197,7 @@ export class SkillRegistryRestoreService {
         if (source.includes("\uFFFD")) continue;
         const manifest = this.#ports.parseManifest(source);
         if (manifest.id !== receipt.skillId || manifest.version !== receipt.record.version ||
-          manifest.kind !== "pure" || manifest.scope !== "machine_local") continue;
+          manifest.kind !== "pure" || manifest.scope !== this.#ports.scope) continue;
         candidates.push({
           candidate,
           projection: {

@@ -12,6 +12,7 @@ import {
   SkillPendingStagedReviewsRequestSchema,
   SkillPendingStagedReviewsResultSchema,
   SkillRegistryMutationResultSchema,
+  SkillRegistryQueryRequestSchema,
   SkillRegistryQueryResultSchema,
   SkillRestoreRequestSchema,
   SkillRestoreResultSchema,
@@ -36,6 +37,7 @@ import {
   type SkillPendingStagedReviewsRequest,
   type SkillPendingStagedReviewsResult,
   type SkillRegistryMutationResult,
+  type SkillRegistryQueryRequest,
   type SkillRegistryQueryResult,
   type SkillRestoreRequest,
   type SkillRestoreResult,
@@ -62,7 +64,7 @@ interface RegisterSkillsIpcOptions {
     readonly canceled: boolean;
     readonly filePaths: string[];
   }>;
-  readonly summary: () => SkillRegistryQueryResult | Promise<SkillRegistryQueryResult>;
+  readonly summary: (request: SkillRegistryQueryRequest) => SkillRegistryQueryResult | Promise<SkillRegistryQueryResult>;
   readonly pendingStagedReviews: (
     request: SkillPendingStagedReviewsRequest
   ) => SkillPendingStagedReviewsResult | Promise<SkillPendingStagedReviewsResult>;
@@ -118,9 +120,14 @@ function assertRequestIdentity<T extends { readonly requestId: string }>(
 }
 
 export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
-  options.ipcMain.handle("skills.summary", async () =>
-    SkillRegistryQueryResultSchema.parse(await options.summary())
-  );
+  options.ipcMain.handle("skills.summary", async (_event, request: unknown) => {
+    const parsed = SkillRegistryQueryRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return summaryFailed(parsed);
+    const result = SkillRegistryQueryResultSchema.parse(await options.summary(parsed));
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+      !hasActiveVault(options, parsed.activeVaultId)) return summaryFailed(parsed);
+    return result;
+  });
   options.ipcMain.handle("skills.pendingStagedReviews", async (_event, request: unknown) => {
     const parsed = SkillPendingStagedReviewsRequestSchema.parse(request);
     if (!hasActiveVault(options, parsed.activeVaultId)) return pendingReviewsFailed(parsed);
@@ -133,8 +140,10 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
   });
   options.ipcMain.handle("skills.stageFromUrl", async (_event, request: unknown) => {
     const parsed = SkillStageFromUrlRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return urlStageFailed(parsed);
     const result = SkillStageFromUrlResultSchema.parse(await options.stageFromUrl(parsed));
     assertRequestIdentity(parsed, result);
+    if (result.activeVaultId !== parsed.activeVaultId || !hasActiveVault(options, parsed.activeVaultId)) return urlStageFailed(parsed);
     return result;
   });
   options.ipcMain.handle("skills.stageFromMarkdown", async (event, request: unknown) => {
@@ -223,20 +232,30 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
   });
   options.ipcMain.handle("skills.installStaged", async (_event, request: unknown) => {
     const parsed = SkillInstallStagedRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return installFailed(parsed);
     const result = SkillInstallStagedResultSchema.parse(await options.installStaged(parsed));
     assertRequestIdentity(parsed, result);
+    if (result.activeVaultId !== parsed.activeVaultId || !hasActiveVault(options, parsed.activeVaultId)) return installFailed(parsed);
     if (result.status === "committed") options.publishRegistryChanged(result);
     return result;
   });
   options.ipcMain.handle("skills.discardStaged", async (_event, request: unknown) => {
     const parsed = SkillDiscardStagedRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return discardFailed(parsed);
     const result = SkillDiscardStagedResultSchema.parse(await options.discardStaged(parsed));
     assertRequestIdentity(parsed, result);
+    if (result.activeVaultId !== parsed.activeVaultId || !hasActiveVault(options, parsed.activeVaultId)) return discardFailed(parsed);
     return result;
   });
   options.ipcMain.handle("skills.disable", async (_event, request: unknown) => {
     const parsed = SkillDisableRequestSchema.parse(request);
+    if (!hasActiveVault(options, parsed.activeVaultId)) return SkillRegistryMutationResultSchema.parse({
+      status: "failed", error: unavailableError()
+    });
     const result = SkillRegistryMutationResultSchema.parse(await options.disable(parsed));
+    if (!hasActiveVault(options, parsed.activeVaultId)) return SkillRegistryMutationResultSchema.parse({
+      status: "failed", error: unavailableError()
+    });
     if (result.status === "committed") options.publishRegistryChanged(result);
     return result;
   });
@@ -247,7 +266,7 @@ export function registerSkillsIpc(options: RegisterSkillsIpcOptions): void {
     if (!hasActiveVault(options, parsed.activeVaultId)) return restoreFailed(parsed);
     const result = SkillRestoreResultSchema.parse(await options.restore(parsed));
     if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
-      result.restoreContextId !== parsed.restoreContextId || result.skillId !== parsed.skillId ||
+      result.scope !== parsed.scope || result.restoreContextId !== parsed.restoreContextId || result.skillId !== parsed.skillId ||
       !hasActiveVault(options, parsed.activeVaultId)) return restoreFailed(parsed);
     if (result.status === "committed") options.publishRegistryChanged(result);
     return result;
@@ -284,6 +303,7 @@ function restoreFailed(request: SkillRestoreRequest): SkillRestoreResult {
     apiVersion: 1,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
+    scope: request.scope,
     restoreContextId: request.restoreContextId,
     skillId: request.skillId,
     status: "failed"
@@ -315,6 +335,7 @@ function registerInstalledMutation<TRequest extends InstalledRequest>(
         apiVersion: parsed.apiVersion,
         requestId: parsed.requestId,
         activeVaultId: parsed.activeVaultId,
+        scope: parsed.scope,
         skillId: parsed.skillId,
         status: "failed"
       });
@@ -335,7 +356,7 @@ function assertInstalledIdentity(
   result: SkillLifecycleMutationResult | SkillExportResult | SkillStageUpdateResult
 ): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
-    result.activeVaultId !== request.activeVaultId || result.skillId !== request.skillId) {
+    result.activeVaultId !== request.activeVaultId || result.scope !== request.scope || result.skillId !== request.skillId) {
     throw new Error("Skill lifecycle response identity did not match the request.");
   }
 }
@@ -349,6 +370,7 @@ function stageUpdateStatus(request: SkillStageUpdateRequest, status: "cancelled"
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
+    scope: request.scope,
     skillId: request.skillId,
     status
   });
@@ -359,6 +381,7 @@ function exportStatus(request: SkillExportRequest, status: "cancelled" | "failed
     apiVersion: request.apiVersion,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
+    scope: request.scope,
     skillId: request.skillId,
     registryRevision: request.expectedRegistryRevision,
     status
@@ -393,4 +416,28 @@ function zipStatus(request: SkillStageFromZipRequest, status: "cancelled" | "fai
     activeVaultId: request.activeVaultId,
     status
   });
+}
+
+function summaryFailed(request: SkillRegistryQueryRequest): SkillRegistryQueryResult {
+  return SkillRegistryQueryResultSchema.parse({ ...request, status: "failed", error: unavailableError() });
+}
+
+function urlStageFailed(request: SkillStageFromUrlRequest): SkillStageFromUrlResult {
+  return SkillStageFromUrlResultSchema.parse({ requestId: request.requestId, activeVaultId: request.activeVaultId,
+    status: "failed", error: unavailableError() });
+}
+
+function installFailed(request: SkillInstallStagedRequest): SkillInstallStagedResult {
+  return SkillInstallStagedResultSchema.parse({ requestId: request.requestId, activeVaultId: request.activeVaultId,
+    status: "failed", error: unavailableError() });
+}
+
+function discardFailed(request: SkillDiscardStagedRequest): SkillDiscardStagedResult {
+  return SkillDiscardStagedResultSchema.parse({ requestId: request.requestId, activeVaultId: request.activeVaultId,
+    status: "failed", error: unavailableError() });
+}
+
+function unavailableError() {
+  return { code: "skill.registry_unavailable", domain: "skill", messageKey: "error.generic",
+    retryable: true, severity: "error", userAction: "retry" } as const;
 }

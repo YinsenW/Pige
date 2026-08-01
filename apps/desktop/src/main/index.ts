@@ -372,6 +372,7 @@ import {
 } from "./services/task-execution-recipe-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
+import { ScopedSkillRegistryService } from "./services/scoped-skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
 import { ExternalWebSkillRuntimeService } from "./services/external-web-skill-runtime-service";
@@ -472,6 +473,7 @@ let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
+let scopedSkillRegistryService: ScopedSkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
 let externalWebSkillRuntimeService: ExternalWebSkillRuntimeService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
@@ -772,10 +774,19 @@ const getSkillRegistryService = (): SkillRegistryService => {
   return skillRegistryService;
 };
 
+const getScopedSkillRegistryService = (): ScopedSkillRegistryService => {
+  scopedSkillRegistryService ??= new ScopedSkillRegistryService(getSkillRegistryService(), () => {
+    const vault = getVaultService().current();
+    const vaultPath = getVaultService().activeVaultPath();
+    return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
+  });
+  return scopedSkillRegistryService;
+};
+
 const getSkillUrlInstallService = (): SkillUrlInstallService => {
   skillUrlInstallService ??= new SkillUrlInstallService({
     appDataRoot: app.getPath("userData"),
-    registry: getSkillRegistryService()
+    registry: getScopedSkillRegistryService()
   });
   return skillUrlInstallService;
 };
@@ -2932,20 +2943,20 @@ registerSkillsIpc({
   getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
   showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
-  summary: () => getSkillRegistryService().summary(),
+  summary: (request) => getScopedSkillRegistryService().summary(request),
   pendingStagedReviews: (request) => getSkillUrlInstallService().pendingStagedReviews(request),
   stageFromUrl: (request) => getSkillUrlInstallService().stageFromUrl(request),
   stageFromMarkdown: (request, sourcePath) => getSkillUrlInstallService().stageFromMarkdown(request, sourcePath),
   stageFromZip: (request, sourcePath) => getSkillUrlInstallService().stageFromZip(request, sourcePath),
-  resolveUpdateSource: (request) => getSkillUrlInstallService().resolveUpdateSource(request),
-  stageUpdate: (request, sourcePath) => getSkillUrlInstallService().stageUpdate(request, sourcePath),
-  installStaged: (request) => getSkillUrlInstallService().installStaged(request),
-  discardStaged: (request) => getSkillUrlInstallService().discardStaged(request),
-  disable: (request) => getSkillRegistryService().disable(request),
-  enable: (request) => getSkillRegistryService().enable(request),
-  uninstall: (request) => getSkillRegistryService().uninstall(request),
-  restore: (request) => getSkillRegistryService().restore(request),
-  exportSkill: (request, destinationPath) => getSkillRegistryService().export(request, destinationPath),
+  resolveUpdateSource: (request) => getScopedSkillRegistryService().resolveUpdateSource(request, getSkillUrlInstallService()),
+  stageUpdate: (request, sourcePath) => getScopedSkillRegistryService().stageUpdate(request, getSkillUrlInstallService(), sourcePath),
+  installStaged: (request) => getScopedSkillRegistryService().installStaged(request, getSkillUrlInstallService()),
+  discardStaged: (request) => getScopedSkillRegistryService().discardStaged(request, getSkillUrlInstallService()),
+  disable: (request) => getScopedSkillRegistryService().disable(request),
+  enable: (request) => getScopedSkillRegistryService().enable(request),
+  uninstall: (request) => getScopedSkillRegistryService().uninstall(request),
+  restore: (request) => getScopedSkillRegistryService().restore(request),
+  exportSkill: (request, destinationPath) => getScopedSkillRegistryService().export(request, destinationPath),
   publishRegistryChanged: (result) => {
     if (!("registry" in result)) return;
     for (const window of mainWindows) {

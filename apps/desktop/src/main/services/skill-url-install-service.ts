@@ -69,6 +69,9 @@ import {
   type SkillBundleFile,
   type SkillZipBundle
 } from "./skill-zip-stage-service";
+import {
+  isAllowedStagedManifest, type SkillRegistryRoutingPort, withLegacyActiveVault, withLegacySkillScope
+} from "./skill-scope-policy";
 
 const STAGE_SCHEMA_VERSION = 1;
 const STAGE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -81,6 +84,7 @@ interface SkillStageRecordBase {
   readonly schemaVersion: 1;
   readonly requestId: string;
   readonly stagingId: string;
+  readonly activeVaultId: string;
   readonly manifestSha256: `sha256:${string}`;
   readonly bundleSha256: `sha256:${string}`;
   readonly files: readonly { readonly relativePath: string; readonly utf8ByteSize: number; readonly sha256: `sha256:${string}` }[];
@@ -116,7 +120,7 @@ export interface SkillUrlFetchPort {
 
 export interface SkillUrlInstallServiceOptions {
   readonly appDataRoot: string;
-  readonly registry: SkillRegistryService;
+  readonly registry: SkillRegistryRoutingPort;
   readonly fetcher?: SkillUrlFetchPort;
   readonly now?: () => Date;
   readonly zipStage?: SkillZipStageService;
@@ -125,7 +129,7 @@ export interface SkillUrlInstallServiceOptions {
 export class SkillUrlInstallService implements SkillStagingStorePort {
   readonly #rootPath: string;
   readonly #stagingRoot: string;
-  readonly #registry: SkillRegistryService;
+  readonly #registry: SkillRegistryRoutingPort;
   readonly #fetcher: SkillUrlFetchPort;
   readonly #now: () => Date;
   readonly #zipStage: SkillZipStageService;
@@ -141,26 +145,24 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     this.#prepare();
     this.#reapExpiredStages();
   }
-
   async stageFromUrl(
     requestInput: SkillStageFromUrlRequest,
     signal: AbortSignal = new AbortController().signal
   ): Promise<SkillStageFromUrlResult> {
-    const request = SkillStageFromUrlRequestSchema.parse(requestInput);
+    const request = SkillStageFromUrlRequestSchema.parse(withLegacyActiveVault(requestInput));
     return await this.#stageUrl(request, undefined, signal, () => undefined);
   }
-
   async stageFromChatUrl(
     requestInput: SkillStageFromUrlRequest,
     bindingInput: SkillChatStageBinding,
     signal: AbortSignal,
     assertCurrent: () => void
   ): Promise<SkillStageFromUrlResult> {
-    const request = SkillStageFromUrlRequestSchema.parse(requestInput);
     const binding = parseChatBinding(bindingInput);
+    const request = SkillStageFromUrlRequestSchema.parse(withLegacyActiveVault(requestInput, binding.activeVaultId));
+    if (binding.activeVaultId !== request.activeVaultId) return stageFailed(request);
     return await this.#stageUrl(request, binding, signal, assertCurrent);
   }
-
   pendingStagedReviews(requestInput: SkillPendingStagedReviewsRequest): SkillPendingStagedReviewsResult {
     const request = SkillPendingStagedReviewsRequestSchema.parse(requestInput);
     try {
@@ -182,7 +184,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       return SkillPendingStagedReviewsResultSchema.parse({ ...request, status: "failed" });
     }
   }
-
   async #stageUrl(
     request: SkillStageFromUrlRequest,
     chat: SkillChatStageBinding | undefined,
@@ -196,61 +197,61 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const existing = this.#readCandidate(stagingId);
       if (existing) {
         if (existing.record.requestId !== request.requestId || isLocalMarkdownRecord(existing.record) ||
+          existing.record.activeVaultId !== request.activeVaultId ||
           existing.record.requestSourceUrl !== request.sourceUrl ||
           !sameOptionalChatBinding(existing.record.chat, chat)) {
-          return stageFailed(request.requestId);
+          return stageFailed(request);
         }
         assertCurrent();
         if (!isExpired(existing.record.expiresAt, this.#now())) {
           return SkillStageFromUrlResultSchema.parse({
             status: "ready",
             requestId: request.requestId,
+            activeVaultId: request.activeVaultId,
             staged: this.#project(existing)
           });
         }
         this.#removeStage(stagingId, existing.record.manifestSha256, existing.record.bundleSha256);
       }
-
       const snapshot = await this.#fetcher.fetchSnapshot(request.sourceUrl, signal);
       signal.throwIfAborted();
       assertCurrent();
       const finalSourceUrl = SkillInstallUrlSchema.safeParse(snapshot.finalUrl);
-      if (!finalSourceUrl.success) return stageFailed(request.requestId);
+      if (!finalSourceUrl.success) return stageFailed(request);
       if (!isMarkdownContentType(snapshot.contentType)) {
-        return invalidStageResult(request.requestId, "unsafe_content");
+        return invalidStageResult(request, "unsafe_content");
       }
       const source = snapshot.rawContent;
       const bytes = Buffer.from(source, "utf8");
       if (bytes.length === 0 || bytes.length > SKILL_URL_STAGE_MAX_UTF8_BYTES) {
-        return invalidStageResult(request.requestId, "source_too_large");
+        return invalidStageResult(request, "source_too_large");
       }
       if (source.includes("\uFFFD") || containsRestrictedModelContent(source)) {
-        return invalidStageResult(request.requestId, "unsafe_content");
+        return invalidStageResult(request, "unsafe_content");
       }
-
       let manifest: SkillManifest;
       try {
         manifest = parseSkillManifest(source);
       } catch {
-        return invalidStageResult(request.requestId, "manifest_invalid");
+        return invalidStageResult(request, "manifest_invalid");
       }
-      if (manifest.scope !== "machine_local") return invalidStageResult(request.requestId, "unsupported_scope");
-      if (!isStagedSkillKind(manifest.kind)) return invalidStageResult(request.requestId, "unsupported_kind");
+      if (!isAllowedStagedManifest(manifest)) return invalidStageResult(request, "unsupported_scope");
+      if (!isStagedSkillKind(manifest.kind)) return invalidStageResult(request, "unsupported_kind");
       if (manifest.kind === "external_web" && manifest.sourceUrl !== undefined && manifest.sourceUrl !== finalSourceUrl.data) {
-        return invalidStageResult(request.requestId, "manifest_invalid");
+        return invalidStageResult(request, "manifest_invalid");
       }
       try {
         assertSkillManifestRendererSafe(manifest);
       } catch {
-        return invalidStageResult(request.requestId, "unsafe_content");
+        return invalidStageResult(request, "unsafe_content");
       }
-
       const bundle = singleManifestBundle(bytes);
       const now = this.#now();
       const record: SkillStageRecord = {
         schemaVersion: STAGE_SCHEMA_VERSION,
         requestId: request.requestId,
         stagingId,
+        activeVaultId: request.activeVaultId,
         requestSourceUrl: request.sourceUrl,
         finalSourceUrl: finalSourceUrl.data,
         ...(chat ? { chat } : {}),
@@ -262,17 +263,17 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       };
       this.#publishStage(record, bundle.files, assertCurrent);
       const staged = this.#readCandidate(stagingId);
-      if (!staged || staged.record.manifestSha256 !== record.manifestSha256) return stageFailed(request.requestId);
+      if (!staged || staged.record.manifestSha256 !== record.manifestSha256) return stageFailed(request);
       return SkillStageFromUrlResultSchema.parse({
         status: "ready",
         requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
         staged: this.#project(staged)
       });
     } catch {
-      return stageFailed(request.requestId);
+      return stageFailed(request);
     }
   }
-
   async stageFromMarkdown(
     requestInput: SkillStageFromMarkdownRequest,
     sourcePath: string
@@ -284,7 +285,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const existing = this.#readCandidate(stagingId);
       if (existing) {
         if (existing.record.requestId !== request.requestId || !isLocalMarkdownRecord(existing.record) ||
-          existing.record.sourceKind !== "local_markdown") {
+          existing.record.activeVaultId !== request.activeVaultId || existing.record.sourceKind !== "local_markdown") {
           return markdownFailed(identity);
         }
         if (!isExpired(existing.record.expiresAt, this.#now())) {
@@ -292,12 +293,11 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         }
         this.#removeStage(stagingId, existing.record.manifestSha256, existing.record.bundleSha256);
       }
-
       const bytes = readSelectedMarkdown(sourcePath);
       const source = decodeUtf8(bytes);
       if (containsRestrictedModelContent(source)) return markdownFailed(identity);
       const manifest = parseSkillManifest(source);
-      if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind) || manifest.sourceUrl !== undefined) {
+      if (!isAllowedStagedManifest(manifest) || manifest.sourceUrl !== undefined) {
         return markdownFailed(identity);
       }
       assertSkillManifestRendererSafe(manifest);
@@ -307,6 +307,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         schemaVersion: STAGE_SCHEMA_VERSION,
         requestId: request.requestId,
         stagingId,
+        activeVaultId: request.activeVaultId,
         sourceKind: "local_markdown",
         manifestSha256: digest(bytes),
         bundleSha256: bundle.bundleSha256,
@@ -325,7 +326,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       return markdownFailed(identity);
     }
   }
-
   async stageFromZip(requestInput: SkillStageFromZipRequest, sourcePath: string): Promise<SkillStageFromZipResult> {
     const request = SkillStageFromZipRequestSchema.parse(requestInput);
     const identity = markdownIdentity(request);
@@ -334,7 +334,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const existing = this.#readCandidate(stagingId);
       if (existing) {
         if (existing.record.requestId !== request.requestId || !isLocalMarkdownRecord(existing.record) ||
-          existing.record.sourceKind !== "local_zip") {
+          existing.record.activeVaultId !== request.activeVaultId || existing.record.sourceKind !== "local_zip") {
           return zipFailed(identity);
         }
         if (!isExpired(existing.record.expiresAt, this.#now())) {
@@ -345,7 +345,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const bundle = await this.#zipStage.readSelectedArchive(sourcePath);
       const source = decodeUtf8(bundle.manifestBytes);
       const manifest = parseSkillManifest(source);
-      if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind) || manifest.sourceUrl !== undefined) {
+      if (!isAllowedStagedManifest(manifest) || manifest.sourceUrl !== undefined) {
         return zipInvalid(identity, "manifest_invalid");
       }
       assertSkillManifestRendererSafe(manifest);
@@ -354,6 +354,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         schemaVersion: STAGE_SCHEMA_VERSION,
         requestId: request.requestId,
         stagingId,
+        activeVaultId: request.activeVaultId,
         sourceKind: "local_zip",
         manifestSha256: bundle.manifestSha256,
         bundleSha256: bundle.bundleSha256,
@@ -373,15 +374,16 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       return zipFailed(identity);
     }
   }
-
   async stageUpdate(
     requestInput: SkillStageUpdateRequest,
     selectedPath?: string,
-    signal: AbortSignal = new AbortController().signal
+    signal: AbortSignal = new AbortController().signal,
+    registryInput?: SkillRegistryService
   ): Promise<SkillStageUpdateResult> {
-    const request = SkillStageUpdateRequestSchema.parse(requestInput);
+    const request = SkillStageUpdateRequestSchema.parse(withLegacySkillScope(requestInput, "machine_local"));
+    const registry = registryInput ?? this.#registry.registryFor(request.scope, request.activeVaultId);
     const identity = updateIdentity(request);
-    const resolution = this.#registry.resolveUpdateTarget(request);
+    const resolution = registry.resolveUpdateTarget(request);
     if (resolution.status === "result") return resolution.result;
     const target = resolution.target;
     const stagingId = createStagingId(request.requestId);
@@ -396,7 +398,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
         }
         this.#removeStage(stagingId, existing.record.manifestSha256, existing.record.bundleSha256);
       }
-
       let bundle: SkillZipBundle;
       let sourceUrl: string | undefined;
       if (target.sourceKind) {
@@ -430,25 +431,26 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       const manifest = parseSkillManifest(source);
       assertSkillManifestRendererSafe(manifest);
       const expectedKind = target.kind === "external_web" ? "external_web" : "pure";
-      if (manifest.id !== target.skillId || manifest.scope !== "machine_local" || manifest.kind !== expectedKind ||
+      if (manifest.id !== target.skillId || manifest.scope !== target.scope || manifest.kind !== expectedKind ||
+        (manifest.scope === "vault" && manifest.kind !== "pure") ||
         manifest.sourceUrl !== sourceUrl || !manifest.updatedAt) return updateFailed(identity);
       const manifestSha256 = bundle.manifestSha256;
-      const refreshed = this.#registry.resolveUpdateTarget(request);
+      const refreshed = registry.resolveUpdateTarget(request);
       if (refreshed.status === "result") return refreshed.result;
       if (!sameUpdateTarget(refreshed.target, target)) return updateFailed(identity);
       if (target.sourceKind
         ? bundle.bundleSha256 === target.installedBundleSha256
         : manifestSha256 === target.installedManifestSha256) {
-        return this.#registry.stageUpdateResult(request, "current");
+        return registry.stageUpdateResult(request, "current");
       }
       if (manifest.version === target.installedVersion ||
         Date.parse(manifest.updatedAt) <= Date.parse(target.installedUpdatedAt)) return updateFailed(identity);
-
       const now = this.#now();
       const baseRecord: SkillStageRecordBase = {
         schemaVersion: STAGE_SCHEMA_VERSION,
         requestId: request.requestId,
         stagingId,
+        activeVaultId: request.activeVaultId,
         manifestSha256,
         bundleSha256: bundle.bundleSha256,
         files: projectFiles(bundle.files),
@@ -476,23 +478,28 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       return updateFailed(identity);
     }
   }
-
   resolveUpdateSource(requestInput: SkillStageUpdateRequest): "https" | "local_markdown" | "local_zip" | "local_file" | undefined {
-    const resolution = this.#registry.resolveUpdateTarget(SkillStageUpdateRequestSchema.parse(requestInput));
+    const request = SkillStageUpdateRequestSchema.parse(withLegacySkillScope(requestInput, "machine_local"));
+    const resolution = this.#registry.registryFor(request.scope, request.activeVaultId).resolveUpdateTarget(request);
     if (resolution.status !== "ready") return undefined;
     return resolution.target.sourceKind ?? "https";
   }
-
   installStaged(requestInput: SkillInstallStagedRequest): SkillInstallStagedResult {
-    const request = SkillInstallStagedRequestSchema.parse(requestInput);
-    return SkillInstallStagedResultSchema.parse(this.#registry.installStaged(request, this));
+    const candidate = this.readForInstall(requestInput.stagingId, requestInput.manifestSha256, requestInput.bundleSha256);
+    const request = SkillInstallStagedRequestSchema.parse(withLegacySkillScope(
+      requestInput, candidate && candidate !== "stale" && candidate.manifest.scope === "vault" ? "vault" : "machine_local",
+      candidate && candidate !== "stale" ? candidate.activeVaultId : undefined
+    ));
+    return SkillInstallStagedResultSchema.parse(this.#registry.registryFor(request.scope, request.activeVaultId).installStaged(request, this));
   }
-
   discardStaged(requestInput: SkillDiscardStagedRequest): SkillDiscardStagedResult {
-    const request = SkillDiscardStagedRequestSchema.parse(requestInput);
-    return SkillDiscardStagedResultSchema.parse(this.#registry.discardStaged(request, this));
+    const candidate = this.readForInstall(requestInput.stagingId, requestInput.manifestSha256, requestInput.bundleSha256);
+    const request = SkillDiscardStagedRequestSchema.parse(withLegacySkillScope(
+      requestInput, candidate && candidate !== "stale" && candidate.manifest.scope === "vault" ? "vault" : "machine_local",
+      candidate && candidate !== "stale" ? candidate.activeVaultId : undefined
+    ));
+    return SkillDiscardStagedResultSchema.parse(this.#registry.registryFor(request.scope, request.activeVaultId).discardStaged(request, this));
   }
-
   readForInstall(stagingId: string, manifestSha256: string, bundleSha256: string): SkillStagedInstallCandidate | "stale" | undefined {
     const parsedId = SkillStagingIdSchema.parse(stagingId);
     const current = this.#readCandidate(parsedId);
@@ -502,6 +509,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     return {
       stagingId: parsedId,
       requestId: current.record.requestId,
+      activeVaultId: current.record.activeVaultId,
       source: stageSource(current.record),
       ...(!isLocalMarkdownRecord(current.record) ? { sourceUrl: current.record.finalSourceUrl } : {}),
       manifestSha256: current.record.manifestSha256,
@@ -514,28 +522,26 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       ...(current.record.update ? { update: current.record.update } : {})
     };
   }
-
   discardExact(stagingId: string, manifestSha256: string, bundleSha256: string): "discarded" | "stale" | "not_found" {
     return this.#removeStage(SkillStagingIdSchema.parse(stagingId), manifestSha256, bundleSha256);
   }
-
   #project(candidate: ReadStageCandidate): SkillStagedSummary {
     const manifest = candidate.manifest;
-    if (!isStagedSkillKind(manifest.kind)) throw stageInvalid();
+    if (!isAllowedStagedManifest(manifest)) throw stageInvalid();
     const warnings = this.#warnings(candidate);
     return {
       stagingId: candidate.record.stagingId,
       manifestSha256: candidate.record.manifestSha256,
       bundleSha256: candidate.record.bundleSha256,
       registryRevision: candidate.record.update?.expectedRegistryRevision ??
-        this.#registry.currentRevision(),
+        this.#registry.revisionFor(manifest.scope, candidate.record.activeVaultId),
       expiresAt: candidate.record.expiresAt,
       ...(!isLocalMarkdownRecord(candidate.record) ? { sourceUrl: candidate.record.finalSourceUrl } : {}),
       id: manifest.id,
       name: manifest.name,
       version: manifest.version,
       description: manifest.description,
-      scope: "machine_local",
+      scope: manifest.scope as "machine_local" | "vault",
       kind: manifest.kind,
       capabilities: manifest.capabilities,
       dataBoundaries: manifest.kind === "pure" ? ["local"] : [...deriveSkillDataBoundaries(manifest.capabilities)],
@@ -553,14 +559,13 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       warnings
     };
   }
-
   #warnings(candidate: ReadStageCandidate): SkillStagedSummary["warnings"] {
     return [
       ...(!isLocalMarkdownRecord(candidate.record) ? ["untrusted_remote_source" as const] : []),
-      ...(this.#registry.hasTriggerOverlap(candidate.manifest) ? ["trigger_overlap" as const] : [])
+      ...(this.#registry.registryFor(candidate.manifest.scope as "machine_local" | "vault", candidate.record.activeVaultId)
+        .hasTriggerOverlap(candidate.manifest) ? ["trigger_overlap" as const] : [])
     ];
   }
-
   #publishStage(
     record: SkillStageRecord,
     files: readonly SkillBundleFile[],
@@ -590,7 +595,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       if (!published) fs.rmSync(temporaryPath, { recursive: true, force: true });
     }
   }
-
   #readCandidate(stagingId: string): ReadStageCandidate | undefined {
     const stagePath = this.#stagePath(stagingId);
     let stageStats: fs.Stats;
@@ -612,7 +616,7 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     if (bytes.length === 0 || digest(bytes) !== record.manifestSha256) throw stageInvalid();
     const source = decodeUtf8(bytes);
     const manifest = parseSkillManifest(source);
-    if (manifest.scope !== "machine_local" || !isStagedSkillKind(manifest.kind)) throw stageInvalid();
+    if (!isAllowedStagedManifest(manifest)) throw stageInvalid();
     const sourceKind = stageSource(record);
     if (manifest.kind === "external_web" &&
       ((!isLocalMarkdownRecord(record) && manifest.sourceUrl !== undefined && manifest.sourceUrl !== record.finalSourceUrl) ||
@@ -620,7 +624,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     assertSkillManifestRendererSafe(manifest);
     return { record, bytes, files, manifest };
   }
-
   #removeStage(stagingId: string, expectedManifestSha256: string, expectedBundleSha256: string): "discarded" | "stale" | "not_found" {
     const current = this.#readCandidate(stagingId);
     if (!current) return "not_found";
@@ -632,7 +635,6 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
     fs.rmSync(tombstone, { recursive: true, force: true });
     return "discarded";
   }
-
   #reapExpiredStages(): void {
     for (const entry of fs.readdirSync(this.#stagingRoot)) {
       if (!SkillStagingIdSchema.safeParse(entry).success) continue;
@@ -646,13 +648,11 @@ export class SkillUrlInstallService implements SkillStagingStorePort {
       }
     }
   }
-
   #stagePath(stagingId: string): string {
     const candidate = path.join(this.#stagingRoot, stagingId);
     if (path.dirname(candidate) !== this.#stagingRoot) throw stageInvalid();
     return candidate;
   }
-
   #prepare(): void {
     fs.mkdirSync(this.#stagingRoot, { recursive: true, mode: 0o700 });
     for (const directory of [this.#rootPath, this.#stagingRoot]) {
@@ -682,8 +682,8 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort().join(",");
   const isLocal = [
-    "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId",
-    "bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId,update"
+    "activeVaultId,bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId",
+    "activeVaultId,bundleSha256,createdAt,expiresAt,files,manifestSha256,requestId,schemaVersion,sourceKind,stagingId,update"
   ].includes(keys) &&
     (record.sourceKind === "local_markdown" || record.sourceKind === "local_zip") && typeof record.requestId === "string" &&
     (/^skillreq_[a-z0-9]{16,64}$/u.test(record.requestId) || isSkillUpdateStageRecord(record)) &&
@@ -699,17 +699,19 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
     }
   }
   const isUrl = [
-    "bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
-    "bundleSha256,chat,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
-    "bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
+    "activeVaultId,bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
+    "activeVaultId,bundleSha256,chat,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId",
+    "activeVaultId,bundleSha256,createdAt,expiresAt,files,finalSourceUrl,manifestSha256,requestId,requestSourceUrl,schemaVersion,stagingId,update"
   ].includes(keys) &&
-    (SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId, sourceUrl: record.requestSourceUrl }).success ||
+    (SkillStageFromUrlRequestSchema.safeParse({ apiVersion: 1, requestId: record.requestId,
+      activeVaultId: record.activeVaultId, sourceUrl: record.requestSourceUrl }).success ||
       isSkillUpdateStageRecord(record)) && SkillInstallUrlSchema.safeParse(record.finalSourceUrl).success &&
     chatBindingValid &&
     !(record.chat !== undefined && record.update !== undefined);
   if (
     (!isLocal && !isUrl) ||
     record.schemaVersion !== STAGE_SCHEMA_VERSION ||
+    !VaultIdSchema.safeParse(record.activeVaultId).success ||
     !SkillStagingIdSchema.safeParse(record.stagingId).success ||
     typeof record.manifestSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.manifestSha256) ||
     typeof record.bundleSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(record.bundleSha256) ||
@@ -721,19 +723,15 @@ function parseStageRecord(bytes: Buffer): SkillStageRecord {
   try { files = record.files.map((file) => SkillStagedFileSummarySchema.parse(file)); } catch { throw stageInvalid(); }
   return { ...record, files } as unknown as SkillStageRecord;
 }
-
 function isLocalMarkdownRecord(record: SkillStageRecord): record is SkillLocalMarkdownStageRecord {
   return "sourceKind" in record;
 }
-
 function isStagedSkillKind(kind: SkillManifest["kind"]): kind is "pure" | "external_web" {
   return kind === "pure" || kind === "external_web";
 }
-
 function stageSource(record: SkillStageRecord): SkillInstallSourceKind {
   return isLocalMarkdownRecord(record) ? record.sourceKind : "https";
 }
-
 function parseChatBinding(value: unknown): SkillChatStageBinding {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw stageInvalid();
   const record = value as Record<string, unknown>;
@@ -919,14 +917,16 @@ function fsyncDirectory(directoryPath: string): void {
   }
 }
 
-function invalidStageResult(requestId: string, reason: "source_too_large" | "manifest_invalid" | "unsupported_kind" | "unsupported_scope" | "unsafe_content"): SkillStageFromUrlResult {
-  return SkillStageFromUrlResultSchema.parse({ status: "invalid", requestId, reason });
+function invalidStageResult(request: SkillStageFromUrlRequest, reason: "source_too_large" | "manifest_invalid" | "unsupported_kind" | "unsupported_scope" | "unsafe_content"): SkillStageFromUrlResult {
+  return SkillStageFromUrlResultSchema.parse({ status: "invalid", requestId: request.requestId,
+    activeVaultId: request.activeVaultId, reason });
 }
 
-function stageFailed(requestId: string): SkillStageFromUrlResult {
+function stageFailed(request: SkillStageFromUrlRequest): SkillStageFromUrlResult {
   return SkillStageFromUrlResultSchema.parse({
     status: "failed",
-    requestId,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
     error: {
       code: "skill.stage_unavailable",
       domain: "skill",
@@ -958,7 +958,8 @@ function zipFailed(identity: ReturnType<typeof markdownIdentity>): SkillStageFro
 }
 
 function updateIdentity(request: SkillStageUpdateRequest) {
-  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId, skillId: request.skillId };
+  return { apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    scope: request.scope, skillId: request.skillId };
 }
 
 function updateFailed(identity: ReturnType<typeof updateIdentity>): SkillStageUpdateResult {

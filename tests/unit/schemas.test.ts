@@ -5969,7 +5969,8 @@ describe("schemas", () => {
     const stagingId = `skillstage_${"a".repeat(32)}`;
     const manifestSha256 = `sha256:${"b".repeat(64)}`;
     const sourceUrl = "https://example.com/skills/paper-reading/SKILL.md";
-    const stageRequest = { apiVersion: 1, requestId, sourceUrl } as const;
+    const activeVaultId = "vault_20260728_skillstaging";
+    const stageRequest = { apiVersion: 1, requestId, activeVaultId, sourceUrl } as const;
     expect(SkillStageFromUrlRequestSchema.parse(stageRequest)).toEqual(stageRequest);
     for (const unsafeUrl of [
       "http://example.com/SKILL.md",
@@ -5998,7 +5999,7 @@ describe("schemas", () => {
       files: [{ relativePath: "SKILL.md", utf8ByteSize: 1024, sha256: manifestSha256 }],
       warnings: ["untrusted_remote_source"]
     } as const;
-    const stageResult = { status: "ready", requestId, staged } as const;
+    const stageResult = { status: "ready", requestId, activeVaultId, staged } as const;
     expect(SkillStageFromUrlResultSchema.parse(stageResult)).toEqual(stageResult);
     for (const unsafe of [{ body: "private" }, { path: "/tmp/staged" }, { sourceBytes: "private" }]) {
       expect(() => SkillStageFromUrlResultSchema.parse({ ...stageResult, ...unsafe })).toThrow();
@@ -6007,6 +6008,8 @@ describe("schemas", () => {
     const installRequest = {
       apiVersion: 1,
       requestId,
+      activeVaultId,
+      scope: "machine_local",
       stagingId,
       manifestSha256,
       bundleSha256: manifestSha256,
@@ -6015,13 +6018,16 @@ describe("schemas", () => {
     } as const;
     expect(SkillInstallStagedRequestSchema.parse(installRequest)).toEqual(installRequest);
     const registry = { apiVersion: 1, revision: 5, invalidManifestCount: 0, skills: [], restorableSkills: [] } as const;
-    expect(SkillInstallStagedResultSchema.parse({ status: "committed", requestId, registry }))
-      .toEqual({ status: "committed", requestId, registry });
+    expect(SkillInstallStagedResultSchema.parse({ status: "committed", requestId, activeVaultId, registry }))
+      .toEqual({ status: "committed", requestId, activeVaultId, registry });
 
-    const discardRequest = { apiVersion: 1, requestId, stagingId, manifestSha256, bundleSha256: manifestSha256 } as const;
+    const discardRequest = {
+      apiVersion: 1, requestId, activeVaultId, scope: "machine_local", stagingId,
+      manifestSha256, bundleSha256: manifestSha256
+    } as const;
     expect(SkillDiscardStagedRequestSchema.parse(discardRequest)).toEqual(discardRequest);
-    expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId }))
-      .toEqual({ status: "discarded", requestId });
+    expect(SkillDiscardStagedResultSchema.parse({ status: "discarded", requestId, activeVaultId }))
+      .toEqual({ status: "discarded", requestId, activeVaultId });
   });
 
   it("freezes External/Web Skill review disclosure without implicit runtime or secret authority", () => {
@@ -6447,6 +6453,7 @@ describe("schemas", () => {
       apiVersion: 1,
       requestId: "skill_lifecycle_request_abcdefghijklmnop",
       activeVaultId: "vault_20260728_abcdefgh",
+      scope: "machine_local",
       skillId: "paper-reading",
       expectedRegistryRevision: 5
     } as const;
@@ -6459,6 +6466,7 @@ describe("schemas", () => {
       apiVersion: 1,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId
     } as const;
     const skill = {
@@ -6607,6 +6615,7 @@ describe("schemas", () => {
       apiVersion: 1,
       requestId: "skill_lifecycle_request_restore123456789",
       activeVaultId: "vault_20260729_restore01",
+      scope: "machine_local",
       restoreContextId: restorable.restoreContextId,
       skillId: restorable.skillId,
       expectedRegistryRevision: registry.revision
@@ -6616,6 +6625,7 @@ describe("schemas", () => {
       apiVersion: 1,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       restoreContextId: request.restoreContextId,
       skillId: request.skillId
     } as const;

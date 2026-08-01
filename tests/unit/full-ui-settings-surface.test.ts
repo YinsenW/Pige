@@ -1654,6 +1654,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1 as const,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       status: "committed" as const,
       registry: reenabledRegistry
@@ -1710,7 +1711,10 @@ describe("full UI Settings surface", () => {
       buttonNamed(row, "Disable: Review notes").click();
       await settle(dom);
     });
-    expect(disable).toHaveBeenCalledWith({ apiVersion: 1, skillId: "review-notes", expectedRevision: 7 });
+    expect(disable).toHaveBeenCalledWith({
+      apiVersion: 1, activeVaultId: "vault_20260728_skilllifecycle", scope: "machine_local",
+      skillId: "review-notes", expectedRevision: 7
+    });
     expect(row.textContent).toContain("Disabled");
     expect(row.textContent).toContain("Enable");
     const disabledStatus = requireElement(row.querySelector<HTMLElement>(".settings-status"));
@@ -1728,6 +1732,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1,
       requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
       activeVaultId: "vault_20260728_skilllifecycle",
+      scope: "machine_local",
       skillId: "review-notes",
       expectedRegistryRevision: 8
     });
@@ -1769,6 +1774,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1 as const,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       registryRevision: request.expectedRegistryRevision,
       status: "cancelled" as const
@@ -1806,6 +1812,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1,
       requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
       activeVaultId: vaultId,
+      scope: "machine_local",
       skillId: "review-notes",
       expectedRegistryRevision: 12
     });
@@ -1844,6 +1851,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1,
       requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
       activeVaultId: vaultId,
+      scope: "machine_local",
       skillId: "review-notes",
       expectedRegistryRevision: 12
     });
@@ -1852,6 +1860,7 @@ describe("full UI Settings surface", () => {
         apiVersion: 1,
         requestId: request.requestId,
         activeVaultId: vaultId,
+        scope: "machine_local",
         skillId: "review-notes",
         status: "committed",
         registry: afterUninstall
@@ -1924,18 +1933,21 @@ describe("full UI Settings surface", () => {
     const stageUpdate = vi.fn(async (request: {
       requestId: `skill_lifecycle_request_${string}`;
       activeVaultId: string;
+      scope: "machine_local" | "vault";
       skillId: string;
     }) => ({
       apiVersion: 1 as const,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       status: "ready" as const,
       staged
     }));
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "committed" as const,
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       registry: updatedRegistry
     }));
     Object.defineProperty(dom.window, "pige", {
@@ -1974,6 +1986,7 @@ describe("full UI Settings surface", () => {
       apiVersion: 1,
       requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
       activeVaultId: vaultId,
+      scope: "machine_local",
       skillId: "review-notes",
       expectedRegistryRevision: 20
     });
@@ -1994,6 +2007,8 @@ describe("full UI Settings surface", () => {
     expect(installStaged).toHaveBeenCalledWith({
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      scope: "machine_local",
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256,
@@ -2063,10 +2078,11 @@ describe("full UI Settings surface", () => {
     }]);
     const stageUpdate = vi.fn(async (request: SkillStageUpdateRequest): Promise<SkillStageUpdateResult> => ({
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      skillId: request.skillId, status: "ready", staged
+      scope: request.scope, skillId: request.skillId, status: "ready", staged
     }));
-    const installStaged = vi.fn(async (request: { requestId: `skillreq_${string}` }) => ({
-      status: "committed" as const, requestId: request.requestId, registry: committed
+    const installStaged = vi.fn(async (request: { requestId: `skillreq_${string}`; activeVaultId: string }) => ({
+      status: "committed" as const, requestId: request.requestId,
+      activeVaultId: request.activeVaultId, registry: committed
     }));
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       skills: {
@@ -2202,9 +2218,10 @@ describe("full UI Settings surface", () => {
       if (stageAttempt === 2) return { ...identity, status: "ready" as const, staged };
       return { ...identity, status: "failed" as const };
     });
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "committed" as const,
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       registry: installedRegistry
     }));
     Object.defineProperty(dom.window, "pige", {
@@ -2267,6 +2284,8 @@ describe("full UI Settings surface", () => {
     expect(installStaged).toHaveBeenCalledWith({
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      scope: "machine_local",
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256,
@@ -2331,9 +2350,10 @@ describe("full UI Settings surface", () => {
       if (stageAttempt === 2) return { ...identity, status: "invalid" as const, reason: "archive_unsafe" as const };
       return { ...identity, status: "ready" as const, staged };
     });
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "committed" as const,
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       registry: installedRegistry
     }));
     Object.defineProperty(dom.window, "pige", {
@@ -2401,6 +2421,8 @@ describe("full UI Settings surface", () => {
     expect(installStaged).toHaveBeenCalledWith({
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      scope: "machine_local",
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256,
@@ -2416,6 +2438,7 @@ describe("full UI Settings surface", () => {
 
   it("stages one exact Skill URL for review, installs with the frozen identity, and discards without installing", async () => {
     const dom = createDom();
+    const vaultId = "vault_20260728_urlskill";
     const initialRegistry = skillRegistry(3, false, 0, []);
     const installedRegistry = skillRegistry(4, true, 0);
     const staged = {
@@ -2439,19 +2462,22 @@ describe("full UI Settings surface", () => {
       warnings: ["untrusted_remote_source" as const]
     };
     let stageCall = 0;
-    const stageFromUrl = vi.fn(async (request: { requestId: string }) => ({
+    const stageFromUrl = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "ready" as const,
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       staged: { ...staged, registryRevision: stageCall++ === 0 ? 3 : 4 }
     }));
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "committed" as const,
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       registry: installedRegistry
     }));
-    const discardStaged = vi.fn(async (request: { requestId: string }) => ({
+    const discardStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
       status: "discarded" as const,
-      requestId: request.requestId
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId
     }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
@@ -2463,7 +2489,8 @@ describe("full UI Settings surface", () => {
           discardStaged,
           disable: vi.fn(),
           onChanged: () => () => undefined
-        }
+        },
+        vault: { current: async () => ({ vaultId }) }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -2503,6 +2530,8 @@ describe("full UI Settings surface", () => {
     expect(installStaged).toHaveBeenCalledWith({
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      scope: "machine_local",
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256,
@@ -2534,6 +2563,8 @@ describe("full UI Settings surface", () => {
     expect(discardStaged).toHaveBeenCalledWith({
       apiVersion: 1,
       requestId: expect.stringMatching(/^skillreq_[a-z0-9]{16,64}$/u),
+      activeVaultId: vaultId,
+      scope: "machine_local",
       stagingId: staged.stagingId,
       manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256
@@ -2568,11 +2599,12 @@ describe("full UI Settings surface", () => {
       .mockImplementationOnce(async (request) => ({ ...request, status: "ready" as const, staged: [first, second] }))
       .mockImplementationOnce(async (request) => ({ ...request, status: "ready" as const, staged: [second] }))
       .mockImplementationOnce(async (request) => ({ ...request, status: "failed" as const }));
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
-      status: "committed" as const, requestId: request.requestId, registry: skillRegistry(5, true)
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
+      status: "committed" as const, requestId: request.requestId,
+      activeVaultId: request.activeVaultId, registry: skillRegistry(5, true)
     }));
-    const discardStaged = vi.fn(async (request: { requestId: string }) => ({
-      status: "discarded" as const, requestId: request.requestId
+    const discardStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
+      status: "discarded" as const, requestId: request.requestId, activeVaultId: request.activeVaultId
     }));
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       skills: {
@@ -2643,8 +2675,9 @@ describe("full UI Settings surface", () => {
       sourceUrl: staged.sourceUrl, manifestSha256: staged.manifestSha256,
       bundleSha256: staged.bundleSha256, files: staged.files
     }]);
-    const installStaged = vi.fn(async (request: { requestId: string }) => ({
-      status: "committed" as const, requestId: request.requestId, registry: committedRegistry
+    const installStaged = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
+      status: "committed" as const, requestId: request.requestId,
+      activeVaultId: request.activeVaultId, registry: committedRegistry
     }));
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       skills: {
@@ -2701,7 +2734,7 @@ describe("full UI Settings surface", () => {
     const committed = skillRegistry(15, false, 0, [{ ...external, enabled: true, canEnable: false }, unsupported]);
     const enable = vi.fn(async (request: SkillEnableRequest): Promise<SkillLifecycleMutationResult> => ({
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      skillId: request.skillId, status: "committed", registry: committed
+      scope: request.scope, skillId: request.skillId, status: "committed", registry: committed
     }));
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       skills: {
@@ -2720,7 +2753,7 @@ describe("full UI Settings surface", () => {
     await act(async () => { buttonNamed(supportedRow, "Enable: Supported external").click(); await settle(dom); await settle(dom); });
     expect(enable).toHaveBeenCalledWith({
       apiVersion: 1, requestId: expect.stringMatching(/^skill_lifecycle_request_[a-z0-9]{16,64}$/u),
-      activeVaultId: vaultId, skillId: external.id, expectedRegistryRevision: 14
+      activeVaultId: vaultId, scope: "machine_local", skillId: external.id, expectedRegistryRevision: 14
     });
     expect(supportedRow.textContent).toContain("Enabled");
     expect(unsupportedRow.textContent).toContain("Disabled");
@@ -2747,8 +2780,9 @@ describe("full UI Settings surface", () => {
     const pendingStagedReviews = vi.fn((request) => new Promise((resolve) => {
       resolvePending = (value) => resolve({ ...request, ...(value as object) });
     }));
-    const stageFromUrl = vi.fn(async (request: { requestId: string }) => ({
-      requestId: request.requestId, status: "ready" as const, staged: summary
+    const stageFromUrl = vi.fn(async (request: { requestId: string; activeVaultId: string }) => ({
+      requestId: request.requestId, activeVaultId: request.activeVaultId,
+      status: "ready" as const, staged: summary
     }));
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       skills: {
@@ -2781,6 +2815,7 @@ describe("full UI Settings surface", () => {
 
   it("fails closed on the body-free Skill Registry failed result and retries to a verified empty state", async () => {
     const dom = createDom();
+    const vaultId = "vault_20260729_skillretry";
     const failedQuery: SkillRegistryQueryResult = {
       status: "failed",
       error: {
@@ -2802,7 +2837,8 @@ describe("full UI Settings surface", () => {
           summary,
           disable: vi.fn(),
           onChanged: () => () => undefined
-        }
+        },
+        vault: { current: async () => ({ vaultId }) }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -2832,6 +2868,7 @@ describe("full UI Settings surface", () => {
 
   it("keeps verified Skill state unchanged for body-free busy and unavailable disable results", async () => {
     const dom = createDom();
+    const vaultId = "vault_20260729_skillfailure";
     const registry = skillRegistry(11, true, 0);
     const failedResult = (code: "skill.registry_busy" | "skill.registry_unavailable"): SkillRegistryMutationResult => ({
       status: "failed",
@@ -2854,7 +2891,8 @@ describe("full UI Settings surface", () => {
           summary: async () => ({ status: "ready" as const, registry }),
           disable,
           onChanged: () => () => undefined
-        }
+        },
+        vault: { current: async () => ({ vaultId }) }
       }
     });
     const root = createRoot(dom.window.document.querySelector("#root")!);

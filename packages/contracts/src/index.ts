@@ -391,6 +391,7 @@ import type {
   SkillLifecycleMutationResult,
   SkillPendingStagedReviewsRequest,
   SkillPendingStagedReviewsResult,
+  SkillRegistryQueryRequest,
   SkillRegistryQueryResult,
   SkillRegistryMutationResult,
   SkillRegistrySummary,
@@ -853,6 +854,7 @@ export type {
   SkillLifecycleRequestId,
   SkillPendingStagedReviewsRequest,
   SkillPendingStagedReviewsResult,
+  SkillRegistryQueryRequest,
   SkillRegistryQueryResult,
   SkillKind,
   SkillRegistryMutationResult,
@@ -2194,7 +2196,7 @@ export interface PigeDesktopApi {
     ) => () => void;
   };
   readonly skills: {
-    readonly summary: () => Promise<SkillRegistryQueryResult>;
+    readonly summary: (request: SkillRegistryQueryRequest) => Promise<SkillRegistryQueryResult>;
     readonly pendingStagedReviews: (
       request: SkillPendingStagedReviewsRequest
     ) => Promise<SkillPendingStagedReviewsResult>;
