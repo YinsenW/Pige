@@ -288,6 +288,7 @@ import { ManagedCollectionViewService } from "./services/managed-collection-view
 import { ManagedCollectionViewRedoService } from "./services/managed-collection-view-redo-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifecycle-service";
+import { ManagedDatasetPurgeService } from "./services/managed-dataset-purge-service";
 import { ManagedDatasetTitleService } from "./services/managed-dataset-title-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
 import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
@@ -511,6 +512,7 @@ let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionViewRedoService: ManagedCollectionViewRedoService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
+let managedDatasetPurgeService: ManagedDatasetPurgeService | undefined;
 let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
@@ -2357,6 +2359,9 @@ const getManagedDatasetLifecycleService = (): ManagedDatasetLifecycleService => 
   return managedDatasetLifecycleService;
 };
 
+const getManagedDatasetPurgeService = (): ManagedDatasetPurgeService =>
+  managedDatasetPurgeService ??= new ManagedDatasetPurgeService(getVaultService());
+
 const getManagedDatasetTitleService = (): ManagedDatasetTitleService => {
   if (!managedDatasetTitleService) managedDatasetTitleService = new ManagedDatasetTitleService(getVaultService());
   return managedDatasetTitleService;
@@ -2381,6 +2386,7 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
     operation.kind === "rename_dataset" ? titles :
       operation.kind === "rename_collection_table" ? tables :
+      operation.kind === "purge_dataset" ? getManagedDatasetPurgeService() :
       ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
       ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
         .includes(operation.kind) ? views : collections;
@@ -2399,13 +2405,16 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const collectionResult = collections.recoverIncompleteOperations();
       const viewResult = views.recoverIncompleteOperations();
       const datasetResult = datasets.recoverIncompleteOperations();
+      const datasetPurgeResult = getManagedDatasetPurgeService().recoverIncompletePurges();
       const titleResult = titles.recoverIncompleteOperations();
       const tableResult = tables.recoverIncompleteOperations();
       return {
         recovered: collectionRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
-          viewResult.recovered + datasetResult.recovered + titleResult.recovered + tableResult.recovered,
+          viewResult.recovered + datasetResult.recovered + datasetPurgeResult.recovered +
+          titleResult.recovered + tableResult.recovered,
         failed: collectionRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
-          viewResult.failed + datasetResult.failed + titleResult.failed + tableResult.failed
+          viewResult.failed + datasetResult.failed + datasetPurgeResult.failed +
+          titleResult.failed + tableResult.failed
       };
     }
   };
@@ -3354,6 +3363,7 @@ registerManagedCollectionIpc({
   trashDataset: (request) => getManagedDatasetLifecycleService().trash(request),
   listDatasetTrash: (request) => getManagedDatasetLifecycleService().listTrash(request),
   restoreDataset: (request) => getManagedDatasetLifecycleService().restore(request),
+  purgeDataset: (request) => getManagedDatasetPurgeService().purge(request),
   renameDataset: (request) => getManagedDatasetTitleService().rename(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)

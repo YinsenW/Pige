@@ -101,6 +101,8 @@ import {
   type CollectionListDatasetTrashResult,
   type CollectionRestoreDatasetRequest,
   type CollectionRestoreDatasetResult,
+  type CollectionPurgeDatasetRequest,
+  type CollectionPurgeDatasetResult,
   type CollectionRenameDatasetRequest,
   type CollectionRenameDatasetResult,
   type CollectionOpenCitationRequest,
@@ -203,6 +205,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly restoreDataset: (
     request: CollectionRestoreDatasetRequest
   ) => CollectionRestoreDatasetResult | Promise<CollectionRestoreDatasetResult>;
+  readonly purgeDataset: (
+    request: CollectionPurgeDatasetRequest
+  ) => CollectionPurgeDatasetResult | Promise<CollectionPurgeDatasetResult>;
   readonly renameDataset: (
     request: CollectionRenameDatasetRequest
   ) => CollectionRenameDatasetResult | Promise<CollectionRenameDatasetResult>;

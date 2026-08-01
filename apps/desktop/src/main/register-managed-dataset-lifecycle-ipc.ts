@@ -2,17 +2,22 @@ import type { IpcMain, WebContents } from "electron";
 import {
   COLLECTION_LIST_DATASET_TRASH_CHANNEL,
   COLLECTION_RESTORE_DATASET_CHANNEL,
+  COLLECTION_PURGE_DATASET_CHANNEL,
   COLLECTION_TRASH_DATASET_CHANNEL,
   CollectionListDatasetTrashRequestSchema,
   CollectionListDatasetTrashResultSchema,
   CollectionRestoreDatasetRequestSchema,
   CollectionRestoreDatasetResultSchema,
+  CollectionPurgeDatasetRequestSchema,
+  CollectionPurgeDatasetResultSchema,
   CollectionTrashDatasetRequestSchema,
   CollectionTrashDatasetResultSchema,
   type CollectionListDatasetTrashRequest,
   type CollectionListDatasetTrashResult,
   type CollectionRestoreDatasetRequest,
   type CollectionRestoreDatasetResult,
+  type CollectionPurgeDatasetRequest,
+  type CollectionPurgeDatasetResult,
   type CollectionTrashDatasetRequest,
   type CollectionTrashDatasetResult
 } from "@pige/schemas";
@@ -24,6 +29,7 @@ export function registerManagedDatasetLifecycleIpc(options: {
   readonly trashDataset: (request: CollectionTrashDatasetRequest) => CollectionTrashDatasetResult | Promise<CollectionTrashDatasetResult>;
   readonly listDatasetTrash: (request: CollectionListDatasetTrashRequest) => CollectionListDatasetTrashResult | Promise<CollectionListDatasetTrashResult>;
   readonly restoreDataset: (request: CollectionRestoreDatasetRequest) => CollectionRestoreDatasetResult | Promise<CollectionRestoreDatasetResult>;
+  readonly purgeDataset: (request: CollectionPurgeDatasetRequest) => CollectionPurgeDatasetResult | Promise<CollectionPurgeDatasetResult>;
 }): void {
   options.ipcMain.handle(COLLECTION_TRASH_DATASET_CHANNEL, async (event, request: unknown) => {
     const parsed = CollectionTrashDatasetRequestSchema.parse(request);
@@ -53,6 +59,16 @@ export function registerManagedDatasetLifecycleIpc(options: {
     const result = CollectionRestoreDatasetResultSchema.parse(raw);
     assertIdentity(parsed, result, ["datasetId", "expectedRevisionId", "trashOperationId", "expectedTrashRevision"]);
     return trusted(options, event.sender, parsed.activeVaultId) ? result : CollectionRestoreDatasetResultSchema.parse({ ...parsed, status: "failed" });
+  });
+
+  options.ipcMain.handle(COLLECTION_PURGE_DATASET_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionPurgeDatasetRequestSchema.parse(request);
+    if (!trusted(options, event.sender, parsed.activeVaultId)) return CollectionPurgeDatasetResultSchema.parse({ ...parsed, status: "failed" });
+    let raw: CollectionPurgeDatasetResult;
+    try { raw = await options.purgeDataset(parsed); } catch { return CollectionPurgeDatasetResultSchema.parse({ ...parsed, status: "failed" }); }
+    const result = CollectionPurgeDatasetResultSchema.parse(raw);
+    assertIdentity(parsed, result, ["datasetId", "expectedRevisionId", "trashOperationId", "expectedTrashRevision", "confirmation"]);
+    return trusted(options, event.sender, parsed.activeVaultId) ? result : CollectionPurgeDatasetResultSchema.parse({ ...parsed, status: "failed" });
   });
 }
 
