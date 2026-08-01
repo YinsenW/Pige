@@ -2968,6 +2968,10 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
           ? AgentSubmitTurnResultSchema.parse(failed)
           : AgentStagedSubmitTurnResultSchema.parse(failed);
       }
+      home.appendPreparedCaptureReferences(prepared, preserved.captureReferences.map((reference) => ({
+        ...reference,
+        jobId: prepared.jobId
+      })));
       if (normalizedRequest.stagedItems === undefined) {
         const result = await home.submitPreparedSourceTurn(prepared, draftContext);
         return AgentSubmitTurnResultSchema.parse({

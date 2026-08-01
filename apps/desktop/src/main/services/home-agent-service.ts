@@ -62,6 +62,7 @@ import type {
   AgentSourceToolSession
 } from "./agent-ingest-service";
 import { HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME, type HomeAuthoredTextCaptureService } from "./home-authored-text-capture-service";
+import type { ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
@@ -619,6 +620,27 @@ export class HomeAgentService {
     };
   }
 
+  appendPreparedCaptureReferences(
+    prepared: PreparedSourceAgentTurn,
+    references: readonly ConversationCaptureReferenceInput[]
+  ): void {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath || this.#vaults.current()?.vaultId !== prepared.activeVaultId) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The prepared capture vault changed.");
+    }
+    if (references.length !== prepared.sourceIds.length || references.some((reference, index) =>
+      reference.jobId !== prepared.jobId || reference.sourceId !== prepared.sourceIds[index])) {
+      throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The prepared capture references changed.");
+    }
+    for (const reference of references) {
+      this.#conversations.appendCaptureReference(
+        vaultPath,
+        prepared.preservedTurn,
+        reference
+      );
+    }
+  }
+
   runAcceptedPreparedSourceTurn(
     prepared: PreparedSourceAgentTurn,
     context: { readonly onDraft?: (snapshot: HomeAgentDraftSnapshot) => void } = {}
@@ -849,6 +871,7 @@ export class HomeAgentService {
               authoredTaskIntent: resolveDurableAuthoredTaskIntent(activeTurn.metadata),
               sourceConversationId: activeTurn.event.conversationId,
               sourceEventId: activeTurn.event.id,
+              sourceTurn: activeTurn,
               sourceLanguage: activeTurn.event.languageContinuity.queryLanguage.language,
               ...(validatedRequest.scope ? { scope: validatedRequest.scope } : {})
             },
@@ -1158,6 +1181,7 @@ export class HomeAgentService {
               authoredTaskIntent: resolveDurableAuthoredTaskIntent(preservedMetadata),
               sourceConversationId: currentPreserved.event.conversationId,
               sourceEventId: currentPreserved.event.id,
+              sourceTurn: currentPreserved,
               sourceLanguage: currentPreserved.event.languageContinuity.queryLanguage.language,
               ...(preservedMetadata.scope ? { scope: preservedMetadata.scope } : {})
             },
@@ -1253,6 +1277,7 @@ export class HomeAgentService {
       readonly authoredTaskIntent: AgentTurnAuthoredTaskIntent;
       readonly sourceConversationId: string;
       readonly sourceEventId: string;
+      readonly sourceTurn: PreservedAgentTurn;
       readonly sourceLanguage: DurableLanguage;
     },
     activeVault: VaultSummary,
@@ -1602,6 +1627,8 @@ export class HomeAgentService {
         userEventId: request.sourceEventId, turnJobId: jobId, policyHash: policy.policyHash,
         authoredText: request.text, locale: request.locale, assertCurrent: assertCurrentBindingAndVault },
       onCaptured: (result) => { capturedAuthoredTextSourceIds.add(result.sourceId);
+        this.#conversations.appendCaptureReference(vaultPath, request.sourceTurn, { ...result, jobId,
+          displayName: "Authored text", sourceKind: "text" });
         session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current; }
     });
     const authoredTextCaptureRegistered = authoredTextCaptureTool !== undefined;

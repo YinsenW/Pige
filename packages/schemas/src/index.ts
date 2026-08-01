@@ -9351,6 +9351,7 @@ export const ConversationEventSchema = z.object({
   contentHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   sourceId: SourceIdSchema.optional(),
   captureId: CaptureIdSchema.optional(),
+  pageId: PageIdSchema.optional(),
   jobId: JobIdSchema.optional(),
   operationId: OperationIdSchema.optional(),
   proposalId: ProposalIdSchema.optional(),
@@ -9974,7 +9975,16 @@ export const AgentConversationMessageSchema = z.object({
   text: z.string(),
   jobId: JobIdSchema.optional(),
   answer: AgentTurnAnswerSchema.optional(),
-  inputPresentation: AgentConversationInputPresentationSchema.optional()
+  inputPresentation: AgentConversationInputPresentationSchema.optional(),
+  captureReferences: z.array(z.object({
+    eventId: ConversationEventIdSchema,
+    sourceId: SourceIdSchema,
+    captureId: CaptureIdSchema,
+    jobId: JobIdSchema,
+    displayName: z.string().min(1).max(512),
+    sourceKind: SourceKindSchema,
+    pageId: PageIdSchema.optional()
+  }).strict()).max(8).readonly().optional()
 }).strict();
 export const AgentConversationTurnSummarySchema = z.object({
   jobId: JobIdSchema,

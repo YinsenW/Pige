@@ -2002,6 +2002,15 @@ export interface AgentConversationMessage {
   readonly jobId?: string;
   readonly answer?: AgentTurnAnswer;
   readonly inputPresentation?: AgentConversationInputPresentation;
+  readonly captureReferences?: readonly {
+    readonly eventId: string;
+    readonly sourceId: string;
+    readonly captureId: string;
+    readonly jobId: string;
+    readonly displayName: string;
+    readonly sourceKind: SourceKind;
+    readonly pageId?: string;
+  }[];
 }
 
 export type AgentConversationInputPresentation =

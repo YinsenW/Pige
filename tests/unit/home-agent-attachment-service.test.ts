@@ -114,6 +114,8 @@ describe("HomeAgentAttachmentService", () => {
       status: "failed",
       attachmentSetHash: prepared.attachmentSetHash,
       sourceIds: [request.firstSourceId],
+      captureReferences: [{ sourceId: request.firstSourceId, captureId: "cap_20260722_abcdefgh",
+        displayName: "first.md", sourceKind: "markdown_file" }],
       rejectedFiles: [{ displayName: "second.md", reason: "copy_failed" }]
     });
     expect(JSON.stringify(failed)).not.toContain(root);
@@ -261,7 +263,13 @@ describe("HomeAgentAttachmentService", () => {
 
     expect(result).toMatchObject({
       status: "preserved",
-      sourceIds: ["src_20260723_mixedowner01", createAttachmentSourceId("job_20260723_mixedowner01", 1)]
+      sourceIds: ["src_20260723_mixedowner01", createAttachmentSourceId("job_20260723_mixedowner01", 1)],
+      captureReferences: [
+        { sourceId: "src_20260723_mixedowner01", captureId: "cap_20260723_mixedowner01",
+          displayName: "first.md", sourceKind: "markdown_file" },
+        { sourceId: createAttachmentSourceId("job_20260723_mixedowner01", 1),
+          captureId: "cap_20260723_mixedowner02", displayName: "Pasted text", sourceKind: "text" }
+      ]
     });
     expect(prepared.rejectedItems).toEqual([
       { ordinal: 2, kind: "file", displayName: "blocked.exe", reason: "unsupported_type" }

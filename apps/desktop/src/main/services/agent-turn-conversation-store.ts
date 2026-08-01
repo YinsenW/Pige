@@ -27,6 +27,8 @@ import {
   selectConversationTimelineMessages
 } from "./agent-conversation-pagination";
 import { conversationLanguageContinuity } from "./durable-language";
+import { assertMatchingConversationCaptureReference, createConversationCaptureReference,
+  type ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
 import { selectCompactedConversationContext } from "./conversation-context-compaction-service";
 const MAX_TURN_TEXT_BYTES = 64 * 1024, MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_TIMELINE_MESSAGES = 50, MAX_TIMELINE_MESSAGES = 100;
@@ -185,6 +187,28 @@ export class AgentTurnConversationStore {
       }
       if (events.some((candidate) => candidate.id === event.id)) {
         throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent assistant event identity is already in use.");
+      }
+      return undefined;
+    });
+  }
+
+  appendCaptureReference(
+    vaultPath: string,
+    userTurn: PreservedAgentTurn,
+    input: ConversationCaptureReferenceInput
+  ): ConversationEvent {
+    const durableUser = this.readUserTurn(vaultPath, userTurn.locator, userTurn.event.id, userTurn.inputHash);
+    const event = createConversationCaptureReference(durableUser.event, input);
+    return appendEvent(vaultPath, durableUser.locator, event, false, (events) => {
+      assertConversationEventsBelong(events, durableUser.event.conversationId);
+      const matches = events.filter((candidate) => candidate.id === event.id);
+      if (matches.length > 1) throw new PigeDomainError("agent_runtime.turn_conflict", "Duplicate capture references claim one identity.");
+      if (matches[0]) {
+        assertMatchingConversationCaptureReference(matches[0], event);
+        return matches[0];
+      }
+      if (!events.some((candidate) => candidate.id === durableUser.event.id && candidate.type === "user_message")) {
+        throw new PigeDomainError("agent_runtime.turn_changed", "The capture parent turn changed before publication.");
       }
       return undefined;
     });
@@ -794,13 +818,7 @@ function resolveAuthoredTaskIntent(inputKind: AgentTurnInputKind, value: unknown
 }
 
 function conversationHasScope(events: readonly ConversationEvent[], scope: AgentTurnScope | undefined): boolean {
-  if (scope && events.some((event) =>
-    event.type === "attachment_reference" ||
-    event.type === "capture_reference" ||
-    event.type === "source_reference"
-  )) {
-    return false;
-  }
+  if (scope && events.some((event) => event.type === "attachment_reference" || event.type === "source_reference")) return false;
   const userEvents = events.filter((event) => event.type === "user_message");
   return userEvents.length > 0 && userEvents.every((event) =>
     scopesEqual(readTurnMetadata(event)?.scope, scope)
