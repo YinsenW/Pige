@@ -5620,7 +5620,7 @@ describe("Home durable Agent conversation UI", () => {
     await clickElement(dom, pdfCitation);
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
     expect(harness.noteRenderRequests.at(-1)).toBe("page_20260726_pdfsource");
-    expect(buttons(mount.container, enMessages["note.edit"])).toHaveLength(0);
+    expect(buttons(mount.container, enMessages["note.edit"])).toHaveLength(1);
     expect(harness.editorOpenRequests).toHaveLength(0);
     expect(harness.timeline?.conversationId).toBe(timeline.conversationId);
 

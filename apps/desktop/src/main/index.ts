@@ -3813,7 +3813,17 @@ ipcMain.handle("updates.apply", async (_event, request: UpdateApplyRequest) =>
     await getUpdateService().apply(UpdateApplyRequestSchema.parse(request))
   )
 );
-ipcMain.handle("system.toolchainHealth", () => getToolchainService().health());
+ipcMain.handle("system.toolchainHealth", () => getToolchainService().recheckAndRecover({
+  hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
+  requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
+  requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
+  scheduleParseProcessing,
+  scheduleAgentIngestProcessing,
+  onRecoveryFailure: (owner) => recordBackgroundFailure(
+    `toolchain.${owner}.recovery_failed`,
+    "Preserved work could not be resumed after the local toolchain became ready."
+  )
+}));
 
 app.whenReady().then(async () => {
   if (!ownsAppInstanceLock) return;
