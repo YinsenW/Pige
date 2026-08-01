@@ -360,6 +360,18 @@ describe("notes service", () => {
     expect(rendered.tagging).toBeUndefined();
   });
 
+  it("projects only a valid active Entity type as revision-bound mutation authority", async () => {
+    const { vaultPath, vault } = makeVault(), pageId = "page_20260801_entitytype1";
+    writePage({ vaultPath, fileName: "entity-type.md", pageId, title: "Ada", pageType: "entity",
+      extraFrontmatter: 'entity:\n  entity_type: "person"\n  canonical_name: "Ada"\n  identifiers: []' });
+    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    expect(rendered.entityType).toEqual({ entityType: "person", canChange: true,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u) });
+    fs.writeFileSync(path.join(vaultPath, "wiki", "entity-type.md"),
+      fs.readFileSync(path.join(vaultPath, "wiki", "entity-type.md"), "utf8").replace('entity_type: "person"', 'entity_type: "company"'));
+    await expect(makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID)).resolves.not.toHaveProperty("entityType");
+  });
+
   it("opens active typed knowledge pages and Source Pages while keeping Topic out", async () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };

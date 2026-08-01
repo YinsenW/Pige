@@ -6,6 +6,7 @@ import type {
   NoteRenderResult,
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
   NoteSetClaimConfidenceRequest, NoteSetClaimConfidenceResult,
+  NoteSetEntityTypeRequest, NoteSetEntityTypeResult,
   NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
@@ -32,6 +33,7 @@ import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createR
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
+import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
 import { ReaderConceptParents } from "./ReaderConceptParents";
@@ -102,6 +104,8 @@ export function NoteReader(props: {
     request: NoteSetClaimConfidenceRequest
   ) => Promise<NoteSetClaimConfidenceResult>;
   readonly onClaimConfidenceChanged?: (render: NoteRenderResult) => void;
+  readonly onSetEntityType?: (request: NoteSetEntityTypeRequest) => Promise<NoteSetEntityTypeResult>;
+  readonly onEntityTypeChanged?: (render: NoteRenderResult) => void;
   readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
   readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
   readonly onSearchClaimContradictions?: (
@@ -909,6 +913,16 @@ export function NoteReader(props: {
               note={props.note}
               onSetConfidence={props.onSetClaimConfidence}
               onCommitted={props.onClaimConfidenceChanged}
+              t={props.t}
+            />
+          ) : null}
+          {props.activeVaultId && props.onSetEntityType && props.onEntityTypeChanged ? (
+            <ReaderEntityTypeControl
+              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.entityType?.revision ?? ""}`}
+              activeVaultId={props.activeVaultId}
+              note={props.note}
+              onSetType={props.onSetEntityType}
+              onCommitted={props.onEntityTypeChanged}
               t={props.t}
             />
           ) : null}

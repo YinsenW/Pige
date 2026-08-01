@@ -352,6 +352,28 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes one pathless current-Reader Entity type correction", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const entitySchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SET_ENTITY_TYPE_CHANNEL = "notes.setEntityType"'),
+      schemasSource.indexOf("const NoteQuestionAnswerOwnerSchema")
+    );
+    expect(entitySchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(entitySchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(schemasSource).toContain('"person", "organization", "product", "place", "project", "event", "other"');
+    expect(contractsSource).toContain("readonly setEntityType: (");
+    expect(preloadSource).toContain("NoteSetEntityTypeRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteSetEntityTypeResultSchema.parse(");
+    expect(appSource.match(/onSetEntityType=\{\(request\) => window\.pige\.notes\.setEntityType\(request\)\}/gu))
+      .toHaveLength(2);
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(entitySchemas).not.toContain(privateField);
+    }
+  });
+
   it("freezes pathless current-Reader question answer search and exact mutation", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
