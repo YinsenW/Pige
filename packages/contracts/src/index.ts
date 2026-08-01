@@ -366,6 +366,8 @@ import type {
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
   PiPackageSetPinnedResult,
+  PiPackageSetEnabledRequest,
+  PiPackageSetEnabledResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
@@ -639,6 +641,9 @@ export type {
   PiPackageSetPinnedRequest,
   PiPackageSetPinnedRequestId,
   PiPackageSetPinnedResult,
+  PiPackageSetEnabledRequest,
+  PiPackageSetEnabledRequestId,
+  PiPackageSetEnabledResult,
   PiPackageType,
   PiPackageVersion,
   PiPackageUninstallRequest,
@@ -2338,6 +2343,9 @@ export interface PigeDesktopApi {
     readonly setPinned: (
       request: PiPackageSetPinnedRequest
     ) => Promise<PiPackageSetPinnedResult>;
+    readonly setEnabled: (
+      request: PiPackageSetEnabledRequest
+    ) => Promise<PiPackageSetEnabledResult>;
   };
   readonly taskExecution: {
     readonly interaction: () => Promise<TaskInteractionPendingResult>;

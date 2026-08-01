@@ -220,6 +220,7 @@ function createFixture(input: { revision?: number } = {}) {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
+        canEnable: false,
         trust: "community",
         canUpdate: true,
         canRollback: false,

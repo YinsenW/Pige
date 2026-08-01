@@ -45,7 +45,7 @@ export class PiPackageUpdateService {
       return await this.#manager.withLifecycleLock(async () => {
         const current = this.#manager.readLifecycleRegistry();
         const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
-        if (record?.pinned) return updateResult(identity, "failed");
+        if (record?.pinned || record?.enabled) return updateResult(identity, "failed");
         const replay = this.#manager.lifecycleStore.updateReceiptForRequest(request.requestId);
         if (replay) return this.#adoptUpdateReplay(request, replay);
         if (current.revision !== request.expectedRegistryRevision) return updateResult(identity, "stale", this.#project(current));
@@ -85,7 +85,7 @@ export class PiPackageUpdateService {
       return await this.#manager.withLifecycleLock(() => {
         const current = this.#manager.readLifecycleRegistry();
         const record = current.packages.find((candidate) => candidate.packageId === request.packageId);
-        if (record?.pinned) return rollbackResult(identity, "failed");
+        if (record?.pinned || record?.enabled) return rollbackResult(identity, "failed");
         const receipt = this.#manager.lifecycleStore.readUpdateReceipt(request.rollbackId);
         if (receipt?.state === "rolled_back" && receipt.rollbackRequestId === request.requestId &&
           receipt.rollbackExpectedRegistryRevision === request.expectedRegistryRevision &&

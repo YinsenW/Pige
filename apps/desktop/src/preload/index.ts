@@ -273,6 +273,8 @@ import type {
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
   PiPackageSetPinnedResult,
+  PiPackageSetEnabledRequest,
+  PiPackageSetEnabledResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
@@ -626,6 +628,8 @@ import {
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
   PiPackageSetPinnedResultSchema,
+  PiPackageSetEnabledRequestSchema,
+  PiPackageSetEnabledResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
   PiPackageUpdateRequestSchema,
@@ -1958,6 +1962,11 @@ const api: PigeDesktopApi = {
       PiPackageSetPinnedResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.setPinned",
         PiPackageSetPinnedRequestSchema.parse(request)
+      )),
+    setEnabled: async (request: PiPackageSetEnabledRequest): Promise<PiPackageSetEnabledResult> =>
+      PiPackageSetEnabledResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.setEnabled",
+        PiPackageSetEnabledRequestSchema.parse(request)
       ))
   },
   taskExecution: {

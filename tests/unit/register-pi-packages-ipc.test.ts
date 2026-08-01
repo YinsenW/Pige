@@ -22,6 +22,7 @@ const registry = {
     packageTypes: ["extension"],
     dependencyCount: 0,
     enabled: false,
+    canEnable: false,
     trust: "community",
     pinned: false,
     canUpdate: true,
@@ -81,6 +82,11 @@ const pinRequest = {
   packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision,
   pinned: true
 } as const;
+const enableRequest = {
+  apiVersion: 1, requestId: "pi_package_enable_request_abcdefghijklmnop",
+  packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision,
+  enabled: true
+} as const;
 
 function makeHarness(overrides: {
   readonly isTrustedSender?: () => boolean;
@@ -96,6 +102,7 @@ function makeHarness(overrides: {
   readonly confirmRollback?: (value: typeof rollbackRequest) => unknown;
   readonly rollback?: (value: typeof rollbackRequest) => unknown;
   readonly setPinned?: (value: typeof pinRequest) => unknown;
+  readonly setEnabled?: (value: typeof enableRequest) => unknown;
 } = {}) {
   const handlers = new Map<string, IpcHandler>();
   const summary = vi.fn(overrides.summary ?? (() => ({ status: "ready", registry })));
@@ -148,6 +155,13 @@ function makeHarness(overrides: {
       pinned: value.pinned, canUpdate: !value.pinned, canRollback: false, rollbackTarget: null }] },
     status: "committed"
   })));
+  const setEnabled = vi.fn(overrides.setEnabled ?? ((value) => ({
+    apiVersion: 1, requestId: value.requestId, packageId: value.packageId, enabled: value.enabled,
+    registry: { ...registry, revision: registry.revision + 1, packages: [{ ...registry.packages[0],
+      state: value.enabled ? "installed_enabled" : "installed_disabled", enabled: value.enabled,
+      canEnable: true, canUpdate: !value.enabled, canRollback: false, rollbackTarget: null }] },
+    status: "committed"
+  })));
   registerPiPackagesIpc({
     ipcMain: {
       handle: (channel, handler) => handlers.set(channel, handler as IpcHandler)
@@ -164,10 +178,11 @@ function makeHarness(overrides: {
     update,
     confirmRollback,
     rollback,
-    setPinned
+    setPinned,
+    setEnabled
   });
   return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall, restore,
-    confirmUpdate, update, confirmRollback, rollback, setPinned };
+    confirmUpdate, update, confirmRollback, rollback, setPinned, setEnabled };
 }
 
 describe("registerPiPackagesIpc", () => {
@@ -175,7 +190,8 @@ describe("registerPiPackagesIpc", () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
       "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall",
-      "piPackages.restore", "piPackages.update", "piPackages.rollback", "piPackages.setPinned"
+      "piPackages.restore", "piPackages.update", "piPackages.rollback", "piPackages.setPinned",
+      "piPackages.setEnabled"
     ]);
 
     await expect(call(harness, "piPackages.summary")).resolves.toEqual({ status: "ready", registry });
@@ -318,6 +334,20 @@ describe("registerPiPackagesIpc", () => {
     expect(pinned.confirmRollback).not.toHaveBeenCalled();
     expect(pinned.update).not.toHaveBeenCalled();
     expect(pinned.rollback).not.toHaveBeenCalled();
+  });
+
+  it("forwards an exact pathless package runtime CAS and fences response identity", async () => {
+    const harness = makeHarness();
+    await expect(call(harness, "piPackages.setEnabled", enableRequest)).resolves.toMatchObject({
+      status: "committed", enabled: true,
+      registry: { revision: 5, packages: [{ state: "installed_enabled", canEnable: true }] }
+    });
+    expect(harness.setEnabled).toHaveBeenCalledWith(enableRequest);
+
+    const drift = makeHarness({ setEnabled: (value) => ({
+      apiVersion: 1, requestId: value.requestId, packageId: value.packageId, enabled: false, status: "failed"
+    }) });
+    await expect(call(drift, "piPackages.setEnabled", enableRequest)).resolves.toMatchObject({ status: "failed", enabled: true });
   });
 
   it("fails pin closed across malformed identity and vault drift", async () => {

@@ -11,6 +11,8 @@ import {
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
   PiPackageSetPinnedResultSchema,
+  PiPackageSetEnabledRequestSchema,
+  PiPackageSetEnabledResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
   PiPackageUpdateRequestSchema,
@@ -27,6 +29,8 @@ import {
   type PiPackageRollbackResult,
   type PiPackageSetPinnedRequest,
   type PiPackageSetPinnedResult,
+  type PiPackageSetEnabledRequest,
+  type PiPackageSetEnabledResult,
   type PiPackageUninstallRequest,
   type PiPackageUninstallResult,
   type PiPackageUpdateRequest,
@@ -50,6 +54,7 @@ export interface RegisterPiPackagesIpcOptions {
   readonly confirmRollback: (sender: WebContents, binding: PiPackageRollbackConfirmationBinding) => Awaitable<boolean>;
   readonly rollback: (request: PiPackageRollbackRequest) => Awaitable<PiPackageRollbackResult>;
   readonly setPinned: (request: PiPackageSetPinnedRequest) => Awaitable<PiPackageSetPinnedResult>;
+  readonly setEnabled: (request: PiPackageSetEnabledRequest) => Awaitable<PiPackageSetEnabledResult>;
 }
 
 export interface PiPackageUpdateConfirmationBinding {
@@ -209,6 +214,17 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
       return trustedActiveVault(options, event.sender) === vaultId ? result : failedPinned(parsed);
     } catch { return failedPinned(parsed); }
   });
+
+  options.ipcMain.handle("piPackages.setEnabled", async (event, request: unknown) => {
+    const parsed = PiPackageSetEnabledRequestSchema.parse(request);
+    const vaultId = trustedActiveVault(options, event.sender);
+    if (!vaultId) return failedEnabled(parsed);
+    try {
+      const result = PiPackageSetEnabledResultSchema.parse(await options.setEnabled(parsed));
+      assertEnabledIdentity(parsed, result);
+      return trustedActiveVault(options, event.sender) === vaultId ? result : failedEnabled(parsed);
+    } catch { return failedEnabled(parsed); }
+  });
 }
 
 function trustedActiveVault(
@@ -343,5 +359,14 @@ function failedPinned(request: PiPackageSetPinnedRequest): PiPackageSetPinnedRes
 function assertPinnedIdentity(request: PiPackageSetPinnedRequest, result: PiPackageSetPinnedResult): void {
   if (result.requestId !== request.requestId || result.packageId !== request.packageId || result.pinned !== request.pinned) {
     throw new Error("Pi package pin result identity changed.");
+  }
+}
+function failedEnabled(request: PiPackageSetEnabledRequest): PiPackageSetEnabledResult {
+  return PiPackageSetEnabledResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
+    packageId: request.packageId, enabled: request.enabled, status: "failed" });
+}
+function assertEnabledIdentity(request: PiPackageSetEnabledRequest, result: PiPackageSetEnabledResult): void {
+  if (result.requestId !== request.requestId || result.packageId !== request.packageId || result.enabled !== request.enabled) {
+    throw new Error("Pi package runtime result identity changed.");
   }
 }

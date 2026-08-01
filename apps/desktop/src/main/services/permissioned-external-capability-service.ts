@@ -89,6 +89,7 @@ export interface PermissionedExternalCapabilityAdapter {
     readonly highRisk?: (normalizedInput: unknown) => PermissionHighRiskIntent;
   };
   readonly reviewedPlan?: PermissionedExternalReviewedPlanBinding;
+  isAvailable?(turn: PermissionedExternalTurnContext): boolean;
   normalizeInput(args: unknown): unknown;
   resourceIdentity(normalizedInput: unknown): unknown;
   resourceDisplayName?(normalizedInput: unknown): string;
@@ -165,7 +166,7 @@ export class PermissionedExternalCapabilityRegistry {
   toolsForTurn(turn: PermissionedExternalTurnContext): readonly PigeAgentToolDefinition[] {
     if (this.#adapters.length === 0) return [];
     const broker = this.broker();
-    return this.#adapters.map((adapter): PigeAgentToolDefinition => ({
+    return this.#adapters.filter((adapter) => adapter.isAvailable?.(turn) !== false).map((adapter): PigeAgentToolDefinition => ({
       ...adapter.tool,
       version: adapter.action.version,
       capability: adapter.permission.capability,
