@@ -164,7 +164,8 @@ describe("Pi AI provider binding", () => {
         `${anthropicBaseUrl}/anthropic`,
         "anthropic-selected",
         "deepseek_anthropic",
-        "synthetic-anthropic-compatible-key"
+        "synthetic-anthropic-compatible-key",
+        "deepseek-anthropic"
       ),
       jobId: "job_20260712_deepseekanthropic",
       systemPrompt: "Return a bounded acknowledgement.",
@@ -435,12 +436,14 @@ function makeConfig(
   baseUrl: string,
   modelId: string,
   suffix = providerKind,
-  apiKey = "scoped-test-key"
+  apiKey = "scoped-test-key",
+  presetId?: string
 ): ModelProviderRuntimeConfig {
   return {
     provider: {
       id: `provider_${suffix}`,
       displayName: providerKind,
+      ...(presetId ? { presetId } : {}),
       providerKind,
       endpointProtocol,
       authRequirement: "api_key",

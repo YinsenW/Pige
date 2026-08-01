@@ -85,7 +85,8 @@ describe("model provider registry", () => {
         modelListStrategy: "list_models",
         cloudBoundary: "cloud"
       }),
-      expect.objectContaining({ presetId: "deepseek", endpointProtocol: "openai_chat_completions" })
+      expect.objectContaining({ presetId: "deepseek", endpointProtocol: "openai_chat_completions" }),
+      expect.objectContaining({ presetId: "deepseek-anthropic", endpointProtocol: "anthropic_messages" })
     ]));
     expect(summary.providers).toHaveLength(1);
     expect(summary.providers[0]).toMatchObject({
@@ -145,6 +146,49 @@ describe("model provider registry", () => {
         apiKey: "synthetic-deepseek-key"
       })
     ]);
+  });
+
+  it("connects the reviewed DeepSeek Anthropic preset and keeps its key out of profile files", async () => {
+    const requests: { url?: string; apiKey?: string; version?: string } = {};
+    const probe = new RecordingProbe();
+    const { root, registry } = makeRegistry(async (input, init) => {
+      requests.url = String(input);
+      const headers = new Headers(init?.headers);
+      requests.apiKey = headers.get("x-api-key") ?? undefined;
+      requests.version = headers.get("anthropic-version") ?? undefined;
+      return okModelListFetch(["deepseek-v4-pro", "deepseek-v4-flash"])(input, init);
+    }, fakeCrypto, probe);
+
+    const summary = await registry.addPresetProvider({
+      presetId: "deepseek-anthropic",
+      apiKey: "synthetic-deepseek-anthropic-key"
+    });
+
+    expect(requests).toEqual({
+      url: "https://api.deepseek.com/anthropic/models",
+      apiKey: "synthetic-deepseek-anthropic-key",
+      version: "2023-06-01"
+    });
+    expect(summary.providers).toEqual([expect.objectContaining({
+      presetId: "deepseek-anthropic",
+      providerKind: "anthropic_compatible",
+      endpointProtocol: "anthropic_messages",
+      baseUrl: "https://api.deepseek.com/anthropic"
+    })]);
+    expect(summary.models.find((model) => model.isDefault)?.modelId).toBe("deepseek-v4-pro");
+    expect(probe.configs).toEqual([expect.objectContaining({
+      provider: expect.objectContaining({
+        presetId: "deepseek-anthropic",
+        endpointProtocol: "anthropic_messages",
+        baseUrl: "https://api.deepseek.com/anthropic"
+      }),
+      model: expect.objectContaining({ modelId: "deepseek-v4-pro" }),
+      apiKey: "synthetic-deepseek-anthropic-key"
+    })]);
+    expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8"))
+      .not.toContain("synthetic-deepseek-anthropic-key");
+    expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8"))
+      .not.toContain("synthetic-deepseek-anthropic-key");
   });
 
   it("does not replace a Custom Provider that happens to use a preset endpoint", async () => {

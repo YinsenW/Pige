@@ -52,6 +52,20 @@ const DEEPSEEK_PRESET: ReviewedProviderPreset = {
   bootstrapModelIds: ["deepseek-chat", "deepseek-v4-pro", "deepseek-v4-flash"]
 };
 
+const DEEPSEEK_ANTHROPIC_PRESET: ReviewedProviderPreset = {
+  presetId: "deepseek-anthropic",
+  displayName: "DeepSeek (Anthropic Messages)",
+  providerKind: "anthropic_compatible",
+  endpointProtocol: "anthropic_messages",
+  authRequirement: "api_key",
+  fixedBaseUrl: "https://api.deepseek.com/anthropic",
+  modelListStrategy: "list_models",
+  cloudBoundary: "cloud",
+  canOpenApiKeyManagement: true,
+  apiKeyManagementUrl: "https://platform.deepseek.com/api_keys",
+  bootstrapModelIds: ["deepseek-chat", "deepseek-v4-pro", "deepseek-v4-flash"]
+};
+
 const GEMINI_PRESET: ReviewedProviderPreset = {
   presetId: "gemini",
   displayName: "Gemini",
@@ -79,7 +93,8 @@ const OLLAMA_PRESET: ReviewedProviderPreset = {
   bootstrapModelIds: ["llama3.2", "qwen3", "gemma3"]
 };
 
-const PRESETS = [OPENAI_PRESET, ANTHROPIC_PRESET, GEMINI_PRESET, DEEPSEEK_PRESET, OLLAMA_PRESET] as const;
+const PRESETS = [OPENAI_PRESET, ANTHROPIC_PRESET, GEMINI_PRESET, DEEPSEEK_PRESET,
+  DEEPSEEK_ANTHROPIC_PRESET, OLLAMA_PRESET] as const;
 
 export function listReviewedProviderPresets(): readonly ProviderPresetSummary[] {
   return PRESETS.map(({
@@ -134,7 +149,9 @@ export function isReviewedPresetModel(presetId: string, modelId: string): boolea
   }
   if (preset.presetId === "anthropic") return /^claude-[A-Za-z0-9._-]+$/u.test(modelId);
   if (preset.presetId === "gemini") return /^gemini-[A-Za-z0-9._-]+$/u.test(modelId);
-  if (preset.presetId === "deepseek") return /^deepseek-[A-Za-z0-9._-]+$/u.test(modelId);
+  if (preset.presetId === "deepseek" || preset.presetId === "deepseek-anthropic") {
+    return /^deepseek-[A-Za-z0-9._-]+$/u.test(modelId);
+  }
   if (preset.presetId === "ollama") return /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/u.test(modelId);
   return false;
 }
