@@ -210,8 +210,8 @@ Exit criteria:
 - [E1.05] Every exposed setting is registered; machine-local values and secrets are absent from the vault manifest and default backup inputs.
 - [E1.06] Agent-affecting settings have typed policy effects and owning-service enforcement rather than prompt-only behavior.
 - [E1.07] Diagnostics export is redacted, previewed, cancelable, local-only, bounded, and free of raw secrets or source/note bodies by default.
-- [E1.08] Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds.
-- [E1.09] Reset Local Database cannot delete Markdown knowledge, source records/assets, memory, conversations, proposals, operations, or trash.
+- [E1.08] Deleting `.pige/db/` does not delete user-owned files, and the empty migration/rebuild path succeeds through a completed durable `index_rebuild` Job.
+- [E1.09] Reset Local Database re-proves the confirmed active Vault binding, removes only `.pige/db`, `.pige/indexes`, and `.pige/cache`, preserves Markdown knowledge, source records/assets, memory, conversations, Jobs, proposals, operations, skills, and trash, and returns the completed rebuild result.
 - [E1.10] Renderer reaches privileged capabilities only through typed preload IPC.
 - [E1.11] Compact and expanded shell modes retain current context and remain usable in the six catalog locales.
 - [E1.12] One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.

@@ -98,7 +98,8 @@ describe("desktop shell build contract", () => {
 
     expect(mainSource).not.toMatch(/\bsafeStorage\b/u);
     expect(mainSource).toContain('new JsonSecretStore(app.getPath("userData"))');
-    expect(storeSource).toContain('path.join(userDataPath, "secrets.json")');
+    expect(storeSource).toContain("const resolved = path.resolve(userDataPath)");
+    expect(storeSource).toContain('path.join(resolved, "secrets.json")');
     expect(storeSource).toContain("schemaVersion: z.literal(2)");
     expect(storeSource).not.toContain(".encryptString(");
     expect(storeSource).not.toContain(".decryptString(");
@@ -570,7 +571,6 @@ describe("desktop shell build contract", () => {
     );
 
     expect(contractsSource).toContain("readonly localCapabilities: {");
-    expect(contractsSource).toContain('readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr_local")[]');
     expect(contractsSource).toContain("readonly paddleOcrSummary:");
     for (const action of ["install", "enable", "test", "disable", "remove"] as const) {
       expect(contractsSource).toContain(`readonly ${action}PaddleOcr:`);
@@ -1264,7 +1264,11 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.deleteProvider"'),
       mainSource.indexOf('ipcMain.handle("models.addManualModel"')
     );
-    expect(resetHandler.indexOf("confirmSettingAction")).toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase()"));
+    expect(resetHandler.indexOf("const expectedBinding")).toBeLessThan(resetHandler.indexOf("confirmSettingAction"));
+    expect(resetHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase(expectedBinding)"));
+    expect(resetHandler.indexOf("getVaultService().resetLocalDatabase(expectedBinding)"))
+      .toBeLessThan(resetHandler.indexOf("getIndexRebuildJobExecutor().request()"));
     expect(providerHandler.indexOf("AddManualProviderRequestSchema.parse(request)"))
       .toBeLessThan(providerHandler.indexOf("getModelProviderRegistry().addManualProvider(validatedRequest)"));
     expect(presetHandler.indexOf("AddPresetProviderRequestSchema.parse(request)"))

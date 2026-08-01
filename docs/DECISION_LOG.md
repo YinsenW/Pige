@@ -1997,11 +1997,15 @@ References:
 
 Status: Accepted
 Date: 2026-07-10
-Revised: 2026-07-10
+Revised: 2026-08-01
 
 Decision:
 
 Manual local database rebuilds must create a durable `index_rebuild` job before rebuilding SQLite page metadata and FTS from Markdown. An initial implementation may execute the rebuild body synchronously after job creation, but the product contract is job-first.
+
+The confirmed Reset Local Database repair re-proves its exact active Vault binding, deletes
+only rebuildable roots, and then uses and awaits this same durable rebuild owner; deletion
+without a returned rebuild result is not a successful reset.
 
 Rationale:
 

@@ -255,6 +255,12 @@ Current driver, schema, rebuild, locale-search, graph, worker, scale, and platfo
 live in the Playbook and acceptance manifest. Legacy `pending_sqlite_driver` migration
 state remains readable; it never substitutes for the real driver contract above.
 
+Reset Local Database is one confirmation-bound repair, not a deletion-only command. Main
+captures and re-proves the exact active Vault binding around confirmation, deletes only
+`.pige/db`, `.pige/indexes`, and `.pige/cache`, then creates and awaits the normal durable
+`index_rebuild` Job. Success therefore means rebuilt derived state is available; a changed
+Vault binding or failed rebuild never substitutes another Vault or claims repair completion.
+
 ## 11. References
 
 Database/runtime sources and replacement policy are registered once in

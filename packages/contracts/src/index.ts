@@ -1153,6 +1153,10 @@ export interface LocalDatabaseResetResult {
   readonly recreatedRoots: readonly string[];
 }
 
+export interface LocalDatabaseResetAndRebuildResult extends LocalDatabaseResetResult {
+  readonly rebuild: LocalDatabaseRebuildResult;
+}
+
 export interface LocalDatabaseRebuildResult {
   readonly rebuiltAt: string;
   readonly pageCount: number;
@@ -2655,7 +2659,7 @@ export interface PigeDesktopApi {
   };
   readonly maintenance: {
     readonly rebuildLocalDatabase: () => Promise<LocalDatabaseRebuildResult>;
-    readonly resetLocalDatabase: () => Promise<LocalDatabaseResetResult>;
+    readonly resetLocalDatabase: () => Promise<LocalDatabaseResetAndRebuildResult>;
     readonly localDatabaseStatus: () => Promise<LocalDatabaseStatus>;
     readonly runKnowledgeHealth: (
       request: KnowledgeHealthRunRequest

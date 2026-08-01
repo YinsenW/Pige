@@ -316,8 +316,11 @@ Rules:
 - `maintenance.rebuildLocalDatabase` creates an `index_rebuild` Job, rebuilds SQLite
   metadata/FTS from Markdown, and returns counts plus the completed Job ID. The current
   body may run synchronously; release scale still requires worker progress/cancellation.
-- `maintenance.resetLocalDatabase` recreates only `.pige/db`, `.pige/indexes`, and
-  `.pige/cache`; durable vault data is untouched.
+- `maintenance.resetLocalDatabase` captures the active Vault binding before native
+  confirmation, re-proves the same Vault ID and path after confirmation, recreates only
+  `.pige/db`, `.pige/indexes`, and `.pige/cache`, then starts and awaits the durable
+  `index_rebuild` Job. Its result contains both the recreated-root summary and the completed
+  rebuild result; binding drift fails before deletion and durable vault data is untouched.
 
 ### 6.2 Capture
 

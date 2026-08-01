@@ -166,6 +166,42 @@ describe("VaultService writer lease lifecycle", () => {
     expect(startupService.current()).toMatchObject({ vaultId: openedVault.summary.vaultId });
   });
 
+  it("never resets a different vault after the reviewed binding changes", () => {
+    const root = makeTempRoot();
+    const reviewed = makeVault(root, "Reviewed");
+    const replacement = makeVault(root, "Replacement");
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(
+      makeSettingsStore(root),
+      () => false,
+      harness.factory
+    ));
+    const reviewedDatabase = path.join(reviewed.path, ".pige/db/vault.sqlite");
+    const replacementDatabase = path.join(replacement.path, ".pige/db/vault.sqlite");
+    fs.writeFileSync(reviewedDatabase, "reviewed database", "utf8");
+    fs.writeFileSync(replacementDatabase, "replacement database", "utf8");
+
+    service.openPath(reviewed.path);
+    const expectedBinding = {
+      activeVaultId: reviewed.summary.vaultId,
+      vaultPath: reviewed.path
+    };
+    service.openPath(replacement.path);
+
+    expect(() => service.resetLocalDatabase(expectedBinding)).toThrowError(
+      expect.objectContaining({ code: "vault.binding_changed" })
+    );
+    expect(fs.readFileSync(reviewedDatabase, "utf8")).toBe("reviewed database");
+    expect(fs.readFileSync(replacementDatabase, "utf8")).toBe("replacement database");
+
+    expect(service.resetLocalDatabase({
+      activeVaultId: replacement.summary.vaultId,
+      vaultPath: replacement.path
+    })).toMatchObject({ recreatedRoots: [".pige/db", ".pige/indexes", ".pige/cache"] });
+    expect(fs.existsSync(replacementDatabase)).toBe(false);
+    expect(fs.readFileSync(reviewedDatabase, "utf8")).toBe("reviewed database");
+  });
+
   it("does not activate a Vault with missing or malformed readable root documents", () => {
     const root = makeTempRoot();
     const current = makeVault(root, "Current");

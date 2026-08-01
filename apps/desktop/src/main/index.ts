@@ -3611,14 +3611,20 @@ registerVaultRecentIpc({ ipcMain, parentWindow: (sender) => BrowserWindow.fromWe
   reconnectRecent: (parentWindow, request) => getVaultService().reconnectRecent(parentWindow, request) });
 ipcMain.handle("maintenance.rebuildLocalDatabase", () => getIndexRebuildJobExecutor().request());
 ipcMain.handle("maintenance.resetLocalDatabase", async (event) => {
+  const activeVault = getVaultService().current();
+  const activeVaultPath = getVaultService().activeVaultPath();
+  if (!activeVault || !activeVaultPath) {
+    throw new PigeDomainError("vault_missing", "No active Pige vault is selected.");
+  }
+  const expectedBinding = { activeVaultId: activeVault.vaultId, vaultPath: activeVaultPath };
   await confirmSettingAction(event.sender, ["maintenance.localDatabaseReset"], {
     title: "Reset local index data?",
     message: "Pige will delete and rebuild only local indexes, caches, and database state. Your notes and source evidence stay intact.",
     confirmLabel: "Reset local data"
   });
-  const result = getVaultService().resetLocalDatabase();
-  initializeActiveDatabase();
-  return result;
+  const result = getVaultService().resetLocalDatabase(expectedBinding);
+  const rebuild = await getIndexRebuildJobExecutor().request();
+  return { ...result, rebuild };
 });
 ipcMain.handle("maintenance.localDatabaseStatus", () => {
   const activeVaultPath = getVaultService().activeVaultPath();
