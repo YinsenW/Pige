@@ -29,6 +29,7 @@ import {
   type SkillUninstallRequest
 } from "@pige/schemas";
 import { SkillRegistryService } from "./skill-registry-service";
+import type { EnabledPureSkillRuntime } from "./pure-skill-runtime-service";
 import type { SkillStagingStorePort } from "./skill-source-update-registry";
 import { SkillUrlInstallService } from "./skill-url-install-service";
 
@@ -61,6 +62,22 @@ export class ScopedSkillRegistryService {
 
   revisionFor(_scope: "machine_local" | "vault", activeVaultId: string): number {
     return this.#combined(activeVaultId).revision;
+  }
+
+  enabledPureSkillRuntimes(activeVaultId: string): readonly EnabledPureSkillRuntime[] {
+    const active = this.#requireVault(activeVaultId);
+    const machine = this.#machine.enabledPureSkillRuntimes();
+    const vault = this.registryFor("vault", active.vaultId).enabledPureSkillRuntimes();
+    const seen = new Set<string>();
+    const combined = [...machine, ...vault].sort((left, right) =>
+      left.identity.skillId.localeCompare(right.identity.skillId, "en") ||
+      left.identity.scope.localeCompare(right.identity.scope, "en"));
+    for (const runtime of combined) {
+      if (seen.has(runtime.identity.skillId)) throw new Error("skill.runtime_identity_ambiguous");
+      seen.add(runtime.identity.skillId);
+    }
+    this.#requireVault(activeVaultId);
+    return Object.freeze(combined);
   }
 
   summary(request: SkillRegistryQueryRequest): SkillRegistryQueryResult {

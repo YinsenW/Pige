@@ -379,6 +379,7 @@ import { ScopedSkillRegistryService } from "./services/scoped-skill-registry-ser
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
 import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool";
 import { ExternalWebSkillRuntimeService } from "./services/external-web-skill-runtime-service";
+import { PureSkillRuntimeService } from "./services/pure-skill-runtime-service";
 import { AgentMemoryService } from "./services/agent-memory-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
@@ -481,6 +482,7 @@ let skillRegistryService: SkillRegistryService | undefined;
 let scopedSkillRegistryService: ScopedSkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
 let externalWebSkillRuntimeService: ExternalWebSkillRuntimeService | undefined;
+let pureSkillRuntimeService: PureSkillRuntimeService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
 let paddleOcrLifecycleService: PaddleOcrLifecycleService | undefined;
 let paddleOcrRuntimeComposition: PaddleOcrRuntimeComposition | undefined;
@@ -807,6 +809,11 @@ const getExternalWebSkillRuntimeService = (): ExternalWebSkillRuntimeService => 
     }
   });
   return externalWebSkillRuntimeService;
+};
+
+const getPureSkillRuntimeService = (): PureSkillRuntimeService => {
+  pureSkillRuntimeService ??= new PureSkillRuntimeService(getScopedSkillRegistryService());
+  return pureSkillRuntimeService;
 };
 
 const getAgentMemoryService = (): AgentMemoryService => {
@@ -1648,7 +1655,15 @@ const getHomeAgentService = (): HomeAgentService => {
         }
       },
       new HomeSkillStagingToolService(getSkillUrlInstallService()),
-      getExternalWebSkillRuntimeService(),
+      { toolsForTurn: (turn) => [
+        ...getExternalWebSkillRuntimeService().toolsForTurn(turn),
+        ...getPureSkillRuntimeService().toolsForTurn({
+          activeVaultId: turn.vaultId,
+          authoredTaskIntent: turn.authoredTaskIntent,
+          authoredText: turn.authoredText,
+          assertCurrent: turn.assertCurrent
+        })
+      ] },
       homeConversationHistory,
       new HomeAuthoredTextCaptureService(getCaptureService(), getJobsService())
     );
