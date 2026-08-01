@@ -683,7 +683,9 @@ describe("security-sensitive shared contracts", () => {
       span: { unit: "utf8_bytes" as const, start: 12, endExclusive: 24 },
       selectedContentHash: `sha256:${"b".repeat(64)}`
     };
-    for (const [index, action] of (["create_note", "create_claim", "create_question"] as const).entries()) {
+    for (const [index, action] of ([
+      "create_note", "create_claim", "create_question", "create_concept", "create_entity", "create_topic"
+    ] as const).entries()) {
       const request = {
         apiVersion: 1 as const,
         requestId: `readerselaction_abcdef123456789${index}`,
@@ -715,7 +717,7 @@ describe("security-sensitive shared contracts", () => {
     expect(() => ReaderSelectionCreateNoteRequestSchema.parse({
       apiVersion: 1,
       requestId: "readerselaction_abcdef1234567899",
-      action: "create_concept",
+      action: "create_summary",
       activeVaultId: "vault_20260710_abcdef12",
       renderContextId: `notectx_${"c".repeat(32)}`,
       selection,

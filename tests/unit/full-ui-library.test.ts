@@ -3237,9 +3237,13 @@ describe("full UI Library", () => {
 
     await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
     await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="createNote"]')));
-    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-create-action="create_claim"]')));
+    expect(Array.from(container.querySelectorAll<HTMLElement>("[data-selection-create-action]")).map((item) =>
+      item.dataset.selectionCreateAction)).toEqual([
+      "create_note", "create_claim", "create_question", "create_concept", "create_entity", "create_topic"
+    ]);
+    await clickButton(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-create-action="create_concept"]')));
     const secondRequest = requests[1]!;
-    expect(secondRequest.action).toBe("create_claim");
+    expect(secondRequest.action).toBe("create_concept");
     await act(async () => {
       resolveCreate({
         apiVersion: 1,
@@ -3251,7 +3255,7 @@ describe("full UI Library", () => {
         tailEventId: "evt_20260729_createnote2",
         proposal: {
           proposalId: "proposal_20260729_createnote",
-          action: "create_claim",
+          action: "create_concept",
           state: "ready",
           revision: 1,
           lines: [{ kind: "added", text: "Create a durable note" }]

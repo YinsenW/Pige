@@ -9,6 +9,7 @@ import type {
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
+  ReaderSelectionCreatePageActionSchema,
   ReaderSelectionIdentitySchema,
   type JobRecord,
   type PigeErrorSummary
@@ -272,7 +273,7 @@ export function isValidReaderSelectionJobScope(
     )) &&
     (scope.linkAction === undefined || (scope.selection !== undefined && scope.linkAction === "link")) &&
     (scope.createNoteAction === undefined || (scope.selection !== undefined &&
-      ["create_note", "create_claim", "create_question"].includes(scope.createNoteAction))) &&
+      ReaderSelectionCreatePageActionSchema.safeParse(scope.createNoteAction).success)) &&
     [scope.transformAction, scope.linkAction, scope.createNoteAction].filter(Boolean).length <= 1 &&
     !hasSourceBinding;
 }

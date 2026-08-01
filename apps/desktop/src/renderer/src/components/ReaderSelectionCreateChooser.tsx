@@ -1,6 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { ReaderSelectionCreatePageAction } from "@pige/contracts";
 
+const actions: readonly ReaderSelectionCreatePageAction[] = [
+  "create_note", "create_claim", "create_question", "create_concept", "create_entity", "create_topic"
+];
+const labelKeys: Record<ReaderSelectionCreatePageAction, string> = {
+  create_note: "note.selection.createNote",
+  create_claim: "note.selection.createClaim",
+  create_question: "note.selection.createQuestion",
+  create_concept: "note.selection.createConcept",
+  create_entity: "note.selection.createEntity",
+  create_topic: "note.selection.createTopic"
+};
+
 export function ReaderSelectionCreateChooser(props: {
   readonly ownerIdentity: string;
   readonly onChoose: (action: ReaderSelectionCreatePageAction) => void;
@@ -10,7 +22,6 @@ export function ReaderSelectionCreateChooser(props: {
   const dialogRef = useRef<HTMLElement>(null); const firstRef = useRef<HTMLButtonElement>(null);
   useEffect(() => { firstRef.current?.focus({ preventScroll: true }); }, [props.ownerIdentity]);
   const cancel = (): void => props.onCancel();
-  const actions: readonly ReaderSelectionCreatePageAction[] = ["create_note", "create_claim", "create_question"];
   return <div className="confirmation-backdrop"><section ref={dialogRef} className="confirmation-dialog" role="dialog" aria-modal="true"
     aria-labelledby="reader-selection-create-title" aria-describedby="reader-selection-create-description"
     onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); return; } if (event.key !== "Tab") return;
@@ -20,7 +31,7 @@ export function ReaderSelectionCreateChooser(props: {
     <div className="confirmation-copy"><h2 id="reader-selection-create-title">{props.t("note.selection.turnInto")}</h2>
       <p id="reader-selection-create-description">{props.t("note.selection.turnIntoDescription")}</p></div>
     <div className="confirmation-actions">{actions.map((action, index) => <button ref={index === 0 ? firstRef : undefined} key={action} type="button" className="secondary"
-      data-selection-create-action={action} onClick={() => props.onChoose(action)}>{props.t(action === "create_note" ? "note.selection.createNote" : action === "create_claim" ? "note.selection.createClaim" : "note.selection.createQuestion")}</button>)}
+      data-selection-create-action={action} onClick={() => props.onChoose(action)}>{props.t(labelKeys[action])}</button>)}
       <button type="button" className="secondary" onClick={cancel}>{props.t("note.selection.turnIntoCancel")}</button></div>
   </section></div>;
 }
