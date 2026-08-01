@@ -702,8 +702,10 @@ Datasets stay in Library. Bound paging preserves rows/focus; citations are read-
 an explicit progressive disclosure that lists pathless safe summaries and restores one exact current
 receipt before refreshing the catalog; stale inventory retains the surface and reloads Main truth. Stable-ID
 snapshots have Undo. Dialogs edit representable formulas, including numeric lookup/rollup and acyclic
-same-table Pige-formula operands while hiding nonnumeric/self/downstream cycle candidates, select one relation row, or derive its
-scalar lookup/rollup; eligible relation fields can switch their table/display field, preserving row links
+same-table Pige-formula operands; an inline table-name action keeps the stable table identity and retains
+the exact local draft when Dataset revision CAS is stale. Dialogs select one relation row, or derive its
+scalar lookup/rollup while hiding nonnumeric/self/downstream cycle candidates; eligible relation fields
+can switch their table/display field, preserving row links
 for display-only changes and clearing them for a table change. Pige-owned lookup definitions can switch relation/scalar target and rollups can
 switch relation and count/numeric sum while derived cells stay read-only. Main owns eligibility and
 stale keeps drafts. Pige-owned views edit their optional
