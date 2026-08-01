@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  KnowledgeActivityRedoRequest,
+  KnowledgeActivityRedoResult,
   KnowledgeActivitySummary,
   KnowledgeActivityUndoResult,
   LibraryRenameTopicRequest,
@@ -41,6 +43,8 @@ interface TopicRenameReceipt {
   readonly afterTitle: string;
   readonly operationId: string;
   readonly createdAt: string;
+  readonly redoOfOperationId?: string;
+  readonly undoOperationId?: string;
 }
 
 export class LibraryTopicRenameService {
@@ -130,8 +134,12 @@ export class LibraryTopicRenameService {
     if (!vaultPath || operation.kind !== "rename_page") return undefined;
     const receipt = findReceipt(vaultPath, operation.id);
     if (!receipt || !matchesOperation(receipt, operation)) return undefined;
-    const undone = undo?.id === undoOperationId(operation.id);
+    const undone = !!undo && matchesUndoOperation(operation, undo);
     const current = undone ? beforeMatches(vaultPath, receipt) : afterMatches(vaultPath, receipt);
+    const redoReceipt = undone ? findRedoReceipt(vaultPath, operation.id) : undefined;
+    const redoOperation = redoReceipt ? readOperation(vaultPath, redoReceipt.operationId) : undefined;
+    const matchingRedo = !!redoReceipt && !!redoOperation && matchesOperation(redoReceipt, redoOperation);
+    const canRedo = undone && !redoOperation && current;
     return {
       operationId: operation.id,
       kind: "update_page",
@@ -140,6 +148,11 @@ export class LibraryTopicRenameService {
       target: { kind: "page", pageId: receipt.pageId },
       status: undone ? "undone" : "applied",
       canUndo: !undone && current,
+      ...(undone ? {
+        canRedo,
+        ...(!canRedo ? { redoUnavailableReason: matchingRedo
+          ? "already_redone" as const : "content_changed" as const } : {})
+      } : {}),
       ...(undone
         ? { undoUnavailableReason: "already_undone" as const }
         : current ? {} : { undoUnavailableReason: "content_changed" as const })
@@ -147,7 +160,11 @@ export class LibraryTopicRenameService {
   }
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
-    return operations.find((candidate) => candidate.id === undoOperationId(operation.id));
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return undefined;
+    const receipt = findReceipt(vaultPath, operation.id);
+    if (!receipt || !matchesOperation(receipt, operation)) return undefined;
+    return operations.find((candidate) => matchesUndoOperation(operation, candidate));
   }
 
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
@@ -163,6 +180,44 @@ export class LibraryTopicRenameService {
     persistUndoIntent(vaultPath, receipt);
     completeUndo(vaultPath, receipt, operation);
     return { status: "undone", operationId: operation.id, undoOperationId: undoId };
+  }
+
+  redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return { status: "not_found", operationId: request.operationId };
+    try {
+      const operation = readOperation(vaultPath, request.operationId);
+      const receipt = operation ? findReceipt(vaultPath, operation.id) : undefined;
+      if (!operation || !receipt || !matchesOperation(receipt, operation)) {
+        return { status: "not_found", operationId: request.operationId };
+      }
+      const undo = readOperation(vaultPath, undoOperationId(operation.id));
+      if (!undo || !matchesUndoOperation(operation, undo)) {
+        return { status: "not_found", operationId: operation.id };
+      }
+      const existingReceipt = findRedoReceipt(vaultPath, operation.id);
+      if (existingReceipt && !matchesRedoReceipt(existingReceipt, receipt, undo)) {
+        return { status: "stale", operationId: operation.id };
+      }
+      const redoReceipt = existingReceipt ?? createRedoReceipt(receipt, undo, this.#now().toISOString());
+      const existingOperation = readOperation(vaultPath, redoReceipt.operationId);
+      if (existingOperation) {
+        if (!matchesOperation(redoReceipt, existingOperation)) return { status: "stale", operationId: operation.id };
+        return { status: "already_redone", operationId: operation.id, undoOperationId: undo.id,
+          redoOperationId: existingOperation.id, revisionId: redoReceipt.afterHash };
+      }
+      const currentRevisionId = pathHash(resolveVaultPath(vaultPath, receipt.pagePath));
+      if ((request.expectedRevisionId !== undefined && request.expectedRevisionId !== receipt.beforeHash) ||
+        !beforeMatches(vaultPath, receipt)) {
+        return { status: "stale", operationId: operation.id, ...(currentRevisionId ? { currentRevisionId } : {}) };
+      }
+      if (!existingReceipt) persistRedoReceipt(vaultPath, redoReceipt);
+      completeForward(vaultPath, redoReceipt);
+      return { status: "redone", operationId: operation.id, undoOperationId: undo.id,
+        redoOperationId: redoReceipt.operationId, revisionId: redoReceipt.afterHash };
+    } catch {
+      return { status: "stale", operationId: request.operationId };
+    }
   }
 
   recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number } {
@@ -295,10 +350,12 @@ function createOperation(receipt: TopicRenameReceipt): OperationRecord {
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
     kind: "rename_page",
     targetRefs: [{ kind: "page", id: receipt.pageId, checksum: receipt.afterHash }],
-    sourceRefs: [],
+    sourceRefs: receipt.redoOfOperationId && receipt.undoOperationId
+      ? [{ kind: "operation", id: receipt.redoOfOperationId }, { kind: "operation", id: receipt.undoOperationId }]
+      : [],
     before: { kind: "page", id: receipt.pageId, checksum: receipt.beforeHash },
     after: { kind: "page", id: receipt.pageId, checksum: receipt.afterHash },
-    summary: `Renamed topic “${bounded(receipt.beforeTitle)}” to “${bounded(receipt.afterTitle)}”.`,
+    summary: `${receipt.redoOfOperationId ? "Reapplied" : "Renamed"} topic “${bounded(receipt.beforeTitle)}” to “${bounded(receipt.afterTitle)}”.`,
     reversible: "yes",
     warnings: []
   });
@@ -327,6 +384,18 @@ function persistIntent(vaultPath: string, receipt: TopicRenameReceipt, before: B
   writeExclusive(receiptPath(vaultPath, receipt.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
 }
 
+function createRedoReceipt(parent: TopicRenameReceipt, undo: OperationRecord, createdAt: string): TopicRenameReceipt {
+  return { ...parent,
+    requestId: `topicrenameredoreq_${createHash("sha256").update(parent.operationId).digest("hex").slice(0, 32)}`,
+    requestDigest: hash(Buffer.from(`${parent.operationId}\0${undo.id}\0${parent.beforeHash}\0${parent.afterHash}`, "utf8")),
+    operationId: redoOperationId(parent.operationId), createdAt,
+    redoOfOperationId: parent.operationId, undoOperationId: undo.id };
+}
+
+function persistRedoReceipt(vaultPath: string, receipt: TopicRenameReceipt): void {
+  writeExclusive(receiptPath(vaultPath, receipt.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
+}
+
 function readReceipt(vaultPath: string, requestId: string): TopicRenameReceipt | undefined {
   const file = receiptPath(vaultPath, requestId);
   if (!fs.existsSync(file)) return undefined;
@@ -346,6 +415,12 @@ function listReceipts(vaultPath: string): TopicRenameReceipt[] {
 
 function findReceipt(vaultPath: string, operationId: string): TopicRenameReceipt | undefined {
   return listReceipts(vaultPath).find((receipt) => receipt.operationId === operationId);
+}
+
+function findRedoReceipt(vaultPath: string, operationId: string): TopicRenameReceipt | undefined {
+  const matches = listReceipts(vaultPath).filter((receipt) => receipt.redoOfOperationId === operationId);
+  if (matches.length > 1) throw new RenameConflictError();
+  return matches[0];
 }
 
 function receiptPath(vaultPath: string, requestId: string): string {
@@ -421,14 +496,37 @@ function sameFileIdentity(file: string, expected: fs.Stats): boolean {
 
 function matchesOperation(receipt: TopicRenameReceipt, operation: OperationRecord): boolean {
   return operation.id === receipt.operationId && operation.kind === "rename_page" &&
-    operation.targetRefs[0]?.id === receipt.pageId && operation.before?.checksum === receipt.beforeHash &&
-    operation.after?.checksum === receipt.afterHash;
+    operation.targetRefs.length === 1 && operation.targetRefs[0]?.kind === "page" &&
+    operation.targetRefs[0].id === receipt.pageId && operation.targetRefs[0].checksum === receipt.afterHash &&
+    operation.before?.checksum === receipt.beforeHash && operation.after?.checksum === receipt.afterHash &&
+    (receipt.redoOfOperationId && receipt.undoOperationId
+      ? operation.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === receipt.redoOfOperationId) &&
+        operation.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === receipt.undoOperationId)
+      : operation.sourceRefs.length === 0);
+}
+function matchesUndoOperation(operation: OperationRecord, undo: OperationRecord): boolean {
+  return undo.id === undoOperationId(operation.id) && undo.kind === "rename_page" &&
+    undo.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === operation.id) &&
+    undo.before?.checksum === operation.after?.checksum && undo.after?.checksum === operation.before?.checksum;
+}
+function matchesRedoReceipt(child: TopicRenameReceipt, parent: TopicRenameReceipt, undo: OperationRecord): boolean {
+  return child.redoOfOperationId === parent.operationId && child.undoOperationId === undo.id &&
+    child.operationId === redoOperationId(parent.operationId) && child.activeVaultId === parent.activeVaultId &&
+    child.pageId === parent.pageId && child.pagePath === parent.pagePath &&
+    child.beforeImagePath === parent.beforeImagePath && child.afterImagePath === parent.afterImagePath &&
+    child.beforeHash === parent.beforeHash && child.afterHash === parent.afterHash &&
+    child.beforeTitle === parent.beforeTitle && child.afterTitle === parent.afterTitle;
 }
 function beforeMatches(vaultPath: string, receipt: TopicRenameReceipt): boolean { return pathHash(resolveVaultPath(vaultPath, receipt.pagePath)) === receipt.beforeHash; }
 function afterMatches(vaultPath: string, receipt: TopicRenameReceipt): boolean { return pathHash(resolveVaultPath(vaultPath, receipt.pagePath)) === receipt.afterHash; }
 function digestRequest(request: LibraryRenameTopicRequest): string { return hash(Buffer.from(JSON.stringify(request), "utf8")); }
 function hash(bytes: Buffer): `sha256:${string}` { return `sha256:${createHash("sha256").update(bytes).digest("hex")}`; }
 function undoOperationId(operationId: string): string { return `${operationId}undo`; }
+function redoOperationId(operationId: string): string {
+  const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!date) throw new RenameConflictError();
+  return `op_${date}_${createHash("sha256").update(`pige.topic-rename-redo.v1\0${operationId}`).digest("hex").slice(0, 16)}`;
+}
 function createOperationId(createdAt: string, request: LibraryRenameTopicRequest, randomId: string): string {
   return `op_${createdAt.slice(0, 10).replace(/-/gu, "")}_${createHash("sha256").update(`${request.requestId}\0${randomId}`).digest("hex").slice(0, 16)}`;
 }

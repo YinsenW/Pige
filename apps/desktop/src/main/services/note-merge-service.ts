@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  KnowledgeActivityRedoRequest,
+  KnowledgeActivityRedoResult,
   KnowledgeActivitySummary,
   KnowledgeActivityUndoResult,
   NoteMergeRequest,
@@ -50,6 +52,8 @@ interface MergeReceipt {
   readonly survivorTitle: string;
   readonly absorbedTitle: string;
   readonly createdAt: string;
+  readonly redoOfOperationId?: string;
+  readonly undoOperationId?: string;
 }
 
 export type NoteMergeServiceResult =
@@ -124,7 +128,12 @@ export class NoteMergeService {
     if (!vaultPath || operation.kind !== "update_page") return undefined;
     const receipt = findReceiptByOperation(vaultPath, operation.id);
     if (!receipt || !matchesOperation(receipt, operation)) return undefined;
-    const undone = undo !== undefined && undo.id === undoOperationId(operation.id);
+    const undone = !!undo && matchesUndoOperation(operation, undo);
+    const current = undone ? originalsStateMatches(vaultPath, receipt) : mergeStateMatches(vaultPath, receipt);
+    const redoReceipt = undone ? findRedoReceipt(vaultPath, operation.id) : undefined;
+    const redoOperation = redoReceipt ? readOperation(vaultPath, redoReceipt.operationId) : undefined;
+    const matchingRedo = !!redoReceipt && !!redoOperation && matchesOperation(redoReceipt, redoOperation);
+    const canRedo = undone && !redoOperation && current;
     return {
       operationId: operation.id,
       kind: "update_page",
@@ -132,14 +141,21 @@ export class NoteMergeService {
       targetLabel: receipt.survivorTitle,
       target: { kind: "page", pageId: receipt.survivorPageId },
       status: undone ? "undone" : "applied",
-      canUndo: !undone && mergeStateMatches(vaultPath, receipt),
+      canUndo: !undone && current,
+      ...(undone ? { canRedo,
+        ...(!canRedo ? { redoUnavailableReason: matchingRedo
+          ? "already_redone" as const : "content_changed" as const } : {}) } : {}),
       ...(undone ? { undoUnavailableReason: "already_undone" as const } : {}),
-      ...(!undone && !mergeStateMatches(vaultPath, receipt) ? { undoUnavailableReason: "content_changed" as const } : {})
+      ...(!undone && !current ? { undoUnavailableReason: "content_changed" as const } : {})
     };
   }
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
-    return operations.find((candidate) => candidate.id === undoOperationId(operation.id));
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return undefined;
+    const receipt = findReceiptByOperation(vaultPath, operation.id);
+    if (!receipt || !matchesOperation(receipt, operation)) return undefined;
+    return operations.find((candidate) => matchesUndoOperation(operation, candidate));
   }
 
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
@@ -154,6 +170,46 @@ export class NoteMergeService {
     restoreOriginals(vaultPath, receipt);
     writeOperation(vaultPath, createUndoOperation(receipt, operation, undoId));
     return { status: "undone", operationId: operation.id, undoOperationId: undoId };
+  }
+
+  redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return { status: "not_found", operationId: request.operationId };
+    try {
+      const operation = readOperation(vaultPath, request.operationId);
+      const receipt = operation ? findReceiptByOperation(vaultPath, operation.id) : undefined;
+      if (!operation || !receipt || !matchesOperation(receipt, operation)) {
+        return { status: "not_found", operationId: request.operationId };
+      }
+      const undo = readOperation(vaultPath, undoOperationId(operation.id));
+      if (!undo || !matchesUndoOperation(operation, undo)) {
+        return { status: "not_found", operationId: operation.id };
+      }
+      const existingReceipt = findRedoReceipt(vaultPath, operation.id);
+      if (existingReceipt && !matchesRedoReceipt(existingReceipt, receipt, undo)) {
+        return { status: "stale", operationId: operation.id };
+      }
+      const redoReceipt = existingReceipt ?? createRedoReceipt(receipt, undo, this.#now().toISOString());
+      const existingOperation = readOperation(vaultPath, redoReceipt.operationId);
+      if (existingOperation) {
+        if (!matchesOperation(redoReceipt, existingOperation) || !mergeStateMatches(vaultPath, redoReceipt)) {
+          return { status: "stale", operationId: operation.id };
+        }
+        return { status: "already_redone", operationId: operation.id, undoOperationId: undo.id,
+          redoOperationId: existingOperation.id, revisionId: redoReceipt.survivorMergedHash };
+      }
+      const currentRevisionId = fileHash(resolve(vaultPath, receipt.survivorPath));
+      if ((request.expectedRevisionId !== undefined && request.expectedRevisionId !== receipt.survivorBeforeHash) ||
+        !originalsStateMatches(vaultPath, receipt)) {
+        return { status: "stale", operationId: operation.id, ...(currentRevisionId ? { currentRevisionId } : {}) };
+      }
+      if (!existingReceipt) persistRedoReceipt(vaultPath, redoReceipt);
+      completeMerge(vaultPath, redoReceipt);
+      return { status: "redone", operationId: operation.id, undoOperationId: undo.id,
+        redoOperationId: redoReceipt.operationId, revisionId: redoReceipt.survivorMergedHash };
+    } catch {
+      return { status: "stale", operationId: request.operationId };
+    }
   }
 
   recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number } {
@@ -246,6 +302,18 @@ function persistMergeIntent(vaultPath: string, receipt: MergeReceipt, survivor: 
   writeExclusive(receiptPath(vaultPath, receipt.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
 }
 
+function createRedoReceipt(parent: MergeReceipt, undo: OperationRecord, createdAt: string): MergeReceipt {
+  return { ...parent,
+    requestId: `notemergeredoreq_${createHash("sha256").update(parent.operationId).digest("hex").slice(0, 32)}`,
+    requestDigest: hash(Buffer.from(`${parent.operationId}\0${undo.id}\0${parent.survivorBeforeHash}\0${parent.absorbedBeforeHash}\0${parent.survivorMergedHash}`, "utf8")),
+    operationId: redoOperationId(parent.operationId), createdAt,
+    redoOfOperationId: parent.operationId, undoOperationId: undo.id };
+}
+
+function persistRedoReceipt(vaultPath: string, receipt: MergeReceipt): void {
+  writeExclusive(receiptPath(vaultPath, receipt.requestId), Buffer.from(JSON.stringify(receipt), "utf8"));
+}
+
 function completeMerge(vaultPath: string, receipt: MergeReceipt): void {
   const existing = readOperation(vaultPath, receipt.operationId);
   if (existing) { if (!matchesOperation(receipt, existing)) throw new Error("operation conflict"); return; }
@@ -294,9 +362,12 @@ function createMergeOperation(receipt: MergeReceipt): OperationRecord {
       { kind: "page", id: receipt.survivorPageId, checksum: receipt.survivorMergedHash },
       { kind: "page", id: receipt.absorbedPageId, checksum: receipt.absorbedBeforeHash }
     ],
-    sourceRefs: [], before: { kind: "operation", id: receipt.requestId, checksum: receipt.survivorBeforeHash },
+    sourceRefs: receipt.redoOfOperationId && receipt.undoOperationId
+      ? [{ kind: "operation", id: receipt.redoOfOperationId }, { kind: "operation", id: receipt.undoOperationId }]
+      : [], before: { kind: "operation", id: receipt.requestId, checksum: receipt.survivorBeforeHash },
     after: { kind: "page", id: receipt.survivorPageId, checksum: receipt.survivorMergedHash },
-    summary: "Merged one note into another while preserving both prior versions.", reversible: "yes", warnings: []
+    summary: `${receipt.redoOfOperationId ? "Reapplied" : "Merged"} one note into another while preserving both prior versions.`,
+    reversible: "yes", warnings: []
   });
 }
 
@@ -312,14 +383,44 @@ function createUndoOperation(receipt: MergeReceipt, operation: OperationRecord, 
 
 function matchesOperation(receipt: MergeReceipt, operation: OperationRecord): boolean {
   return operation.id === receipt.operationId && operation.kind === "update_page" && operation.targetRefs.length === 2 &&
-    operation.targetRefs[0]?.id === receipt.survivorPageId && operation.targetRefs[1]?.id === receipt.absorbedPageId &&
-    operation.after?.checksum === receipt.survivorMergedHash;
+    operation.targetRefs[0]?.kind === "page" && operation.targetRefs[0].id === receipt.survivorPageId &&
+    operation.targetRefs[0].checksum === receipt.survivorMergedHash &&
+    operation.targetRefs[1]?.kind === "page" && operation.targetRefs[1].id === receipt.absorbedPageId &&
+    operation.targetRefs[1].checksum === receipt.absorbedBeforeHash &&
+    operation.before?.checksum === receipt.survivorBeforeHash && operation.after?.checksum === receipt.survivorMergedHash &&
+    (receipt.redoOfOperationId && receipt.undoOperationId
+      ? operation.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === receipt.redoOfOperationId) &&
+        operation.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === receipt.undoOperationId)
+      : operation.sourceRefs.length === 0);
+}
+
+function matchesUndoOperation(operation: OperationRecord, undo: OperationRecord): boolean {
+  return undo.id === undoOperationId(operation.id) && undo.kind === "update_page" &&
+    undo.sourceRefs.some((reference) => reference.kind === "operation" && reference.id === operation.id) &&
+    undo.before?.checksum === operation.after?.checksum && undo.after?.checksum === operation.before?.checksum;
+}
+
+function matchesRedoReceipt(child: MergeReceipt, parent: MergeReceipt, undo: OperationRecord): boolean {
+  return child.redoOfOperationId === parent.operationId && child.undoOperationId === undo.id &&
+    child.operationId === redoOperationId(parent.operationId) && child.activeVaultId === parent.activeVaultId &&
+    child.survivorPageId === parent.survivorPageId && child.absorbedPageId === parent.absorbedPageId &&
+    child.survivorPath === parent.survivorPath && child.absorbedPath === parent.absorbedPath &&
+    child.absorbedTrashPath === parent.absorbedTrashPath && child.survivorBeforePath === parent.survivorBeforePath &&
+    child.absorbedBeforePath === parent.absorbedBeforePath && child.survivorMergedPath === parent.survivorMergedPath &&
+    child.survivorBeforeHash === parent.survivorBeforeHash && child.absorbedBeforeHash === parent.absorbedBeforeHash &&
+    child.survivorMergedHash === parent.survivorMergedHash;
 }
 
 function mergeStateMatches(vaultPath: string, receipt: MergeReceipt): boolean {
   return fileHash(resolve(vaultPath, receipt.survivorPath)) === receipt.survivorMergedHash &&
     fileHash(resolve(vaultPath, receipt.absorbedPath)) === undefined &&
     fileHash(resolve(vaultPath, receipt.absorbedTrashPath)) === receipt.absorbedBeforeHash;
+}
+
+function originalsStateMatches(vaultPath: string, receipt: MergeReceipt): boolean {
+  return fileHash(resolve(vaultPath, receipt.survivorPath)) === receipt.survivorBeforeHash &&
+    fileHash(resolve(vaultPath, receipt.absorbedPath)) === receipt.absorbedBeforeHash &&
+    fileHash(resolve(vaultPath, receipt.absorbedTrashPath)) === undefined;
 }
 
 function listReceipts(vaultPath: string): MergeReceipt[] {
@@ -333,6 +434,12 @@ function listReceipts(vaultPath: string): MergeReceipt[] {
 
 function findReceiptByOperation(vaultPath: string, operationId: string): MergeReceipt | undefined {
   return listReceipts(vaultPath).find((receipt) => receipt.operationId === operationId);
+}
+
+function findRedoReceipt(vaultPath: string, operationId: string): MergeReceipt | undefined {
+  const matches = listReceipts(vaultPath).filter((receipt) => receipt.redoOfOperationId === operationId);
+  if (matches.length > 1) throw new Error("multiple note merge Redo receipts");
+  return matches[0];
 }
 
 function readReceipt(vaultPath: string, requestId: string): MergeReceipt | undefined {
@@ -396,3 +503,8 @@ function unique(values: readonly string[]): string[] { return [...new Set(values
 function escapeHeading(value: string): string { return value.replace(/[\r\n#]/gu, " ").replace(/\s+/gu, " ").trim(); }
 function createOperationId(createdAt: string, request: NoteMergeRequest, randomId: string): string { return `op_${createdAt.slice(0, 10).replace(/-/gu, "")}_${createHash("sha256").update(`${request.requestId}\0${randomId}`).digest("hex").slice(0, 16)}`; }
 function undoOperationId(operationId: string): string { return `${operationId}undo`; }
+function redoOperationId(operationId: string): string {
+  const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
+  if (!date) throw new Error("note merge Redo operation id invalid");
+  return `op_${date}_${createHash("sha256").update(`pige.note-merge-redo.v1\0${operationId}`).digest("hex").slice(0, 16)}`;
+}

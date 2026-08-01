@@ -45,7 +45,18 @@ describe("NoteMergeService", () => {
     expect(fs.readFileSync(fixture.survivorPath, "utf8")).toBe(fixture.survivorMarkdown);
     expect(fs.readFileSync(fixture.absorbedPath, "utf8")).toBe(fixture.absorbedMarkdown);
     expect(fixture.service.activitySummary(operation, findOperations(fixture.vaultPath).find((item) => item.id === `${operation.id}undo`)))
-      .toMatchObject({ status: "undone", canUndo: false, undoUnavailableReason: "already_undone" });
+      .toMatchObject({ status: "undone", canUndo: false, canRedo: true, undoUnavailableReason: "already_undone" });
+    const redone = fixture.service.redo({ operationId: operation.id });
+    expect(redone).toMatchObject({ status: "redone", redoOperationId: expect.any(String) });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("merge Redo did not commit");
+    expect(fs.readFileSync(fixture.survivorPath, "utf8")).toContain("## Absorbed note");
+    expect(fs.existsSync(fixture.absorbedPath)).toBe(false);
+    expect(fixture.service.redo({ operationId: operation.id })).toMatchObject({ status: "already_redone" });
+    const redoOperation = findOperations(fixture.vaultPath).find((item) => item.id === redone.redoOperationId)!;
+    expect(fixture.service.undo(redoOperation)).toMatchObject({ status: "undone" });
+    const redoUndo = findOperations(fixture.vaultPath).find((item) => item.id === `${redoOperation.id}undo`)!;
+    expect(fixture.service.activitySummary(redoOperation, redoUndo)).toMatchObject({ status: "undone", canRedo: true });
+    expect(fixture.service.redo({ operationId: redoOperation.id })).toMatchObject({ status: "redone" });
   });
 
   it("fails closed when either exact note changes before commit", async () => {
@@ -74,6 +85,28 @@ describe("NoteMergeService", () => {
     expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
     expect(findOperations(fixture.vaultPath).filter((operation) => operation.id === committed.operationId)).toHaveLength(1);
     expect(fs.existsSync(fixture.absorbedPath)).toBe(false);
+  });
+
+  it("adopts an interrupted Redo after restart and rejects drift in either restored note", async () => {
+    const fixture = await createFixture();
+    const committed = fixture.service.merge("reader_owner", mergeRequest(fixture));
+    if (committed.status !== "committed") throw new Error("merge did not commit");
+    const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(fixture.service.undo(operation)).toMatchObject({ status: "undone" });
+    const redone = fixture.service.redo({ operationId: operation.id });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("merge Redo did not commit");
+    fs.unlinkSync(findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${redone.redoOperationId}.json`))!);
+    const restarted = new NoteMergeService(fixture.vaults, fixture.notes);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+
+    const stale = await createFixture();
+    const staleCommitted = stale.service.merge("reader_owner", mergeRequest(stale));
+    if (staleCommitted.status !== "committed") throw new Error("merge did not commit");
+    const staleOperation = findOperations(stale.vaultPath).find((item) => item.id === staleCommitted.operationId)!;
+    expect(stale.service.undo(staleOperation)).toMatchObject({ status: "undone" });
+    fs.appendFileSync(stale.absorbedPath, "\nexternal drift\n");
+    expect(stale.service.redo({ operationId: staleOperation.id })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(stale.survivorPath, "utf8")).toBe(stale.survivorMarkdown);
   });
 });
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T08:15:00Z",
+  "reviewedAt": "2026-08-01T08:32:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle and active-note title/filename Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "d76db539195a8973ff1d95d739c340e9f5c9bf01b77bd5ba734544c91ba401f3"
+    "reviewedSha256": "06a9bf1fc98db95aecc40b3fcd558f515bfe3aa67318891e4feb7acd86c12d58"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note-title rename/alias management/tag removal/Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation",
+    "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note and Topic rename, tag lifecycle, note merge and duplicate-topic merge Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, and reviewed Reader exact-selection creation",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed active-note title/filename Redo across API, Job, UI and the existing rename Decision while retaining exact Reader create-page and Library tag Redo contracts; Development supplied Main/service/path-transition/recovery evidence and the existing Activity UI remains authoritative."
+    "independence": "Planning reviewed the grouped Topic-title, exact note-merge and duplicate-topic-merge Redo contract across API, Job, UI and one durable Decision; Development supplied independent owner, receipt-lineage, two-page drift and restart evidence while the existing Activity API/UI remain authoritative."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias, tag and exact create-page workflows while Activity can safely repeat an undone active-note title/filename rename."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, Job, UI and D-20260731-Exact-Note-Title-And-Filename-Rename agree on matching-Undo authority, restored-byte/destination reproof and deterministic forward rename_page."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Service, Main routing, stale/conflict and restart tests bind title/filename Redo without promoting broader PIGE-KNOW-001/PIGE-JOB-005 exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"The existing rename receipt owns exact images, path transition, deterministic Redo identity and repeatable Undo/Redo; no new renderer contract or state owner is introduced."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Activity and note-rename owner sections absorb the Redo extension without a new document, locale key, schema or status promotion."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Activity can safely repeat undone Topic-title correction and exact note/topic merges while preserving current Reader, Library and Knowledge Health navigation."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, Job, UI and D-20260801-Knowledge-Lifecycle-Redo agree on matching-Undo authority, exact live/trash reproof, deterministic child Operation and restart adoption."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Three direct owner suites and Main routing bind the grouped Redo behavior without promoting broader PIGE-KNOW-001/PIGE-KNOW-005/PIGE-JOB-005 exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing private images and trash receipts own deterministic child lineage, repeatable Undo/Redo and interrupted-operation adoption; no new public state owner is introduced."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Activity/API/Job/UI owners plus one grouped durable Decision absorb all three mutations without a new document, locale, schema or status promotion."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Exact tag-removal semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/note-rename-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact title/filename Redo, repeatable inverse lineage, stale closure, Main routing and interrupted-operation adoption are executable."},
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Grouped knowledge-lifecycle Redo semantics, owner routing and references remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/library-topic-rename-service.test.ts tests/unit/note-merge-service.test.ts tests/unit/knowledge-health-duplicate-topic-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact matching-Undo lineage, repeated inverse action, multi-page drift closure, Main routing and interrupted Redo adoption are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "active-note-rename-redo-bind-20260801",
-    "taskTitle": "Bind active-note title and filename Redo",
+    "taskId": "knowledge-lifecycle-redo-bind-20260801",
+    "taskTitle": "Bind grouped knowledge lifecycle Redo",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds one exact rename_page and matching Undo to its private before/after images, re-proves restored bytes and destination vacancy, and publishes one deterministic forward rename_page without exposing paths or Markdown.",
-    "acknowledgement": "Planning binds active-note title/filename Redo while broader restore/Redo, PIGE-KNOW-001 and PIGE-JOB-005 remain partial; existing Reader and Activity UI contracts remain unchanged."
+    "compatibility": "Main binds each exact topic rename or two-page merge and matching Undo to private before/after/trash receipts, re-proves restored durable state, and publishes one deterministic forward Operation without exposing paths or Markdown.",
+    "acknowledgement": "Planning binds grouped Topic-title, note-merge and duplicate-topic-merge Redo while unrelated restore/Redo families and broader acceptance exits remain open; existing Activity IPC and UI contracts remain unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

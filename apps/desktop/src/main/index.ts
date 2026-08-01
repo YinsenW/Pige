@@ -3037,8 +3037,15 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
   const trashResult = getNoteTrashRedoService().redo(request);
   const renameResult = trashResult.status === "not_found" ? getNoteRenameService().redo(request) : trashResult;
-  const tagResult = renameResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : renameResult;
-  const result = tagResult.status === "not_found" ? getNoteMarkdownEditorRedoService().redo(request) : tagResult;
+  const topicResult = renameResult.status === "not_found" ? getLibraryTopicRenameService().redo(request) : renameResult;
+  const tagResult = topicResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : topicResult;
+  const mergeResult = tagResult.status === "not_found" ? getNoteMergeService().redo(request) : tagResult;
+  const duplicateTopicResult = mergeResult.status === "not_found"
+    ? getKnowledgeHealthDuplicateTopicService().redo(request)
+    : mergeResult;
+  const result = duplicateTopicResult.status === "not_found"
+    ? getNoteMarkdownEditorRedoService().redo(request)
+    : duplicateTopicResult;
   if (result.status === "redone" || result.status === "already_redone") scheduleActivityIndexRebuild();
   return result;
 });

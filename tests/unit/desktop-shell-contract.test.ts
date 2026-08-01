@@ -1859,7 +1859,10 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("activity.redo"');
     expect(mainUndoHandler).toContain("getNoteTrashRedoService().redo(request)");
     expect(mainUndoHandler).toContain("getNoteRenameService().redo(request)");
+    expect(mainUndoHandler).toContain("getLibraryTopicRenameService().redo(request)");
     expect(mainUndoHandler).toContain("getLibraryTagRenameService().redo(request)");
+    expect(mainUndoHandler).toContain("getNoteMergeService().redo(request)");
+    expect(mainUndoHandler).toContain("getKnowledgeHealthDuplicateTopicService().redo(request)");
     expect(mainUndoHandler).toContain('trashResult.status === "not_found"');
     expect(mainSource).toContain("recoverIncompleteUndos()");
     expect(mainSource).toContain("recoverIncompleteRedos()");
