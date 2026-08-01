@@ -361,7 +361,7 @@ export class OcrService implements OcrPort {
       await sourceSnapshot.dispose();
     }
     control?.throwIfCancellationRequested();
-    const media = validateMaterializedMedia(target.targets, materialized);
+    const media = validateMaterializedMedia(target.targets, materialized, format);
     const results: PptxMediaOcrItemResult[] = [];
     for (const item of media) {
       control?.throwIfCancellationRequested();
@@ -416,14 +416,15 @@ function isDeterministicMediaOcrError(caught: unknown): boolean {
 
 function validateMaterializedMedia(
   targets: readonly OfficeMediaTarget[],
-  result: Awaited<ReturnType<OfficeMediaMaterializerPort["materialize"]>>
+  result: Awaited<ReturnType<OfficeMediaMaterializerPort["materialize"]>>,
+  format: "docx" | "pptx"
 ): readonly MaterializedOfficeMedia[] {
   if (
     result.materializerId !== OFFICE_MEDIA_MATERIALIZER_ID ||
     result.materializerVersion !== OFFICE_MEDIA_MATERIALIZER_VERSION ||
     result.media.length !== targets.length
   ) {
-    throw new PigeDomainError("ocr.pptx.materializer_result_invalid", "The PPTX media materializer returned an invalid target set.");
+    throw new PigeDomainError(`ocr.${format}.materializer_result_invalid`, `The ${format.toUpperCase()} media materializer returned an invalid target set.`);
   }
   for (let index = 0; index < targets.length; index += 1) {
     const target = targets[index];
@@ -435,7 +436,7 @@ function validateMaterializedMedia(
       !(item.bytes instanceof Uint8Array) ||
       item.bytes.byteLength !== target.size
     ) {
-      throw new PigeDomainError("ocr.pptx.materializer_result_invalid", "A materialized PPTX media item is invalid.");
+      throw new PigeDomainError(`ocr.${format}.materializer_result_invalid`, `A materialized ${format.toUpperCase()} media item is invalid.`);
     }
   }
   return result.media;
@@ -447,7 +448,7 @@ async function recognizePrivateMedia(
   languages: readonly string[],
   signal?: AbortSignal
 ): ReturnType<NativeImageOcrAdapterPort["recognize"]> {
-  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pige-pptx-media-"));
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), "pige-office-media-"));
   const filePath = path.join(root, `media${media.extension}`);
   try {
     await fs.promises.chmod(root, 0o700).catch(() => undefined);

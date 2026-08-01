@@ -366,7 +366,7 @@ export class OfficeMediaOcrArtifactService {
       },
       updatedAt: now
     });
-    writeSourceRecordAtomic(vaultPath, sourceRecordPath, updatedSource, currentSource.fileChecksum);
+    writeSourceRecordAtomic(vaultPath, sourceRecordPath, updatedSource, currentSource.fileChecksum, format);
     const page = this.#sourcePages.refreshForSource(vaultPath, updatedSource, sourceRecordPath, job.id);
     const resultWarnings = page.conflict ? [...warnings, sourcePageConflictWarning()] : warnings;
     const operation = writeOfficeMediaOcrOperation(vaultPath, updatedSource, job, resultWarnings, format);
@@ -603,7 +603,7 @@ function writeOfficeMediaOcrOperation(
   if (fs.existsSync(absolutePath)) {
     const stat = fs.lstatSync(absolutePath);
     if (!stat.isFile() || stat.isSymbolicLink()) {
-      throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR operation path is not a regular vault file.");
+      throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR operation path is not a regular vault file.");
     }
     assertRealPathContainedSync(vaultPath, absolutePath);
     return OperationRecordSchema.parse(JSON.parse(fs.readFileSync(absolutePath, "utf8")));
@@ -635,7 +635,7 @@ function writeOfficeMediaOcrOperation(
     ],
     summary: `Recorded local embedded-media OCR artifacts for ${format.toUpperCase()} source ${sourceRecord.id}.`,
     reversible: "best_effort",
-    rollbackHint: "Remove derived PPTX OCR artifacts only after confirming the Source Record no longer references them.",
+    rollbackHint: `Remove derived ${format.toUpperCase()} OCR artifacts only after confirming the Source Record no longer references them.`,
     warnings: uniqueWarnings(warnings)
   });
   writeJsonAtomic(absolutePath, operation, vaultPath);
@@ -739,7 +739,7 @@ async function verifyArtifactFile(
 async function fileIntegrity(filePath: string, errorCode: string): Promise<FileIntegrity> {
   const stat = await fs.promises.lstat(filePath);
   if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new PigeDomainError(errorCode, "A PPTX OCR artifact was not written as a regular file.");
+    throw new PigeDomainError(errorCode, "An Office media OCR artifact was not written as a regular file.");
   }
   return { checksum: await checksumFile(filePath), size: stat.size };
 }
@@ -773,13 +773,13 @@ async function readCurrentSourceRecord(
     file = await fs.promises.open(resolvedPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
     const before = await file.stat();
     if (!before.isFile() || before.size <= 0 || before.size > MAX_SOURCE_RECORD_BYTES) {
-      throw new PigeDomainError("ocr.pptx.source_record_invalid", "The current PPTX Source Record is not a bounded regular file.");
+      throw new PigeDomainError(`ocr.${format}.source_record_invalid`, `The current ${format.toUpperCase()} Source Record is not a bounded regular file.`);
     }
     const bytes = Buffer.alloc(before.size);
     let position = 0;
     while (position < before.size) {
       const read = await file.read(bytes, position, before.size - position, position);
-      if (read.bytesRead === 0) throw new PigeDomainError("ocr.pptx.target_changed", "The PPTX Source Record changed during OCR.");
+      if (read.bytesRead === 0) throw new PigeDomainError(`ocr.${format}.target_changed`, `The ${format.toUpperCase()} Source Record changed during OCR.`);
       position += read.bytesRead;
     }
     const after = await file.stat();
@@ -792,7 +792,7 @@ async function readCurrentSourceRecord(
       after.ctimeMs !== before.ctimeMs ||
       realPathAfter !== realPath
     ) {
-      throw new PigeDomainError("ocr.pptx.target_changed", "The PPTX Source Record changed during OCR.");
+      throw new PigeDomainError(`ocr.${format}.target_changed`, `The ${format.toUpperCase()} Source Record changed during OCR.`);
     }
     const parsed = SourceRecordSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
     if (parsed.id !== expectedSourceId || parsed.kind !== `${format}_file`) {
@@ -804,7 +804,7 @@ async function readCurrentSourceRecord(
     };
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
-    throw new PigeDomainError("ocr.source_record_unavailable", "The current PPTX Source Record is unavailable.");
+    throw new PigeDomainError("ocr.source_record_unavailable", `The current ${format.toUpperCase()} Source Record is unavailable.`);
   } finally {
     await file?.close().catch(() => undefined);
   }
@@ -814,7 +814,8 @@ function writeSourceRecordAtomic(
   vaultPath: string,
   sourceRecordPath: string,
   sourceRecord: SourceRecord,
-  expectedFileChecksum: string
+  expectedFileChecksum: string,
+  format: OfficeMediaOcrFormat
 ): void {
   const resolvedPath = resolveSourceRecordPath(vaultPath, sourceRecordPath);
   assertSafeWriteParentSync(vaultPath, resolvedPath);
@@ -832,7 +833,7 @@ function writeSourceRecordAtomic(
       descriptorStat.size <= 0 ||
       descriptorStat.size > MAX_SOURCE_RECORD_BYTES
     ) {
-      throw new PigeDomainError("ocr.source_record_unavailable", "The PPTX Source Record is unavailable.");
+      throw new PigeDomainError("ocr.source_record_unavailable", `The ${format.toUpperCase()} Source Record is unavailable.`);
     }
     const hash = createHash("sha256");
     const buffer = Buffer.allocUnsafe(1024 * 1024);
@@ -844,11 +845,11 @@ function writeSourceRecordAtomic(
       position += bytesRead;
     }
     if (position !== descriptorStat.size || `sha256:${hash.digest("hex")}` !== expectedFileChecksum) {
-      throw new PigeDomainError("ocr.pptx.target_changed", "The PPTX Source Record changed before OCR could commit its result.");
+      throw new PigeDomainError(`ocr.${format}.target_changed`, `The ${format.toUpperCase()} Source Record changed before OCR could commit its result.`);
     }
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
-    throw new PigeDomainError("ocr.source_record_unavailable", "The PPTX Source Record is unavailable.");
+    throw new PigeDomainError("ocr.source_record_unavailable", `The ${format.toUpperCase()} Source Record is unavailable.`);
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
@@ -868,7 +869,7 @@ function resolveSourceRecordPath(vaultPath: string, sourceRecordPath: string): s
 }
 
 const resolveVaultRelativePath = createVaultRelativePathResolver(
-  () => new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR path escapes the active vault.")
+  () => new PigeDomainError("ocr.path_outside_vault", "The Office media OCR path escapes the active vault.")
 );
 
 async function assertSafeWriteParent(vaultPath: string, filePath: string): Promise<void> {
@@ -879,11 +880,11 @@ async function assertSafeWriteParent(vaultPath: string, filePath: string): Promi
     fs.promises.realpath(path.dirname(filePath))
   ]);
   if (!isContainedPath(realParent, realVault)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write parent resolves outside the active vault.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write parent resolves outside the active vault.");
   }
   const existing = await fs.promises.lstat(filePath).catch(() => undefined);
   if (existing?.isSymbolicLink() || (existing && !existing.isFile())) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write target is not a regular vault file.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write target is not a regular vault file.");
   }
 }
 
@@ -893,12 +894,12 @@ function assertSafeWriteParentSync(vaultPath: string, filePath: string): void {
   const realVault = fs.realpathSync(vaultPath);
   const realParent = fs.realpathSync(path.dirname(filePath));
   if (!isContainedPath(realParent, realVault)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write parent resolves outside the active vault.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write parent resolves outside the active vault.");
   }
   try {
     const existing = fs.lstatSync(filePath);
     if (existing.isSymbolicLink() || !existing.isFile()) {
-      throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write target is not a regular vault file.");
+      throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write target is not a regular vault file.");
     }
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
@@ -912,7 +913,7 @@ async function assertRealPathContained(vaultPath: string, filePath: string): Pro
     fs.promises.realpath(filePath)
   ]);
   if (!isContainedPath(realFile, realVault)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write escaped the active vault.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write escaped the active vault.");
   }
 }
 
@@ -920,13 +921,13 @@ function assertRealPathContainedSync(vaultPath: string, filePath: string): void 
   const realVault = fs.realpathSync(vaultPath);
   const realFile = fs.realpathSync(filePath);
   if (!isContainedPath(realFile, realVault)) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR write escaped the active vault.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR write escaped the active vault.");
   }
 }
 
 function assertLexicalPathContained(vaultPath: string, filePath: string): void {
   if (!isContainedPath(path.resolve(filePath), path.resolve(vaultPath))) {
-    throw new PigeDomainError("ocr.path_outside_vault", "The PPTX OCR path escapes the active vault.");
+    throw new PigeDomainError("ocr.path_outside_vault", "The Office media OCR path escapes the active vault.");
   }
 }
 
