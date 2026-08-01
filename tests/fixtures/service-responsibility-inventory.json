@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "6f9ea2ef761d016a0d839ae4ae621dc12c690240",
+  "baseline": "20aa5f8d5edb0592efe965b80975bf0bdabcccff",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 246,
-  "baselineLines": 117961,
+  "baselineFileCount": 249,
+  "baselineLines": 118396,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -41,6 +41,7 @@
       ["generated-note-file.ts", 515, "rdf"],
       ["agent-turn-publication.ts", 386, "jrd"],
       ["durable-agent-turn-answer.ts", 79, "rd"],
+      ["crash-recovery-service.ts", 184, "rd"],
       ["diagnostics-lifecycle-service.ts", 868, "jrd"],
       ["dictation-language-preference-service.ts", 65, ""],
       ["home-agent-attachment-service.ts", 358, "jrd"],
@@ -106,8 +107,10 @@
       ["restore-job-cancellation.ts", 46, "jr"],
       ["retrieval-evidence-boundary.ts", 470, "prf"],
       ["setting-action-guard.ts", 36, "p"],
+      ["scoped-skill-registry-service.ts", 219, "rd"],
       ["skill-source-update-registry.ts", 393, "rd"],
       ["skill-registry-restore-service.ts", 378, "rd"],
+      ["skill-scope-policy.ts", 32, "p"],
       ["skill-url-install-service.ts", 999, "prd"],
       ["skill-zip-stage-service.ts", 256, "pf"],
       ["source-file-access.ts", 217, "pr"],
@@ -279,7 +282,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 246,
+    "serviceOwnerCount": 249,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
