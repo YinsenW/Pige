@@ -11,6 +11,7 @@ import {
   type SourceRecord,
   type VaultBindingsFile
 } from "@pige/schemas";
+import { repairManagedCopyDependency } from "./backup-managed-copy-binding";
 
 const EMPTY_BINDINGS: VaultBindingsFile = VaultBindingsFileSchema.parse({ schemaVersion: 1, roots: [], defaults: [] });
 
@@ -89,6 +90,35 @@ export class ManagedCopyRootService {
       availability,
       canConfigure: true
     };
+  }
+
+  reconnectDefault(input: {
+    readonly vaultPath: string;
+    readonly vaultId: string;
+    readonly selectedDirectory: string;
+    readonly expectedSourceStorageRevision: string;
+  }): ManagedCopyRootReceipt {
+    const current = this.readBindings();
+    if (sourceStorageRevision(input.vaultId, "external_binding", current) !== input.expectedSourceStorageRevision) {
+      throw new PigeDomainError("managed_copy.selection_stale", "The managed-copy root selection changed.");
+    }
+    const rootId = current.defaults.find((entry) => entry.vaultId === input.vaultId)?.rootId;
+    if (!rootId) throw new PigeDomainError("managed_copy.selection_missing", "The managed-copy root selection is unavailable.");
+    try {
+      repairManagedCopyDependency(
+        this.#userDataPath,
+        input.vaultPath,
+        input.vaultId,
+        { dependencyKind: "vault_binding", dependencyId: rootId },
+        input.selectedDirectory
+      );
+    } catch (caught) {
+      if (!(caught instanceof PigeDomainError) || caught.code !== "backup.reconnect_not_found") throw caught;
+      this.repairBinding(input.vaultId, rootId, input.selectedDirectory);
+    }
+    const rebound = this.binding(input.vaultId, rootId);
+    if (!rebound) throw new PigeDomainError("managed_copy.selection_failed", "The managed-copy root failed durable readback.");
+    return { vaultId: input.vaultId, rootId, revision: rebound.revision };
   }
 
   bindDefault(input: {

@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "需要访问权限",
   "vaultSettings.managedCopyRoot.choose": "选择文件夹",
   "vaultSettings.managedCopyRoot.change": "更换文件夹",
+  "vaultSettings.managedCopyRoot.reconnect": "重新连接文件夹",
   "vaultSettings.managedCopyRoot.choosing": "正在选择文件夹…",
   "vaultSettings.managedCopyRoot.configured": "来源存储已更新。",
   "vaultSettings.managedCopyRoot.stale": "来源存储已发生变化，请确认后重试。",

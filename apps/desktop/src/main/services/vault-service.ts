@@ -56,6 +56,12 @@ export interface VaultManagedCopyRootPort {
     readonly vaultId: string;
     readonly selectedDirectory: string;
   }): unknown;
+  reconnectDefault(input: {
+    readonly vaultPath: string;
+    readonly vaultId: string;
+    readonly selectedDirectory: string;
+    readonly expectedSourceStorageRevision: string;
+  }): unknown;
 }
 
 export interface VaultRestoreTransition {
@@ -317,8 +323,12 @@ export class VaultService {
     if (current.managedCopyRoot.sourceStorageRevision !== request.expectedSourceStorageRevision) {
       return { ...identity, status: "stale", summary: current.managedCopyRoot };
     }
+    const reconnectMissingDefault = current.sourceAssetRootKind === "external_binding" &&
+      current.managedCopyRoot.availability !== "available";
     const selection = await dialog.showOpenDialog(parentWindow, {
-      title: "Choose a folder for future source copies",
+      title: reconnectMissingDefault
+        ? "Reconnect the existing source-copy folder"
+        : "Choose a folder for future source copies",
       defaultPath: app.getPath("documents"),
       properties: ["openDirectory", "createDirectory"]
     });
@@ -332,7 +342,16 @@ export class VaultService {
         beforeCommit.vaultId !== request.activeVaultId ||
         beforeCommit.managedCopyRoot.sourceStorageRevision !== request.expectedSourceStorageRevision
       ) return { ...identity, status: "stale", summary: beforeCommit.managedCopyRoot };
-      this.#managedRoots.bindDefault({ vaultId: request.activeVaultId, selectedDirectory: selection.filePaths[0] });
+      if (reconnectMissingDefault) {
+        this.#managedRoots.reconnectDefault({
+          vaultPath: activeVaultPath,
+          vaultId: request.activeVaultId,
+          selectedDirectory: selection.filePaths[0],
+          expectedSourceStorageRevision: request.expectedSourceStorageRevision
+        });
+      } else {
+        this.#managedRoots.bindDefault({ vaultId: request.activeVaultId, selectedDirectory: selection.filePaths[0] });
+      }
       const updated = this.#decorateVault(
         activeVaultPath,
         updateVaultSourceAssetRootKind(activeVaultPath, "external_binding")

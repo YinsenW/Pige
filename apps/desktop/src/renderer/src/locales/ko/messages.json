@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "접근 권한 필요",
   "vaultSettings.managedCopyRoot.choose": "폴더 선택",
   "vaultSettings.managedCopyRoot.change": "폴더 변경",
+  "vaultSettings.managedCopyRoot.reconnect": "폴더 다시 연결",
   "vaultSettings.managedCopyRoot.choosing": "폴더 선택 중…",
   "vaultSettings.managedCopyRoot.configured": "소스 저장소를 업데이트했습니다.",
   "vaultSettings.managedCopyRoot.stale": "소스 저장소가 변경되었습니다. 확인한 후 다시 시도하세요.",
