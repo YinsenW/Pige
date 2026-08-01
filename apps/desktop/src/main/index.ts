@@ -21,6 +21,8 @@ import type {
   KnowledgeLanguageMutationResult,
   CreateVaultRequest,
   HighRiskConfirmationResolveRequest,
+  JobCancelRequest,
+  JobCancelResult,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -103,6 +105,8 @@ import {
   ProviderApiKeyManagementRequestSchema,
   ProviderApiKeyManagementResultSchema,
   AddManualModelRequestSchema,
+  JobCancelRequestSchema,
+  JobCancelResultSchema,
   RefreshProviderModelsRequestSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnRequestSchema,
@@ -3310,12 +3314,55 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
   }
 });
 ipcMain.handle("jobs.list", (_event, request?: JobsListRequest) => getJobsService().list(request));
-ipcMain.handle("jobs.cancel", async (_event, request: JobActionRequest): Promise<JobActionResult> => {
-  getTaskProcessSessionService().cancelJob(request.jobId);
+ipcMain.handle("jobs.cancel", async (event, value: unknown): Promise<JobCancelResult> => {
+  requireWindow(event.sender);
+  const request = JobCancelRequestSchema.parse(value);
+  const identity = {
+    apiVersion: 1 as const,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    jobId: request.jobId
+  };
   const jobs = getJobsService();
-  const jobClass = jobs.readJobClass(request.jobId);
-  const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
-  return executor?.cancel ? await executor.cancel(request) : jobs.cancel(request);
+  const currentness = jobs.inspectCancelCurrentness(request);
+  if (currentness.status === "not_found") {
+    return JobCancelResultSchema.parse({ ...identity, status: "not_found" });
+  }
+  if (currentness.status === "stale") {
+    return JobCancelResultSchema.parse({ ...identity, status: "stale", job: currentness.job });
+  }
+  try {
+    getTaskProcessSessionService().cancelJob(request.jobId);
+    const jobClass = jobs.readJobClass(request.jobId);
+    const executor = jobClass ? getJobClassExecutorRegistry().require(jobClass) : undefined;
+    const result = executor?.cancel
+      ? await executor.cancel({ jobId: request.jobId })
+      : jobs.cancel({ jobId: request.jobId });
+    if (result.status === "not_found") {
+      return JobCancelResultSchema.parse({ ...identity, status: "not_found" });
+    }
+    if (
+      result.status === "cancel_requested" ||
+      result.status === "cancelled" ||
+      result.status === "not_allowed"
+    ) {
+      return JobCancelResultSchema.parse({
+        ...identity,
+        status: result.status,
+        job: result.job ?? currentness.job
+      });
+    }
+    return JobCancelResultSchema.parse({ ...identity, status: "failed" });
+  } catch {
+    const after = jobs.inspectCancelCurrentness(request);
+    if (after.status === "stale") {
+      return JobCancelResultSchema.parse({ ...identity, status: "stale", job: after.job });
+    }
+    if (after.status === "not_found") {
+      return JobCancelResultSchema.parse({ ...identity, status: "not_found" });
+    }
+    return JobCancelResultSchema.parse({ ...identity, status: "failed" });
+  }
 });
 ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
   const jobs = getJobsService();

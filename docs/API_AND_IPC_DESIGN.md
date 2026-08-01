@@ -502,9 +502,11 @@ base hash or Operation internals.
 
 ### 6.5 Library And Notes
 
-Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.listRevisionHistory`,
-`notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
-`notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash/purgeTrash`,
+Queries: `library.list`, `library.tree`, `library.tags`, `library.related`, `notes.get`, `notes.render`,
+`notes.openEditor`, `notes.listRevisionHistory`, `notes.openRevisionHistory`,
+`notes.resolveInlineReference`, `notes.openSourceReference`. Commands:
+`notes.saveEditor`, `notes.merge`, `notes.revealSource`, `notes.trashCurrent`, `notes.listTrash`,
+`notes.restoreTrash`, `notes.purgeTrash`,
 `notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`,
 `notes.changeAlias`, `notes.removeTag`, `notes.setQuestionState`.
 
@@ -1044,7 +1046,7 @@ Agent policy DTOs must follow `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`.
 
 #### 6.8.1 Deferred Trusted Update Lifecycle
 
-`updates.summary`, `updates.check`, `updates.download`, `updates.apply`, and
+`updates.summary`, `updates.check`, `updates.download`, `updates.apply`, `updates.openManualDownload`, and
 `updates.onStatusChanged` are body-free.
 Their strict contract remains reserved for a future trusted signing identity. Packaged v0.1
 composes `NoNetworkUpdateCheckAdapter`, returns unavailable state, performs no network check,

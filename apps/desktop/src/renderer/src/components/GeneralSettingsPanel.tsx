@@ -11,18 +11,13 @@ export interface StartupDestinationApi {
   readonly load: () => Promise<StartupDestinationSummary>;
   readonly set: (request: SetStartupDestinationRequest) => Promise<StartupDestinationMutationResult>;
 }
-const settingsProfileTransferApi: SettingsProfileTransferApi = {
-  exportProfile: (request) => window.pige.settings.exportProfile(request),
-  previewImport: (request) => window.pige.settings.previewProfileImport(request),
-  applyImport: (request) => window.pige.settings.applyProfileImport(request)
-};
-
 export function GeneralSettingsPanel(props: {
   readonly alwaysOnTop: boolean | null;
   readonly alwaysOnTopBusy: boolean;
   readonly onAlwaysOnTopChange: () => Promise<void>;
   readonly onOpenAppearance: () => void;
   readonly startupDestinationApi: StartupDestinationApi;
+  readonly settingsProfileTransferApi: SettingsProfileTransferApi;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [startupSummary, setStartupSummary] = useState<StartupDestinationSummary | null>(null);
@@ -157,7 +152,7 @@ export function GeneralSettingsPanel(props: {
         </div>
       </section>
 
-      <SettingsProfileTransferPanel api={settingsProfileTransferApi} t={props.t} />
+      <SettingsProfileTransferPanel api={props.settingsProfileTransferApi} t={props.t} />
 
       <section className="settings-section" aria-labelledby="settings-general-pige-title">
         <h2 className="settings-section-title" id="settings-general-pige-title">

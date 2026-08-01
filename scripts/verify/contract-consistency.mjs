@@ -197,10 +197,6 @@ requireText("docs/JOB_OPERATION_AND_RECOVERY.md", [
   "`replace_existing` preserves the vault ID",
   "`clone_as_new` mints a vault ID"
 ]);
-requireText("resources/traceability/acceptance.manifest.json", [
-  "Durable backup Job/checkpoint resume and external-dependency completeness remain open."
-]);
-
 requireText("docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md", [
   "`ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract",
   "`ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract",

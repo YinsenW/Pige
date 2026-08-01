@@ -17,6 +17,7 @@ import {
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
 import { GeneralSettingsPanel } from "../../apps/desktop/src/renderer/src/components/GeneralSettingsPanel";
+import type { SettingsProfileTransferApi } from "../../apps/desktop/src/renderer/src/components/SettingsProfileTransferPanel";
 import {
   PermissionsPrivacySettingsPanel,
   type PermissionPolicyApi
@@ -432,6 +433,7 @@ describe("full UI Settings surface", () => {
         onAlwaysOnTopChange,
         onOpenAppearance: vi.fn(),
         startupDestinationApi,
+        settingsProfileTransferApi: createSettingsProfileTransferApi(),
         t
       }));
       await settle(dom);
@@ -452,6 +454,7 @@ describe("full UI Settings surface", () => {
         onAlwaysOnTopChange,
         onOpenAppearance: vi.fn(),
         startupDestinationApi,
+        settingsProfileTransferApi: createSettingsProfileTransferApi(),
         t
       }));
       await settle(dom);
@@ -491,6 +494,7 @@ describe("full UI Settings surface", () => {
         onAlwaysOnTopChange,
         onOpenAppearance,
         startupDestinationApi,
+        settingsProfileTransferApi: createSettingsProfileTransferApi(),
         t
       }));
       await settle(dom);
@@ -524,7 +528,7 @@ describe("full UI Settings surface", () => {
 
     expect(onOpenAppearance).toHaveBeenCalledOnce();
     expect(onAlwaysOnTopChange).toHaveBeenCalledOnce();
-    expect(ipcRead).toBe(true);
+    expect(ipcRead).toBe(false);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -547,6 +551,7 @@ describe("full UI Settings surface", () => {
         onAlwaysOnTopChange: async () => undefined,
         onOpenAppearance: () => undefined,
         startupDestinationApi,
+        settingsProfileTransferApi: createSettingsProfileTransferApi(),
         t
       }));
       await settle(dom);
@@ -7090,6 +7095,26 @@ function createDom(): JSDOM {
     }
   });
   return dom;
+}
+
+function createSettingsProfileTransferApi(): SettingsProfileTransferApi {
+  return {
+    exportProfile: vi.fn(async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "failed"
+    })),
+    previewImport: vi.fn(async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "failed"
+    })),
+    applyImport: vi.fn(async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "failed"
+    }))
+  };
 }
 
 function installAnimationFrame(dom: JSDOM): void {

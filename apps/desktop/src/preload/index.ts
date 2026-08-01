@@ -68,6 +68,8 @@ import type {
   PermissionRevokeGrantResult,
   PermissionSetDefaultModeRequest,
   PermissionSetDefaultModeResult,
+  JobCancelRequest,
+  JobCancelResult,
   JobActionRequest,
   JobActionResult,
   JobChangedEvent,
@@ -686,6 +688,8 @@ import {
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
   JOB_CHANGED_EVENT_CHANNEL,
+  JobCancelRequestSchema,
+  JobCancelResultSchema,
   JobChangedEventSchema,
   PERMISSIONS_CHANGED_CHANNEL,
   PERMISSIONS_REVOKE_GRANT_CHANNEL,
@@ -2181,8 +2185,19 @@ const api: PigeDesktopApi = {
   jobs: {
     list: async (request?: JobsListRequest): Promise<JobsListResult> =>
       ipcRenderer.invoke("jobs.list", request) as Promise<JobsListResult>,
-    cancel: async (request: JobActionRequest): Promise<JobActionResult> =>
-      ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
+    cancel: async (value: JobCancelRequest): Promise<JobCancelResult> => {
+      const request = JobCancelRequestSchema.parse(value);
+      const result = JobCancelResultSchema.parse(await ipcRenderer.invoke("jobs.cancel", request));
+      if (
+        result.requestId !== request.requestId ||
+        result.activeVaultId !== request.activeVaultId ||
+        result.jobId !== request.jobId ||
+        ("job" in result && result.job.id !== request.jobId)
+      ) {
+        throw new Error("The Job cancellation response identity does not match the request.");
+      }
+      return result;
+    },
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>,
     onChanged: (listener: (event: JobChangedEvent) => void): (() => void) => {
