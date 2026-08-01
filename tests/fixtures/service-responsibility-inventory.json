@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "d65754f8ed98764015c0e50bc4669be7268f7316",
+  "baseline": "8955a53d366d9f64323a2ee1c4896c7353627457",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 282,
-  "baselineLines": 125404,
+  "baselineFileCount": 283,
+  "baselineLines": 125717,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -217,6 +217,7 @@
       ["agent-source-tool-execution.ts", 14, "ar"],
       ["capture-job-executor.ts", 124, "jr"],
       ["capture-service.ts", 1065, "jrd"],
+      ["claim-confidence-service.ts", 147, "rd"],
       ["command-capability-adapter.ts", 127, "p"],
       ["command-execution-service.ts", 306, "p"],
       ["dataset-ingest-core.ts", 1839, "f"],
@@ -237,7 +238,7 @@
       ["legacy-agent-ingest-job-executor.ts", 130, "jr"],
       ["ocr-job-executor.ts", 191, "jr"],
       ["paddle-ocr-adapter.ts", 502, "p"],
-      ["knowledge-relation-index.ts", 115, "f"],
+      ["knowledge-relation-index.ts", 281, "f"],
       ["knowledge-tree-aggregate.ts", 390, "f"],
       ["knowledge-tree-entity-branches.ts", 58, "f"],
       ["library-service.ts", 142, "f"],
@@ -315,7 +316,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 282,
+    "serviceOwnerCount": 283,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

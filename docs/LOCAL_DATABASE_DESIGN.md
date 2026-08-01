@@ -215,9 +215,11 @@ indexes; FTS and body-free chunk metadata; Job/memory/Operation lookup accelerat
 migrations. `page_reference_keys` stores normalized stable ID, title, alias, governed path,
 and filename/slug candidates for the Main-owned Reader resolver.
 
-Durable truth stays in files. App schema v3/index revision 6 retains
-`003_inline_reference_keys` after v2 body-free chunks and rebuilds Markdown-owned
-`entities`/`related_page_ids` into typed entity and relationship branches. Lookup checks revision+rebuild
+Durable truth stays in files. App schema v4/index revision 7 adds
+`004_knowledge_relation_sources` after inline reference keys. It rebuilds strict inline citations,
+validated Source Record `cites_source`/`derived_from` edges, and managed Related-section edges;
+source-target edges use a separate nullable `to_source_id` rather than impersonating page IDs.
+Markdown-owned `entities`/`related_page_ids` remain typed relationship branches. Lookup checks revision+rebuild
 generation before/after a maximum-two query; exact page ID wins only in a current index.
 Main watches `wiki/`, `sources/`, and replacement, with signatures covering missed events.
 Dirty/missing/changed state is unavailable until rebuild; watcher state is never truth.

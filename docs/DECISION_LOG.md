@@ -4861,6 +4861,37 @@ References:
 - `docs/SETTINGS_AND_PREFERENCES.md`
 - `docs/PROMPT_DESIGN.md`
 
+### D-20260801-Rebuildable-Source-Relationship-Edges
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Rebuild source citations and source-derived relationships from strict Markdown plus exact,
+confined Source Records. Store the source endpoint in `relation_edges.to_source_id`; never put a
+Source ID in the page-target column.
+
+Rationale:
+
+The existing index rebuilt page links but left the citation table empty and could not represent a
+typed source endpoint. A dedicated nullable source target preserves the page graph contract while
+making complete deletion/rebuild deterministic from durable user-owned truth.
+
+Consequences:
+
+- App schema v4/index revision 7 adds migration `004_knowledge_relation_sources`.
+- Invalid or missing Source Records and citation-like code text grant no relationship authority.
+- Exact managed Related blocks rebuild `related_to`; ordinary user links keep their existing
+  `links_to` and backlink projections.
+- SQLite remains disposable; deleting `.pige/db/` and rebuilding produces the same projection.
+
+References:
+
+- `docs/LOCAL_DATABASE_DESIGN.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/MARKDOWN_SCHEMA.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
