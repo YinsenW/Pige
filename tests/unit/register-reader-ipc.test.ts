@@ -207,6 +207,7 @@ describe("registerReaderIpc", () => {
       "notes.openSearchMatch",
       "notes.openEditor",
       "notes.saveEditor",
+      "notes.saveEditorConflictAsNew",
       "notes.listRevisionHistory",
       "notes.openRevisionHistory",
       "notes.restoreRevisionHistory",

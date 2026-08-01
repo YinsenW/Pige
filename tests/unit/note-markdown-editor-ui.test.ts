@@ -7,7 +7,8 @@ import type {
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
-  NoteEditorSaveResult
+  NoteEditorSaveResult,
+  NoteEditorSaveConflictAsNewRequest
 } from "@pige/contracts";
 import {
   NoteMarkdownEditor,
@@ -38,6 +39,9 @@ const labels = {
   discardDescription: "Your unsaved Markdown changes will be lost.",
   keepEditing: "Keep editing",
   discardChanges: "Discard changes",
+  reloadDiscardTitle: "Reload and discard this draft?",
+  reloadDiscardDescription: "Your local draft will be discarded.",
+  reloadCurrent: "Reload current version",
   review: "Review changes",
   reviewing: "Loading current file…",
   conflictTitle: "Review external changes",
@@ -45,6 +49,8 @@ const labels = {
   draft: "Your draft",
   useCurrent: "Use current file",
   continueDraft: "Continue editing draft",
+  saveAsNew: "Save draft as new note",
+  savingAsNew: "Saving new note…",
   stale: "The note changed. Your draft is preserved.",
   failed: "The note could not be saved.",
   notFound: "This note is no longer available.",
@@ -201,14 +207,14 @@ describe("NoteMarkdownEditor", () => {
     expect(harness.container.textContent).toContain("Your draft is preserved");
     await click(harness.dom, harness.button("Review changes"));
     expect(openRequests[0]).toMatchObject({ renderContextId: context1 });
-    expect(harness.textarea().value).toBe("exact attempted markdown\n");
-    const currentFile = requireElement(
-      harness.container.querySelector<HTMLTextAreaElement>("#note-markdown-editor-current-file")
-    );
-    expect(currentFile.value).toBe("# Authoritative\n");
-    expect(currentFile.readOnly).toBe(true);
+    expect((await waitForElement<HTMLElement>(harness.dom, () =>
+      harness.container.querySelector('[aria-label="Your draft"] [data-note-markdown-conflict-preview]'))).textContent)
+      .toContain("exact attempted markdown");
+    const currentFile = await waitForElement<HTMLElement>(harness.dom, () =>
+      harness.container.querySelector('[aria-label="Current file (read only)"] [data-note-markdown-conflict-preview]'));
+    expect(currentFile.textContent).toContain("Authoritative");
     expect(harness.button("Save").disabled).toBe(true);
-    expect(harness.dom.window.document.activeElement).toBe(currentFile);
+    expect(harness.dom.window.document.activeElement).toBe(harness.button("Continue editing draft"));
     await keydown(harness.dom, currentFile, { key: "Enter", ctrlKey: true, isComposing: true });
     await keydown(harness.dom, currentFile, { key: "Enter", ctrlKey: true });
     expect(saveRequests).toHaveLength(1);
@@ -242,8 +248,14 @@ describe("NoteMarkdownEditor", () => {
     await inputText(harness.dom, harness.textarea(), "local draft that must not disappear implicitly");
     await click(harness.dom, harness.button("Save"));
     await click(harness.dom, harness.button("Review changes"));
-    expect(harness.textarea().value).toBe("local draft that must not disappear implicitly");
-    await click(harness.dom, harness.button("Use current file"));
+    expect((await waitForElement<HTMLElement>(harness.dom, () =>
+      harness.container.querySelector('[aria-label="Your draft"] [data-note-markdown-conflict-preview]'))).textContent)
+      .toContain("local draft that must not disappear implicitly");
+    await click(harness.dom, harness.button("Reload current version"));
+    expect(harness.container.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await click(harness.dom, requireElement(
+      harness.container.querySelector<HTMLButtonElement>('[role="alertdialog"] .primary.danger')
+    ));
     expect(harness.textarea().value).toBe("# Current external body\n");
     expect(harness.container.textContent).toContain("previous draft was discarded");
     await click(harness.dom, harness.button("Save"));
@@ -252,6 +264,38 @@ describe("NoteMarkdownEditor", () => {
       expectedRevision: revision2,
       markdown: "# Current external body\n"
     });
+    await harness.close();
+  });
+
+  it("saves the exact retained conflict draft as a new note without overwriting the current file", async () => {
+    const requests: NoteEditorSaveConflictAsNewRequest[] = [];
+    const saved: string[] = [];
+    const harness = await renderEditor({
+      onSave: async (request) => ({ apiVersion: 1, requestId: request.requestId,
+        activeVaultId: request.activeVaultId, pageId: request.pageId, status: "stale", revision: revision2 }),
+      onReload: async (request) => ready({ requestId: request.requestId, renderContextId: context2,
+        revision: revision2, markdown: "# Current external body\n" }),
+      onSaveConflictAsNew: async (request) => {
+        requests.push(request);
+        return { apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+          pageId: request.pageId, currentRenderContextId: request.currentRenderContextId,
+          expectedCurrentRevision: request.expectedCurrentRevision, status: "saved", operationId: "op_conflictcopy",
+          render: committedResult({ apiVersion: 1, requestId: "noteeditreq_savedcopy1",
+            activeVaultId: request.activeVaultId, pageId: "page_20260802_savedcopy123456",
+            renderContextId: context2, expectedRevision: revision2, markdown: request.markdown }, revision3,
+          `notectx_${"e".repeat(32)}`).render };
+      },
+      onConflictSaved: (result) => saved.push(result.render.summary.pageId)
+    });
+    await inputText(harness.dom, harness.textarea(), "# Exact local conflict draft\n");
+    await click(harness.dom, harness.button("Save"));
+    await click(harness.dom, harness.button("Review changes"));
+    await click(harness.dom, harness.button("Save draft as new note"));
+    expect(requests[0]).toMatchObject({ activeVaultId: vaultId, pageId,
+      currentRenderContextId: context2, expectedCurrentRevision: revision2,
+      markdown: "# Exact local conflict draft\n" });
+    expect(requests[0]?.requestId).toMatch(/^noteeditconflict_[a-z0-9]{16,64}$/u);
+    expect(saved).toEqual(["page_20260802_savedcopy123456"]);
     await harness.close();
   });
 
@@ -287,9 +331,9 @@ describe("NoteMarkdownEditor", () => {
     await click(harness.dom, harness.button("Save"));
     expect(harness.container.textContent).toContain("Your draft is preserved");
     await click(harness.dom, harness.button("Review changes"));
-    expect(requireElement(
-      harness.container.querySelector<HTMLTextAreaElement>("#note-markdown-editor-current-file")
-    ).value).toBe("# External two\n");
+    expect((await waitForElement<HTMLElement>(harness.dom, () =>
+      harness.container.querySelector('[aria-label="Current file (read only)"] [data-note-markdown-conflict-preview]'))).textContent)
+      .toContain("External two");
     expect(saveRequests.map(({ expectedRevision }) => expectedRevision)).toEqual([revision1, revision2]);
     await harness.close();
   });
@@ -458,7 +502,12 @@ async function renderEditor(initial: EditorOverrides = {}) {
     ready: ready(), labels, returnFocusRef,
     onSave: async (request) => ({ apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, pageId: request.pageId, status: "failed" }),
     onReload: async (request) => ({ apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, pageId: request.pageId, status: "failed" }),
+    onSaveConflictAsNew: async (request) => ({ apiVersion: 1, requestId: request.requestId,
+      activeVaultId: request.activeVaultId, pageId: request.pageId,
+      currentRenderContextId: request.currentRenderContextId,
+      expectedCurrentRevision: request.expectedCurrentRevision, status: "failed" }),
     onCommitted: () => undefined,
+    onConflictSaved: () => undefined,
     onCancel: () => undefined,
     ...initial
   };

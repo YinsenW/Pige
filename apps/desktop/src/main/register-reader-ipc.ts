@@ -8,6 +8,8 @@ import type {
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteEditorSaveConflictAsNewRequest,
+  NoteEditorSaveConflictAsNewResult,
   NoteMergeRequest,
   NoteMergeResult,
   NoteRelateRequest,
@@ -77,6 +79,9 @@ import {
   NoteEditorOpenResultSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NOTE_EDITOR_SAVE_CONFLICT_AS_NEW_CHANNEL,
+  NoteEditorSaveConflictAsNewRequestSchema,
+  NoteEditorSaveConflictAsNewResultSchema,
   NOTE_MERGE_CHANNEL,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
@@ -237,6 +242,7 @@ import type { NoteAliasService } from "./services/note-alias-service";
 import type { NoteMergeService } from "./services/note-merge-service";
 import type { NoteRelateService } from "./services/note-relate-service";
 import type { NoteMarkdownImportService } from "./services/note-markdown-import-service";
+import type { NoteMarkdownEditorConflictService } from "./services/note-markdown-editor-conflict-service";
 import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import type { QuestionStateService } from "./services/question-state-service";
@@ -284,6 +290,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteMergeService: () => NoteMergeService;
   readonly getNoteRelateService: () => NoteRelateService;
   readonly getNoteMarkdownImportService: () => NoteMarkdownImportService;
+  readonly getNoteMarkdownEditorConflictService: () => NoteMarkdownEditorConflictService;
   readonly getNoteRevisionHistoryService: () => NoteRevisionHistoryService;
   readonly getLibraryTopicRenameService: () => LibraryTopicRenameService;
   readonly onNoteTrashCommitted: () => void;
@@ -420,6 +427,34 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
       ? result
       : failedEditorSave(parsed);
+  });
+  options.ipcMain.handle(NOTE_EDITOR_SAVE_CONFLICT_AS_NEW_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteEditorSaveConflictAsNewRequestSchema.parse(request) as NoteEditorSaveConflictAsNewRequest;
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: parsed.requestId,
+      activeVaultId: parsed.activeVaultId,
+      pageId: parsed.pageId,
+      currentRenderContextId: parsed.currentRenderContextId,
+      expectedCurrentRevision: parsed.expectedCurrentRevision
+    };
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (!ownerId || event.sender.isDestroyed()) {
+      return NoteEditorSaveConflictAsNewResultSchema.parse({ ...identity, status: "stale" });
+    }
+    let result: NoteEditorSaveConflictAsNewResult;
+    try {
+      result = NoteEditorSaveConflictAsNewResultSchema.parse(
+        await options.getNoteMarkdownEditorConflictService().saveAsNew(ownerId, parsed)
+      );
+    } catch {
+      result = NoteEditorSaveConflictAsNewResultSchema.parse({ ...identity, status: "failed" });
+    }
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteEditorSaveConflictAsNewResultSchema.parse({ ...identity, status: "stale" });
+    }
+    if (result.status === "saved") options.onNoteImported();
+    return result;
   });
   options.ipcMain.handle(NOTE_REVISION_HISTORY_LIST_CHANNEL, (event, request: unknown): NoteRevisionHistoryListResult => {
     const parsed = NoteRevisionHistoryListRequestSchema.parse(request) as NoteRevisionHistoryListRequest;

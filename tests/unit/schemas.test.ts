@@ -186,6 +186,8 @@ import {
   NoteEditorPortableMarkdownSchema,
   NoteEditorSaveRequestSchema,
   NoteEditorSaveResultSchema,
+  NoteEditorSaveConflictAsNewRequestSchema,
+  NoteEditorSaveConflictAsNewResultSchema,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
   NoteRevealGeneratedRequestSchema,
@@ -5546,6 +5548,29 @@ describe("schemas", () => {
     expect(() => NoteEditorPortableMarkdownSchema.parse(
       "😀".repeat(Math.floor(NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES / 4) + 1)
     )).toThrow();
+
+    const conflictRequest = {
+      apiVersion: 1 as const,
+      requestId: "noteeditconflict_abcdefghijklmnop",
+      activeVaultId: identity.activeVaultId,
+      pageId: identity.pageId,
+      currentRenderContextId: renderContextId,
+      expectedCurrentRevision: revision,
+      markdown
+    };
+    expect(NoteEditorSaveConflictAsNewRequestSchema.parse(conflictRequest)).toEqual(conflictRequest);
+    expect(NoteEditorSaveConflictAsNewResultSchema.parse({
+      apiVersion: 1, requestId: conflictRequest.requestId, activeVaultId: identity.activeVaultId,
+      pageId: identity.pageId, currentRenderContextId: renderContextId,
+      expectedCurrentRevision: revision, status: "failed"
+    })).toEqual({
+      apiVersion: 1, requestId: conflictRequest.requestId, activeVaultId: identity.activeVaultId,
+      pageId: identity.pageId, currentRenderContextId: renderContextId,
+      expectedCurrentRevision: revision, status: "failed"
+    });
+    expect(() => NoteEditorSaveConflictAsNewResultSchema.parse({
+      ...conflictRequest, status: "failed", path: "/private/current.md"
+    })).toThrow();
   });
 
   it("keeps vault Memory lifecycle CAS-bound, reversible, and pathless", () => {
