@@ -1,28 +1,28 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type {
-  AgentConversationHistoryCursor,
-  AgentConversationHistoryQuery,
-  AgentConversationHistorySummary
-} from "@pige/contracts";
+import type { AgentConversationHistoryCursor, AgentConversationHistoryQuery } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
-  AgentConversationInputPresentationSchema,
   AgentConversationHistoryQuerySchema,
   AgentConversationMetadataManifestSchema,
   AgentConversationSetTitleRequestSchema,
-  AgentTurnCurrentNoteScopeSchema,
   ConversationEventSchema,
   type AgentConversationMetadataManifest,
   type AgentConversationSetTitleRequest,
   type ConversationEvent
 } from "@pige/schemas";
+import {
+  compareConversationHistoryEntries,
+  conversationHistoryEntryMatchesQuery,
+  createConversationHistorySnapshotHash,
+  projectConversationHistoryEntry,
+  type AgentConversationHistoryEntry
+} from "./agent-conversation-search";
 import { containsRestrictedModelContent } from "./model-egress-content";
 
 const DEFAULT_PAGE_SIZE = 24;
 const MAX_PAGE_SIZE = 50;
-const MAX_PREVIEW_CODE_POINTS = 240;
 const MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_DISCOVERY_FILES = 256;
 const MAX_DISCOVERY_ENTRIES = 4_096;
@@ -31,12 +31,7 @@ const DEFAULT_CURSOR_CAPACITY = 128;
 const MAX_METADATA_BYTES = 512 * 1024;
 const METADATA_FILE_NAME = "conversations-manifest.json";
 const CONVERSATION_FILE_PATTERN = /^(conv_(\d{8})(?:_[a-z0-9]{4,})?)\.jsonl$/u;
-const UNSAFE_PREVIEW_PATTERN = /[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu;
-
-export interface AgentConversationHistoryEntry extends AgentConversationHistorySummary {
-  readonly titleRevision: number;
-  readonly latestUserEventId?: string;
-}
+export type { AgentConversationHistoryEntry } from "./agent-conversation-search";
 
 export interface AgentConversationHistoryPage {
   readonly currentConversationId?: string;
@@ -88,9 +83,11 @@ export class AgentConversationHistory {
     const limit = validateLimit(input.limit ?? DEFAULT_PAGE_SIZE);
     const query = input.query === undefined ? undefined : AgentConversationHistoryQuerySchema.parse(input.query);
     const vaultPath = assertSafeVaultRoot(input.vaultPath);
-    const allEntries = readHistoryEntries(vaultPath);
-    const entries = query === undefined ? allEntries : allEntries.filter((entry) => matchesQuery(entry, query));
-    const snapshotHash = createSnapshotHash(allEntries);
+    const allEntries = readHistoryEntries(vaultPath, undefined, query);
+    const entries = query === undefined
+      ? allEntries
+      : allEntries.filter((entry) => conversationHistoryEntryMatchesQuery(entry, query));
+    const snapshotHash = createConversationHistorySnapshotHash(allEntries);
     let offset = 0;
 
     if (input.cursor) {
@@ -176,7 +173,10 @@ export class AgentConversationHistory {
     const absolutePath = path.join(root, ...relativePath.split("/"));
     if (!lstatIfExists(absolutePath)) return undefined;
     const data = readConversationFileData(absolutePath);
-    const summary = toHistoryEntry(input.conversationId, data.events);
+    const summary = projectConversationHistoryEntry({
+      conversationId: input.conversationId,
+      events: data.events
+    });
     if (!summary) throw unavailableHistory();
     const digest = createHash("sha256").update(data.bytes).digest("hex");
     return {
@@ -263,7 +263,8 @@ export class AgentConversationHistory {
 
 function readHistoryEntries(
   vaultPath: string,
-  knownMetadata?: AgentConversationMetadataManifest
+  knownMetadata?: AgentConversationMetadataManifest,
+  query?: AgentConversationHistoryQuery
 ): AgentConversationHistoryEntry[] {
   const conversationsRoot = path.join(vaultPath, ".pige", "conversations");
   if (!assertExistingDirectoryPath(vaultPath, conversationsRoot)) return [];
@@ -298,7 +299,13 @@ function readHistoryEntries(
           throw unavailableHistory();
         }
         const data = readConversationFileData(filePath);
-        const entry = toHistoryEntry(conversationId, data.events, titles.get(conversationId));
+        const metadata = titles.get(conversationId);
+        const entry = projectConversationHistoryEntry({
+          conversationId,
+          events: data.events,
+          ...(metadata ? { metadata } : {}),
+          ...(query ? { query } : {})
+        });
         if (entry) {
           const digest = createHash("sha256").update(data.bytes).digest("hex");
           entries.push({ ...entry, revision: `conversationrev_${digest}` });
@@ -306,40 +313,7 @@ function readHistoryEntries(
       }
     }
   }
-  return entries.sort(compareHistoryEntries);
-}
-
-function toHistoryEntry(
-  conversationId: string,
-  events: readonly ConversationEvent[],
-  metadata?: AgentConversationMetadataManifest["conversations"][number]
-): AgentConversationHistoryEntry | undefined {
-  if (events.some((event) => event.conversationId !== conversationId)) throw unavailableHistory();
-  const visible = events.filter((event) => event.type === "user_message" || event.type === "assistant_message");
-  const tail = visible.at(-1);
-  if (!tail) return undefined;
-  const latestUser = [...visible].reverse().find((event) => event.type === "user_message");
-  const previewEvent = latestUser ?? tail;
-  const safePreview = createSafePreview(typeof previewEvent.text === "string" ? previewEvent.text : "Conversation");
-  const scope = latestUser
-    ? AgentTurnCurrentNoteScopeSchema.safeParse((latestUser as ConversationEvent & Record<string, unknown>).scope)
-    : undefined;
-  const inputPresentation = latestUser
-    ? AgentConversationInputPresentationSchema.safeParse(
-        (latestUser as ConversationEvent & Record<string, unknown>).inputPresentation
-      )
-    : undefined;
-  return {
-    conversationId,
-    updatedAt: tail.createdAt,
-    safePreview,
-    tailEventId: tail.id,
-    ...(metadata?.title ? { title: metadata.title } : {}),
-    titleRevision: metadata?.revision ?? 0,
-    ...(scope?.success ? { scope: scope.data } : {}),
-    ...(inputPresentation?.success ? { inputPresentation: inputPresentation.data } : {}),
-    ...(latestUser ? { latestUserEventId: latestUser.id } : {})
-  };
+  return entries.sort(compareConversationHistoryEntries);
 }
 
 interface ConversationMetadataRevision {
@@ -490,31 +464,6 @@ function readDirectoryEntries(
     directory.closeSync();
   }
   return entries;
-}
-
-function createSafePreview(value: string): string {
-  const oneLine = value.replace(UNSAFE_PREVIEW_PATTERN, " ").replace(/\s+/gu, " ").trim();
-  const codePoints = [...(oneLine || "Conversation")];
-  return codePoints.slice(0, MAX_PREVIEW_CODE_POINTS).join("");
-}
-
-function createSnapshotHash(entries: readonly AgentConversationHistoryEntry[]): string {
-  return createHash("sha256").update(JSON.stringify(entries), "utf8").digest("hex");
-}
-
-function matchesQuery(entry: AgentConversationHistoryEntry, query: AgentConversationHistoryQuery): boolean {
-  const needle = normalizeSearchText(query);
-  return normalizeSearchText(entry.title ?? "").includes(needle) ||
-    normalizeSearchText(entry.safePreview).includes(needle);
-}
-
-function normalizeSearchText(value: string): string {
-  return value.normalize("NFKC").toLowerCase().replace(/\s+/gu, " ").trim();
-}
-
-function compareHistoryEntries(left: AgentConversationHistoryEntry, right: AgentConversationHistoryEntry): number {
-  const updated = right.updatedAt.localeCompare(left.updatedAt, "en");
-  return updated || left.conversationId.localeCompare(right.conversationId, "en");
 }
 
 function validateLimit(limit: number): number {
