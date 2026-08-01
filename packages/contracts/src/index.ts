@@ -102,6 +102,8 @@ import type {
   CollectionRenameViewResult,
   CollectionTrashViewRequest,
   CollectionTrashViewResult,
+  CollectionTrashDatasetRequest,
+  CollectionTrashDatasetResult,
   CollectionListRequest,
   CollectionListResult,
   CollectionOpenCitationRequest,
@@ -1565,6 +1567,8 @@ export interface KnowledgeActivitySummary {
     | "restore_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
+    | "trash_dataset"
+    | "restore_dataset"
     | "create_memory"
     | "update_memory"
     | "trash_memory"
@@ -2435,6 +2439,9 @@ export interface PigeDesktopApi {
     readonly trashView: (
       request: CollectionTrashViewRequest
     ) => Promise<CollectionTrashViewResult>;
+    readonly trashDataset: (
+      request: CollectionTrashDatasetRequest
+    ) => Promise<CollectionTrashDatasetResult>;
     readonly trashColumn: (
       request: CollectionTrashColumnRequest
     ) => Promise<CollectionTrashColumnResult>;

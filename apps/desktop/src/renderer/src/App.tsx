@@ -57,6 +57,7 @@ import {
   type AgentMemoryFocusRequest,
 } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
+import { ManagedDatasetTrashAction } from "./components/ManagedDatasetTrashAction";
 import { renameCollectionView, trashCollectionView, updateCollectionView } from "./collection-view-lifecycle";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
@@ -218,6 +219,7 @@ import {
   type CollectionSnapshot,
   type CollectionTrashRowRequest,
   type CollectionTrashRowResult,
+  type CollectionTrashDatasetRequest, type CollectionTrashDatasetResult,
   type JobState,
   type Locale,
   type ProviderEndpointProtocol,
@@ -1721,6 +1723,12 @@ export function App(): React.JSX.Element {
     return result;
   };
 
+  const trashDataset = async (request: CollectionTrashDatasetRequest): Promise<CollectionTrashDatasetResult> => {
+    const result = await window.pige.collections.trashDataset(request);
+    if (result.status === "committed") await Promise.allSettled([refreshCollectionCatalog(false), refreshVaultState()]);
+    return result;
+  };
+
   const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string): boolean => {
     const active = selectedCollectionRef.current;
     if (
@@ -2770,6 +2778,7 @@ export function App(): React.JSX.Element {
             onRefreshCollectionCatalog={() => refreshCollectionCatalog(false)}
             onLoadMoreCollections={() => refreshCollectionCatalog(true)}
             onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "library")}
+            onTrashDataset={trashDataset}
             activeVaultId={activeVault.vaultId}
             onResolveReaderSelection={resolveReaderSelection}
             onSubmitReaderSelectionAction={submitReaderSelectionAction}
@@ -3433,6 +3442,7 @@ export function LibraryPanel(props: {
   readonly onRefreshCollectionCatalog?: () => Promise<void>;
   readonly onLoadMoreCollections?: () => Promise<void>;
   readonly onOpenCollection?: (datasetId: string, tableId: string) => Promise<boolean>;
+  readonly onTrashDataset?: (request: CollectionTrashDatasetRequest) => Promise<CollectionTrashDatasetResult>;
   readonly selectedNote: NoteRenderResult | null;
   readonly searchFocusSegmentId?: string;
   readonly selectedNoteRelated: NoteRelatedState;
@@ -3953,6 +3963,8 @@ export function LibraryPanel(props: {
                         <small>{props.t("collection.open")}</small>
                       </button>
                     ))}
+                    {props.onTrashDataset && props.activeVaultId ? <ManagedDatasetTrashAction activeVaultId={props.activeVaultId}
+                      dataset={dataset} onTrash={props.onTrashDataset} onCommitted={() => undefined} t={props.t} /> : null}
                   </section>
                 ))}
                 {props.collectionCatalog.hasMore ? (

@@ -267,6 +267,7 @@ import { ManagedCollectionService } from "./services/managed-collection-service"
 import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
+import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifecycle-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
 import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
 import { AgentConversationExportService } from "./services/agent-conversation-export-service";
@@ -464,6 +465,7 @@ let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService |
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
+let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
 const homeConversationHistory = new AgentConversationHistory();
@@ -2132,6 +2134,11 @@ const getManagedCollectionViewService = (): ManagedCollectionViewService => {
   return managedCollectionViewService;
 };
 
+const getManagedDatasetLifecycleService = (): ManagedDatasetLifecycleService => {
+  if (!managedDatasetLifecycleService) managedDatasetLifecycleService = new ManagedDatasetLifecycleService(getVaultService());
+  return managedDatasetLifecycleService;
+};
+
 const getManagedCollectionCitationService = (): ManagedCollectionCitationService => {
   if (!managedCollectionCitationService) {
     managedCollectionCitationService = new ManagedCollectionCitationService(
@@ -2145,19 +2152,22 @@ const getManagedCollectionCitationService = (): ManagedCollectionCitationService
 const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort => {
   const collections = getManagedCollectionService();
   const views = getManagedCollectionViewService();
+  const datasets = getManagedDatasetLifecycleService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
-    ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
-      .includes(operation.kind) ? views : collections;
+    ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
+      ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
+        .includes(operation.kind) ? views : collections;
   return {
     activitySummary: (operation, undo) => owner(operation).activitySummary(operation, undo),
     findUndoOperation: (operation, operations) => owner(operation).findUndoOperation(operation, operations),
-    undo: (operation, expectedRevisionId) => owner(operation).undo(operation, expectedRevisionId),
+    undo: (operation, expectedRevisionId) => Promise.resolve(owner(operation).undo(operation, expectedRevisionId)),
     recoverIncompleteOperations: () => {
       const collectionResult = collections.recoverIncompleteOperations();
       const viewResult = views.recoverIncompleteOperations();
+      const datasetResult = datasets.recoverIncompleteOperations();
       return {
-        recovered: collectionResult.recovered + viewResult.recovered,
-        failed: collectionResult.failed + viewResult.failed
+        recovered: collectionResult.recovered + viewResult.recovered + datasetResult.recovered,
+        failed: collectionResult.failed + viewResult.failed + datasetResult.failed
       };
     }
   };
@@ -3081,6 +3091,7 @@ registerManagedCollectionIpc({
   updateCollectionView: (request) => getManagedCollectionViewService().updateView(request),
   renameCollectionView: (request) => getManagedCollectionViewService().renameView(request),
   trashCollectionView: (request) => getManagedCollectionViewService().trashView(request),
+  trashDataset: (request) => getManagedDatasetLifecycleService().trash(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
@@ -3287,7 +3298,8 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
   return result;
 });
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
-  const trashResult = getNoteTrashRedoService().redo(request);
+  const datasetResult = getManagedDatasetLifecycleService().redo(request);
+  const trashResult = datasetResult.status === "not_found" ? getNoteTrashRedoService().redo(request) : datasetResult;
   const renameResult = trashResult.status === "not_found" ? getNoteRenameService().redo(request) : trashResult;
   const topicResult = renameResult.status === "not_found" ? getLibraryTopicRenameService().redo(request) : renameResult;
   const tagResult = topicResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : topicResult;
