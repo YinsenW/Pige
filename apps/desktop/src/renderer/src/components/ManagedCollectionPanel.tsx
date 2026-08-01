@@ -13,8 +13,8 @@ import type {
   CollectionOpenResult,
   CollectionRevealRequest, CollectionRevealResult,
   CollectionOpenCitationResult,
-  CollectionRenameColumnRequest,
-  CollectionRenameColumnResult,
+  CollectionRenameColumnRequest, CollectionRenameColumnResult,
+  CollectionRenameTableRequest, CollectionRenameTableResult,
   CollectionScalarValue,
   CollectionSnapshot,
   CollectionTrashColumnRequest,
@@ -30,10 +30,8 @@ import {
 } from "./ManagedCollectionColumnActions";
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
-import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog";
-import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
-import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog";
-import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction";
+import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog"; import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
+import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -117,6 +115,7 @@ export function ManagedCollectionPanel(props: {
   readonly onTrashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
   readonly onAddNullableColumn: (request: CollectionAddNullableColumnRequest) => Promise<CollectionAddNullableColumnResult>;
   readonly onRenameColumn: (request: CollectionRenameColumnRequest) => Promise<CollectionRenameColumnResult>;
+  readonly onRenameTable: (request: CollectionRenameTableRequest) => Promise<CollectionRenameTableResult>;
   readonly onTrashColumn: (request: CollectionTrashColumnRequest) => Promise<CollectionTrashColumnResult>;
   readonly onOpenView: (viewId?: string) => Promise<CollectionSnapshot | null>;
   readonly onCreateView: (
@@ -614,7 +613,8 @@ export function ManagedCollectionPanel(props: {
           </button>
           <p className="retrieval-eyebrow">{props.t("collection.title")}</p>
           <h1 id="managed-collection-title">{props.snapshot.title}</h1>
-          <p className="muted">{props.snapshot.tableName}</p>
+          <ManagedCollectionTableRenameAction activeVaultId={props.activeVaultId} snapshot={props.snapshot} blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
+            onRename={props.onRenameTable} onAdoptSnapshot={props.onAdoptSnapshot} onBusyChange={(active) => { viewControlsActiveRef.current = active; setViewControlsBusy(active); }} t={props.t} />
         </div>
         <div>
           <p className="muted dataset-answer-count">

@@ -18,11 +18,13 @@ import { DatasetService } from "../../apps/desktop/src/main/services/dataset-ser
 import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { ManagedCollectionService } from "../../apps/desktop/src/main/services/managed-collection-service";
+import { ManagedCollectionTableService } from "../../apps/desktop/src/main/services/managed-collection-table-service";
 import { ManagedCollectionRedoService } from "../../apps/desktop/src/main/services/managed-collection-redo-service";
 import {
   readBundle,
   readCollectionSnapshot,
-  readImmutableCollectionRevision
+  readImmutableCollectionRevision,
+  operationPathFor
 } from "../../apps/desktop/src/main/services/managed-collection-storage";
 import {
   createVaultOnDisk,
@@ -2018,6 +2020,45 @@ describe("ManagedCollectionService", () => {
       { columnId: nested.columnId, value: 12, editable: false, readOnlyReason: "formula" }
     ]));
   }, 30_000);
+
+  it("renames one stable table through CAS, replay, Activity Undo, and restart recovery", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionTableService(port);
+    const initial = readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId)!;
+    const table = required(initial.schema.tables[0]);
+    const rowIds = readRowIds(initial.payloadPath);
+    const columnIds = readCollectionColumnIds(initial.payloadPath);
+    const request = { apiVersion: 1 as const, requestId: "collection_request_tablerename001abc",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: initial.revision.id, name: "People" };
+    const committed = await service.rename(request);
+    expect(committed).toMatchObject({ status: "committed", snapshot: { tableId: table.id, tableName: "People" } });
+    if (committed.status !== "committed") throw new Error("Collection table rename did not commit");
+    const renamed = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(renamed.revision.change).toEqual({ kind: "collection_table_rename", tableId: table.id,
+      previousName: table.name, name: "People" });
+    expect(readPayloadSourceName(renamed.payloadPath, table.id)).toBe("records");
+    expect(readRowIds(renamed.payloadPath)).toEqual(rowIds);
+    expect(readCollectionColumnIds(renamed.payloadPath)).toEqual(columnIds);
+    expect(await service.rename(request)).toEqual(committed);
+    const operationPath = operationPathFor(fixture.vaultPath, committed.operationId);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(service.activitySummary(operation)).toMatchObject({ kind: "rename_collection_table",
+      targetLabel: "People", status: "applied", canUndo: true });
+    fs.rmSync(operationPath);
+    const restarted = new ManagedCollectionTableService(port);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const recovered = OperationRecordSchema.parse(readJson(operationPath));
+    const undone = await restarted.undo(recovered, committed.snapshot.revisionId);
+    expect(undone.status).toBe("undone");
+    const restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(restored.schema.tables.find(({ id }) => id === table.id)?.name).toBe(table.name);
+    expect(readPayloadSourceName(restored.payloadPath, table.id)).toBe("records");
+    expect(restored.revision.change).toMatchObject({ kind: "collection_table_rename_undo",
+      tableId: table.id, name: table.name, undoOfOperationId: recovered.id });
+  }, 30_000);
 });
 
 async function makeCollectionFixture() {
@@ -2196,6 +2237,15 @@ function readCollectionColumnIds(payloadPath: string): string[] {
   } finally {
     database.close();
   }
+}
+
+function readPayloadSourceName(payloadPath: string, tableId: string): string {
+  const database = new DatabaseSync(payloadPath, { readOnly: true });
+  try {
+    const row = database.prepare("SELECT source_name FROM pige_dataset_tables WHERE table_id = ?").get(tableId) as { source_name?: unknown } | undefined;
+    if (typeof row?.source_name !== "string") throw new Error("Missing Dataset table");
+    return row.source_name;
+  } finally { database.close(); }
 }
 
 function findFile(root: string, suffix: string): string {

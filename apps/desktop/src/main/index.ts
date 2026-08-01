@@ -281,6 +281,7 @@ import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
+import { ManagedCollectionTableService } from "./services/managed-collection-table-service";
 import { ManagedCollectionRedoService } from "./services/managed-collection-redo-service";
 import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
@@ -504,6 +505,7 @@ let knowledgeHealthService: KnowledgeHealthService | undefined;
 let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService | undefined;
 let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
+let managedCollectionTableService: ManagedCollectionTableService | undefined;
 let managedCollectionRedoService: ManagedCollectionRedoService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionViewRedoService: ManagedCollectionViewRedoService | undefined;
@@ -2331,6 +2333,9 @@ const getManagedCollectionService = (): ManagedCollectionService => {
   return managedCollectionService;
 };
 
+const getManagedCollectionTableService = (): ManagedCollectionTableService =>
+  managedCollectionTableService ??= new ManagedCollectionTableService(getVaultService());
+
 const getManagedCollectionRevealService = (): ManagedCollectionRevealService =>
   new ManagedCollectionRevealService(getVaultService(), {
     reveal: (absolutePath) => shell.showItemInFolder(absolutePath)
@@ -2372,8 +2377,10 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const views = getManagedCollectionViewService();
   const datasets = getManagedDatasetLifecycleService();
   const titles = getManagedDatasetTitleService();
+  const tables = getManagedCollectionTableService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
     operation.kind === "rename_dataset" ? titles :
+      operation.kind === "rename_collection_table" ? tables :
       ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
       ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
         .includes(operation.kind) ? views : collections;
@@ -2393,11 +2400,12 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const viewResult = views.recoverIncompleteOperations();
       const datasetResult = datasets.recoverIncompleteOperations();
       const titleResult = titles.recoverIncompleteOperations();
+      const tableResult = tables.recoverIncompleteOperations();
       return {
         recovered: collectionRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
-          viewResult.recovered + datasetResult.recovered + titleResult.recovered,
+          viewResult.recovered + datasetResult.recovered + titleResult.recovered + tableResult.recovered,
         failed: collectionRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
-          viewResult.failed + datasetResult.failed + titleResult.failed
+          viewResult.failed + datasetResult.failed + titleResult.failed + tableResult.failed
       };
     }
   };
@@ -3338,6 +3346,7 @@ registerManagedCollectionIpc({
   addRollupCollectionColumn: (request) => getManagedCollectionService().addRollupColumn(request),
   updateRollupCollectionColumn: (request) => getManagedCollectionService().updateRollupColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
+  renameCollectionTable: (request) => getManagedCollectionTableService().rename(request),
   createCollectionView: (request) => getManagedCollectionViewService().createView(request),
   updateCollectionView: (request) => getManagedCollectionViewService().updateView(request),
   renameCollectionView: (request) => getManagedCollectionViewService().renameView(request),

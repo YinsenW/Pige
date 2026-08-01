@@ -115,6 +115,12 @@ const renameColumnRequest = {
   columnId: "column_abcdefghijkl",
   label: "Work item"
 } as const;
+const renameTableRequest = {
+  ...openRequest,
+  requestId: "collection_request_renametableabcdef",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  name: "People"
+} as const;
 const createViewRequest = {
   ...openRequest,
   requestId: "collection_request_viewabcdefghijkl",
@@ -178,6 +184,7 @@ function makeHarness(options: {
   readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
   readonly updateRelationCollectionColumn?: (request: typeof updateRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
+  readonly renameCollectionTable?: (request: typeof renameTableRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
   readonly updateCollectionView?: (request: typeof updateViewRequest) => unknown;
   readonly renameCollectionView?: (request: typeof renameViewRequest) => unknown;
@@ -312,6 +319,10 @@ function makeHarness(options: {
     columnId: request.columnId,
     status: "not_found"
   })));
+  const renameCollectionTable = vi.fn(options.renameCollectionTable ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, name: request.name, status: "not_found"
+  })));
   const trashCollectionColumn = vi.fn(options.trashCollectionColumn ?? ((request) => ({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
@@ -372,6 +383,7 @@ function makeHarness(options: {
     editRelationCollectionCell,
     updateRelationCollectionColumn,
     renameCollectionColumn,
+    renameCollectionTable,
     createCollectionView,
     updateCollectionView,
     renameCollectionView,
@@ -399,6 +411,7 @@ function makeHarness(options: {
     editRelationCollectionCell,
     updateRelationCollectionColumn,
     renameCollectionColumn,
+    renameCollectionTable,
     createCollectionView,
     updateCollectionView,
     renameCollectionView,
@@ -430,6 +443,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateLookupColumn",
       "collections.updateRollupColumn",
       "collections.renameColumn",
+      "collections.renameTable",
       "collections.createView",
       "collections.renameView",
       "collections.updateView",
@@ -729,6 +743,7 @@ describe("registerManagedCollectionIpc", () => {
       appendDefaultCollectionRow,
       addNullableCollectionColumn,
       renameCollectionColumn,
+      renameCollectionTable,
       createCollectionView,
       trashCollectionColumn,
       trashCollectionRow
@@ -792,6 +807,8 @@ describe("registerManagedCollectionIpc", () => {
       });
     await expect(handlers.get("collections.renameColumn")!({ sender: {} } as IpcMainInvokeEvent, renameColumnRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: renameColumnRequest.requestId });
+    await expect(handlers.get("collections.renameTable")!({ sender: {} } as IpcMainInvokeEvent, renameTableRequest))
+      .resolves.toMatchObject({ status: "not_found", requestId: renameTableRequest.requestId, name: "People" });
     await expect(handlers.get("collections.createView")!({ sender: {} } as IpcMainInvokeEvent, createViewRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: createViewRequest.requestId });
     await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, trashColumnRequest))
@@ -803,6 +820,7 @@ describe("registerManagedCollectionIpc", () => {
     expect(appendDefaultCollectionRow).toHaveBeenCalledWith(appendRequest);
     expect(addNullableCollectionColumn).toHaveBeenCalledWith(addColumnRequest);
     expect(renameCollectionColumn).toHaveBeenCalledWith(renameColumnRequest);
+    expect(renameCollectionTable).toHaveBeenCalledWith(renameTableRequest);
     expect(createCollectionView).toHaveBeenCalledWith(createViewRequest);
     expect(trashCollectionColumn).toHaveBeenCalledWith(trashColumnRequest);
     expect(trashCollectionRow).toHaveBeenCalledWith(trashRowRequest);
