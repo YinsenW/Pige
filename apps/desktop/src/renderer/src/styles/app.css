@@ -6659,6 +6659,36 @@ dd {
 
 .knowledge-toolbar-action[aria-pressed="true"] { color: var(--text-primary); background: var(--surface-muted); }
 
+.knowledge-tree-more-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  z-index: 12;
+  display: grid;
+  width: max-content;
+  min-width: 156px;
+  gap: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  padding: 4px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-float);
+}
+
+.knowledge-tree-more-menu button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  font: 10px/1.4 inherit;
+}
+
+.knowledge-tree-more-menu button:hover,
+.knowledge-tree-more-menu button:focus-visible { background: var(--surface-muted); }
+
 .knowledge-map-modes {
   position: absolute;
   top: 10px;
@@ -6791,6 +6821,36 @@ dd {
 .knowledge-inspector-open { display: inline-flex; align-items: center; gap: 5px; margin-top: 16px; border: 0; padding: 0; background: transparent; color: var(--text-primary); font-size: 10px; font-weight: 550; }
 .knowledge-inspector-open::after { content: "→"; transition: transform 160ms ease; }
 .knowledge-inspector-open:hover::after { transform: translateX(2px); }
+
+.knowledge-branch-browser {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 11px;
+}
+
+.knowledge-branch-browser h3 { margin: 0; color: var(--text-secondary); font-size: 10px; font-weight: 600; }
+.knowledge-branch-browser .related-empty { margin: 0; font-size: 10px; }
+.knowledge-branch-list { display: grid; max-height: 132px; gap: 4px; overflow-y: auto; }
+.knowledge-branch-list button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 7px;
+  background: var(--surface-muted);
+  color: var(--text-primary);
+  text-align: left;
+  font: 10px/1.35 inherit;
+}
+.knowledge-branch-list button:hover,
+.knowledge-branch-list button:focus-visible { background: var(--surface-hover); }
+.knowledge-branch-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.knowledge-branch-list small { color: var(--text-tertiary); font-size: 9px; }
 
 .knowledge-minimap {
   position: absolute;

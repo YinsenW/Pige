@@ -39,8 +39,7 @@ type VisualTree = {
 
 type ViewportAnnouncement =
   | { readonly kind: "focused"; readonly title: string }
-  | { readonly kind: "zoom"; readonly percent: number }
-  | { readonly kind: "secondary-unavailable" };
+  | { readonly kind: "zoom"; readonly percent: number };
 
 type PointerDrag = {
   readonly pointerId: number;
@@ -69,12 +68,15 @@ export function KnowledgeTreeMap(props: {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [viewportAnnouncement, setViewportAnnouncement] = useState<ViewportAnnouncement | null>(null);
   const [related, setRelated] = useState<{ readonly owner: string; readonly value: KnowledgeTreeRelatedState }>({
     owner: "",
     value: null
   });
   const nodeRefs = useRef(new Map<string, SVGGElement>());
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   const pointerDragRef = useRef<PointerDrag | null>(null);
   const searchOriginRef = useRef<string | null>(null);
   const relatedSequenceRef = useRef(0);
@@ -121,6 +123,16 @@ export function KnowledgeTreeMap(props: {
     !normalizedQuery || node.title.toLocaleLowerCase().includes(normalizedQuery);
 
   const nodeDimmed = (node: VisualNode): boolean => !nodeInteractive(node) || !nodeSearchMatch(node);
+  const activeChildren = active
+    ? visual.nodes.filter((node) => node.parentId === active.id && nodeInteractive(node))
+    : [];
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const move = (): void => moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
+    else move();
+  }, [moreOpen]);
 
   useEffect(() => {
     const current = visual.byId.get(activeId);
@@ -203,11 +215,6 @@ export function KnowledgeTreeMap(props: {
     setViewportAnnouncement({ kind: "zoom", percent: 100 });
   };
 
-  const announceSecondaryUnavailable = (): void => {
-    setAnnouncedMode(null);
-    setViewportAnnouncement({ kind: "secondary-unavailable" });
-  };
-
   const updateQuery = (nextQuery: string): void => {
     if (!query && nextQuery) searchOriginRef.current = activeId;
     if (query && !nextQuery) {
@@ -218,6 +225,61 @@ export function KnowledgeTreeMap(props: {
     setAnnouncedMode(null);
     setViewportAnnouncement(null);
     setQuery(nextQuery);
+  };
+
+  const closeMore = (restoreFocus = false): void => {
+    setMoreOpen(false);
+    if (!restoreFocus) return;
+    const move = (): void => moreButtonRef.current?.focus();
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
+    else move();
+  };
+
+  const focusParent = (): void => {
+    if (!active?.parentId) return;
+    const parent = visual.byId.get(active.parentId);
+    if (!parent) return;
+    closeMore();
+    focusNode(parent, true);
+  };
+
+  const focusRoot = (): void => {
+    const root = visual.nodes[0];
+    if (!root) return;
+    closeMore();
+    focusNode(root, true);
+  };
+
+  const showAllBranches = (): void => {
+    const root = visual.nodes[0];
+    if (!root) return;
+    setMode("tree");
+    setReviewOnly(false);
+    setQuery("");
+    searchOriginRef.current = null;
+    closeMore();
+    focusNode(root, true);
+  };
+
+  const handleMoreMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeMore(true);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    if (items.length === 0) return;
+    event.preventDefault();
+    const currentIndex = Math.max(0, items.indexOf(event.target as HTMLButtonElement));
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? items.length - 1
+        : event.key === "ArrowDown"
+          ? (currentIndex + 1) % items.length
+          : (currentIndex - 1 + items.length) % items.length;
+    items[nextIndex]?.focus();
   };
 
   const handleViewportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
@@ -438,17 +500,23 @@ export function KnowledgeTreeMap(props: {
             >
               {props.t("knowledgeTree.open")}
             </button>
-          ) : (
+          ) : activeChildren.length > 0 ? (
             <button
               className="knowledge-inspector-open"
               type="button"
-              data-knowledge-action="open-topic"
-              aria-describedby="knowledge-map-status"
-              onClick={announceSecondaryUnavailable}
+              data-knowledge-action="browse-branch"
+              onClick={() => focusNode(activeChildren[0]!, true)}
             >
-              {props.t("knowledgeTree.open")}
+              {props.t("knowledgeTree.browseBranch")}
             </button>
-          )}
+          ) : null}
+          {activeChildren.length > 0 || !active.pageId ? (
+            <KnowledgeTreeBranchPanel
+              children={activeChildren}
+              onSelect={(node) => focusNode(node, true)}
+              t={props.t}
+            />
+          ) : null}
           {active.pageId && active.focusKey ? (
             <KnowledgeTreeRelatedPanel
               state={related.owner === relatedOwnerRef.current ? related.value : "loading"}
@@ -497,9 +565,7 @@ export function KnowledgeTreeMap(props: {
           ? props.t("knowledgeTree.focused").replace("{title}", viewportAnnouncement.title)
           : viewportAnnouncement?.kind === "zoom"
             ? props.t("knowledgeTree.zoomStatus").replace("{percent}", String(viewportAnnouncement.percent))
-            : viewportAnnouncement?.kind === "secondary-unavailable"
-              ? props.t("knowledgeTree.secondaryUnavailable")
-              : normalizedQuery
+            : normalizedQuery
                 ? props.t("knowledgeTree.searching").replace("{count}", String(visual.nodes.filter((node) => nodeInteractive(node) && nodeSearchMatch(node)).length))
                 : announcedMode
                   ? props.t(`knowledgeTree.modeStatus.${announcedMode}`)
@@ -545,17 +611,76 @@ export function KnowledgeTreeMap(props: {
           <PigeIcon name="filter" size={15} />
         </button>
         <button
+          ref={moreButtonRef}
           type="button"
           className="icon-button knowledge-toolbar-action"
           aria-label={props.t("knowledgeTree.more")}
           data-knowledge-action="more"
-          aria-describedby="knowledge-map-status"
-          onClick={announceSecondaryUnavailable}
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
+          aria-controls="knowledge-tree-more-menu"
+          onClick={() => setMoreOpen((value) => !value)}
         >
           <PigeIcon name="more" size={15} />
         </button>
+        {moreOpen ? (
+          <div
+            ref={moreMenuRef}
+            id="knowledge-tree-more-menu"
+            className="knowledge-tree-more-menu"
+            role="menu"
+            aria-label={props.t("knowledgeTree.more")}
+            onKeyDown={handleMoreMenuKeyDown}
+          >
+            {active?.parentId ? (
+              <button type="button" role="menuitem" data-knowledge-action="back-parent" onClick={focusParent}>
+                {props.t("knowledgeTree.backToParent")}
+              </button>
+            ) : null}
+            {active?.parentId && visual.byId.get(active.parentId)?.parentId ? (
+              <button type="button" role="menuitem" data-knowledge-action="go-root" onClick={focusRoot}>
+                {props.t("knowledgeTree.goToRoot")}
+              </button>
+            ) : null}
+            <button type="button" role="menuitem" data-knowledge-action="show-all" onClick={showAllBranches}>
+              {props.t("knowledgeTree.showAllBranches")}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function KnowledgeTreeBranchPanel(props: {
+  readonly children: readonly VisualNode[];
+  readonly onSelect: (node: VisualNode) => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  return (
+    <section className="knowledge-branch-browser" aria-label={props.t("knowledgeTree.branchContents")}>
+      <h3>{props.t("knowledgeTree.branchContents")}</h3>
+      {props.children.length === 0 ? (
+        <p className="related-empty">{props.t("knowledgeTree.branchEmpty")}</p>
+      ) : (
+        <div className="knowledge-branch-list">
+          {props.children.map((node) => (
+            <button
+              key={node.id}
+              type="button"
+              data-knowledge-action="browse-child"
+              aria-label={`${props.t("knowledgeTree.browseBranch")}: ${node.title}`}
+              onClick={() => props.onSelect(node)}
+            >
+              <span>{node.title}</span>
+              <small>{node.kind === "page"
+                ? props.t("knowledgeTree.supportingPage")
+                : props.t(`knowledgeTree.kind.${node.kind}`)}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
