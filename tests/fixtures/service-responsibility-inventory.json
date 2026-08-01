@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "8955a53d366d9f64323a2ee1c4896c7353627457",
+  "baseline": "16377ac8f06ec52c8990427d93dfbad30601411a",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 285,
-  "baselineLines": 126011,
+  "baselineFileCount": 288,
+  "baselineLines": 126357,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -225,6 +225,7 @@
       ["dataset-ingest-core.ts", 1839, "f"],
       ["dataset-import-job-executor.ts", 157, "jr"],
       ["dataset-query-core.ts", 1103, "rdf"],
+      ["dataset-relation-query-core.ts", 295, "rdf"],
       ["dataset-query-service.ts", 1428, "rd"],
       ["diagnostics-export-core.ts", 633, "df"],
       ["document-parse-job-executor.ts", 180, "jr"],
@@ -282,6 +283,8 @@
       ["agent-turn-draft-publisher.ts", 123, "a"],
       ["dataset-ingest-types.ts", 265, ""],
       ["dataset-ingest-worker-service.ts", 107, "j"],
+      ["dataset-query-catalog-contract.ts", 41, ""],
+      ["dataset-query-tool-contract.ts", 10, ""],
       ["dataset-query-types.ts", 379, ""],
       ["dataset-query-worker-service.ts", 114, "j"],
       ["diagnostics-export-types.ts", 73, ""],
@@ -318,7 +321,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 285,
+    "serviceOwnerCount": 288,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

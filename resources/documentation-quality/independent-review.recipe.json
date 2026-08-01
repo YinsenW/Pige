@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T15:26:43.444Z",
+  "reviewedAt": "2026-08-01T15:31:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E3.07 durable deterministic Agent knowledge outcomes and recovery references.",
+    "scope": "E6.11 bounded same-Dataset relation-driven analytical query through Home.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "ce2d7865ab83f2b571a23cb08f24509da98ceb7431afde17f3a7930c2514c9ba"
+    "reviewedSha256": "f2a8b2a95b8358b44b006746026a4279ead2b0f1be05c5dd2b274f794bfe6319"
   },
   "reviewers": [
     {

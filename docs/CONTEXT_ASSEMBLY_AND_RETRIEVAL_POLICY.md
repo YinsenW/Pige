@@ -148,7 +148,10 @@ Current Home Dataset bridge permits one bounded catalog followed by one typed qu
 Pi selects `pige_query_dataset@1`. The model receives only opaque Dataset/table/column
 refs, a strict filter/group/aggregate/order/limit vocabulary, and the bounded escaped
 result; SQL, paths, handles, whole payloads, repeated query, and page/URL evidence mixing
-fail closed. For a preserved-source continuation, the catalog is additionally restricted
+fail closed. A catalog-declared same-Dataset single relation may additionally bind one
+target table for projection, filtering and ordering; Main validates the stored target row
+IDs and both table schemas, while multi-hop joins and joined aggregation remain closed.
+For a preserved-source continuation, the catalog is additionally restricted
 to the exact durable source, Dataset, and revision refs created for that turn; unrelated
 historical Dataset records are omitted rather than becoming context or blockers. Dataset
 Service revalidates the exact manifest/revision/schema/payload and
@@ -453,7 +456,8 @@ Tests must verify:
 - Retrieval works through lexical/metadata fallback without local embeddings.
 - CJK retrieval fixtures work without whitespace-only assumptions.
 - Dataset queries revalidate revision/schema, enforce row/column/byte/time/result bounds,
-  produce deterministic result hashes, and preserve exact citations across retry.
+  produce deterministic result hashes, and preserve exact citations across retry. One
+  declared same-Dataset relation join is bounded by the same authority and evidence rules.
 - Formula, cell, column, and database metadata remain untrusted and cannot change query,
   tool, provider, permission, destination, or output authority.
 

@@ -589,6 +589,11 @@ Dataset boundary:
 
 - Checksum-bound previews use <=50 rows/64 KiB; cursors bind vault/catalog/revision/view/boundary.
   Drift is stale; citation keys yield only Main-derived read-only highlights.
+- The Home-only `pige_query_dataset@1` catalog may disclose one opaque relation join from a
+  source table to its declared same-Dataset target. One typed query may project, filter and
+  order across that target; Main revalidates both tables and the stored row-ID relation before
+  returning the ordinary bounded, hash-bound Dataset preview. Multi-hop joins, relation
+  aggregates and renderer query authority remain unavailable.
 - Formula/relation/lookup/rollup writes bind revision, IDs and eligibility; relations store same-Dataset row
   IDs/labels. `collections.updateRelationColumn` preserves targets for a display-field change, clears them
   for a target-table change, and rejects definitions with dependent lookup/rollup columns. Lookup definition updates accept one current

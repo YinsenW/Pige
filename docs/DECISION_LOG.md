@@ -4892,6 +4892,30 @@ References:
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/MARKDOWN_SCHEMA.md`
 
+### D-20260801-Dataset-Relation-Query
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Permit one Home-only analytical join across an exact Pige-owned same-Dataset single relation.
+
+Rationale:
+
+Opaque catalog refs and stored row IDs provide useful cross-table analysis without exposing SQL,
+payloads, paths or renderer query authority.
+
+Consequences:
+
+- Main revalidates both table schemas, the relation descriptor and every referenced target row.
+- Joined projection/filter/order uses the existing bounded result hash, citation and durable
+  conversation contract; multi-hop joins and joined aggregation remain unavailable.
+
+References:
+
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/API_AND_IPC_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
