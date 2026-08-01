@@ -115,6 +115,45 @@ describe("registerCurrentNoteAppendIpc", () => {
     expect(decideProposal).not.toHaveBeenCalled();
   });
 
+  it("keeps a conflict in durable review until the exact current revision is accepted", async () => {
+    const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
+    const currentRevision = `noteeditrev_${"a".repeat(64)}` as const;
+    const conflicted = { ...appendPreview(), state: "conflicted" as const, revision: 3, currentRevision };
+    const rejected = { ...appendPreview(), state: "rejected" as const, revision: 4 };
+    const decideProposal = vi.fn((input: { readonly decision: string }) => input.decision === "keep_current"
+      ? { status: "rejected" as const, proposal: rejected }
+      : { status: "conflicted" as const, proposal: conflicted });
+    let job = waitingJob();
+    const resolveAgentTurnReview = vi.fn((input: any) => {
+      job = { ...input.job, state: "completed" } as JobRecord;
+      return job;
+    });
+    registerCurrentNoteAppendIpc({
+      ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler); } },
+      currentVault: () => ({ vaultId: VAULT_ID } as VaultSummary),
+      activeVaultPath: () => "/synthetic/vault",
+      getService: () => ({ getProposal: () => conflicted, decideProposal } as unknown as CurrentNoteAppendService),
+      getJobsService: () => ({ readAgentTurnJob: () => job, resolveAgentTurnReview } as unknown as JobsService)
+    });
+    const first = await decide(handlers);
+    expect(first).toMatchObject({ status: "conflicted", proposal: { currentRevision } });
+    expect(job.state).toBe("awaiting_review");
+    expect(resolveAgentTurnReview).not.toHaveBeenCalled();
+    const kept = await handlers.get("agent.decideCurrentNoteAppendProposal")?.({}, {
+      apiVersion: 1,
+      activeVaultId: VAULT_ID,
+      pageId: PAGE_ID,
+      jobId: JOB_ID,
+      proposalId: PROPOSAL_ID,
+      expectedRevision: 3,
+      decision: "keep_current",
+      expectedCurrentRevision: currentRevision
+    });
+    expect(kept).toMatchObject({ status: "rejected", proposal: { revision: 4 } });
+    expect(decideProposal).toHaveBeenLastCalledWith(expect.objectContaining({ decision: "keep_current", expectedCurrentRevision: currentRevision }));
+    expect(job.state).toBe("completed");
+  });
+
   it("rereads CAS contention and returns success only after the same Job converges", async () => {
     const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
     const preview = appendPreview();

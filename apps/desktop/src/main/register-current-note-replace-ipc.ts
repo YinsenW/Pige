@@ -79,7 +79,8 @@ export function registerCurrentNoteReplaceIpc(options: RegisterCurrentNoteReplac
         jobId: parsed.jobId,
         proposalId: parsed.proposalId,
         expectedRevision: parsed.expectedRevision,
-        decision: parsed.decision
+        decision: parsed.decision,
+        ...(parsed.expectedCurrentRevision ? { expectedCurrentRevision: parsed.expectedCurrentRevision } : {})
       });
       if (result.status === "not_found") return decisionStale();
       if (result.status === "stale") {
@@ -134,7 +135,7 @@ function reconcileReview(
   expectedProposalId: string,
   operationId?: string
 ): boolean {
-  if (proposal.proposalId !== expectedProposalId || !isResolvedProposalState(proposal.state)) return true;
+  if (proposal.proposalId !== expectedProposalId || proposal.state === "conflicted" || !isResolvedProposalState(proposal.state)) return true;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const job = jobs.readAgentTurnJob(proposal.jobId);
     if (!job) return false;
@@ -143,20 +144,8 @@ function reconcileReview(
       const settled = jobs.resolveAgentTurnReview({
         job,
         proposalId: proposal.proposalId,
-        result: proposal.state === "conflicted" ? "failed_final" : "completed",
-        message: proposal.state === "conflicted"
-          ? "The current-note replacement review conflicted with the current page."
-          : "The current-note replacement review was resolved.",
-        ...(proposal.state === "conflicted" ? {
-          error: PigeErrorSummarySchema.parse({
-            code: "agent_runtime.turn_conflict",
-            domain: "agent_runtime",
-            messageKey: "errors.agent_runtime.turn_conflict",
-            retryable: false,
-            severity: "error",
-            userAction: "none"
-          })
-        } : {}),
+        result: "completed",
+        message: "The current-note replacement review was resolved.",
         facts: {
           stage: "planning",
           ...(operationId ? {
@@ -175,8 +164,8 @@ function reconcileReview(
 
 function isResolvedProposalState(
   state: "ready" | "resolving" | "applied" | "rejected" | "conflicted"
-): state is "applied" | "rejected" | "conflicted" {
-  return state === "applied" || state === "rejected" || state === "conflicted";
+): state is "applied" | "rejected" {
+  return state === "applied" || state === "rejected";
 }
 
 function isExactWaitingReview(job: JobRecord, proposalId: string): boolean {
@@ -236,6 +225,7 @@ function projectProposal(proposal: {
   readonly revision: number;
   readonly activeVaultId: string;
   readonly jobId: string;
+  readonly currentRevision?: `noteeditrev_${string}`;
   readonly lines: readonly { readonly kind: "context" | "removed" | "added"; readonly text: string }[];
 }) {
   return {
@@ -245,6 +235,7 @@ function projectProposal(proposal: {
     revision: proposal.revision,
     activeVaultId: proposal.activeVaultId,
     jobId: proposal.jobId,
+    ...(proposal.currentRevision ? { currentRevision: proposal.currentRevision } : {}),
     lines: proposal.lines
   };
 }

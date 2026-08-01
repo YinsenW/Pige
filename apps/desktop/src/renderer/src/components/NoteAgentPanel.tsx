@@ -33,6 +33,7 @@ export type NoteAgentProposal = {
   readonly id: string;
   readonly action: ReaderSelectionProposalPreview["action"] | "append_current_note" | "replace_current_note";
   readonly revision: number;
+  readonly currentRevision?: string;
   readonly lines: readonly {
     readonly kind: "context" | "removed" | "added";
     readonly text: string;
@@ -72,7 +73,7 @@ export function NoteAgentPanel(props: {
   readonly onSelectModel?: (modelId: string) => Promise<boolean>;
   readonly onOpenCitation?: (pageId: string) => void;
   readonly onCopyMessage?: (messageId: string) => Promise<boolean> | boolean;
-  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply") => void;
+  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply" | "keep_current" | "manual_edit") => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const paneRef = useRef<HTMLElement | null>(null);
@@ -373,7 +374,21 @@ export function NoteAgentPanel(props: {
                       {props.t(props.proposal.errorMessageKey)}
                     </p>
                   ) : null}
-                  {props.proposal.state === "ready" || props.proposal.state === "resolving" ? (
+                  {props.proposal.state === "conflicted" && props.proposal.currentRevision ? (
+                    <div className="proposal-actions">
+                      {(["manual_edit", "keep_current"] as const).map((action) => (
+                        <button
+                          key={action}
+                          className={action === "keep_current" ? "primary-button" : "quiet-button"}
+                          type="button"
+                          disabled={!props.onProposalAction}
+                          onClick={() => props.proposal && props.onProposalAction?.(props.proposal.id, action)}
+                        >
+                          {props.t(`note.proposal.${action}`)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : props.proposal.state === "ready" || props.proposal.state === "resolving" ? (
                     <div className="proposal-actions">
                       {(["reject", "later", "apply"] as const).map((action) => (
                         <button

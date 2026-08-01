@@ -568,7 +568,8 @@ Context pack: `docs/AGENT_MEMORY_DESIGN.md`; `docs/DATA_ARCHITECTURE.md`; `docs/
 Build:
 
 - [B7.01 -> E7.01] Exact create/append/tags/link Activity/Undo, restart-safe exact note-edit Redo, stable page Open, and transitional review.
-- [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
+- [B7.02 -> E7.01] Bounded escaped exceptional preview plus current-note unified conflict diff,
+  exact keep-current resolution and manual-edit escape; apply-proposed/save-new conflict actions remain open.
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
 - [B7.04 -> E7.01] Hash-bound create/update/tag/link recovery plus `trash_page` or inverse `update_page`; other mutations open.
 - [B7.05 -> E7.02] Explicit and exact authored preference/correction/workflow memory with private provenance.

@@ -85,6 +85,7 @@ import {
   CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
   CollectionTrashRowResultSchema,
+  CurrentNoteAppendProposalDecisionRequestSchema,
   CurrentNoteAppendProposalDecisionResultSchema,
   CurrentNoteReplaceProposalDecisionRequestSchema,
   CurrentNoteReplaceProposalDecisionResultSchema,
@@ -734,6 +735,26 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260728_schemaappend01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+    const conflictRevision = `noteeditrev_${"a".repeat(64)}`;
+    expect(CurrentNoteAppendProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId: proposal.activeVaultId,
+      pageId: proposal.pageId,
+      jobId: proposal.jobId,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "keep_current",
+      expectedCurrentRevision: conflictRevision
+    })).toMatchObject({ decision: "keep_current", expectedCurrentRevision: conflictRevision });
+    expect(() => CurrentNoteAppendProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId: proposal.activeVaultId,
+      pageId: proposal.pageId,
+      jobId: proposal.jobId,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "keep_current"
+    })).toThrow();
   });
 
   it("keeps current-note replacement review pathless and proposal-bound", () => {
@@ -784,6 +805,14 @@ describe("schemas", () => {
 
     const decision = { ...request, expectedRevision: 1, decision: "approve" } as const;
     expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse(decision)).toEqual(decision);
+    const keepCurrent = {
+      ...request,
+      expectedRevision: 3,
+      decision: "keep_current",
+      expectedCurrentRevision: `noteeditrev_${"b".repeat(64)}`
+    } as const;
+    expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse(keepCurrent)).toEqual(keepCurrent);
+    expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({ ...keepCurrent, expectedCurrentRevision: undefined })).toThrow();
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({
       ...decision,
       replacementMarkdown: "renderer-authored body"

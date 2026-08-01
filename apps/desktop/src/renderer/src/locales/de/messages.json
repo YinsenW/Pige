@@ -1235,6 +1235,8 @@
   "note.proposal.description": "Diese außergewöhnliche Änderung muss geprüft werden, bevor sie die Notiz aktualisiert. Das Original bleibt über Aktivität und Rückgängig wiederherstellbar.",
   "note.proposal.decisionFailed": "Die Prüfentscheidung konnte nicht gespeichert werden. Es wurde nichts geändert.",
   "note.proposal.later": "Später",
+  "note.proposal.keep_current": "Aktuelle Notiz behalten",
+  "note.proposal.manual_edit": "Manuell bearbeiten",
   "note.proposal.line.added": "Hinzugefügter Text",
   "note.proposal.line.context": "Unveränderter Kontext",
   "note.proposal.line.removed": "Entfernter Text",

@@ -1235,6 +1235,8 @@
   "note.proposal.description": "这项异常更改需要先审阅再更新笔记。原内容仍可从“活动”中撤销恢复。",
   "note.proposal.decisionFailed": "无法保存审阅决定。未进行任何更改。",
   "note.proposal.later": "稍后",
+  "note.proposal.keep_current": "保留当前笔记",
+  "note.proposal.manual_edit": "手动编辑",
   "note.proposal.line.added": "新增文字",
   "note.proposal.line.context": "未更改的上下文",
   "note.proposal.line.removed": "移除文字",
