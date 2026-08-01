@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T19:15:03.263Z",
+  "reviewedAt": "2026-08-02T03:20:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Knowledge Tree dense-layout and assistive tree semantics close PIGE-UI-004/E6.09 with deterministic source-backed product evidence; release-wide unsigned package smoke remains owned by release acceptance.",
+    "scope": "One strict YAML and type-specific boundary validates, rewrites and indexes all Pige-managed Markdown page types and closes PIGE-SCHEMA-001.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "ff925f1c02da05f0a0e14981a8f17010ec9a1ad3710dcb5e144703b0e7306bf5"
+    "reviewedSha256": "857659063da0447b93c835227f7da885ae9168b0f62b7df45890360b847bd6b2"
   },
   "reviewers": [
     {
-      "reviewerId": "knowledge-tree-a11y-review",
-      "task": "Review dense Knowledge Tree layout, keyboard and assistive semantics",
+      "reviewerId": "managed-markdown-schema-review",
+      "task": "Review strict managed Markdown parsing, round-trip and index acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the exact acceptance projection while renderer implementation and direct dense-tree tests provide separate executable evidence."
+      "independence": "Planning reviews the durable Markdown contract and acceptance facts; Development supplies separate parser, writer, index and regression evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-a11y-review",
+      "reviewerId": "managed-markdown-schema-review",
       "blockerCount": 0,
-      "summary": "Dense Knowledge Tree leaves remain individually navigable after automatic fit, search focus and deterministic zoom into one selected node."
+      "summary": "Managed Markdown keeps exact user body bytes and unknown safe fields while invalid files remain outside Library and index truth."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-a11y-review",
+      "reviewerId": "managed-markdown-schema-review",
       "blockerCount": 0,
-      "summary": "The existing body-free aggregate, visual density bands, exact counts and new assistive sibling positions agree without changing Main or durable data."
+      "summary": "Schema, parser, writers, Source projection, index rebuild, architecture registry and accepted decision use one validation contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-a11y-review",
+      "reviewerId": "managed-markdown-schema-review",
       "blockerCount": 0,
-      "summary": "PIGE-UI-004 and E6.09 now cite direct sparse, dense, keyboard, review-outline and assistive-tree evidence with no functional gap."
+      "summary": "PIGE-SCHEMA-001 cites seven-type round-trip, malformed-page exclusion, Source projection and Agent-ingest evidence without an open gap."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-a11y-review",
+      "reviewerId": "managed-markdown-schema-review",
       "blockerCount": 0,
-      "summary": "The existing KnowledgeTreeMap owner keeps layout and camera state renderer-local while preserving Reader navigation and source-backed authority."
+      "summary": "The shared schema/parser boundary replaces hand-written index interpretation while existing writer and storage owners retain publication authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "knowledge-tree-a11y-review",
+      "reviewerId": "managed-markdown-schema-review",
       "blockerCount": 0,
-      "summary": "Existing owner documents already define deterministic density and accessibility; only acceptance locks change alongside the implementing renderer test."
+      "summary": "Existing Markdown, architecture, playbook, decision and traceability owners contain the complete delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/knowledge-tree-ui.test.ts",
+      "command": "npx vitest run tests/unit/markdown-frontmatter.test.ts tests/unit/markdown-page-index.test.ts tests/unit/source-page-service.test.ts tests/unit/note-markdown-import-service.test.ts tests/unit/agent-ingest-service.test.ts",
       "status": "passed",
-      "evidence": "Direct renderer tests cover density bands, review outlines, non-colliding dense leaves, complete tree positions, camera, search, keyboard and Reader navigation."
+      "evidence": "Focused parser, index and writer tests cover every page type, exact body/unknown-field round-trip, invalid-page exclusion and bounded Source projection."
     },
     {
-      "command": "npm run typecheck && npm run verify:architecture-reset && npm run verify:change",
+      "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The renderer-only change compiles and remains within the existing Knowledge Tree ownership and change boundary."
+      "evidence": "The candidate compiles and builds with the existing Markdown and index owners inside protected architecture budgets."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Independent snapshot and semantic claims bind the exact PIGE-UI-004 and E6.09 acceptance promotion; remote Verify owns final execution."
+      "evidence": "Markdown, architecture, playbook, decision, acceptance and semantic-claim owners agree; remote Verify owns the final concurrent trace execution."
     }
   ],
   "coordination": {
-    "taskId": "knowledge-tree-dense-a11y-20260802",
-    "taskTitle": "Close dense Knowledge Tree visual and assistive semantics",
+    "taskId": "managed-markdown-schema-bind-20260802",
+    "taskTitle": "Bind strict managed Markdown schema and rebuild acceptance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No Main, IPC, durable tree, source authority or Reader contract changes; only renderer layout and assistive semantics are completed.",
-    "acknowledgement": "Planning promotes only PIGE-UI-004 and E6.09 from the direct sparse and dense renderer evidence."
+    "compatibility": "The legacy top-level parser remains available for migration/input inspection; only managed-page write and rebuild truth use the strict contract.",
+    "acknowledgement": "Planning promotes PIGE-SCHEMA-001 from partial to verified on complete managed-page round-trip and invalid-index exclusion evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

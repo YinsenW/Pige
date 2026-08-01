@@ -495,6 +495,9 @@ open under Source Storage.
 Generated-note evidence covers first-wins cancellation, two Source Record fences,
 durable pre-link guard, create-only publication, conflict
 preservation, bounded same-job provenance, guarded missing-index repair, and recovery.
+The shared Markdown boundary now strictly parses and round-trips all seven managed page
+types, preserves unknown fields and exact user body bytes, accepts only the bounded Source
+sidecar projection, and excludes malformed pages from Library/index rebuild truth.
 The eligible pasted-text path now converges its cited note, index, Operation and append-only
 log across restart after exact Vault/Job/Source/capture-event revalidation. Strict
 cross-process SourceRecord-to-note CAS, parent-swap, broader multi-effect transactions,

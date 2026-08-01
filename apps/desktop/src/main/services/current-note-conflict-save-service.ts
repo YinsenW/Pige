@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { parsePigeFrontmatter } from "@pige/markdown";
+import { parsePigeMarkdownPage } from "@pige/markdown";
 import {
   OperationIdSchema,
   OperationRecordSchema,
@@ -218,7 +218,7 @@ function createMarkdown(input: CurrentNoteConflictSaveBaseInput & {
 }): string {
   const body = normalizeBody(input.body);
   const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: "note"\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: "active"\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: ${JSON.stringify([input.sourcePageId])}\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  last_operation_id: ${JSON.stringify(input.operationId)}\n  model_profile_id: ${JSON.stringify(input.modelProfileId)}\n  confidence: "high"\nnote:\n  note_kind: "summary"\n  review_state: "clean"\n---\n\n# ${escapeHeading(input.title)}\n\n${body}\n`;
-  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {
+  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeMarkdownPage(markdown)) {
     throw new Error("current_note_conflict_save.invalid_page");
   }
   return markdown;

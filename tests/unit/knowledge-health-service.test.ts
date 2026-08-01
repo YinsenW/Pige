@@ -680,7 +680,7 @@ function createOrphanFixture() {
 }
 
 function noteMarkdown(pageId: string, title: string, body: string): string {
-  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: "2026-07-31T12:00:00.000Z"\nupdated_at: "2026-07-31T12:00:00.000Z"\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "user"\nnote:\n  note_kind: "user"\n  review_state: "clean"\n---\n\n# ${title}\n\n${body}\n`;
+  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: "2026-07-31T12:00:00.000Z"\nupdated_at: "2026-07-31T12:00:00.000Z"\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "user"\nnote:\n  note_kind: "general"\n  review_state: "clean"\n---\n\n# ${title}\n\n${body}\n`;
 }
 
 function isRepairableOrphan(issue: unknown): issue is {

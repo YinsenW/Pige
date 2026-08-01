@@ -3,15 +3,14 @@ import path from "node:path";
 import type { LibraryPageSummary } from "@pige/contracts";
 import {
   createPigeTagKey,
-  normalizePigeTag,
-  normalizePigeTags,
+  parsePigeMarkdownIndexPage,
   parsePigeFrontmatter,
-  type PigeFrontmatter
 } from "@pige/markdown";
 import {
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
   PageIdSchema,
+  type PigeMarkdownFrontmatter,
   type MarkdownPageType
 } from "@pige/schemas";
 import { createVaultRelativePathResolver } from "./vault-layout";
@@ -297,34 +296,26 @@ function readMarkdownPageRecord(
   filePath: string,
   expected?: MarkdownFileSignatureRecord
 ): MarkdownPageRecord | undefined {
-  const parsed = parsePigeFrontmatter(readFilePrefix(filePath, expected));
+  const parsed = parsePigeMarkdownIndexPage(readFilePrefix(filePath, expected));
   if (!parsed) return undefined;
-  const hasTagsField = parsed.raw.split(/\r?\n/u).some((line) => line.startsWith("tags:"));
-  const rawTags = parsed.frontmatter.tags;
-  if (
-    (hasTagsField && !Array.isArray(rawTags)) ||
-    (rawTags && (rawTags.length > 12 || rawTags.some((tag) => normalizePigeTag(tag) === undefined)))
-  ) {
-    return undefined;
-  }
   const summary = frontmatterToSummary(vaultPath, filePath, parsed.frontmatter);
   return summary ? {
     summary,
     absolutePath: filePath,
     knowledge: {
-      aliases: sanitizeKnowledgeRefs(parsed.frontmatter.aliases),
-      tags: normalizePigeTags(rawTags ?? [], rawTags?.length ?? 12),
-      topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics),
-      entities: sanitizeKnowledgeRefs(parsed.frontmatter.entities),
-      relatedPageIds: sanitizeKnowledgeRefs(parsed.frontmatter.related_page_ids),
+      aliases: [...(parsed.frontmatter.aliases ?? [])],
+      tags: [...(parsed.frontmatter.tags ?? [])],
+      topics: [...(parsed.frontmatter.topics ?? [])],
+      entities: [...(parsed.frontmatter.entities ?? [])],
+      relatedPageIds: [...(parsed.frontmatter.related_page_ids ?? [])],
       claimContradicts: summary.pageType === "claim"
-        ? readNestedPageIds(parsed.raw, "claim", "contradicts")
+        ? [...(parsed.frontmatter.claim?.contradicts ?? [])]
         : [],
       questionAnswers: summary.pageType === "question"
-        ? readNestedPageIds(parsed.raw, "question", "answered_by")
+        ? [...(parsed.frontmatter.question?.answered_by ?? [])]
         : [],
       conceptParents: summary.pageType === "concept"
-        ? readNestedPageIds(parsed.raw, "concept", "parent_concepts")
+        ? [...(parsed.frontmatter.concept?.parent_concepts ?? [])]
         : []
     }
   } : undefined;
@@ -333,7 +324,7 @@ function readMarkdownPageRecord(
 function frontmatterToSummary(
   vaultPath: string,
   filePath: string,
-  frontmatter: PigeFrontmatter
+  frontmatter: PigeMarkdownFrontmatter
 ): LibraryPageSummary | undefined {
   if (frontmatter.schema_version !== 1) return undefined;
   if (!frontmatter.id || !frontmatter.title || !frontmatter.created_at || !frontmatter.updated_at) return undefined;
@@ -493,32 +484,6 @@ function matchesSignature(stat: fs.Stats, expected: MarkdownFileSignatureRecord)
 
 function sanitizeSourceIds(sourceIds: readonly string[]): readonly string[] {
   return sourceIds.filter((sourceId) => /^src_\d{8}_[a-z0-9]{8,}$/u.test(sourceId));
-}
-
-function sanitizeKnowledgeRefs(values: readonly string[] | undefined): readonly string[] {
-  const normalized = (values ?? [])
-    .map(normalizeTitle)
-    .filter((value) => value.length > 0 && value.length <= 256);
-  return Array.from(new Set(normalized)).slice(0, 64);
-}
-
-function readNestedPageIds(raw: string, section: "claim" | "question" | "concept", field: string): readonly string[] {
-  const lines = raw.split(/\r?\n/u);
-  const starts = lines.flatMap((line, index) => line === `${section}:` ? [index] : []);
-  if (starts.length !== 1) return [];
-  const end = lines.findIndex((line, index) => index > starts[0]! && /^\S/u.test(line));
-  const prefix = `  ${field}:`;
-  const values = lines.slice(starts[0]! + 1, end < 0 ? undefined : end)
-    .filter((line) => line.startsWith(prefix));
-  if (values.length !== 1) return [];
-  try {
-    const parsed = JSON.parse(values[0]!.slice(prefix.length).trim()) as unknown;
-    if (!Array.isArray(parsed) || parsed.length > 32) return [];
-    const pageIds = parsed.filter((value): value is string => PageIdSchema.safeParse(value).success);
-    return pageIds.length === parsed.length ? Array.from(new Set(pageIds)) : [];
-  } catch {
-    return [];
-  }
 }
 
 function normalizeTitle(title: string): string {

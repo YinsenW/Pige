@@ -237,7 +237,18 @@ function openedCurrent(relatedPageIds: readonly string[] = [], pageType: Relatab
 }
 
 function noteMarkdown(pageId: string, title: string, updatedAt: string, relatedPageIds: readonly string[] = [], pageType: RelatablePageType = "note"): string {
-  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: ${JSON.stringify(pageType)}\ncreated_at: "2026-07-30T09:00:00.000Z"\nupdated_at: ${JSON.stringify(updatedAt)}\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: ${JSON.stringify(relatedPageIds)}\nprovenance:\n  generated_by: "user"\n${pageType === "note" ? 'note:\n  note_kind: "user"\n  review_state: "clean"' : ""}\n---\n\n# ${title}\n\nBody.\n`;
+  const sourceIds = pageType === "claim" ? '["src_20260730_relateclaim"]' : "[]";
+  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: ${JSON.stringify(pageType)}\ncreated_at: "2026-07-30T09:00:00.000Z"\nupdated_at: ${JSON.stringify(updatedAt)}\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: ${sourceIds}\nrelated_page_ids: ${JSON.stringify(relatedPageIds)}\nprovenance:\n  generated_by: "user"\n${relationTypeBlock(pageType, title)}\n---\n\n# ${title}\n\nBody.\n`;
+}
+
+function relationTypeBlock(pageType: RelatablePageType, title: string): string {
+  switch (pageType) {
+    case "note": return 'note:\n  note_kind: "general"\n  review_state: "clean"';
+    case "claim": return 'claim:\n  confidence: "medium"\n  evidence: ["src_20260730_relateclaim#p1"]\n  contradicts: []';
+    case "question": return 'question:\n  state: "open"\n  answered_by: []';
+    case "concept": return `concept:\n  canonical_name: ${JSON.stringify(title)}\n  parent_concepts: []\n  child_concepts: []`;
+    case "entity": return `entity:\n  entity_type: "other"\n  canonical_name: ${JSON.stringify(title)}\n  identifiers: []`;
+  }
 }
 
 function relatedRender(pageType: RelatablePageType = "note") {

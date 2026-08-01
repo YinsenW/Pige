@@ -169,7 +169,7 @@ describe("notes service", () => {
       extraFrontmatter: 'question:\n  state: "open"\n  state: "answered"\n  answered_by: []'
     });
     await expect(notes.render({ pageId: "page_20260801_question2" }, OWNER_ID))
-      .resolves.not.toHaveProperty("questionState");
+      .rejects.toMatchObject({ code: "note_not_found" });
   });
 
   it("projects exact mutable confidence only for a current valid Claim page", async () => {
@@ -194,7 +194,7 @@ describe("notes service", () => {
       title: "Malformed", pageType: "claim",
       extraFrontmatter: 'claim:\n  confidence: "medium"\n  confidence: "high"\n  evidence: []\n  contradicts: []' });
     await expect(notes.render({ pageId: "page_20260801_claimconf2" }, OWNER_ID))
-      .resolves.not.toHaveProperty("claimConfidence");
+      .rejects.toMatchObject({ code: "note_not_found" });
   });
 
   it("projects only current stable parent Topics for an active Topic page", async () => {
@@ -220,7 +220,7 @@ describe("notes service", () => {
     writePage({ vaultPath, fileName: "malformed-topic.md", pageId: "page_20260801_topicproj3",
       title: "Malformed topic", pageType: "topic", extraFrontmatter: "topics: []\ntopics: []" });
     await expect(notes.render({ pageId: "page_20260801_topicproj3" }, OWNER_ID))
-      .resolves.not.toHaveProperty("topicParents");
+      .rejects.toMatchObject({ code: "note_not_found" });
   });
 
   it("projects five current SourceRecord summaries while retaining failures and omitting unsafe names", async () => {
@@ -357,12 +357,11 @@ describe("notes service", () => {
     expect(operations).toEqual([saved.operationId]);
   });
 
-  it("keeps malformed or duplicate aliases out of the mutation eligibility projection without breaking Reader", async () => {
+  it("keeps malformed or duplicate aliases out of the Reader index", async () => {
     const { vaultPath, vault } = makeVault(), pageId = "page_20260731_badaliases01";
     writePage({ vaultPath, fileName: "bad-aliases.md", pageId, title: "Alias safety", aliases: [" Existing ", "existing"] });
-    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
-    expect(rendered.summary.pageId).toBe(pageId);
-    expect(rendered.aliasing).toBeUndefined();
+    await expect(makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID))
+      .rejects.toMatchObject({ code: "note_not_found" });
   });
 
   it.each(["note", "claim", "question", "concept", "entity"] as const)(
@@ -395,7 +394,8 @@ describe("notes service", () => {
       revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{32,64}$/u) });
     fs.writeFileSync(path.join(vaultPath, "wiki", "entity-type.md"),
       fs.readFileSync(path.join(vaultPath, "wiki", "entity-type.md"), "utf8").replace('entity_type: "person"', 'entity_type: "company"'));
-    await expect(makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID)).resolves.not.toHaveProperty("entityType");
+    await expect(makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID))
+      .rejects.toMatchObject({ code: "note_not_found" });
   });
 
   it("opens active typed knowledge pages and Source Pages while keeping Topic out", async () => {
@@ -1481,16 +1481,23 @@ status: "active"
   it("projects and revalidates reveal only for the exact current Pige-generated page", async () => {
     const { vaultPath, vault } = makeVault();
     const generatedPageId = "page_20260801_generated1";
+    const generatedSourceId = "src_20260801_generated1";
+    const importedSourceId = "src_20260801_imported2";
+    const archivedSourceId = "src_20260801_archived1";
     writePage({ vaultPath, fileName: "generated.md", pageId: generatedPageId, title: "Generated",
-      pageType: "claim", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+      pageType: "claim", sourceIds: [generatedSourceId], extraFrontmatter:
+        `provenance:\n  generated_by: "pige"\nclaim:\n  confidence: "medium"\n  evidence: ["${generatedSourceId}#generated"]\n  contradicts: []` });
     writePage({ vaultPath, fileName: "imported.md", pageId: "page_20260801_imported01", title: "Imported",
-      extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+      extraFrontmatter: 'provenance:\n  generated_by: "user"\nnote:\n  note_kind: "imported"\n  review_state: "clean"' });
     writePage({ vaultPath, fileName: "imported-claim.md", pageId: "page_20260801_imported02", title: "Imported claim",
-      pageType: "claim", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+      pageType: "claim", sourceIds: [importedSourceId], extraFrontmatter:
+        `provenance:\n  generated_by: "user"\nclaim:\n  confidence: "medium"\n  evidence: ["${importedSourceId}#imported"]\n  contradicts: []` });
     writePage({ vaultPath, fileName: "generated-source.md", pageId: "page_20260801_source001", title: "Source",
-      pageType: "source", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+      pageType: "source", sourceIds: [generatedSourceId], extraFrontmatter:
+        `provenance:\n  generated_by: "pige"\nsource:\n  id: "${generatedSourceId}"\n  kind: "text"\n  storage_strategy: "reference_original"\n  source_record_path: ".pige/source-records/2026/08/${generatedSourceId}.json"\n  source_record_schema_version: 1\n  source_record_updated_at: "2026-08-01T12:00:00.000Z"\n  captured_at: "2026-08-01T12:00:00.000Z"\n  availability: "available"\n  artifact_ids: []` });
     writePage({ vaultPath, fileName: "archived-claim.md", pageId: "page_20260801_archived01", title: "Archived claim",
-      pageType: "claim", status: "archived", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+      pageType: "claim", status: "archived", sourceIds: [archivedSourceId], extraFrontmatter:
+        `provenance:\n  generated_by: "user"\nclaim:\n  confidence: "medium"\n  evidence: ["${archivedSourceId}#archived"]\n  contradicts: []` });
     writePage({ vaultPath, fileName: "topic.md", pageId: "page_20260801_topic0001", title: "Topic",
       pageType: "topic", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
     writePage({ vaultPath, fileName: "archived-topic.md", pageId: "page_20260801_topic0002", title: "Archived topic",

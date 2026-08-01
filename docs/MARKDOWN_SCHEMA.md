@@ -370,6 +370,15 @@ Every Markdown write must validate:
 - Managed block markers are balanced.
 - Pige-reserved fields are not malformed.
 
+`@pige/markdown.parsePigeMarkdownPage` is the single strict YAML/frontmatter boundary for
+Pige-managed pages. It rejects duplicate keys, aliases, unsafe mapping keys, invalid stable IDs,
+wrong or missing type blocks, and unsafe Source-page projections. The Library/index rebuild uses
+the same YAML safety and common-field boundary, with a provenance-free schema-v1 compatibility
+reader for existing user-authored pages; malformed common truth and every invalid Pige-generated
+page are counted as invalid instead of being partially projected.
+`rewritePigeMarkdownFrontmatter` validates both sides of a change, preserves unknown fields, and
+keeps the exact user body bytes.
+
 Failed validation blocks the write. Pige repairs/replans or abstains; it stages a proposal
 only when the failure reaches an exceptional conflict or stricter user policy.
 

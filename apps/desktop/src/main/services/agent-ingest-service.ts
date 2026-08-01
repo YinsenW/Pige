@@ -7,7 +7,7 @@ import {
   createPigeTagKey,
   normalizePigeTag,
   normalizePigeTags,
-  parsePigeFrontmatter
+  parsePigeFrontmatter, parsePigeMarkdownPage
 } from "@pige/markdown";
 import {
   AgentIngestOutputSchema,
@@ -1109,6 +1109,7 @@ export class AgentIngestService {
         relatedPageIds,
         now
       });
+      if (!parsePigeMarkdownPage(noteMarkdown)) throw new PigeDomainError("markdown.invalid", "Generated Markdown failed validation.");
       const proposedOperation = {
         kind: "create" as const,
         path: pagePath,
@@ -2158,7 +2159,7 @@ export class AgentIngestService {
               pagePath,
               title: prepared.output.title,
               created: true,
-              reviewRequired: parsePigeFrontmatter(prepared.noteMarkdown)?.frontmatter.status === "needs_review",
+              reviewRequired: parsePigeMarkdownPage(prepared.noteMarkdown)?.frontmatter.status === "needs_review",
               warnings: normalizeList(prepared.output.warnings),
               operationId: operation.id,
               operationIds: [operation.id]
@@ -2835,7 +2836,7 @@ function validateApprovedProposalEnvelope(input: {
       "The approved proposal no longer matches its durable source, tool, catalog, or policy binding."
     );
   }
-  const parsed = parsePigeFrontmatter(operation.content);
+  const parsed = parsePigeMarkdownPage(operation.content);
   const frontmatter = parsed?.raw ?? "";
   const title = parsed?.frontmatter.title?.trim();
   const modelProfileId = readNestedFrontmatterScalar(frontmatter, "provenance", "model_profile_id");
@@ -2880,7 +2881,7 @@ function assertCommittedProposalTarget(input: {
       "The proposal target no longer matches the approved create operation."
     );
   }
-  const parsed = parsePigeFrontmatter(committedContent);
+  const parsed = parsePigeMarkdownPage(committedContent);
   const frontmatter = parsed?.raw ?? "";
   if (
     parsed?.frontmatter.source_ids?.includes(input.sourceId) !== true ||
@@ -2956,7 +2957,7 @@ function recoverExistingKnowledgeProposal(input: {
   }
 
   input.hooks?.assertSourceCurrent?.(input.sourceRecord);
-  const parsed = parsePigeFrontmatter(operation.content);
+  const parsed = parsePigeMarkdownPage(operation.content);
   const frontmatter = parsed?.raw ?? "";
   const title = parsed?.frontmatter.title?.trim();
   if (

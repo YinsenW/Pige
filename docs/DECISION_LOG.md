@@ -5431,6 +5431,40 @@ References:
 - `docs/SETTINGS_AND_PREFERENCES.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-One-Strict-Managed-Markdown-Boundary
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+All Pige-managed Markdown page types use one strict YAML plus type-specific frontmatter
+schema in `@pige/markdown` and `@pige/schemas`. Writers validate generated/imported pages,
+frontmatter rewrites preserve unknown fields and exact body bytes, and the rebuildable
+Library/index excludes and counts malformed common truth or any Pige-generated page that fails
+the same boundary; provenance-free schema-v1 user pages retain a bounded compatibility reader.
+
+Rationale:
+
+The prior hand-written top-level parser could admit a common-field summary while ignoring
+duplicate YAML keys, malformed type blocks, or unsafe Source projection fields. Separate
+writer and index interpretations would make Markdown an unreliable durable authority.
+
+Consequences:
+
+- Seven managed page types have executable common and type-specific frontmatter contracts.
+- New Source pages expose only a sidecar identity/projection and never operational locators.
+- Unknown safe fields survive validated rewrites for forward compatibility.
+- Invalid Pige-generated pages remain user-owned files but cannot become Library or index truth;
+  provenance-free schema-v1 pages retain common-field-only read compatibility.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
