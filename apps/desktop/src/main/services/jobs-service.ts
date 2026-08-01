@@ -4195,6 +4195,7 @@ function toJobSummary(vaultPath: string, job: JobRecord, hasActiveExecution = fa
     canReconnectBackupDestination: canReconnectBackupDestination(job),
     canContinueIncomplete: canContinueIncomplete(job),
     canCancel: canCancelJob(job, hasActiveExecution),
+    canRetry: canRetryJob(job),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
@@ -4220,12 +4221,25 @@ const COOPERATIVE_RUNNING_CANCEL_CLASSES = new Set<JobClass>([
   "index_rebuild"
 ]);
 
+const GENERIC_RETRY_CLASSES = new Set<JobClass>([
+  "capture",
+  "parse",
+  "ocr",
+  "dataset_import",
+  "index_rebuild"
+]);
+
 function canCancelJob(job: JobRecord, hasActiveExecution: boolean): boolean {
   if (!GENERIC_CANCEL_CLASSES.has(job.class)) return false;
   if (job.state === "running") {
     return hasActiveExecution && COOPERATIVE_RUNNING_CANCEL_CLASSES.has(job.class);
   }
   return CANCELABLE_STATES.has(job.state) && job.cancellation?.durableWritesApplied !== true;
+}
+
+function canRetryJob(job: JobRecord): boolean {
+  return (GENERIC_RETRY_CLASSES.has(job.class) || isAgentKnowledgeTurn(job)) && RETRYABLE_STATES.has(job.state) &&
+    !canReconnectDependency(job);
 }
 
 function canReconnectDependency(job: JobRecord): boolean {

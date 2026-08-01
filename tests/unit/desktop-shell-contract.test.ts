@@ -448,6 +448,7 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain('"root_binding"');
     expect(contractsSource).toContain("readonly canContinueIncomplete: boolean;");
     expect(contractsSource).toContain("readonly canCancel?: boolean;");
+    expect(contractsSource).toContain("readonly canRetry?: boolean;");
     expect(backupApi).toContain("readonly continueIncomplete: (");
     expect(backupApi).toContain("request: BackupContinueIncompleteRequest");
     expect(backupApi).toContain(") => Promise<BackupContinueIncompleteResult>;");

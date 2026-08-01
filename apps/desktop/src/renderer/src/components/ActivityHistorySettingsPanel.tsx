@@ -21,7 +21,9 @@ export function ActivityHistorySettingsPanel(props: {
   readonly onUndo: (operationId: string) => Promise<void>;
   readonly onRedo: (operationId: string) => Promise<void>;
   readonly onLoadMore: () => Promise<boolean>;
-  readonly onCancelJob?: (jobId: string) => Promise<void>;
+  readonly onCancelJob?: (jobId: string) => Promise<unknown>;
+  readonly onRetryJob?: (jobId: string) => Promise<unknown>;
+  readonly onRefreshJobs?: () => Promise<boolean>;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const locale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
@@ -29,9 +31,15 @@ export function ActivityHistorySettingsPanel(props: {
   const historyTitleRef = useRef<HTMLHeadingElement | null>(null);
   const loadInFlightRef = useRef(false);
   const [focusEpoch, setFocusEpoch] = useState(0);
-  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
-  const [cancelFailedJobId, setCancelFailedJobId] = useState<string | null>(null);
-  const activeJobs = (props.jobs ?? []).filter(isActivityJob);
+  const jobRowRefs = useRef(new Map<string, HTMLElement>());
+  const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [jobAction, setJobAction] = useState<{ readonly jobId: string; readonly kind: "cancel" | "retry" } | null>(null);
+  const [jobActionFailure, setJobActionFailure] = useState<{ readonly jobId: string; readonly kind: "cancel" | "retry" } | null>(null);
+  const [jobsRefreshing, setJobsRefreshing] = useState(false);
+  const [jobsRefreshFailed, setJobsRefreshFailed] = useState(false);
+  const backgroundJobs = (props.jobs ?? []).filter((job) => job.class !== "agent_turn");
+  const activeJobs = backgroundJobs.filter(isActivityJob);
+  const recentJobs = backgroundJobs.filter(isTerminalActivityJob).slice(0, 20);
   useLayoutEffect(() => {
     if (focusEpoch === 0) return;
     requestAnimationFrame(() => (loadTriggerRef.current ?? historyTitleRef.current)?.focus({ preventScroll: true }));
@@ -46,18 +54,81 @@ export function ActivityHistorySettingsPanel(props: {
       setFocusEpoch((current) => current + 1);
     }
   };
-  const cancelJob = async (jobId: string): Promise<void> => {
-    if (!props.onCancelJob || cancellingJobId !== null) return;
-    setCancellingJobId(jobId);
-    setCancelFailedJobId(null);
+  const restoreJobFocus = (jobId?: string, fallback?: HTMLElement | null): void => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const target = (jobId ? jobRowRefs.current.get(jobId) : null) ?? fallback ?? historyTitleRef.current;
+      target?.focus({ preventScroll: true });
+    }));
+  };
+  const refreshJobs = async (): Promise<boolean> => {
+    if (!props.onRefreshJobs || jobsRefreshing || jobAction !== null) return false;
+    setJobsRefreshing(true);
+    setJobsRefreshFailed(false);
     try {
-      await props.onCancelJob(jobId);
-    } catch {
-      setCancelFailedJobId(jobId);
+      const refreshed = await props.onRefreshJobs();
+      if (!refreshed) setJobsRefreshFailed(true);
+      return refreshed;
     } finally {
-      setCancellingJobId(null);
-      requestAnimationFrame(() => historyTitleRef.current?.focus({ preventScroll: true }));
+      setJobsRefreshing(false);
+      restoreJobFocus(undefined, refreshButtonRef.current);
     }
+  };
+  const actOnJob = async (kind: "cancel" | "retry", jobId: string): Promise<void> => {
+    const handler = kind === "cancel" ? props.onCancelJob : props.onRetryJob;
+    if (!handler || jobAction !== null || jobsRefreshing) return;
+    setJobAction({ jobId, kind });
+    setJobActionFailure(null);
+    setJobsRefreshFailed(false);
+    let succeeded = false;
+    try {
+      succeeded = await handler(jobId) !== false;
+      if (succeeded && props.onRefreshJobs) {
+        const refreshed = await props.onRefreshJobs();
+        if (!refreshed) setJobsRefreshFailed(true);
+      }
+      if (!succeeded) setJobActionFailure({ jobId, kind });
+    } catch {
+      setJobActionFailure({ jobId, kind });
+    } finally {
+      setJobAction(null);
+      restoreJobFocus(jobId);
+    }
+  };
+  const renderJob = (job: JobSummary): React.JSX.Element => {
+    const progress = job.progress?.totalUnits
+      ? Math.min(100, Math.max(0, Math.round((job.progress.completedUnits / job.progress.totalUnits) * 100)))
+      : null;
+    const label = job.sourceDisplayName ?? job.message;
+    const updatedAt = new Date(job.updatedAt);
+    const updatedAtLabel = Number.isNaN(updatedAt.getTime())
+      ? props.t("activity.timeUnavailable")
+      : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(updatedAt);
+    const pending = jobAction?.jobId === job.id;
+    const failure = jobActionFailure?.jobId === job.id ? jobActionFailure.kind : null;
+    return <article ref={(node) => { if (node) jobRowRefs.current.set(job.id, node); else jobRowRefs.current.delete(job.id); }}
+      className="settings-row tall activity-history-row" key={job.id} data-activity-job-id={job.id} tabIndex={-1}>
+      <span className="activity-row-dot" aria-hidden="true" />
+      <div className="settings-row-copy">
+        <strong>{label}</strong>
+        <span>{props.t(activityJobStateMessageKey(job))}{progress === null ? "" : ` · ${progress}%`} · {updatedAtLabel}</span>
+        {progress === null ? null : <span className="progress-track" role="progressbar"
+          aria-label={`${label} ${progress}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <span className="progress-fill" style={{ "--progress": `${progress}%` } as CSSProperties} />
+        </span>}
+        {job.error ? <span>{props.t(job.error.messageKey)}</span> : null}
+        {failure ? <span role="alert">{props.t(failure === "retry" ? "activity.jobRetryFailed" : "activity.jobCancelFailed")}</span> : null}
+      </div>
+      <div className="settings-row-control">
+        {job.canRetry === true && props.onRetryJob ? <button type="button" className="settings-button"
+          disabled={jobAction !== null || jobsRefreshing} data-activity-retry-job-id={job.id}
+          onClick={() => void actOnJob("retry", job.id)}>{props.t(pending && jobAction?.kind === "retry"
+            ? "activity.jobRetrying" : "home.retryJob")}</button> : null}
+        {job.canCancel === true && props.onCancelJob ? <button type="button" className="settings-button"
+          disabled={jobAction !== null || jobsRefreshing} data-activity-cancel-job-id={job.id}
+          onClick={() => void actOnJob("cancel", job.id)}>{props.t(pending && jobAction?.kind === "cancel"
+            ? "home.jobCancelRequested" : "home.cancelJob")}</button> : null}
+      </div>
+    </article>;
   };
   return (
     <section className="settings-page settings-history-page" aria-labelledby="settings-history-title">
@@ -71,39 +142,20 @@ export function ActivityHistorySettingsPanel(props: {
           <p className="settings-note">{props.t("activity.activeWorkEmpty")}</p>
         ) : (
           <div className="settings-card activity-history-list">
-            {activeJobs.map((job) => {
-              const progress = job.progress?.totalUnits
-                ? Math.min(100, Math.max(0, Math.round((job.progress.completedUnits / job.progress.totalUnits) * 100)))
-                : null;
-              const label = job.sourceDisplayName ?? job.message;
-              return <article className="settings-row tall activity-history-row" key={job.id} data-activity-job-id={job.id}>
-                <span className="activity-row-dot" aria-hidden="true" />
-                <div className="settings-row-copy">
-                  <strong>{label}</strong>
-                  <span>{props.t(activityJobStateMessageKey(job))}{progress === null ? "" : ` · ${progress}%`}</span>
-                  {progress === null ? null : <span
-                    className="progress-track"
-                    role="progressbar"
-                    aria-label={`${label} ${progress}%`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={progress}
-                  ><span className="progress-fill" style={{ "--progress": `${progress}%` } as CSSProperties} /></span>}
-                  {cancelFailedJobId === job.id ? <span role="alert">{props.t("activity.jobCancelFailed")}</span> : null}
-                </div>
-                <div className="settings-row-control">
-                  {job.canCancel === true && props.onCancelJob ? <button
-                    type="button"
-                    className="settings-button"
-                    disabled={cancellingJobId !== null}
-                    data-activity-cancel-job-id={job.id}
-                    onClick={() => void cancelJob(job.id)}
-                  >{props.t(cancellingJobId === job.id ? "home.jobCancelRequested" : "home.cancelJob")}</button> : null}
-                </div>
-              </article>;
-            })}
+            {activeJobs.map(renderJob)}
           </div>
         )}
+      </section>
+      <section className="settings-section" aria-labelledby="activity-background-history-title">
+        <div className="settings-section-heading-row">
+          <h2 className="settings-section-title" id="activity-background-history-title">{props.t("activity.backgroundHistory")}</h2>
+          {props.onRefreshJobs ? <button ref={refreshButtonRef} type="button" className="settings-button"
+            disabled={jobsRefreshing || jobAction !== null} onClick={() => void refreshJobs()}>{props.t(jobsRefreshing
+              ? "activity.backgroundRefreshing" : "activity.backgroundRefresh")}</button> : null}
+        </div>
+        {recentJobs.length === 0 ? <p className="settings-note">{props.t("activity.backgroundEmpty")}</p>
+          : <div className="settings-card activity-history-list">{recentJobs.map(renderJob)}</div>}
+        {jobsRefreshFailed ? <p role="alert" className="settings-note">{props.t("activity.backgroundRefreshFailed")}</p> : null}
       </section>
       <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
       <section className="settings-section" aria-labelledby="activity-recent-title">
@@ -187,14 +239,11 @@ export function ActivityHistorySettingsPanel(props: {
 }
 
 function isActivityJob(job: JobSummary): boolean {
-  return job.class !== "agent_turn" && new Set([
-    "queued",
-    "running",
-    "waiting_dependency",
-    "awaiting_review",
-    "cancel_requested",
-    "failed_retryable"
-  ]).has(job.state);
+  return job.class !== "agent_turn" && !isTerminalActivityJob(job);
+}
+
+function isTerminalActivityJob(job: JobSummary): boolean {
+  return new Set(["completed", "completed_with_warnings", "failed_final", "cancelled"]).has(job.state);
 }
 
 function activityJobStateMessageKey(job: JobSummary): string {
@@ -203,5 +252,10 @@ function activityJobStateMessageKey(job: JobSummary): string {
   if (job.state === "cancel_requested") return "home.jobCancelRequested";
   if (job.state === "awaiting_review") return "home.jobReview";
   if (job.state === "waiting_dependency") return "home.jobWaiting";
+  if (job.state.startsWith("waiting_")) return "activity.jobWaitingPermission";
+  if (job.state === "completed") return "activity.jobCompleted";
+  if (job.state === "completed_with_warnings") return "activity.jobCompletedWithWarnings";
+  if (job.state === "cancelled") return "activity.jobCancelled";
+  if (job.state === "failed_final") return "activity.jobFailedFinal";
   return "home.jobFailed";
 }

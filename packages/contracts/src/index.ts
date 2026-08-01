@@ -1443,6 +1443,7 @@ export interface JobSummary {
   readonly canReconnectBackupDestination: boolean;
   readonly canContinueIncomplete: boolean;
   readonly canCancel?: boolean;
+  readonly canRetry?: boolean;
   readonly error?: PigeErrorSummary;
   readonly message: string;
   readonly createdAt: string;
