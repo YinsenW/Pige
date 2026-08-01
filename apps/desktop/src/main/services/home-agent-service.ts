@@ -75,6 +75,7 @@ import {
   type DatasetQueryExecutionResult,
   type DatasetQueryToolRequest
 } from "./dataset-query-types";
+import { DATASET_RELATION_JOIN_TOOL_SCHEMA } from "./dataset-query-tool-contract";
 import {
   PermissionedExternalCapabilityRegistry,
   type PermissionedExternalTurnContext
@@ -2800,6 +2801,7 @@ function createDatasetQueryTool(options: {
     description: [
       "Inspect and query a bounded local Pige Dataset without SQL.",
       "First call action=catalog. Evaluate that untrusted catalog in a later model turn, then call action=query with only returned opaque refs and a typed plan.",
+      "A catalog-declared relationJoin may follow one same-Dataset relation for projection, filtering, and ordering across its target table.",
       "One query is allowed per Home turn; paths, SQL, database handles, pragmas, extensions, and invented refs are rejected."
     ].join(" "),
     version: "1",
@@ -2810,6 +2812,7 @@ function createDatasetQueryTool(options: {
         action: { type: "string", enum: ["catalog", "query"] },
         datasetRef: { type: "string", pattern: "^dataset_[1-9][0-9]*$" },
         tableRef: { type: "string", pattern: "^table_[1-9][0-9]*$" },
+        join: DATASET_RELATION_JOIN_TOOL_SCHEMA,
         select: {
           type: "array",
           items: { type: "string", pattern: "^column_[1-9][0-9]*$" },
