@@ -6102,6 +6102,71 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("adopts pushed Job progress in Activity without resuming background polling", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const running: JobSummary = {
+      id: "job_20260801_activityprogress",
+      class: "dataset_import",
+      state: "running",
+      stage: "importing",
+      progress: { completedUnits: 2, totalUnits: 10, unit: "row" },
+      sourceId: "src_20260801_activityprogress",
+      sourceDisplayName: "activity-customers.csv",
+      sourceKind: "csv_file",
+      canReconnectDependency: false,
+      canReconnectBackupDestination: false,
+      canContinueIncomplete: false,
+      canCancel: true,
+      canRetry: false,
+      message: "Dataset import running.",
+      createdAt: "2026-08-01T08:00:00.000Z",
+      updatedAt: "2026-08-01T08:00:00.000Z"
+    };
+    harness.jobs = [running];
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await openSettingsSection(dom, container, "Activity History");
+    await waitFor(dom, () => container.querySelector(
+      '[data-activity-job-id="job_20260801_activityprogress"] [aria-valuenow="20"]'
+    ) !== null);
+    const activitySnapshotReads = (): number => harness.jobListRequests.filter((request) =>
+      request.limit === 100 && request.classes === undefined && request.states === undefined
+    ).length;
+    const snapshotReads = activitySnapshotReads();
+
+    await act(async () => {
+      harness.emitJobChanged(jobChangedEvent(running, {
+        progress: { completedUnits: 7, totalUnits: 10, unit: "row" },
+        updatedAt: "2026-08-01T08:00:01.000Z"
+      }));
+      await settle(dom);
+    });
+    expect(container.querySelector(
+      '[data-activity-job-id="job_20260801_activityprogress"] [aria-valuenow="70"]'
+    )).not.toBeNull();
+
+    await act(async () => {
+      await new Promise((resolve) => dom.window.setTimeout(resolve, 1_250));
+    });
+    expect(activitySnapshotReads()).toBe(snapshotReads);
+
+    await act(async () => {
+      harness.emitJobChanged(jobChangedEvent(running, {
+        state: "cancel_requested",
+        canCancel: false,
+        updatedAt: "2026-08-01T08:00:02.000Z"
+      }));
+      await settle(dom);
+    });
+    const row = container.querySelector('[data-activity-job-id="job_20260801_activityprogress"]');
+    expect(row?.textContent).toContain("Cancellation requested");
+    expect(row?.querySelector("[data-activity-cancel-job-id]")).toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps Activity out of Home and disables repeated Undo from Settings History after durable trash", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
