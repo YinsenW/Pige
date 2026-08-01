@@ -405,6 +405,11 @@ preview, reversible restore and restart adoption share the same Main-owned bound
 remain deliberately read-only. This closes PIGE-KNOW-001; E4.01/E4.05 remain partial for their
 independent packaged metadata/relationship and migration breadth.
 
+Library browsing now exposes each durable Topic, Concept, Entity, Claim and Question family as an
+exact type filter for both empty-query browse and bounded local search. It reuses the existing
+pathless Library/Search authority; a stale result from another selected family cannot replace the
+current view. PIGE-UI-003 remains partial for its independent shell/platform acceptance breadth.
+
 Deferred from this phase:
 
 - [D4.01] Vector search before the local model is ready; assigned to P6.

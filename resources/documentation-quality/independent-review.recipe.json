@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:32:42.059Z",
+  "reviewedAt": "2026-08-01T16:51:25.854Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E7.01 complete current Collection mutation matching-Undo Redo and restart recovery.",
+    "scope": "Typed Library browsing and search for each durable Topic, Concept, Entity, Claim and Question family.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "2b890842cab6bff9986102f4d13114c69f458e68464aad7bf8b05b8852c5aaec"
+    "reviewedSha256": "4eaa3593ddb1dd58943b38ee0a297addb0b434963bb5e882617b6f237fc69583"
   },
   "reviewers": [
     {
-      "reviewerId": "topic-lifecycle-review",
-      "task": "Review complete managed knowledge-page lifecycle authority and acceptance",
+      "reviewerId": "typed-library-review",
+      "task": "Review exact typed Knowledge discovery and Library navigation acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews lifecycle and acceptance facts; Development supplies separate Main projection, archive, immutable history, restart and Reader interaction evidence."
+      "independence": "Planning reviews Knowledge and UI acceptance facts; Development supplies separate renderer model, localized Library interaction and stale-result evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "topic-lifecycle-review",
+      "reviewerId": "typed-library-review",
       "blockerCount": 0,
-      "summary": "Every managed knowledge page type now preserves stable identity through archive, restore, immutable history and restart while source pages stay read-only."
+      "summary": "Each managed Knowledge family is independently discoverable while stable page identity remains the only Reader-open authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "topic-lifecycle-review",
+      "reviewerId": "typed-library-review",
       "blockerCount": 0,
-      "summary": "Knowledge, Markdown, UI, Operations and Main service policy agree on one exact-current pathless lifecycle for all six managed page types."
+      "summary": "Library browse, local search, locale copy and the durable page-type vocabulary agree without adding renderer or backend authority."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "topic-lifecycle-review",
+      "reviewerId": "typed-library-review",
       "blockerCount": 0,
-      "summary": "PIGE-KNOW-001 is verified by creation, facets, relationships, trash recovery, archive recovery, history restore, UI and restart evidence."
+      "summary": "PIGE-KNOW-001 gains exact typed discovery evidence while PIGE-UI-003 remains partial for unrelated shell and Windows breadth."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "topic-lifecycle-review",
+      "reviewerId": "typed-library-review",
       "blockerCount": 0,
-      "summary": "One shared lifecycle predicate and existing archive/history owners close Topic parity without a new channel, durable format or renderer authority."
+      "summary": "The existing Library model and retrieval pageTypes contract absorb the feature without a new channel, service, index or durable format."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "topic-lifecycle-review",
+      "reviewerId": "typed-library-review",
       "blockerCount": 0,
-      "summary": "Existing Knowledge, UI, playbook, decision and trace owners contain the closure without introducing another design document."
+      "summary": "Existing UI, playbook, decision and trace owners contain the behavior without introducing another design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/note-archive-service.test.ts tests/unit/note-revision-history-service.test.ts tests/unit/note-revision-history-ui.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-library.test.ts",
+      "command": "npx vitest run tests/unit/library-browse-ui-model.test.ts tests/unit/full-ui-library.test.ts",
       "status": "passed",
-      "evidence": "All six managed page types pass archive/restore, exact immutable history, Undo/restart adoption and projection; the real Library Reader also adopts an authoritative archived Topic."
+      "evidence": "Exact typed empty-query browsing, typed local search, stable page open and old-family result fencing pass directly."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The Topic lifecycle compiles and builds while existing Main and service owners remain inside governed architecture boundaries."
+      "evidence": "The existing bounded Library renderer owner compiles and builds without a new service or architecture-budget change."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:documentation-quality",
+      "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Knowledge, UI, decision, playbook, acceptance and semantic-claim owners agree on the complete managed page lifecycle."
+      "evidence": "UI, playbook, accepted decision, acceptance evidence and semantic-claim owners agree on typed Knowledge discovery."
     }
   ],
   "coordination": {
-    "taskId": "topic-lifecycle-bind-20260802",
-    "taskTitle": "Bind complete managed knowledge-page lifecycle",
+    "taskId": "typed-library-browse-bind-20260802",
+    "taskTitle": "Bind exact typed Knowledge discovery in Library",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing page IDs, Markdown files, Operations and Reader channels remain compatible; Topic adopts the same currentness and restore mechanics as other managed pages without migration.",
-    "acknowledgement": "Planning promotes PIGE-KNOW-001 from complete creation, facet, relationship, trash, archive, history, UI and restart evidence."
+    "compatibility": "Existing page IDs, Library search IPC, retrieval indexes and Reader open semantics remain compatible; only exact existing pageTypes are selected.",
+    "acknowledgement": "Planning records typed Knowledge discovery as additional verified PIGE-KNOW-001 evidence and narrows PIGE-UI-003 without promoting its unrelated shell/platform acceptance."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
