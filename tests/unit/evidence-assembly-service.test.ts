@@ -113,6 +113,52 @@ describe("evidence assembly service", () => {
     })]);
   });
 
+  it("pairs DOCX media OCR metadata and emits stable image citation locators", async () => {
+    const vaultPath = makeVault();
+    const sourceId = "src_20260710_defabc456789";
+    const body = "Diagram-only document evidence.";
+    const text = `--- Document Image 1 ---\n${body}`;
+    const textArtifact = artifact("art_docx_media_ocr_text", "ocr", "artifacts/docx-media.txt", text);
+    const start = "--- Document Image 1 ---\n".length;
+    const sidecarText = JSON.stringify({
+      schemaVersion: 1,
+      artifactId: "art_docx_media_ocr_metadata",
+      sourceId,
+      kind: "docx_media_ocr_metadata",
+      ocrTextChecksum: textArtifact.checksum,
+      units: [{
+        locator: "image:1/ocr:block:1",
+        parentLocator: "image:1",
+        characterStart: start,
+        characterEnd: start + body.length,
+        confidence: 0.96
+      }]
+    });
+    const metadataArtifact = artifact(
+      "art_docx_media_ocr_metadata",
+      "metadata",
+      "artifacts/docx-media.json",
+      sidecarText
+    );
+    write(vaultPath, textArtifact.path, text);
+    write(vaultPath, metadataArtifact.path, sidecarText);
+
+    const pack = await new EvidenceAssemblyService().assemble(
+      vaultPath,
+      makeSource(sourceId, "docx_file", [metadataArtifact, textArtifact])
+    );
+
+    expect(pack.warnings).toEqual([]);
+    expect(pack.fragments).toEqual([expect.objectContaining({
+      artifactId: textArtifact.id,
+      locator: "image:1/ocr:block:1",
+      parentLocator: "image:1",
+      citationLocator: "image1-ocr1",
+      text: body,
+      confidence: 0.96
+    })]);
+  });
+
   it("deduplicates OCR text only when it repeats native text under the same parent locator", async () => {
     const vaultPath = makeVault();
     const sourceId = "src_20260710_bcdefa234567";

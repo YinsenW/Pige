@@ -60,5 +60,6 @@ workerPort.on("message", (request: OfficeWorkerRequest) => {
 });
 
 function isMediaRequest(request: OfficeWorkerRequest): request is OfficeMediaMaterializerRequest {
-  return "operation" in request && request.operation === "materialize_pptx_media";
+  return "operation" in request &&
+    (request.operation === "materialize_pptx_media" || request.operation === "materialize_docx_media");
 }

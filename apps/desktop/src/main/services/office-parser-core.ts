@@ -50,6 +50,33 @@ export async function extractOfficeText(request: OfficeParserRequest): Promise<O
 }
 
 async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPackage): Promise<OfficeExtractionResult> {
+  const documentXml = requirePart(packageData, "word/document.xml", "docx");
+  const relationshipXml = requirePart(packageData, "word/_rels/document.xml.rels", "docx");
+  const relationshipById = new Map(
+    parseRelationships(relationshipXml, "word/document.xml", "docx")
+      .filter((relationship) => !relationship.external && relationship.type.endsWith("/image"))
+      .map((relationship) => [relationship.id, relationship])
+  );
+  const packageMediaByPath = new Map(packageData.mediaReferences.map((media) => [media.packagePath, media]));
+  const docxMediaByImageIndex = new Map<number, OfficeUnitMediaReference>();
+  const imageRelationshipIds = findElements(parseOrderedXml(documentXml, "docx"), "blip")
+    .map((node) => attribute(node, "r:embed") ?? attribute(node, "embed"))
+    .filter((value): value is string => Boolean(value));
+  imageRelationshipIds.forEach((relationshipId, index) => {
+    const relationship = relationshipById.get(relationshipId);
+    if (!relationship) return;
+    const packagePath = resolveRelationshipTarget("word/document.xml", relationship.target, "docx");
+    const media = packageMediaByPath.get(packagePath);
+    if (!media) return;
+    const image = index + 1;
+    docxMediaByImageIndex.set(image, {
+      mediaIndex: image,
+      locator: `image:${image}`,
+      packagePath: media.packagePath,
+      size: media.size,
+      extension: media.extension
+    });
+  });
   let imageIndex = 0;
   let converted;
   try {
@@ -65,7 +92,7 @@ async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPac
     throw new PigeDomainError("parser.docx.invalid", "The DOCX document could not be converted safely.");
   }
 
-  const renderer = new DocxHtmlRenderer(request.limits.maxTextCharacters);
+  const renderer = new DocxHtmlRenderer(request.limits.maxTextCharacters, docxMediaByImageIndex);
   let orderedHtml: OrderedNode[];
   try {
     orderedHtml = parseOrderedXml(`<pige-root>${converted.value}</pige-root>`, "docx");
@@ -75,7 +102,9 @@ async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPac
   renderer.render(orderedHtml);
   const title = extractCoreTitle(packageData) ?? renderer.firstHeading;
   const mediaReferences = [...packageData.mediaReferences].sort((left, right) => left.packagePath.localeCompare(right.packagePath));
-  const ocrCandidateLocators = renderer.imageLocators;
+  const ocrCandidateLocators = renderer.imageLocators.filter((locator) =>
+    renderer.units.some((unit) => unit.needsOcr && unit.mediaReferences?.some((media) => media.locator === locator))
+  );
   const warnings = renderer.warnings;
   if (converted.messages.length > 0) {
     warnings.push(`The DOCX converter reported ${converted.messages.length} recoverable issue(s).`);
@@ -112,13 +141,26 @@ async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPac
     totalUncompressedBytes: packageData.totalUncompressedBytes,
     mediaReferences,
     structure: {
+      mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
       headingCount: renderer.headingCount,
       paragraphCount: renderer.paragraphCount,
       listItemCount: renderer.listItemCount,
       tableCount: renderer.tableCount,
       linkCount: renderer.linkCount,
       imageCount: ocrCandidateLocators.length,
-      embeddedMediaCount: mediaReferences.length
+      embeddedMediaCount: mediaReferences.length,
+      ocrCandidateMediaCount: renderer.units
+        .filter((unit) => unit.needsOcr)
+        .reduce((total, unit) => total + (unit.mediaReferences?.length ?? 0), 0),
+      ocrMaterializableMediaCount: renderer.units
+        .filter((unit) => unit.needsOcr)
+        .flatMap((unit) => unit.mediaReferences ?? [])
+        .filter((media) => isMaterializableOfficeMedia(media.extension, media.size)).length,
+      ocrMaterializableMediaBytes: renderer.units
+        .filter((unit) => unit.needsOcr)
+        .flatMap((unit) => unit.mediaReferences ?? [])
+        .filter((media) => isMaterializableOfficeMedia(media.extension, media.size))
+        .reduce((total, media) => total + media.size, 0)
     },
     warnings: uniqueWarnings(warnings)
   };
@@ -128,7 +170,7 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
   const presentationXml = requirePart(packageData, "ppt/presentation.xml", "pptx");
   const presentationRelsXml = requirePart(packageData, "ppt/_rels/presentation.xml.rels", "pptx");
   const presentationNodes = parseOrderedXml(presentationXml, "pptx");
-  const presentationRelations = parseRelationships(presentationRelsXml, "ppt/presentation.xml");
+  const presentationRelations = parseRelationships(presentationRelsXml, "ppt/presentation.xml", "pptx");
   const relationById = new Map(presentationRelations.map((relation) => [relation.id, relation]));
   const warnings: string[] = [];
   let slideParts = findElements(presentationNodes, "sldId")
@@ -174,7 +216,7 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
     if (!firstSlideTitle) firstSlideTitle = visibleParagraphs.find(Boolean);
     const slideRelsPart = `${path.posix.dirname(slidePart)}/_rels/${path.posix.basename(slidePart)}.rels`;
     const slideRelations = packageData.entries.has(slideRelsPart)
-      ? parseRelationships(requirePart(packageData, slideRelsPart, "pptx"), slidePart)
+      ? parseRelationships(requirePart(packageData, slideRelsPart, "pptx"), slidePart, "pptx")
       : [];
     externalRelationshipCount += slideRelations.filter((relation) => relation.external).length;
     const imageRelations = slideRelations.filter((relation) => relation.type.endsWith("/image") && !relation.external);
@@ -308,6 +350,7 @@ class DocxHtmlRenderer {
   readonly warnings: string[] = [];
   readonly imageLocators: string[] = [];
   readonly #maxCharacters: number;
+  readonly #mediaByImageIndex: ReadonlyMap<number, OfficeUnitMediaReference>;
   readonly #parts: string[] = [];
   headingCount = 0;
   paragraphCount = 0;
@@ -317,8 +360,9 @@ class DocxHtmlRenderer {
   truncated = false;
   firstHeading: string | undefined;
 
-  constructor(maxCharacters: number) {
+  constructor(maxCharacters: number, mediaByImageIndex: ReadonlyMap<number, OfficeUnitMediaReference>) {
     this.#maxCharacters = maxCharacters;
+    this.#mediaByImageIndex = mediaByImageIndex;
   }
 
   get text(): string {
@@ -336,16 +380,17 @@ class DocxHtmlRenderer {
       const name = localName(elementName(node));
       if (/^h[1-6]$/u.test(name)) {
         const level = Number(name.slice(1));
-        const text = this.#renderInline(elementChildren(node), { links: 0, images: 0 });
+        const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
+        const text = this.#renderInline(elementChildren(node), state);
         if (text) {
           this.headingCount += 1;
           this.firstHeading ??= text;
-          this.#appendBlock(`${"#".repeat(level)} ${text}`, "heading", 0);
+          this.#appendBlock(`${"#".repeat(level)} ${text}`, "heading", state.images);
         }
         continue;
       }
       if (name === "p") {
-        const state = { links: 0, images: 0 };
+        const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
         const text = this.#renderInline(elementChildren(node), state);
         this.linkCount += state.links;
         if (text) {
@@ -369,7 +414,7 @@ class DocxHtmlRenderer {
   #renderList(node: OrderedNode, ordered: boolean): void {
     const items = directElements(elementChildren(node), "li");
     items.forEach((item, index) => {
-      const state = { links: 0, images: 0 };
+      const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
       const text = this.#renderInline(elementChildren(item), state);
       this.linkCount += state.links;
       if (!text) return;
@@ -389,10 +434,10 @@ class DocxHtmlRenderer {
       .filter(Boolean);
     if (rows.length === 0) return;
     this.tableCount += 1;
-    this.#appendBlock(rows.join("\n"), "table", 0);
+    this.#appendBlock(rows.join("\n"), "table", []);
   }
 
-  #renderInline(nodes: readonly OrderedNode[], state: { links: number; images: number }): string {
+  #renderInline(nodes: readonly OrderedNode[], state: { links: number; images: OfficeUnitMediaReference[] }): string {
     let value = "";
     for (const node of nodes) {
       if (typeof node["#text"] === "string") {
@@ -405,12 +450,13 @@ class DocxHtmlRenderer {
         continue;
       }
       if (name === "img") {
-        state.images += 1;
         const alt = attribute(node, "alt");
         const source = attribute(node, "src");
         const imageNumber = /^pige-image:(\d+)$/u.exec(source ?? "")?.[1] ?? String(this.imageLocators.length + 1);
         const locator = `image:${imageNumber}`;
         if (!this.imageLocators.includes(locator)) this.imageLocators.push(locator);
+        const media = this.#mediaByImageIndex.get(Number(imageNumber));
+        if (media && !state.images.some((candidate) => candidate.locator === media.locator)) state.images.push(media);
         value += `[Image${alt ? `: ${normalizeInline(alt)}` : ` ${imageNumber}`}]`;
         continue;
       }
@@ -426,7 +472,7 @@ class DocxHtmlRenderer {
     return normalizeInline(value);
   }
 
-  #appendBlock(value: string, kind: OfficeExtractionUnit["kind"], imageCount: number): void {
+  #appendBlock(value: string, kind: OfficeExtractionUnit["kind"], mediaReferences: readonly OfficeUnitMediaReference[]): void {
     const separatorLength = this.#parts.length > 0 ? 2 : 0;
     const start = this.text.length + separatorLength;
     if (start + value.length > this.#maxCharacters) {
@@ -442,9 +488,10 @@ class DocxHtmlRenderer {
       characterStart: start,
       characterEnd: start + value.length,
       characterCount: value.length,
-      imageCount,
-      needsOcr: imageCount > 0,
-      warnings: imageCount > 0 ? ["Block contains an image reference that may need OCR."] : []
+      imageCount: mediaReferences.length,
+      ...(mediaReferences.length > 0 ? { mediaReferences } : {}),
+      needsOcr: mediaReferences.length > 0,
+      warnings: mediaReferences.length > 0 ? ["Block contains an image reference that may need OCR."] : []
     });
   }
 }
@@ -456,8 +503,8 @@ interface OpenXmlRelationship {
   readonly external: boolean;
 }
 
-function parseRelationships(xml: string, basePart: string): OpenXmlRelationship[] {
-  const relationships = findElements(parseOrderedXml(xml, "pptx"), "Relationship").map((node) => ({
+function parseRelationships(xml: string, basePart: string, format: "docx" | "pptx"): OpenXmlRelationship[] {
+  const relationships = findElements(parseOrderedXml(xml, format), "Relationship").map((node) => ({
     id: attribute(node, "Id") ?? "",
     type: attribute(node, "Type") ?? "",
     target: attribute(node, "Target") ?? "",
@@ -466,15 +513,15 @@ function parseRelationships(xml: string, basePart: string): OpenXmlRelationship[
   const relationIds = new Set<string>();
   return relationships.map((relation) => {
     if (relationIds.has(relation.id)) {
-      throw new PigeDomainError("parser.pptx.duplicate_relationship", "The PPTX package contains duplicate relationship IDs.");
+      throw new PigeDomainError(`parser.${format}.duplicate_relationship`, `The ${format.toUpperCase()} package contains duplicate relationship IDs.`);
     }
     relationIds.add(relation.id);
-    if (!relation.external) resolveRelationshipTarget(basePart, relation.target, "pptx");
+    if (!relation.external) resolveRelationshipTarget(basePart, relation.target, format);
     return relation;
   });
 }
 
-function resolveRelationshipTarget(basePart: string, target: string, format: "pptx"): string {
+function resolveRelationshipTarget(basePart: string, target: string, format: "docx" | "pptx"): string {
   const normalizedTarget = target.replaceAll("\\", "/");
   if (/^[a-z][a-z0-9+.-]*:/iu.test(normalizedTarget) || normalizedTarget.startsWith("//")) {
     throw new PigeDomainError(`parser.${format}.unsafe_relationship`, `The ${format.toUpperCase()} package contains an unsafe internal relationship.`);

@@ -107,7 +107,8 @@ export class OcrJobExecutor {
           result,
           hasWarnings ? "completed_with_warnings" : "completed",
           createOcrCompletionMessage(result, source.record.kind),
-          source.record.kind === "pdf_file" ? "page" : source.record.kind === "pptx_file" ? "media" : "image"
+          source.record.kind === "pdf_file" ? "page" :
+            source.record.kind === "pptx_file" || source.record.kind === "docx_file" ? "media" : "image"
         );
         if (completedJob.state === "cancelled") failed += 1;
         else completed += 1;
@@ -137,7 +138,9 @@ function inspectOcrSource(ocr: OcrPort | undefined, sourceRecord: SourceRecord):
 }
 
 function createOcrCompletionMessage(result: OcrSourceResult, sourceKind: SourceKind): string {
-  const label = sourceKind === "pdf_file" ? "PDF page OCR" : sourceKind === "pptx_file" ? "PPTX media OCR" : "Image OCR";
+  const label = sourceKind === "pdf_file" ? "PDF page OCR" :
+    sourceKind === "pptx_file" ? "PPTX media OCR" :
+      sourceKind === "docx_file" ? "DOCX media OCR" : "Image OCR";
   if (result.sourcePageConflict) return `${label} completed; the edited source page was preserved and requires review before refresh.`;
   if (!result.agentTextReady) return `${label} completed without readable text. The preserved source remains available.`;
   if (sourceKind === "pdf_file" && result.textCharacterCount === 0) {
@@ -154,7 +157,7 @@ function createOcrDependencyMessage(sourceKind: SourceKind): string {
 function ocrFailure(caught: unknown, sourceKind: SourceKind): OcrFailure {
   const label = documentLabel(sourceKind);
   if (caught instanceof PigeDomainError) {
-    if (/^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) || caught.code === "parser.pdf_page_renderer.unavailable" || caught.code === "ocr.pptx.target_not_ready") {
+    if (/^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) || caught.code === "parser.pdf_page_renderer.unavailable" || /^ocr\.(?:docx|pptx)\.target_not_ready$/u.test(caught.code)) {
       return { final: false, waiting: true, message: `Waiting for a healthy local OCR capability before retrying this preserved ${label}.` };
     }
     if (caught.code === "source.external_unavailable") return { final: false, waiting: true, message: `Waiting for the referenced original ${label} to be reconnected before local OCR can continue.` };
@@ -167,11 +170,11 @@ function ocrFailure(caught: unknown, sourceKind: SourceKind): OcrFailure {
     if (/^ocr\.pdf\.(?:parser_metadata_invalid|source_record_invalid|render_result_invalid|rendered_page_invalid|rendered_pages_too_large|result_invalid)$/u.test(caught.code)) {
       return { final: true, waiting: false, message: "The verified PDF OCR target or derived page data failed validation. Re-parse or re-import the preserved PDF before retrying." };
     }
-    if (/^ocr\.pptx\.(?:parser_metadata_invalid|source_record_invalid|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
-      return { final: true, waiting: false, message: "The verified PPTX OCR target or embedded media failed validation. Re-parse or re-import the preserved presentation before retrying." };
+    if (/^ocr\.(?:docx|pptx)\.(?:parser_metadata_invalid|source_record_invalid|source_missing|file_too_large|media_target_invalid|media_target_changed|materializer_result_invalid|result_invalid|invalid_archive|too_many_entries|duplicate_entry|expanded_too_large|media_too_large)$/u.test(caught.code)) {
+      return { final: true, waiting: false, message: `The verified ${label} OCR target or embedded media failed validation. Re-parse or re-import the preserved document before retrying.` };
     }
-    if (sourceKind === "pptx_file" && isDeterministicParserInputFailure(caught.code)) {
-      return { final: true, waiting: false, message: "The preserved PPTX media cannot be materialized safely. Re-import it to create a verified source version." };
+    if ((sourceKind === "docx_file" || sourceKind === "pptx_file") && isDeterministicParserInputFailure(caught.code)) {
+      return { final: true, waiting: false, message: `The preserved ${label} media cannot be materialized safely. Re-import it to create a verified source version.` };
     }
     if (/^ocr\.(?:source_checksum_mismatch|source_unavailable|source_unsupported|path_outside_vault|image\.(?:source_missing|not_regular|file_too_large|invalid|unsupported_format|multiframe_unsupported|dimensions_invalid|dimensions_too_large|decode_failed))$/u.test(caught.code)) {
       return { final: true, waiting: false, message: `The preserved ${label} cannot be processed safely in its current form. Re-import it to create a verified source version.` };
@@ -186,6 +189,7 @@ function isDeterministicParserInputFailure(code: string): boolean {
 
 function documentLabel(sourceKind: SourceKind): string {
   if (sourceKind === "pdf_file") return "PDF";
+  if (sourceKind === "docx_file") return "DOCX";
   if (sourceKind === "pptx_file") return "PPTX";
   return "image";
 }

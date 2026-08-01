@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "327045447b1308aa6899a967ea72d45c799f95f1",
+  "baseline": "8576dc722136b758d557f87cab548c057f4a6895",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 295,
-  "baselineLines": 127680,
+  "baselineFileCount": 296,
+  "baselineLines": 127825,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -263,6 +263,7 @@
       ["office-archive.ts", 268, "f"],
       ["office-media-materializer-core.ts", 55, "f"],
       ["office-media-materializer-service.ts", 123, "j"],
+      ["office-media-ocr-target.ts", 145, "f"],
       ["office-parser-core.ts", 653, "f"],
       ["office-parser-service.ts", 229, "jr"],
       ["pdf-page-renderer-core.ts", 355, "f"],

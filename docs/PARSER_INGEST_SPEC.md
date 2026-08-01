@@ -186,7 +186,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Extract headings, paragraphs, lists, tables, links, and images when feasible.
 - Preserve document structure without pretending layout is perfect.
-- DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected PPTX media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
+- DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected DOCX/PPTX raster media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
 - Current Phase 5 adapter pins Mammoth `1.12.0`, performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`, disables embedded style maps and external file access, replaces images with local references, and never renders converter HTML in the product UI.
 - DOCX output preserves heading/list/table/link structure as normalized text plus `block:N` units, redacts secret-like URL query values, records referenced embedded media, and emits `image:N` OCR candidates only for images reached from document content.
 - The bounded worker returns data only. Main-process Parser Service writes checksummed
@@ -215,7 +215,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Source checksum is verified before and after recognition. Valid deterministic Artifacts are reused after restart; stale derived output is regenerated; changed or path-escaping source evidence fails without invoking the adapter.
 - OCR text is stored once in `artifacts/ocr/`. A separate checksummed metadata sidecar stores engine/version, confidence, language hints, image dimensions, normalized bounding boxes, character spans, and warnings without copying the recognized body.
 - Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR completes its child with warnings and leaves the Agent parent waiting without a note.
-- PDF pages use their reviewed materializer. PPTX uses the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, DOCX-media, and unsupported or oversized targets remain waiting.
+- PDF pages use their reviewed materializer. DOCX and PPTX use the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `image:N/ocr:block:K` or `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, and unsupported or oversized targets remain waiting.
 
 ### 8.7 CSV, XLSX, And Database Files
 

@@ -478,7 +478,7 @@ function isReusableSidecar(
   ) {
     return false;
   }
-  if (format === "pptx" && sidecar.mediaTargetSchemaVersion !== OFFICE_MEDIA_TARGET_SCHEMA_VERSION) {
+  if ((format === "pptx" || format === "docx") && sidecar.mediaTargetSchemaVersion !== OFFICE_MEDIA_TARGET_SCHEMA_VERSION) {
     return false;
   }
   if (!extractedTextArtifact) {

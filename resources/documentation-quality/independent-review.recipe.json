@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:53:36.000Z",
+  "reviewedAt": "2026-08-01T16:32:42.059Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-DIAG-002 explicitly reviewed aggregate Provider metadata in local support bundles without status promotion.",
+    "scope": "PIGE-INGEST-004 selected DOCX raster-media OCR evidence without status promotion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "6fb618ae8a583f2d15a7f92403d6102edfda00065236db81793867f6ace1f1e7"
+    "reviewedSha256": "6c9e1d3e8fb3d2eeb57a9bc02cc9de6f505d3e25bb7b8f18f660e3642d2698cc"
   },
   "reviewers": [
     {
-      "reviewerId": "diagnostics-provider-metadata-review",
-      "task": "Review optional Provider metadata support-bundle privacy and acceptance",
+      "reviewerId": "docx-media-ocr-review",
+      "task": "Review selected DOCX raster-media OCR evidence and remaining scope",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews diagnostics and acceptance facts; Development supplies separate projection, export-core, durable lifecycle and Settings evidence."
+      "independence": "Planning reviews parser and acceptance facts; Development supplies separate archive, materializer, OCR-target and Agent-led evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "diagnostics-provider-metadata-review",
+      "reviewerId": "docx-media-ocr-review",
       "blockerCount": 0,
-      "summary": "Provider metadata remains machine-local, user-selected and bound to one preview/export lifecycle without automatic upload."
+      "summary": "Parser-selected DOCX raster media stays bounded and disposable while original Office evidence remains preserved."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "diagnostics-provider-metadata-review",
+      "reviewerId": "docx-media-ocr-review",
       "blockerCount": 0,
-      "summary": "Diagnostics, privacy, schemas, Main lifecycle and Settings agree on one optional aggregate-only Provider category."
+      "summary": "Parser, OCR target, materializer and playbook contracts agree on the shared DOCX/PPTX raster bounds."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "diagnostics-provider-metadata-review",
+      "reviewerId": "docx-media-ocr-review",
       "blockerCount": 0,
-      "summary": "PIGE-DIAG-002 gains exact Provider projection and durable export evidence while broader path/platform evidence stays open."
+      "summary": "PIGE-INGEST-004 gains exact DOCX media OCR evidence while Windows, broader targets and packaging remain open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "diagnostics-provider-metadata-review",
+      "reviewerId": "docx-media-ocr-review",
       "blockerCount": 0,
-      "summary": "One deterministic projection owner isolates safe Provider aggregates from registry identity, credentials and raw model traffic."
+      "summary": "One bounded OCR-target owner isolates DOCX/PPTX selection without widening parser or Job orchestrators."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "diagnostics-provider-metadata-review",
+      "reviewerId": "docx-media-ocr-review",
       "blockerCount": 0,
-      "summary": "Existing diagnostics, playbook, trace, acceptance and responsibility owners contain the delta without a new design document."
+      "summary": "Existing parser, playbook, trace, acceptance and responsibility owners hold the delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/diagnostics-provider-metadata.test.ts tests/unit/diagnostics-export-core.test.ts tests/unit/diagnostics-lifecycle-service.test.ts tests/unit/diagnostics-service.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/schemas.test.ts",
+      "command": "npx vitest run tests/unit/agent-led-office-parse.test.ts tests/unit/evidence-assembly-service.test.ts tests/unit/office-parser-core.test.ts tests/unit/office-media-materializer-core.test.ts tests/unit/pptx-media-ocr-artifact-service.test.ts tests/unit/ocr-job-executor-integration.test.ts tests/unit/pdf-ocr-artifact-service.test.ts --pool=threads --maxWorkers=1",
       "status": "passed",
-      "evidence": "All 221 focused projection, export, lifecycle, Settings and strict schema tests pass on the rebased candidate."
+      "evidence": "Agent-led DOCX/PPTX OCR, evidence assembly, bounded materialization, artifacts and PDF compatibility pass directly."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds while the 47-line deterministic projection owner is recorded within architecture boundaries."
+      "evidence": "The Office OCR candidate compiles and builds while the new bounded target owner is recorded at its exact size."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:documentation-quality",
+      "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Diagnostics, privacy, playbook, acceptance and semantic-claim owners agree on the reviewed optional Provider aggregate."
+      "evidence": "Parser, playbook, trace, acceptance and semantic-claim owners remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "diagnostics-provider-metadata-bind-20260801",
-    "taskTitle": "Bind reviewed Provider metadata support-bundle evidence",
+    "taskId": "docx-media-ocr-bind-20260801",
+    "taskTitle": "Bind selected DOCX raster-media OCR evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing support previews remain valid with an empty optional-category selection; selected aggregates add no credential, path, Provider profile or model identity projection.",
-    "acknowledgement": "Planning adds exact Provider metadata evidence while keeping PIGE-DIAG-002 partial and broader platform/path evidence explicit."
+    "compatibility": "Existing Office parser artifacts remain readable; DOCX raster OCR reuses the bounded selected-media handoff without durable migration.",
+    "acknowledgement": "Planning adds exact DOCX media OCR evidence while keeping PIGE-INGEST-004 partial and its remaining platform and target breadth explicit."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

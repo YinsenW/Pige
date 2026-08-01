@@ -12,7 +12,7 @@ import {
   OFFICE_PARSER_MAX_UNCOMPRESSED_BYTES,
   type OfficeMediaMaterializerRequest
 } from "../../apps/desktop/src/main/services/office-parser-types";
-import { createOpenXmlZip, createTestPptx, pptxRequiredEntries, TINY_PNG } from "./helpers/office-fixture";
+import { createOpenXmlZip, createTestDocx, createTestPptx, pptxRequiredEntries, TINY_PNG } from "./helpers/office-fixture";
 
 const tempRoots: string[] = [];
 
@@ -32,6 +32,33 @@ describe("Office media materializer core", () => {
     expect(result.media.map((media) => media.locator)).toEqual(["slide:2/media:1", "slide:1/media:1"]);
     expect(Buffer.from(result.media[0]!.bytes)).toEqual(TINY_PNG);
     expect(Buffer.from(result.media[1]!.bytes)).toEqual(TINY_PNG);
+  });
+
+  it("materializes an exact parser-selected DOCX image without exposing another archive part", async () => {
+    const filePath = await writeFixture("media.docx", await createTestDocx());
+    const docxTarget = {
+      image: 1,
+      parentLocator: "image:1",
+      mediaIndex: 1,
+      locator: "image:1",
+      packagePath: "word/media/image1.png",
+      size: TINY_PNG.length,
+      extension: ".png"
+    } as const;
+    const result = await materializeOfficeMedia({
+      ...request(filePath, [docxTarget]),
+      operation: "materialize_docx_media",
+      sourceKind: "docx_file"
+    });
+
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0]).toMatchObject(docxTarget);
+    expect(Buffer.from(result.media[0]!.bytes)).toEqual(TINY_PNG);
+    await expect(materializeOfficeMedia({
+      ...request(filePath, [{ ...docxTarget, size: TINY_PNG.length + 1 }]),
+      operation: "materialize_docx_media",
+      sourceKind: "docx_file"
+    })).rejects.toMatchObject({ code: "ocr.docx.media_target_changed" });
   });
 
   it("rejects a target whose parser-recorded size no longer matches the archive", async () => {

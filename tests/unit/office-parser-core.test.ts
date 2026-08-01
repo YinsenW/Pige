@@ -60,6 +60,19 @@ describe("Office parser core", () => {
     expect(result.text).toContain("[Image: Architecture diagram]");
     expect(result.text).not.toContain("fixture-secret");
     expect(result.ocrCandidateLocators).toEqual(["image:1"]);
+    expect(result.units.flatMap((unit) => unit.mediaReferences ?? [])).toEqual([{
+      mediaIndex: 1,
+      locator: "image:1",
+      packagePath: "word/media/image1.png",
+      size: 68,
+      extension: ".png"
+    }]);
+    expect(result.structure).toMatchObject({
+      mediaTargetSchemaVersion: 1,
+      ocrCandidateMediaCount: 1,
+      ocrMaterializableMediaCount: 1,
+      ocrMaterializableMediaBytes: 68
+    });
     expect(result.units.map((unit) => unit.locator)).toEqual([
       "block:1",
       "block:2",
