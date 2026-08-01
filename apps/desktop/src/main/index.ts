@@ -1770,7 +1770,7 @@ const getHomeAgentUrlService = (): HomeAgentUrlService => {
   return homeAgentUrlService;
 };
 
-const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
+const getAgentCapabilitySnapshot = () => {
   const vaultPath = getVaultService().activeVaultPath();
   const localDatabaseStatus = vaultPath
     ? getLocalDatabaseService().status(vaultPath).status
@@ -1778,16 +1778,18 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
   const parser = getDocumentParserService();
   const imageOcrReady = getOcrService().canOcr("image_file");
   const appearance = getAppearanceService().summary();
+  const permissionPolicy = getPermissionPolicyStore().agentRuntimePolicyContext();
   return {
     localDatabaseStatus,
     parserToolchainReady: parser.canParse("pdf_file") && parser.canParse("docx_file") && parser.canParse("pptx_file"),
     datasetToolchainReady: getDatasetService().canMaterialize("csv_file") &&
       getDatasetService().canMaterialize("xlsx_file") &&
       getDatasetService().canMaterialize("sqlite_file"),
-    ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision"] : [],
+    ocrEngines: imageOcrReady && process.platform === "darwin" ? ["apple_vision" as const] : [],
     ocrLanguageHints: getOcrLanguagePreferenceService().policyLanguageHints(),
     appLocale: appearance.locale,
     generatedKnowledgeLanguage: appearance.generatedKnowledgeLanguage,
+    ...permissionPolicy,
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",

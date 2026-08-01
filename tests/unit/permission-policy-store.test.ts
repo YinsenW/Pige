@@ -33,6 +33,22 @@ describe("PermissionPolicyStore", () => {
 
     expect(fs.statSync(root).mode & 0o077).toBe(0);
     expect(store.read()).toMatchObject({ revision: 0, defaultMode: "ask_every_time" });
+    expect(store.agentRuntimePolicyContext()).toEqual({
+      permissionMode: "ask_every_time",
+      permissionPolicyRevision: 0
+    });
+  });
+
+  it("restores the exact Agent authority context after restart", () => {
+    const root = temporaryRoot();
+    const first = new PermissionPolicyStore(root, vi.fn());
+    expect(first.setDefaultMode(0, "remember_scoped_grants")).toBe("committed");
+
+    const restarted = new PermissionPolicyStore(root, vi.fn());
+    expect(restarted.agentRuntimePolicyContext()).toEqual({
+      permissionMode: "remember_scoped_grants",
+      permissionPolicyRevision: 1
+    });
   });
 
   it("atomically restores one exact pending request without granting an effect", () => {

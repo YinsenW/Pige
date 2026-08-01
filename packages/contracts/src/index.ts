@@ -1,6 +1,7 @@
 import type { PigeClientCapabilityTier, PigeRuntimeKind } from "@pige/domain";
 import type {
   AgentAttachmentCandidate,
+  AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
   AgentConversationHistoryQuery,
   AgentConversationHistoryListRequest,
@@ -506,6 +507,7 @@ import type {
 
 export type {
   AgentAttachmentCandidate,
+  AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
   AgentConversationHistoryQuery,
   AgentConversationHistoryListRequest,
@@ -1080,61 +1082,6 @@ export interface OnboardingStatus {
     readonly runtimeCapability: number;
     readonly vaultBinding: number;
     readonly externalSource: number;
-  };
-}
-
-export interface AgentRuntimePolicyContext {
-  readonly schemaVersion: 1;
-  readonly policyContextId: string;
-  readonly builtAt: string;
-  readonly jobId: string;
-  readonly policyHash: string;
-  readonly vaultId: string;
-  readonly sourceStorage: {
-    readonly defaultStrategy: SourceStorageStrategy;
-    readonly sourceAssetRootKind: SourceAssetRootKind;
-    readonly allowPerCaptureOverride: boolean;
-    readonly linkStrategyEnabled: false;
-  };
-  readonly model: {
-    readonly defaultModelProfileId?: string;
-    readonly modelConfigured: boolean;
-    readonly cloudBoundary: "cloud" | "self_hosted" | "local" | "unknown";
-    readonly boundaryVerification: BoundaryVerification;
-    readonly cloudSendPolicy: CloudSendPolicy;
-    readonly modelRoutingMode: "default_model_only" | "pi_upstream_model_slots" | "pige_model_routing_service";
-  };
-  readonly language: {
-    readonly appLocale: Locale;
-    readonly generatedKnowledgeLanguage: "preserve_source" | "follow_query" | "app_locale";
-    readonly preserveSourceLanguage: boolean;
-    readonly ocrLanguageHints: readonly string[];
-    readonly voiceInputLanguage?: string;
-  };
-  readonly confirmation: {
-    readonly safeAutoApplyThreshold: number;
-    readonly mutatingReviewThreshold: number;
-    readonly riskyChangeRequiresConfirmation: boolean;
-  };
-  readonly memory: {
-    readonly vaultMemoryEnabled: boolean;
-    readonly allowedMemoryScopes: readonly ("preference" | "correction" | "workflow_lesson" | "profile")[];
-    readonly includeMemoryInBackup: boolean;
-  };
-  readonly retrieval: {
-    readonly lexicalSearchAvailable: boolean;
-    readonly vectorSearchAvailable: boolean;
-    readonly rerankerAvailable: boolean;
-    readonly maxSnippetsForCloudSynthesis: number;
-  };
-  readonly localCapabilities: {
-    readonly localDatabase: "not_initialized" | "ready" | "needs_rebuild" | "error";
-    readonly parserToolchainReady: boolean;
-    readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr_local")[];
-    readonly speechInputAvailable: boolean;
-    readonly embeddingModelInstalled: boolean;
-    readonly hiddenDownloadsAllowed: false;
-    readonly excludeLowConfidenceOcrFromSummaries: boolean;
   };
 }
 

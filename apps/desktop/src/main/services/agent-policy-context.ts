@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AgentRuntimePolicyContext, ModelProfileSummary, ProviderProfileSummary } from "@pige/contracts";
+import { AgentRuntimePolicyContextSchema } from "@pige/schemas";
 import { readVaultConfig, readVaultManifest } from "./vault-layout";
 
 export interface BuildAgentRuntimePolicyContextOptions {
@@ -13,6 +14,8 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly ocrLanguageHints?: readonly string[];
   readonly appLocale?: AgentRuntimePolicyContext["language"]["appLocale"];
   readonly generatedKnowledgeLanguage?: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"];
+  readonly permissionMode?: AgentRuntimePolicyContext["authority"]["permissionMode"];
+  readonly permissionPolicyRevision?: number;
   readonly speechInputAvailable?: boolean;
   readonly embeddingModelInstalled?: boolean;
   readonly lexicalSearchAvailable?: boolean;
@@ -44,6 +47,13 @@ export function buildAgentRuntimePolicyContext(
       boundaryVerification: options.defaultProvider?.boundaryVerification ?? "unknown",
       cloudSendPolicy: options.cloudSendPolicy ?? "ordinary_allowed",
       modelRoutingMode: "default_model_only" as const
+    },
+    authority: {
+      firstPartyTurnAuthority: true as const,
+      highRiskConfirmation: "closed_list" as const,
+      permissionMode: options.permissionMode ?? "ask_every_time",
+      permissionPolicyRevision: options.permissionPolicyRevision ?? 0,
+      thirdPartyInheritance: false as const
     },
     confirmation: {
       safeAutoApplyThreshold: 0.9,
@@ -79,12 +89,12 @@ export function buildAgentRuntimePolicyContext(
   };
   const policyDigest = createHash("sha256").update(JSON.stringify(policyWithoutHash)).digest("hex");
 
-  return {
+  return AgentRuntimePolicyContextSchema.parse({
     policyContextId: `policy_${policyDigest.slice(0, 16)}`,
     policyHash: `sha256:${policyDigest}`,
     builtAt: new Date().toISOString(),
     ...policyWithoutHash
-  };
+  });
 }
 
 export function knowledgeLanguagePolicyInstruction(language: AgentRuntimePolicyContext["language"]): string {

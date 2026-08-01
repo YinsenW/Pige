@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AgentRuntimePolicyContextSchema,
   AGENT_CONVERSATION_HISTORY_PAGE_SIZE_MAX,
   AGENT_CONVERSATION_HISTORY_PREVIEW_MAX_CODE_POINTS,
   AGENT_CONVERSATION_HISTORY_QUERY_MAX_CODE_POINTS,
@@ -5579,6 +5580,79 @@ describe("schemas", () => {
         }
       }).sourceStorage.defaultStrategy
     ).toBe("copy_to_source_library");
+  });
+
+  it("strictly validates the typed Agent runtime authority snapshot", () => {
+    const context = {
+      schemaVersion: 1 as const,
+      policyContextId: "policy_0123456789abcdef",
+      builtAt: "2026-08-01T00:00:00.000Z",
+      jobId: "job_20260801_policy01",
+      policyHash: `sha256:${"a".repeat(64)}`,
+      vaultId: "vault_20260709_ab12cd",
+      sourceStorage: {
+        defaultStrategy: "copy_to_source_library" as const,
+        sourceAssetRootKind: "inside_vault" as const,
+        allowPerCaptureOverride: false,
+        linkStrategyEnabled: false as const
+      },
+      model: {
+        modelConfigured: false,
+        cloudBoundary: "unknown" as const,
+        boundaryVerification: "unknown" as const,
+        cloudSendPolicy: "ordinary_allowed" as const,
+        modelRoutingMode: "default_model_only" as const
+      },
+      authority: {
+        firstPartyTurnAuthority: true as const,
+        highRiskConfirmation: "closed_list" as const,
+        permissionMode: "remember_scoped_grants" as const,
+        permissionPolicyRevision: 7,
+        thirdPartyInheritance: false as const
+      },
+      language: {
+        appLocale: "en" as const,
+        generatedKnowledgeLanguage: "preserve_source" as const,
+        preserveSourceLanguage: true,
+        ocrLanguageHints: ["en"]
+      },
+      confirmation: {
+        safeAutoApplyThreshold: 0.9,
+        mutatingReviewThreshold: 0.7,
+        riskyChangeRequiresConfirmation: true
+      },
+      memory: {
+        vaultMemoryEnabled: true,
+        allowedMemoryScopes: ["preference", "correction", "workflow_lesson", "profile"] as const,
+        includeMemoryInBackup: true
+      },
+      retrieval: {
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        maxSnippetsForCloudSynthesis: 8
+      },
+      localCapabilities: {
+        localDatabase: "ready" as const,
+        parserToolchainReady: true,
+        ocrEngines: [] as const,
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        hiddenDownloadsAllowed: false as const,
+        excludeLowConfidenceOcrFromSummaries: true
+      }
+    };
+
+    expect(AgentRuntimePolicyContextSchema.parse(context).authority).toMatchObject({
+      permissionMode: "remember_scoped_grants",
+      permissionPolicyRevision: 7
+    });
+    expect(() => AgentRuntimePolicyContextSchema.parse({
+      ...context,
+      authority: { ...context.authority, permissionMode: "model_selected" }
+    })).toThrow();
+    expect(() => AgentRuntimePolicyContextSchema.parse({ ...context, rawSettingsPath: "/private/settings" }))
+      .toThrow();
   });
 
   it("freezes canonical BCP-47-or-unknown durable language truth", () => {

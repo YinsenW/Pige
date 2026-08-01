@@ -221,17 +221,27 @@ describe("PermissionBrokerService AR1 authority", () => {
       capability: "run_shell",
       actionInputHash: digest("next input")
     });
-    expect(broker.authorizeTurnAction({ ...request, binding: nextBinding }))
+    const restartedStore = new PermissionPolicyStore(
+      fixture.machineRoot,
+      vi.fn(),
+      () => "2026-07-29T12:00:01.000Z"
+    );
+    const restartedBroker = new PermissionBrokerService({
+      rootPath: fixture.machineRoot,
+      unsafeAllowUnfenced: true,
+      confirmations: new HighRiskConfirmationService(restartedStore)
+    });
+    expect(restartedBroker.authorizeTurnAction({ ...request, binding: nextBinding }))
       .toEqual({ status: "authorized", binding: nextBinding });
-    expect(store.read().receipts.at(-1)).toMatchObject({
+    expect(restartedStore.read().receipts.at(-1)).toMatchObject({
       decidedBy: "system",
       autoAllowedBy: "saved_grant",
       decision: "allow_once"
     });
 
-    const summary = store.summary(VAULT_ID);
-    expect(store.revokeGrant(summary.revision, summary.grants[0]!.grantId)).toBe("committed");
-    expect(broker.authorizeTurnAction({
+    const summary = restartedStore.summary(VAULT_ID);
+    expect(restartedStore.revokeGrant(summary.revision, summary.grants[0]!.grantId)).toBe("committed");
+    expect(restartedBroker.authorizeTurnAction({
       ...request,
       binding: binding({
         actorType: "skill",
