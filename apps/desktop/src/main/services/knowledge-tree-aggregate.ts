@@ -19,7 +19,7 @@ export type {
   KnowledgeTreeSnapshot
 } from "@pige/contracts";
 
-export type KnowledgeTreeRelationType = "has_topic" | "links_to" | "mentions_entity" | "related_to";
+export type KnowledgeTreeRelationType = "has_topic" | "links_to" | "mentions_entity" | "related_to" | "broader_than";
 
 export interface KnowledgeTreeRelationInput {
   readonly fromPageId: string;
@@ -40,6 +40,7 @@ export function buildKnowledgeTreeSnapshot(
   const topicIds = new Set(includedPages.filter((page) => page.pageType === "topic").map((page) => page.pageId));
   const conceptIds = new Set(includedPages.filter((page) => page.pageType === "concept").map((page) => page.pageId));
   const explicitTopics = groupRelationTargets(relations, "has_topic", pageById);
+  const explicitConceptParents = groupRelationTargets(relations, "broader_than", pageById);
   const linkedPages = mergeKnowledgeRelationGroups(
     groupRelationTargets(relations, "links_to", pageById),
     groupRelationTargets(relations, "related_to", pageById)
@@ -82,14 +83,18 @@ export function buildKnowledgeTreeSnapshot(
     return unassigned;
   };
 
+  const conceptParentById = chooseStructuralParents(conceptIds, explicitConceptParents, pageById);
   for (const conceptId of sortPageIds(conceptIds, pageById)) {
     const node = nodes.get(conceptId);
+    const conceptCandidates = relationCandidates(explicitConceptParents.get(conceptId), conceptIds, pageById);
     const explicitCandidates = relationCandidates(explicitTopics.get(conceptId), topicIds, pageById);
     const linkedCandidates = relationCandidates(linkedPages.get(conceptId), topicIds, pageById);
     const candidates = explicitCandidates.length > 0 ? explicitCandidates : linkedCandidates;
-    const parentId = candidates[0];
+    const parentId = conceptParentById.get(conceptId) ?? candidates[0];
     (parentId ? nodes.get(parentId) : requireUnassigned())?.childIds.add(conceptId);
-    for (const candidate of candidates.slice(1)) node?.relatedParentPageIds.add(candidate);
+    for (const candidate of [...conceptCandidates, ...candidates]) {
+      if (candidate !== parentId) node?.relatedParentPageIds.add(candidate);
+    }
   }
 
   for (const page of includedPages) {
@@ -165,6 +170,23 @@ function chooseTopicParents(
     for (const candidate of relationCandidates(explicitTopics.get(topicId), topicIds, pageById)) {
       if (candidate !== topicId && !wouldCreateCycle(topicId, candidate, parentById)) {
         parentById.set(topicId, candidate);
+        break;
+      }
+    }
+  }
+  return parentById;
+}
+
+function chooseStructuralParents(
+  ids: ReadonlySet<string>,
+  relationTargets: ReadonlyMap<string, ReadonlySet<string>>,
+  pageById: ReadonlyMap<string, LibraryPageSummary>
+): ReadonlyMap<string, string> {
+  const parentById = new Map<string, string>();
+  for (const id of sortPageIds(ids, pageById)) {
+    for (const candidate of relationCandidates(relationTargets.get(id), ids, pageById)) {
+      if (candidate !== id && !wouldCreateCycle(id, candidate, parentById)) {
+        parentById.set(id, candidate);
         break;
       }
     }

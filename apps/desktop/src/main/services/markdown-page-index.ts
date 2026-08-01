@@ -33,6 +33,7 @@ export interface MarkdownPageKnowledgeFields {
   readonly relatedPageIds: readonly string[];
   readonly claimContradicts: readonly string[];
   readonly questionAnswers: readonly string[];
+  readonly conceptParents: readonly string[];
 }
 export interface MarkdownPageScanResult {
   readonly pages: readonly MarkdownPageRecord[];
@@ -321,6 +322,9 @@ function readMarkdownPageRecord(
         : [],
       questionAnswers: summary.pageType === "question"
         ? readNestedPageIds(parsed.raw, "question", "answered_by")
+        : [],
+      conceptParents: summary.pageType === "concept"
+        ? readNestedPageIds(parsed.raw, "concept", "parent_concepts")
         : []
     }
   } : undefined;
@@ -498,7 +502,7 @@ function sanitizeKnowledgeRefs(values: readonly string[] | undefined): readonly 
   return Array.from(new Set(normalized)).slice(0, 64);
 }
 
-function readNestedPageIds(raw: string, section: "claim" | "question", field: string): readonly string[] {
+function readNestedPageIds(raw: string, section: "claim" | "question" | "concept", field: string): readonly string[] {
   const lines = raw.split(/\r?\n/u);
   const starts = lines.flatMap((line, index) => line === `${section}:` ? [index] : []);
   if (starts.length !== 1) return [];

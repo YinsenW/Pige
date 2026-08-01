@@ -308,6 +308,12 @@ import type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteConceptParentItem,
+  NoteConceptParentsSummary,
+  NoteSearchConceptParentsRequest,
+  NoteSearchConceptParentsResult,
+  NoteChangeConceptParentRequest,
+  NoteChangeConceptParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -758,6 +764,12 @@ export type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteConceptParentItem,
+  NoteConceptParentsSummary,
+  NoteSearchConceptParentsRequest,
+  NoteSearchConceptParentsResult,
+  NoteChangeConceptParentRequest,
+  NoteChangeConceptParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -1770,7 +1782,7 @@ export interface LibraryRelatedRequest {
 export interface LibraryRelatedPage {
   readonly summary: LibraryPageSummary;
   readonly relation: "outgoing" | "backlink";
-  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "answers";
+  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "answers" | "broader_than";
   readonly target: string;
 }
 
@@ -2534,6 +2546,12 @@ export interface PigeDesktopApi {
     readonly changeClaimContradiction: (
       request: NoteChangeClaimContradictionRequest
     ) => Promise<NoteChangeClaimContradictionResult>;
+    readonly searchConceptParents: (
+      request: NoteSearchConceptParentsRequest
+    ) => Promise<NoteSearchConceptParentsResult>;
+    readonly changeConceptParent: (
+      request: NoteChangeConceptParentRequest
+    ) => Promise<NoteChangeConceptParentResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
     readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;

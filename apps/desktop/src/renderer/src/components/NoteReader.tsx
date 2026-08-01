@@ -9,6 +9,8 @@ import type {
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest, NoteChangeClaimContradictionResult,
+  NoteSearchConceptParentsRequest, NoteSearchConceptParentsResult,
+  NoteChangeConceptParentRequest, NoteChangeConceptParentResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -30,6 +32,7 @@ import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelat
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
+import { ReaderConceptParents } from "./ReaderConceptParents";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 
 function readerSelectionEndpoint(
@@ -101,6 +104,12 @@ export function NoteReader(props: {
   readonly onChangeClaimContradiction?: (
     request: NoteChangeClaimContradictionRequest
   ) => Promise<NoteChangeClaimContradictionResult>;
+  readonly onSearchConceptParents?: (
+    request: NoteSearchConceptParentsRequest
+  ) => Promise<NoteSearchConceptParentsResult>;
+  readonly onChangeConceptParent?: (
+    request: NoteChangeConceptParentRequest
+  ) => Promise<NoteChangeConceptParentResult>;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -903,6 +912,11 @@ export function NoteReader(props: {
           onCommitted={props.onQuestionStateChanged}
           t={props.t}
         />
+      ) : null}
+      {props.activeVaultId && props.onSearchConceptParents && props.onChangeConceptParent && props.onQuestionStateChanged ? (
+        <ReaderConceptParents activeVaultId={props.activeVaultId} note={props.note}
+          search={props.onSearchConceptParents} change={props.onChangeConceptParent}
+          onCommitted={props.onQuestionStateChanged} t={props.t} />
       ) : null}
       <ReaderInlineReferenceSurface
         ref={markdownBodyRef}

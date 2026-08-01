@@ -140,7 +140,7 @@ export class NoteMarkdownEditorRedoService {
     );
     if (
       !validateActivityMarkdown(after, binding.pageId) ||
-      !preservesEditableMarkdownPageOwnership(before, after, true, true)
+      !preservesEditableMarkdownPageOwnership(before, after, true, true, true)
     ) {
       throw new Error("The Markdown Redo after-image is invalid.");
     }

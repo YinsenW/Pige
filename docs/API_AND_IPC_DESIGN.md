@@ -532,6 +532,13 @@ authoritative render only after the new state is durable. Stale, missing, inelig
 outcomes are body/path-free; Activity, Undo, Redo, and restart reuse the existing `update_page`
 lifecycle.
 
+`notes.searchConceptParents` and `notes.changeConceptParent` own the bounded concept hierarchy
+shortcut. Search returns only active concept ID/title/update identity. Change binds current
+Vault/concept/render/revision plus one exact broader concept and `add | remove`; Main alone edits
+`concept.parent_concepts`, returns an authoritative render after commit, and rebuilds narrower
+backlinks/Knowledge Tree from that single durable direction. Closed outcomes are path/body-free and
+retain Reader state; the existing `update_page` Activity lifecycle owns Undo, Redo, and restart.
+
 Reader reference query contract:
 
 - `notes.openSourceReference` accepts exact request/vault/page/render/source identity and returns

@@ -181,6 +181,10 @@ import {
   NoteRevealGeneratedRequestSchema,
   NoteRevealGeneratedResultSchema,
   NoteRenderResultSchema,
+  NoteSearchConceptParentsRequestSchema,
+  NoteSearchConceptParentsResultSchema,
+  NoteChangeConceptParentRequestSchema,
+  NoteChangeConceptParentResultSchema,
   NoteOpenSearchMatchRequestSchema,
   NoteOpenSearchMatchResultSchema,
   NoteArchiveCurrentRequestSchema,
@@ -5164,6 +5168,26 @@ describe("schemas", () => {
       status: "applied",
       canUndo: true
     })).toMatchObject({ kind: "trash_page", canUndo: true });
+  });
+
+  it("keeps concept hierarchy search and mutation renderer-safe and revision-fenced", () => {
+    const identity = { apiVersion: 1 as const, requestId: "conceptparentreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_concepts", currentPageId: "page_20260801_concept01",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    const item = { pageId: "page_20260801_concept02", title: "Broader concept",
+      updatedAt: "2026-08-01T11:00:00.000Z" };
+    const search = { ...identity, query: "broader" };
+    expect(NoteSearchConceptParentsRequestSchema.parse(search)).toEqual(search);
+    expect(NoteSearchConceptParentsResultSchema.parse({ ...search, status: "ready", candidates: [item] }))
+      .toMatchObject({ status: "ready", candidates: [item] });
+    const add = { ...identity, action: "add" as const, targetPageId: item.pageId,
+      expectedTargetUpdatedAt: item.updatedAt };
+    expect(NoteChangeConceptParentRequestSchema.parse(add)).toEqual(add);
+    expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, localPath: "/private/concept.md" })).toThrow();
+    expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
+    expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, action: "remove" })).toThrow();
+    expect(NoteChangeConceptParentResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("keeps Markdown editor identity revision-fenced and drafts exact", () => {

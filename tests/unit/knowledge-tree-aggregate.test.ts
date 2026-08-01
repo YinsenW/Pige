@@ -8,6 +8,7 @@ import {
   type KnowledgeTreeNode
 } from "../../apps/desktop/src/main/services/knowledge-tree-aggregate";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
+import { scanMarkdownPages } from "../../apps/desktop/src/main/services/markdown-page-index";
 
 const tempRoots: string[] = [];
 
@@ -136,6 +137,22 @@ describe("Knowledge Tree aggregate", () => {
     fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
 
     expect(service.knowledgeTree(vaultPath)).toEqual(before);
+  });
+
+  it("derives a deterministic concept hierarchy and narrower backlink from parent_concepts", () => {
+    const vaultPath = makeVaultRoot();
+    writePage(vaultPath, "wiki/concepts/broad.md", { id: "page_20260801_conceptbroad", title: "Broad",
+      type: "concept" });
+    writePage(vaultPath, "wiki/concepts/narrow.md", { id: "page_20260801_conceptnarrow", title: "Narrow",
+      type: "concept", parentConcepts: ["page_20260801_conceptbroad"] });
+    expect(scanMarkdownPages(vaultPath).pages.find(({ summary }) => summary.title === "Narrow")?.knowledge.conceptParents)
+      .toEqual(["page_20260801_conceptbroad"]);
+    const service = new LocalDatabaseService(); service.rebuild(vaultPath);
+    const snapshot = service.knowledgeTree(vaultPath);
+    const unassigned = snapshot?.roots.find((root) => root.title === "Unassigned");
+    expect(childNamed(unassigned, "Broad")?.children.map((child) => child.title)).toEqual(["Narrow"]);
+    expect(service.relatedPages(vaultPath, { pageId: "page_20260801_conceptbroad" })?.backlinks)
+      .toMatchObject([{ relationType: "broader_than", summary: { pageId: "page_20260801_conceptnarrow" } }]);
   });
 
   it("rebuilds entity branches and typed explicit relationships from durable frontmatter", () => {
@@ -329,6 +346,7 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly topics?: readonly string[];
   readonly entities?: readonly string[];
   readonly relatedPageIds?: readonly string[];
+  readonly parentConcepts?: readonly string[];
   readonly sourceIds?: readonly string[];
   readonly body?: string;
 }): void {
@@ -348,8 +366,10 @@ topics: ${JSON.stringify(input.topics ?? [])}
 entities: ${JSON.stringify(input.entities ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 related_page_ids: ${JSON.stringify(input.relatedPageIds ?? [])}
----
-
+${input.type === "concept" ? `concept:
+  parent_concepts: ${JSON.stringify(input.parentConcepts ?? [])}
+  child_concepts: []
+` : ""}---
 ${input.body ?? `# ${input.title}`}
 `, "utf8");
 }

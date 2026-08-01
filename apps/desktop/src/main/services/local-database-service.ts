@@ -393,7 +393,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
             UNION ALL
             SELECT p.*, e.relation_type, p.title AS target
             FROM relation_edges e JOIN pages p ON p.page_id = e.to_page_id
-            WHERE e.from_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers')
+            WHERE e.from_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
           ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
           LIMIT ?
         `
@@ -408,7 +408,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
             UNION ALL
             SELECT p.*, e.relation_type, p.title AS target
             FROM relation_edges e JOIN pages p ON p.page_id = e.from_page_id
-            WHERE e.to_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers')
+            WHERE e.to_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
           ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
           LIMIT ?
         `
@@ -420,7 +420,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
           `SELECT COUNT(*) AS count FROM (
             SELECT 'links_to', to_page_id FROM links WHERE from_page_id = ? AND to_page_id IS NOT NULL
             UNION SELECT relation_type, to_page_id FROM relation_edges
-              WHERE from_page_id = ? AND relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers')
+              WHERE from_page_id = ? AND relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
                 AND to_page_id IN (SELECT page_id FROM pages)
           )`,
           [request.pageId, request.pageId]
@@ -428,7 +428,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
         totalBacklinks: readCount(db, `SELECT COUNT(*) AS count FROM (
           SELECT 'links_to', from_page_id FROM backlinks WHERE to_page_id = ?
           UNION SELECT relation_type, from_page_id FROM relation_edges
-            WHERE to_page_id = ? AND relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers')
+            WHERE to_page_id = ? AND relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
               AND from_page_id IN (SELECT page_id FROM pages)
         )`, [request.pageId, request.pageId]),
         invalidPageCount: readInvalidPageCount(db),
@@ -448,7 +448,7 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       const relations = db.prepare(`
         SELECT from_page_id, to_page_id, relation_type
         FROM relation_edges
-        WHERE relation_type IN ('has_topic', 'links_to', 'mentions_entity', 'related_to')
+        WHERE relation_type IN ('has_topic', 'links_to', 'mentions_entity', 'related_to', 'broader_than')
           AND from_page_id IS NOT NULL
           AND to_page_id IS NOT NULL
         ORDER BY relation_type ASC, from_page_id ASC, to_page_id ASC
@@ -1410,7 +1410,7 @@ function rowToRelatedPage(row: Record<string, unknown>, relation: LibraryRelated
   return {
     summary: rowToSummary(row),
     relation,
-    relationType: ["related_to", "mentions_entity", "contradicts", "answers"].includes(String(row.relation_type))
+    relationType: ["related_to", "mentions_entity", "contradicts", "answers", "broader_than"].includes(String(row.relation_type))
       ? row.relation_type as LibraryRelatedPage["relationType"] : "links_to",
     target: String(row.target ?? "")
   };

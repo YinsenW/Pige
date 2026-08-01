@@ -768,6 +768,11 @@ Model Providers
 
 Knowledge Tree shows growth/connections, not paths; `docs/KNOWLEDGE_MODEL_AND_LINKING.md` owns graph data/review/rebuild. Its sidebar heading, Refresh, totals, and Tree/Network/List views share a body-free aggregate while view/search/focus/camera stay renderer-local. Domain/topic thickness and size show weight; deeper size uses relative density; exact leaf count never depth; fragment-plus-source density uses fixed `0`, `1–2`, `3–5`, `6+` color bands; `needs_review` stays outlined. Meters, detail, and screen-reader text state exact weight/fragment/source/leaf/density so visuals are never sole explanation. Bounded outgoing/backlink IDs open confined Reader; drift/failure preserves tree/focus, Back restores focus, synthetic topics stay disabled, opaque IDs read `Source evidence`. Localized loading/ready/empty/degraded/error work; graph editing, manual taxonomy, health workflows, force/advanced analytics remain open.
 
+An active Concept Reader includes one progressive-disclosure **Broader concepts** control. Search
+lists bounded current concepts; Add/Remove is single-flight, preserves focus and the visible Reader
+on stale/failure, and adopts only Main's authoritative committed render. Narrower concepts appear
+through derived backlinks and the next Knowledge Tree rebuild; users never maintain both directions.
+
 ## 12. Knowledge Health
 
 Settings > Index & Maintenance owns the report. Eligible broken links offer Remove/Retarget;
