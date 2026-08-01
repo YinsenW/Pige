@@ -525,8 +525,8 @@ export class SkillRegistryService {
       ...(loaded.manifest.author ? { author: loaded.manifest.author } : {}),
       ...(loaded.manifest.license ? { license: loaded.manifest.license } : {}),
       canEnable: !record.enabled && (loaded.manifest.kind === "pure" || isSupportedExternalWebRuntime(loaded.manifest)),
-      canUninstall: loaded.manifest.kind === "pure",
-      canExport: loaded.manifest.kind === "pure",
+      canUninstall: this.#isLifecycleEligible(record),
+      canExport: this.#isLifecycleEligible(record),
       canUpdate: canUpdateSkill(loaded.manifest, externalDisclosure),
       ...(loaded.manifest.kind === "external_web"
         ? { ...externalDisclosure!, ...(loaded.manifest.runtime ? { runtime: loaded.manifest.runtime } : {}) }
@@ -536,9 +536,9 @@ export class SkillRegistryService {
   #isLifecycleEligible(record: SkillRegistryRecord): boolean {
     try {
       const loaded = this.#readManifest(record.id);
-      return record.trust === "user_confirmed" && loaded.sha256 === record.manifestSha256 &&
-        loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
-        loaded.manifest.scope === this.#scope && loaded.manifest.kind === "pure";
+      const lifecycleKind = loaded.manifest.kind === "pure" || (this.#scope === "machine_local" && loaded.manifest.kind === "external_web" && Boolean(requireInstalledExternalDisclosure(loaded)));
+      return record.trust === "user_confirmed" && lifecycleKind && loaded.sha256 === record.manifestSha256 &&
+        loaded.manifest.id === record.id && loaded.manifest.version === record.version && loaded.manifest.scope === this.#scope;
     } catch {
       return false;
     }

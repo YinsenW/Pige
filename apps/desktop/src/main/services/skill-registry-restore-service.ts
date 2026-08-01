@@ -192,12 +192,15 @@ export class SkillRegistryRestoreService {
       if (receipt.schemaVersion !== 2 || receipt.state !== "committed" || installedIds.has(receipt.skillId)) continue;
       try {
         const candidate = this.#readCandidate(receipt);
-        if (!candidate || candidate.installReceipt.enabled !== receipt.record.enabled) continue;
+        if (!candidate) continue;
         const source = candidate.snapshot.bytes.toString("utf8");
         if (source.includes("\uFFFD")) continue;
         const manifest = this.#ports.parseManifest(source);
+        const lifecycleKind = manifest.kind === "pure" ||
+          (this.#ports.scope === "machine_local" && manifest.kind === "external_web" &&
+            hasBoundExternalInstallDisclosure(manifest, candidate.installReceipt));
         if (manifest.id !== receipt.skillId || manifest.version !== receipt.record.version ||
-          manifest.kind !== "pure" || manifest.scope !== this.#ports.scope) continue;
+          !lifecycleKind || manifest.scope !== this.#ports.scope) continue;
         candidates.push({
           candidate,
           projection: {
@@ -205,7 +208,7 @@ export class SkillRegistryRestoreService {
             skillId: manifest.id,
             name: manifest.name,
             version: manifest.version,
-            kind: manifest.kind,
+            kind: manifest.kind === "external_web" ? "external_web" : "pure",
             scope: manifest.scope,
             uninstalledAt: receipt.createdAt,
             canRestore: true
@@ -368,6 +371,15 @@ function sameRestoreIntent(left: SkillRestoreReceipt, right: SkillRestoreReceipt
     left.skillId === right.skillId && left.expectedRegistryRevision === right.expectedRegistryRevision &&
     left.uninstallRequestId === right.uninstallRequestId && left.bundleSha256 === right.bundleSha256 &&
     left.installReceiptSha256 === right.installReceiptSha256 && stableJson(left.record) === stableJson(right.record);
+}
+
+function hasBoundExternalInstallDisclosure(manifest: SkillManifest, receipt: SkillInstallReceipt): boolean {
+  if (manifest.kind !== "external_web" || manifest.scope !== "machine_local" ||
+    !receipt.source || !receipt.warnings || receipt.enabled) return false;
+  const remote = receipt.source === "https";
+  return remote === Boolean(receipt.sourceUrl) &&
+    (!remote || (receipt.sourceUrl === manifest.sourceUrl && receipt.warnings.includes("untrusted_remote_source"))) &&
+    (remote || !receipt.warnings.includes("untrusted_remote_source"));
 }
 
 function skillRestoreContextId(receipt: SkillUninstallReceiptV2): string {

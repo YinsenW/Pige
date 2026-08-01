@@ -151,6 +151,56 @@ describe("SkillRegistryService", () => {
     expect(service.enabledExternalWebRuntimes()).toEqual([]);
   });
 
+  it("exports, trash-uninstalls, and restart-restores an External/Web Skill disabled", () => {
+    const root = createRoot();
+    const source = manifest({
+      id: "recoverable-web",
+      name: "Recoverable Web",
+      version: "1.0.0",
+      description: "Read one reviewed public origin and remain recoverable.",
+      kind: "external_web",
+      capabilities: ["read_current_source", "external_network"],
+      extra: [
+        "dataBoundary: [local, network]",
+        "runtime:",
+        "  adapter: pige_readonly_https_v1",
+        "  origin: https://api.example.com"
+      ],
+      body: "## Procedure\n\nRead only the reviewed HTTPS origin."
+    });
+    seedInstalledSkill(root, source, false);
+    const service = new SkillRegistryService(root);
+    expect(readySummary(service).skills[0]).toMatchObject({
+      id: "recoverable-web", canEnable: true, canUninstall: true, canExport: true
+    });
+
+    const exportPath = path.join(fs.realpathSync.native(root), "recoverable-web-SKILL.md");
+    expect(service.export({ ...lifecycleRequest("recoverable-web", 3),
+      requestId: "skill_lifecycle_request_externalexport001" }, exportPath)).toMatchObject({ status: "exported" });
+    expect(fs.readFileSync(exportPath, "utf8")).toBe(source);
+
+    expect(service.enable({ ...lifecycleRequest("recoverable-web", 3),
+      requestId: "skill_lifecycle_request_externalenable001" })).toMatchObject({ status: "committed" });
+    const uninstallRequest = { ...lifecycleRequest("recoverable-web", 4),
+      requestId: "skill_lifecycle_request_externaltrash0001" };
+    expect(service.uninstall(uninstallRequest)).toMatchObject({ status: "committed", registry: {
+      revision: 5, skills: [], restorableSkills: [{ skillId: "recoverable-web", kind: "external_web" }]
+    } });
+
+    const restarted = new SkillRegistryService(root, { recoverOrphanedMutationLock: true });
+    const candidate = readySummary(restarted).restorableSkills[0]!;
+    expect(restarted.restore({ apiVersion: 1,
+      requestId: "skill_lifecycle_request_externalrestore001",
+      activeVaultId: "vault_20260728_skilltest", restoreContextId: candidate.restoreContextId,
+      skillId: candidate.skillId, expectedRegistryRevision: 5 })).toMatchObject({ status: "committed", registry: {
+      revision: 6, restorableSkills: [], skills: [{
+        id: "recoverable-web", kind: "external_web", enabled: false,
+        canEnable: true, canUninstall: true, canExport: true
+      }]
+    } });
+    expect(new SkillRegistryService(root).enabledExternalWebRuntimes()).toEqual([]);
+  });
+
   it("rejects path and credential-shaped display metadata while allowing benign public URLs", () => {
     const root = createRoot();
     const unsafeSources = [
