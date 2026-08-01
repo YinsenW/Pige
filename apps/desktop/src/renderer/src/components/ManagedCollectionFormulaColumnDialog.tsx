@@ -77,7 +77,8 @@ export function ManagedCollectionFormulaColumnDialog(props: {
     triggerRef.current?.focus();
   }, [busy, draft, notice, props.snapshot.revisionId]);
 
-  const eligibleColumns = props.snapshot.columns.filter((column) => column.canUseAsFormulaOperand);
+  const editTargetColumnId = draft?.mode === "edit" ? draft.columnId : undefined;
+  const eligibleColumns = formulaOperandCandidates(props.snapshot, editTargetColumnId);
   const beginDraft = (): void => {
     if (props.blocked || activeRequestRef.current !== null || !props.snapshot.canAddFormulaColumn) return;
     const firstColumn = eligibleColumns[0];
@@ -276,14 +277,41 @@ export function ManagedCollectionFormulaColumnDialog(props: {
 
 function formulaColumnOptions(
   eligibleColumns: CollectionSnapshot["columns"],
-  selectedColumnId: string,
-  snapshot: CollectionSnapshot
+  _selectedColumnId: string,
+  _snapshot: CollectionSnapshot
 ): React.JSX.Element[] {
-  const selected = snapshot.columns.find((column) => column.columnId === selectedColumnId);
-  const columns = selected && !eligibleColumns.some((column) => column.columnId === selected.columnId)
-    ? [selected, ...eligibleColumns]
-    : eligibleColumns;
-  return columns.map((column) => <option value={column.columnId} key={column.columnId}>{column.label}</option>);
+  return eligibleColumns.map((column) => <option value={column.columnId} key={column.columnId}>{column.label}</option>);
+}
+
+function formulaOperandCandidates(
+  snapshot: CollectionSnapshot,
+  editedColumnId?: string
+): CollectionSnapshot["columns"] {
+  return snapshot.columns.filter((column) => column.canUseAsFormulaOperand &&
+    column.columnId !== editedColumnId &&
+    (editedColumnId === undefined || !formulaDependsOn(snapshot, column.columnId, editedColumnId)));
+}
+
+function formulaDependsOn(snapshot: CollectionSnapshot, candidateId: string, targetId: string): boolean {
+  const columns = new Map(snapshot.columns.map((column) => [column.columnId, column]));
+  const pending = [candidateId];
+  const visited = new Set<string>();
+  while (pending.length > 0) {
+    const columnId = pending.pop()!;
+    if (columnId === targetId) return true;
+    if (visited.has(columnId)) continue;
+    visited.add(columnId);
+    const calculation = columns.get(columnId)?.calculation;
+    const expression = calculation?.kind === "pige_numeric_formula" ? calculation.expression : undefined;
+    if (!expression) continue;
+    const nodes: DatasetPigeFormulaExpression[] = [expression];
+    while (nodes.length > 0) {
+      const node = nodes.pop()!;
+      if (node.kind === "column") pending.push(node.columnId);
+      if (node.kind === "binary") nodes.push(node.right, node.left);
+    }
+  }
+  return false;
 }
 
 function editableFormula(

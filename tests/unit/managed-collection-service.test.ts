@@ -267,7 +267,7 @@ describe("ManagedCollectionService", () => {
           expect.objectContaining({ columnId: countColumn.id, canTrash: false, canUseAsFormulaOperand: true }),
           expect.objectContaining({
             columnId: expect.any(String), label: "Double count", logicalType: "number",
-            canRename: true, canTrash: true, canUseAsFormulaOperand: false,
+            canRename: true, canTrash: true, canUseAsFormulaOperand: true,
             calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: request.expression }
           })
         ])
@@ -428,6 +428,84 @@ describe("ManagedCollectionService", () => {
       kind: "collection_formula_update_undo", tableId: table.id, columnId: added.columnId,
       undoOfOperationId: updated.operationId
     });
+  });
+
+  it("evaluates nested formulas in stable dependency order and rejects indirect cycles before effect", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const countColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const firstRowId = readFirstRowId(initial.payloadPath);
+    const upstream = await service.addFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_nestedupstream001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Twice count", expression: { kind: "binary", operator: "multiply",
+        left: { kind: "column", columnId: countColumn.id }, right: { kind: "literal", value: 2 } }
+    });
+    if (upstream.status !== "committed") throw new Error("Upstream formula setup did not commit");
+    const downstream = await service.addFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_nesteddownstream01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: upstream.snapshot.revisionId,
+      label: "Twice plus one", expression: { kind: "binary", operator: "add",
+        left: { kind: "column", columnId: upstream.columnId }, right: { kind: "literal", value: 1 } }
+    });
+    expect(downstream).toMatchObject({ status: "committed", snapshot: { columns: expect.arrayContaining([
+      expect.objectContaining({ columnId: upstream.columnId, canUseAsFormulaOperand: true, canTrash: false }),
+      expect.objectContaining({ columnId: expect.any(String), canUseAsFormulaOperand: true, canTrash: true })
+    ]) } });
+    if (downstream.status !== "committed") throw new Error("Downstream formula did not commit");
+    expect(required(downstream.snapshot.rows.find((row) => row.rowId === firstRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: upstream.columnId, value: 6, editable: false, readOnlyReason: "formula" },
+      { columnId: downstream.columnId, value: 7, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    await expect(service.updateFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_nestedcycleone01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, columnId: upstream.columnId,
+      expectedRevisionId: downstream.snapshot.revisionId,
+      expression: { kind: "binary", operator: "add", left: { kind: "column", columnId: downstream.columnId },
+        right: { kind: "literal", value: 1 } }
+    })).resolves.toMatchObject({ status: "invalid", reason: "ineligible_operand" });
+
+    const edited = await service.editCell({
+      apiVersion: 1, requestId: "collection_request_nestedbaseedit001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, rowId: firstRowId,
+      columnId: countColumn.id, expectedRevisionId: downstream.snapshot.revisionId, value: 5
+    });
+    if (edited.status !== "committed") throw new Error("Nested source edit did not commit");
+    const afterEdit = await service.open({ apiVersion: 1, requestId: "collection_request_nestedopenone001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id });
+    if (afterEdit.status !== "ready") throw new Error("Nested formula Collection did not reopen");
+    expect(required(afterEdit.snapshot.rows.find((row) => row.rowId === firstRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: upstream.columnId, value: 10, editable: false, readOnlyReason: "formula" },
+      { columnId: downstream.columnId, value: 11, editable: false, readOnlyReason: "formula" }
+    ]));
+
+    const updated = await service.updateFormulaColumn({
+      apiVersion: 1, requestId: "collection_request_nestedupdateone01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, columnId: upstream.columnId,
+      expectedRevisionId: edited.revisionId,
+      expression: { kind: "binary", operator: "multiply", left: { kind: "column", columnId: countColumn.id },
+        right: { kind: "literal", value: 3 } }
+    });
+    if (updated.status !== "committed") throw new Error("Nested upstream update did not commit");
+    expect(required(updated.snapshot.rows.find((row) => row.rowId === firstRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: upstream.columnId, value: 15, editable: false, readOnlyReason: "formula" },
+      { columnId: downstream.columnId, value: 16, editable: false, readOnlyReason: "formula" }
+    ]));
+    const activity = new KnowledgeActivityService(port, service);
+    const undo = await activity.undo({ operationId: updated.operationId, expectedRevisionId: updated.snapshot.revisionId });
+    if (undo.status !== "undone") throw new Error("Nested formula update Undo did not commit");
+    const restored = await service.open({ apiVersion: 1, requestId: "collection_request_nestedundoopen001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id });
+    if (restored.status !== "ready") throw new Error("Nested formula Undo did not reopen");
+    expect(required(restored.snapshot.rows.find((row) => row.rowId === firstRowId)).cells).toEqual(expect.arrayContaining([
+      { columnId: upstream.columnId, value: 10, editable: false, readOnlyReason: "formula" },
+      { columnId: downstream.columnId, value: 11, editable: false, readOnlyReason: "formula" }
+    ]));
   });
 
   it("adds nullable columns across all editable types, adopts replay, and restores the prior schema through Activity", async () => {
