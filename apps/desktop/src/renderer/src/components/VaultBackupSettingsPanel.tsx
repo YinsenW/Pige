@@ -811,7 +811,11 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           eligible={props.vault.managedCopyRoot.canConfigure === true}
           disabled={props.busy || relocationBusy || Boolean(revealTarget)}
           labels={{
-            action: props.t(props.vault.managedCopyRoot.mode === "external_binding" ? "vaultSettings.managedCopyRoot.change" : "vaultSettings.managedCopyRoot.choose"),
+            action: props.t(props.vault.managedCopyRoot.mode === "external_binding"
+              ? props.vault.managedCopyRoot.availability === "available"
+                ? "vaultSettings.managedCopyRoot.change"
+                : "vaultSettings.managedCopyRoot.reconnect"
+              : "vaultSettings.managedCopyRoot.choose"),
             pending: props.t("vaultSettings.managedCopyRoot.choosing"),
             selected: props.t("vaultSettings.managedCopyRoot.configured"),
             stale: props.t("vaultSettings.managedCopyRoot.stale"),

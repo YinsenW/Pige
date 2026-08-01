@@ -849,6 +849,45 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("offers an explicit pathless reconnect for an unavailable external managed-copy root", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const activeVault = harness.onboarding.activeVault!;
+    harness.onboarding = {
+      ...harness.onboarding,
+      activeVault: {
+        ...activeVault,
+        sourceAssetRootKind: "external_binding",
+        sourceAssetRootDisplay: "External folder",
+        managedCopyRoot: {
+          ...activeVault.managedCopyRoot,
+          mode: "external_binding",
+          availability: "missing"
+        }
+      }
+    };
+    harness.configureManagedCopyRoot = async (request) => {
+      harness.configureManagedCopyRootRequests.push(request);
+      return {
+        ...request,
+        status: "configured",
+        summary: { activeVaultId: request.activeVaultId, sourceStorageRevision: `ssrev_${"d".repeat(64)}`,
+          mode: "external_binding", availability: "available", canConfigure: true }
+      };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+    await openVaultSettings(dom, container);
+
+    expect(container.textContent).toContain("External folder · Folder unavailable");
+    const reconnect = button(container, "Reconnect folder");
+    await click(dom, reconnect);
+    await waitFor(dom, () => harness.configureManagedCopyRootRequests.length === 1);
+    expect(JSON.stringify(harness.configureManagedCopyRootRequests[0])).not.toMatch(/path|rootId|sourceId/u);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reconnects only an eligible managed-source dependency and resumes through polling without retry", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());

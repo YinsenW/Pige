@@ -23,6 +23,7 @@ import {
 } from "../../apps/desktop/src/main/services/vault-layout";
 import {
   VaultService,
+  type VaultManagedCopyRootPort,
   type VaultWriterLeaseFactory,
   type VaultWriterLeasePort
 } from "../../apps/desktop/src/main/services/vault-service";
@@ -112,6 +113,44 @@ describe("VaultService writer lease lifecycle", () => {
       expectedSourceStorageRevision: current.managedCopyRoot.sourceStorageRevision
     })).resolves.toMatchObject({ status: "stale" });
     expect(electronMocks.showOpenDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconnects a missing external default instead of minting a replacement binding", async () => {
+    const root = makeTempRoot();
+    const vault = makeVault(root, "ReconnectRoot");
+    const configPath = path.join(vault.path, ".pige", "config.json");
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as { sourceStorage: { sourceAssetRootKind: string } };
+    config.sourceStorage.sourceAssetRootKind = "external_binding";
+    fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+    const revision = `ssrev_${"c".repeat(64)}`;
+    let availability: "missing" | "available" = "missing";
+    const bindDefault = vi.fn();
+    const reconnectDefault = vi.fn(() => { availability = "available"; });
+    const managedRoots: VaultManagedCopyRootPort = {
+      summary: (vaultId, mode) => ({ activeVaultId: vaultId, sourceStorageRevision: revision, mode,
+        availability: mode === "inside_vault" ? "available" : availability, canConfigure: true }),
+      selection: () => availability === "available" ? { rootPath: path.join(root, "moved-sources") } : undefined,
+      bindDefault,
+      reconnectDefault
+    };
+    const service = trackService(new VaultService(makeSettingsStore(root), () => false, makeLeaseHarness().factory,
+      undefined, undefined, managedRoots));
+    service.openPath(vault.path);
+    const selectedDirectory = path.join(root, "moved-sources");
+    fs.mkdirSync(selectedDirectory);
+    electronMocks.getPath.mockReturnValue(root);
+    electronMocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [selectedDirectory] });
+
+    await expect(service.configureManagedCopyRoot({} as never, {
+      apiVersion: 1, requestId: "rootconfigreq_reconnectroot1", activeVaultId: vault.summary.vaultId,
+      expectedSourceStorageRevision: revision
+    })).resolves.toMatchObject({ status: "configured", summary: { availability: "available" } });
+    expect(reconnectDefault).toHaveBeenCalledWith({ vaultPath: vault.path, vaultId: vault.summary.vaultId,
+      selectedDirectory, expectedSourceStorageRevision: revision });
+    expect(bindDefault).not.toHaveBeenCalled();
+    expect(electronMocks.showOpenDialog).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      title: "Reconnect the existing source-copy folder"
+    }));
   });
   it("acquires a writer lease when creating, opening, and restoring the startup vault", async () => {
     const root = makeTempRoot();

@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "Autorisation requise",
   "vaultSettings.managedCopyRoot.choose": "Choisir un dossier",
   "vaultSettings.managedCopyRoot.change": "Changer de dossier",
+  "vaultSettings.managedCopyRoot.reconnect": "Reconnecter le dossier",
   "vaultSettings.managedCopyRoot.choosing": "Sélection du dossier…",
   "vaultSettings.managedCopyRoot.configured": "Stockage des sources mis à jour.",
   "vaultSettings.managedCopyRoot.stale": "Le stockage des sources a changé. Vérifiez-le, puis réessayez.",

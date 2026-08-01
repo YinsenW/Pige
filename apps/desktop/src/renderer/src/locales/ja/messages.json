@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "アクセス許可が必要です",
   "vaultSettings.managedCopyRoot.choose": "フォルダを選択",
   "vaultSettings.managedCopyRoot.change": "フォルダを変更",
+  "vaultSettings.managedCopyRoot.reconnect": "フォルダを再接続",
   "vaultSettings.managedCopyRoot.choosing": "フォルダを選択中…",
   "vaultSettings.managedCopyRoot.configured": "ソースストレージを更新しました。",
   "vaultSettings.managedCopyRoot.stale": "ソースストレージが変更されました。確認してもう一度お試しください。",

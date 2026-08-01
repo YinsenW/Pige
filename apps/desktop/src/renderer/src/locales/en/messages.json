@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "Permission needed",
   "vaultSettings.managedCopyRoot.choose": "Choose folder",
   "vaultSettings.managedCopyRoot.change": "Change folder",
+  "vaultSettings.managedCopyRoot.reconnect": "Reconnect folder",
   "vaultSettings.managedCopyRoot.choosing": "Choosing folder…",
   "vaultSettings.managedCopyRoot.configured": "Source storage updated.",
   "vaultSettings.managedCopyRoot.stale": "Source storage changed. Review it and try again.",

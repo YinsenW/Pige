@@ -2285,6 +2285,7 @@
   "vaultSettings.managedCopyRoot.permission_needed": "Zugriff erforderlich",
   "vaultSettings.managedCopyRoot.choose": "Ordner auswählen",
   "vaultSettings.managedCopyRoot.change": "Ordner ändern",
+  "vaultSettings.managedCopyRoot.reconnect": "Ordner erneut verbinden",
   "vaultSettings.managedCopyRoot.choosing": "Ordner wird ausgewählt…",
   "vaultSettings.managedCopyRoot.configured": "Quellspeicher aktualisiert.",
   "vaultSettings.managedCopyRoot.stale": "Der Quellspeicher wurde geändert. Prüfe ihn und versuche es erneut.",
