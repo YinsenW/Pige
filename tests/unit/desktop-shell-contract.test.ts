@@ -2350,11 +2350,13 @@ describe("desktop shell build contract", () => {
     expect(styles).toContain("overflow-wrap: anywhere");
   });
 
-  it("feeds runtime-owned parser, OCR, and search capabilities into Agent policy snapshots", () => {
+  it("feeds runtime-owned parser, OCR, speech-language, and search capabilities into Agent policy snapshots", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     expect(mainSource).toContain("const getAgentCapabilitySnapshot");
     expect(mainSource).toContain('parser.canParse("pdf_file")');
     expect(mainSource).toContain('getOcrService().canOcr("image_file")');
+    expect(mainSource).toContain("getDictationLanguagePreferenceService().preference()");
+    expect(mainSource).toContain("voiceInputLanguage: dictationLanguage.mode");
     expect(mainSource).toContain('lexicalSearchAvailable: localDatabaseStatus === "ready"');
     expect(mainSource).toContain("{ snapshot: getAgentCapabilitySnapshot }");
   });

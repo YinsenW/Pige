@@ -10,6 +10,7 @@ import {
   PigePolicyUpdateResultSchema,
   type OperationRecord,
   type PigePolicySummary,
+  type PigePolicyRevision,
   type PigePolicyUpdateRequest,
   type PigePolicyUpdateResult,
   type PigePolicyValidationIssue
@@ -60,6 +61,11 @@ export interface PigePolicyPreparedUpdate {
 }
 
 export type PigePolicyPrepareResult = PigePolicyPreparedUpdate | PigePolicyUpdateResult;
+
+export interface AgentPigePolicySnapshot {
+  readonly revision: PigePolicyRevision;
+  readonly markdown: string;
+}
 
 export class PigePolicyService {
   readonly #vault: PigePolicyVaultPort;
@@ -231,6 +237,20 @@ export function validatePolicy(markdown: string): readonly PigePolicyValidationI
   ];
   if (secretPatterns.some((pattern) => pattern.test(markdown))) issues.add("secret_like_content");
   return [...issues];
+}
+
+export function readPigePolicyForAgent(vaultPath: string): AgentPigePolicySnapshot {
+  try {
+    const bytes = readExact(policyPath(vaultPath), MAX_POLICY_BYTES);
+    const markdown = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (validatePolicy(markdown).length > 0) throw conflict();
+    return { revision: `pigepolicyrev_${digest(bytes)}`, markdown };
+  } catch {
+    throw new PigeDomainError(
+      "agent_runtime.policy_invalid",
+      "The active Vault PIGE.md policy is unavailable or invalid."
+    );
+  }
 }
 
 function canonicalPolicyBytes(markdown: string): Buffer {

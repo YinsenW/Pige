@@ -126,6 +126,66 @@ describe("agent ingest service", () => {
     }).hasDefaultModel()).toBe(false);
   });
 
+  it("blocks source-ingest model execution when local-only policy is bound to a cloud provider", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "Preserved source content must remain local.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(
+      path.join(vaultPath, ".pige/source-records"),
+      `${captured.sourceId}.json`
+    ));
+    const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    let runtimeCalls = 0;
+    const runtime = new CapturingModelClient(standardAgentOutput("Blocked policy"), () => {
+      runtimeCalls += 1;
+    });
+    const service = new AgentIngestService(makeModelPort(), runtime, {
+      snapshot: () => ({
+        localDatabaseStatus: "ready",
+        parserToolchainReady: true,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        excludeLowConfidenceOcrFromSummaries: true,
+        cloudSendPolicy: "local_only"
+      })
+    });
+
+    await expect(service.ingestSource(vaultPath, sourceRecord, job)).rejects.toMatchObject({
+      code: "model_provider.egress_blocked"
+    });
+    expect(runtimeCalls).toBe(0);
+  });
+
+  it("fails closed before a second ingest model turn when PIGE.md changes", async () => {
+    const { vaultPath, vault } = makeVault();
+    const captured = makeCapture(vaultPath, vault).submitText({
+      text: "Preserved policy-current source.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    const sourceRecord = readJson<SourceRecord>(findFile(
+      path.join(vaultPath, ".pige/source-records"), `${captured.sourceId}.json`
+    ));
+    const job = readJson<JobRecord>(findFile(path.join(vaultPath, ".pige/jobs"), `${captured.jobId}.json`));
+    const runtime = new CapturingModelClient(standardAgentOutput("Policy drift"), () => {
+      fs.appendFileSync(path.join(vaultPath, "PIGE.md"), "\n");
+    });
+
+    await expect(new AgentIngestService(makeModelPort(), runtime).ingestSource(vaultPath, sourceRecord, job))
+      .rejects.toMatchObject({ code: "permission.binding_changed" });
+    expect(runtime.callCount).toBe(1);
+    expect(fs.existsSync(generatedNoteFilePath(vaultPath, captured.sourceId))).toBe(false);
+  });
+
   it("prepares source tools for a Home-owned Pi turn without starting the legacy runtime", async () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
@@ -164,6 +224,10 @@ describe("agent ingest service", () => {
 
   it("turns a preserved source into a wiki note, index entry, and operation record without storing prompts or secrets", async () => {
     const { vaultPath, vault } = makeVault();
+    const policyPath = path.join(vaultPath, "PIGE.md");
+    fs.writeFileSync(policyPath, fs.readFileSync(policyPath, "utf8").replace(
+      "## Agent Review Rules", "## Agent Review Rules\n\n- Keep & <source-bound> edits attributable."
+    ), "utf8");
     const capture = makeCapture(vaultPath, vault);
     const captured = capture.submitText({
       text: "API_KEY=sk-test-source-secret-12345\n\nPige should summarize local-first knowledge capture.",
@@ -236,6 +300,7 @@ describe("agent ingest service", () => {
     expect(result.operationIds).toHaveLength(1);
     expect(modelClient.systemPrompt).toContain("newly generated durable knowledge in the configured app language de");
     expect(modelClient.systemPrompt).toContain("do not translate preserved source bodies");
+    expect(modelClient.systemPrompt).toContain("Keep &amp; &lt;source-bound&gt; edits attributable.");
     expect(modelClient.lastUserPrompt).toContain("API_KEY=sk-test-source-secret-12345");
     expect(modelClient.lastUserPrompt).not.toContain("[redacted-secret]");
 

@@ -47,7 +47,12 @@ import {
   type PigeErrorSummary
 } from "@pige/schemas";
 import { z } from "zod";
-import { buildAgentRuntimePolicyContext, knowledgeLanguagePolicyInstruction } from "./agent-policy-context";
+import {
+  assertAgentModelBoundaryAllowedByPolicy,
+  knowledgeLanguagePolicyInstruction,
+  resolveAgentRuntimePolicyContext,
+  vaultPolicyInstruction
+} from "./agent-policy-context";
 import {
   AgentTurnConversationStore,
   type AgentTurnAuthoredTaskIntent,
@@ -1320,12 +1325,14 @@ export class HomeAgentService {
     assertModelProviderPair(defaultModel, defaultProvider);
     const approvedBinding = createModelRuntimeBindingIdentity(defaultModel, defaultProvider);
     const jobId = session.current.id;
-    const policy = buildAgentRuntimePolicyContext(vaultPath, {
+    const resolvedPolicy = resolveAgentRuntimePolicyContext(vaultPath, {
       jobId,
       defaultModel,
       defaultProvider,
       ...(this.#capabilities?.snapshot() ?? {})
     });
+    const policy = resolvedPolicy.policy;
+    assertAgentModelBoundaryAllowedByPolicy(policy);
     session.current = this.#jobs.patchAgentTurnJob(session.current, {
       stage: "planning",
       policyContextId: policy.policyContextId,
@@ -1421,12 +1428,12 @@ export class HomeAgentService {
       if (!currentDefaultModel || !currentDefaultProvider) {
         throw new PigeDomainError("model_provider.binding_changed", "The default runtime binding became unavailable.");
       }
-      const currentPolicy = buildAgentRuntimePolicyContext(vaultPath, {
+      const currentPolicy = resolveAgentRuntimePolicyContext(vaultPath, {
         jobId,
         defaultModel: currentDefaultModel,
         defaultProvider: currentDefaultProvider,
         ...(this.#capabilities?.snapshot() ?? {})
-      });
+      }).policy;
       if (
         currentPolicy.policyContextId !== policy.policyContextId ||
         currentPolicy.policyHash !== policy.policyHash
@@ -1639,7 +1646,10 @@ export class HomeAgentService {
     const memoryEnabled = policy.memory.vaultMemoryEnabled && this.#memory !== undefined;
     const memoryToolRegistered = memoryEnabled && !currentNoteScope &&
       request.authoredTaskIntent === "explicit_user_task";
-    const recalledMemories = memoryEnabled ? this.#memory!.recall(vaultPath, 8) : [];
+    const allowedMemoryScopes = new Set(policy.memory.allowedMemoryScopes);
+    const recalledMemories = memoryEnabled
+      ? this.#memory!.recall(vaultPath, 8).filter((memory) => allowedMemoryScopes.has(memory.kind)).slice(0, 8)
+      : [];
     contextPackBinding = bindHomeAgentContextPack({ activeVaultId: activeVault.vaultId, job: session.current, conversationId: request.sourceConversationId, userEventId: request.sourceEventId,
       policyContextId: policy.policyContextId, policyHash: policy.policyHash, history, memories: recalledMemories });
     session.current = this.#jobs.patchAgentTurnJob(session.current, contextPackJobFacts(contextPackBinding));
@@ -1928,7 +1938,7 @@ export class HomeAgentService {
           const result = await this.#retrieval.search({
             scope: { kind: "active_vault", vaultId: activeVault.vaultId },
             query: readerSelectionLinkQuery,
-            limit: 8
+            limit: policy.retrieval.maxSnippetsForCloudSynthesis
           });
           if (result.activeVaultId !== activeVault.vaultId || result.query !== readerSelectionLinkQuery) {
             throw new PigeDomainError("rag.search_binding_invalid", "The Reader link search binding changed.");
@@ -1975,7 +1985,7 @@ export class HomeAgentService {
           const result = await this.#retrieval.search({
             scope: { kind: "active_vault", vaultId: activeVault.vaultId },
             query: retrievalQuery,
-            limit: 8
+            limit: policy.retrieval.maxSnippetsForCloudSynthesis
           });
           if (result.activeVaultId !== activeVault.vaultId || result.query !== retrievalQuery) {
             throw new PigeDomainError(
@@ -2023,7 +2033,7 @@ export class HomeAgentService {
       runtimeResult = await this.#runtime.run({
         runtimeConfig,
         jobId,
-        systemPrompt: createHomeSystemPrompt(
+        systemPrompt: `${createHomeSystemPrompt(
           urlCandidates.length,
           !currentNoteScope && this.#datasets !== undefined,
           currentNoteScope !== undefined,
@@ -2035,7 +2045,7 @@ export class HomeAgentService {
           skillStagingTools.length > 0,
           currentNoteRelatedRegistered,
           request.sourceLanguage, policy.language
-        ),
+        )}\n${vaultPolicyInstruction(resolvedPolicy.vaultPolicyMarkdown)}`,
         userPrompt: createHomeUserPrompt(query, recalledMemories),
         history,
         contextPack: contextPackBinding.pack,

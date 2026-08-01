@@ -213,7 +213,8 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       storage: "OS app data/settings.json",
       backedUpByDefault: false,
       applyBehavior: "immediate",
-      permissionRequirement: "none"
+      permissionRequirement: "none",
+      agentPolicyEffect: "language.voiceInputLanguage"
     },
     {
       key: "ocr.excludeLowConfidenceFromSummaries",

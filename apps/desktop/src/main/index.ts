@@ -191,10 +191,10 @@ import { registerVaultRecentIpc } from "./register-vault-recent-ipc";
 import { registerPigePolicyIpc } from "./register-pige-policy-ipc";
 import {
   AgentIngestService,
-  type AgentIngestCapabilitySnapshot,
   type AgentIngestProposalPort,
   type AgentIngestRetrievalPort
 } from "./services/agent-ingest-service";
+import type { AgentIngestCapabilitySnapshot } from "./services/agent-policy-context";
 import { AgentRuntimeService } from "./services/agent-runtime-service";
 import {
   createUnavailablePaddleOcrLifecycleService,
@@ -1817,6 +1817,7 @@ const getAgentCapabilitySnapshot = () => {
   const parser = getDocumentParserService();
   const imageOcrReady = getOcrService().canOcr("image_file");
   const appearance = getAppearanceService().summary();
+  const dictationLanguage = getDictationLanguagePreferenceService().preference();
   const permissionPolicy = getPermissionPolicyStore().agentRuntimePolicyContext();
   return {
     localDatabaseStatus,
@@ -1828,6 +1829,9 @@ const getAgentCapabilitySnapshot = () => {
     ocrLanguageHints: getOcrLanguagePreferenceService().policyLanguageHints(),
     appLocale: appearance.locale,
     generatedKnowledgeLanguage: appearance.generatedKnowledgeLanguage,
+    voiceInputLanguage: dictationLanguage.mode === "preferred"
+      ? dictationLanguage.language
+      : appearance.locale,
     ...permissionPolicy,
     speechInputAvailable: false,
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),

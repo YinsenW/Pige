@@ -2,7 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildAgentRuntimePolicyContext } from "../../apps/desktop/src/main/services/agent-policy-context";
+import {
+  assertAgentModelBoundaryAllowedByPolicy,
+  buildAgentRuntimePolicyContext
+} from "../../apps/desktop/src/main/services/agent-policy-context";
 import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 import {
   createVaultOnDisk,
@@ -55,6 +58,25 @@ describe("agent runtime policy context", () => {
     expect(after).not.toBe(before);
   });
 
+  it("binds the exact validated PIGE.md revision into every policy snapshot", () => {
+    const vaultPath = makeVault();
+    const before = buildAgentRuntimePolicyContext(vaultPath);
+    const policyPath = path.join(vaultPath, "PIGE.md");
+    fs.writeFileSync(
+      policyPath,
+      fs.readFileSync(policyPath, "utf8").replace(
+        "## Agent Review Rules",
+        "## Agent Review Rules\n\n- Keep durable edits concise."
+      ),
+      "utf8"
+    );
+    const after = buildAgentRuntimePolicyContext(vaultPath);
+
+    expect(before.vaultPolicy.revision).toMatch(/^pigepolicyrev_[a-f0-9]{64}$/u);
+    expect(after.vaultPolicy.revision).not.toBe(before.vaultPolicy.revision);
+    expect(after.policyHash).not.toBe(before.policyHash);
+  });
+
   it("binds generated knowledge and app language preferences into each new policy snapshot", () => {
     const vaultPath = makeVault();
     const preserved = buildAgentRuntimePolicyContext(vaultPath);
@@ -75,6 +97,21 @@ describe("agent runtime policy context", () => {
     expect(configured.policyHash).not.toBe(preserved.policyHash);
   });
 
+  it("binds speech, memory-scope, and retrieval-budget owners into the policy hash", () => {
+    const vaultPath = makeVault();
+    const baseline = buildAgentRuntimePolicyContext(vaultPath);
+    const configured = buildAgentRuntimePolicyContext(vaultPath, {
+      voiceInputLanguage: "fr-FR",
+      allowedMemoryScopes: ["preference", "correction"],
+      maxSnippetsForCloudSynthesis: 3
+    });
+
+    expect(configured.language.voiceInputLanguage).toBe("fr-FR");
+    expect(configured.memory.allowedMemoryScopes).toEqual(["preference", "correction"]);
+    expect(configured.retrieval.maxSnippetsForCloudSynthesis).toBe(3);
+    expect(configured.policyHash).not.toBe(baseline.policyHash);
+  });
+
   it.each(["local_only"] as const)(
     "accepts the explicit %s cloud-send policy and binds it into the policy hash",
     (cloudSendPolicy) => {
@@ -87,6 +124,42 @@ describe("agent runtime policy context", () => {
       expect(stricter.policyContextId).not.toBe(ordinary.policyContextId);
     }
   );
+
+  it("blocks a cloud provider under local-only policy and permits verified loopback", () => {
+    const vaultPath = makeVault();
+    const blocked = buildAgentRuntimePolicyContext(vaultPath, {
+      cloudSendPolicy: "local_only",
+      defaultProvider: {
+        id: "provider_cloud",
+        displayName: "Cloud",
+        providerKind: "openai",
+        modelListStrategy: "manual",
+        cloudBoundary: "cloud",
+        boundaryVerification: "builtin_verified",
+        createdAt: "2026-07-09T00:00:00.000Z",
+        updatedAt: "2026-07-09T00:00:00.000Z"
+      }
+    });
+    const allowed = buildAgentRuntimePolicyContext(vaultPath, {
+      cloudSendPolicy: "local_only",
+      defaultProvider: {
+        id: "provider_local",
+        displayName: "Local",
+        providerKind: "openai_compatible",
+        modelListStrategy: "manual",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        cloudBoundary: "local",
+        boundaryVerification: "loopback_verified",
+        createdAt: "2026-07-09T00:00:00.000Z",
+        updatedAt: "2026-07-09T00:00:00.000Z"
+      }
+    });
+
+    expect(() => assertAgentModelBoundaryAllowedByPolicy(blocked)).toThrowError(
+      expect.objectContaining({ code: "model_provider.egress_blocked" })
+    );
+    expect(() => assertAgentModelBoundaryAllowedByPolicy(allowed)).not.toThrow();
+  });
 
   it("includes the effective default model profile when provided by the model registry", () => {
     const vaultPath = makeVault();
