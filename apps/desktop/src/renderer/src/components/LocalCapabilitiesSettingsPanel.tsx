@@ -36,6 +36,11 @@ import {
   type LocalSemanticRetrievalApi
 } from "./LocalSemanticRetrievalSettingsPanel";
 import { LocalRerankerSettingsPanel, type LocalRerankerApi } from "./LocalRerankerSettingsPanel";
+import {
+  OcrEnginePreferenceControl,
+  type OcrEnginePreferenceApi
+} from "./OcrEnginePreferenceControl";
+export type { OcrEnginePreferenceApi } from "./OcrEnginePreferenceControl";
 
 type Translate = (key: string) => string;
 type PaddleOcrReadState = "loading" | "ready" | "failed";
@@ -84,6 +89,7 @@ export interface LocalCapabilitiesSettingsPanelProps {
     preference: DictationLanguagePreference
   ) => void;
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
+  readonly ocrEnginePreferenceApi?: OcrEnginePreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
   readonly rerankerApi: LocalRerankerApi;
@@ -618,6 +624,7 @@ function PaddleOcrLifecyclePanel(props: {
 export function LocalCapabilitiesSettingsPanel(
   props: LocalCapabilitiesSettingsPanelProps
 ): React.JSX.Element {
+  const ocrEnginePreferenceApi = props.ocrEnginePreferenceApi ?? window.pige?.localCapabilities;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [toolchainReinstallPending, setToolchainReinstallPending] = useState(false);
@@ -903,6 +910,9 @@ export function LocalCapabilitiesSettingsPanel(
           {props.t("capabilities.ocrAndVoice")}
         </h2>
         <div className="settings-card">
+          {ocrEnginePreferenceApi ? (
+            <OcrEnginePreferenceControl api={ocrEnginePreferenceApi} t={props.t} />
+          ) : null}
           <PaddleOcrLifecyclePanel api={props.paddleOcrApi} t={props.t} />
           {props.ocrLanguagePreferenceApi ? (
             <OcrLanguagePreferenceControl api={props.ocrLanguagePreferenceApi} t={props.t} />

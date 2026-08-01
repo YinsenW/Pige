@@ -1,16 +1,20 @@
 import { PigeDomainError } from "@pige/domain";
+import type { OcrEnginePreference } from "@pige/schemas";
 import type { NativeImageOcrAdapterPort } from "./ocr-service";
 
 export class NativeOcrAdapterRouter implements NativeImageOcrAdapterPort {
   readonly #nativeAdapter: NativeImageOcrAdapterPort;
   readonly #fallbackAdapter: NativeImageOcrAdapterPort;
+  readonly #preference: () => OcrEnginePreference;
 
   constructor(
     nativeAdapter: NativeImageOcrAdapterPort,
-    fallbackAdapter: NativeImageOcrAdapterPort
+    fallbackAdapter: NativeImageOcrAdapterPort,
+    preference?: (() => OcrEnginePreference) | undefined
   ) {
     this.#nativeAdapter = nativeAdapter;
     this.#fallbackAdapter = fallbackAdapter;
+    this.#preference = preference ?? (() => "automatic");
   }
 
   isAvailable(): boolean {
@@ -22,11 +26,11 @@ export class NativeOcrAdapterRouter implements NativeImageOcrAdapterPort {
     preferredLanguages: readonly string[],
     signal?: AbortSignal
   ): ReturnType<NativeImageOcrAdapterPort["recognize"]> {
-    if (this.#nativeAdapter.isAvailable()) {
-      return this.#nativeAdapter.recognize(inputPath, preferredLanguages, signal);
-    }
-    if (this.#fallbackAdapter.isAvailable()) {
-      return this.#fallbackAdapter.recognize(inputPath, preferredLanguages, signal);
+    const ordered = this.#preference() === "paddleocr_local"
+      ? [this.#fallbackAdapter, this.#nativeAdapter]
+      : [this.#nativeAdapter, this.#fallbackAdapter];
+    for (const adapter of ordered) {
+      if (adapter.isAvailable()) return adapter.recognize(inputPath, preferredLanguages, signal);
     }
     return Promise.reject(new PigeDomainError(
       "ocr.helper_unavailable",

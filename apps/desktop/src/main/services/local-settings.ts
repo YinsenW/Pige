@@ -5,12 +5,14 @@ import {
   AppearanceMachineSettingsSchema,
   DictationLanguagePreferenceMachineSettingsSchema,
   MachineLocalSettingsSchema,
+  OcrEnginePreferenceMachineSettingsSchema,
   OcrLanguagePreferenceMachineSettingsSchema,
   UpdateMachineSettingsSchema,
   type AppearanceMachineSettings,
   type DictationLanguagePreferenceMachineSettings,
   type Locale,
   type MachineLocalSettings,
+  type OcrEnginePreferenceMachineSettings,
   type OcrLanguagePreferenceMachineSettings,
   type StartupDestination,
   type UpdateMachineSettings,
@@ -62,6 +64,11 @@ export interface AppearanceSettingsMutation {
 export interface OcrLanguagePreferenceSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: OcrLanguagePreferenceMachineSettings;
+}
+
+export interface OcrEnginePreferenceSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: OcrEnginePreferenceMachineSettings;
 }
 
 export interface DictationLanguagePreferenceSettingsMutation {
@@ -117,6 +124,10 @@ export class LocalSettingsStore {
     return this.read().ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
   }
 
+  getOcrEnginePreferenceSettings(): OcrEnginePreferenceMachineSettings {
+    return this.read().ocrEnginePreference ?? createDefaultOcrEnginePreferenceSettings();
+  }
+
   getDictationLanguagePreferenceSettings(): DictationLanguagePreferenceMachineSettings {
     return this.read().dictationLanguagePreference ?? createDefaultDictationLanguagePreferenceSettings();
   }
@@ -144,6 +155,7 @@ export class LocalSettingsStore {
         startupDestination: next,
         window: current.window,
         updates: current.updates,
+        ocrEnginePreference: current.ocrEnginePreference,
         ocrLanguagePreference: current.ocrLanguagePreference,
         dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
@@ -176,7 +188,44 @@ export class LocalSettingsStore {
         startupDestination: current.startupDestination,
         window: current.window,
         updates: current.updates,
+        ocrEnginePreference: current.ocrEnginePreference,
         ocrLanguagePreference: next,
+        dictationLanguagePreference: current.dictationLanguagePreference,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: next };
+    });
+  }
+
+  mutateOcrEnginePreferenceSettings(
+    expectedRevision: number,
+    mutation: (settings: OcrEnginePreferenceMachineSettings) => OcrEnginePreferenceMachineSettings
+  ): OcrEnginePreferenceSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const settings = current.ocrEnginePreference ?? createDefaultOcrEnginePreferenceSettings();
+      if (settings.revision !== expectedRevision) return { status: "stale", settings };
+      if (settings.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError(
+          "ocr.engine_preference_revision_exhausted",
+          "The OCR engine preference revision is exhausted."
+        );
+      }
+      const candidate = OcrEnginePreferenceMachineSettingsSchema.parse(mutation(settings));
+      const next = OcrEnginePreferenceMachineSettingsSchema.parse({
+        ...candidate,
+        revision: settings.revision + 1
+      });
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        appearance: current.appearance,
+        startupDestination: current.startupDestination,
+        window: current.window,
+        updates: current.updates,
+        ocrEnginePreference: next,
+        ocrLanguagePreference: current.ocrLanguagePreference,
         dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
@@ -214,6 +263,7 @@ export class LocalSettingsStore {
         startupDestination: current.startupDestination,
         window: current.window,
         updates: current.updates,
+        ocrEnginePreference: current.ocrEnginePreference,
         ocrLanguagePreference: current.ocrLanguagePreference,
         dictationLanguagePreference: next,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
@@ -248,6 +298,7 @@ export class LocalSettingsStore {
         startupDestination: current.startupDestination,
         window: current.window,
         updates: current.updates,
+        ocrEnginePreference: current.ocrEnginePreference,
         ocrLanguagePreference: current.ocrLanguagePreference,
         dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
@@ -286,6 +337,7 @@ export class LocalSettingsStore {
         startupDestination: current.startupDestination,
         window: current.window,
         updates: nextUpdates,
+        ocrEnginePreference: current.ocrEnginePreference,
         ocrLanguagePreference: current.ocrLanguagePreference,
         dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
@@ -308,6 +360,7 @@ export class LocalSettingsStore {
         startupDestination: settings.startupDestination,
         window: settings.window,
         updates: settings.updates,
+        ocrEnginePreference: settings.ocrEnginePreference,
         ocrLanguagePreference: settings.ocrLanguagePreference,
         dictationLanguagePreference: settings.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: [
@@ -327,6 +380,7 @@ export class LocalSettingsStore {
       startupDestination: settings.startupDestination,
       window: settings.window,
       updates: settings.updates,
+      ocrEnginePreference: settings.ocrEnginePreference,
       ocrLanguagePreference: settings.ocrLanguagePreference,
       dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -342,6 +396,7 @@ export class LocalSettingsStore {
       startupDestination: settings.startupDestination,
       window,
       updates: settings.updates,
+      ocrEnginePreference: settings.ocrEnginePreference,
       ocrLanguagePreference: settings.ocrLanguagePreference,
       dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -378,6 +433,7 @@ export class LocalSettingsStore {
       startupDestination: settings.startupDestination,
       window: settings.window,
       updates: settings.updates,
+      ocrEnginePreference: settings.ocrEnginePreference,
       ocrLanguagePreference: settings.ocrLanguagePreference,
       dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -585,6 +641,7 @@ function activateVault(
     startupDestination: settings.startupDestination,
     window: settings.window,
     updates: settings.updates,
+    ocrEnginePreference: settings.ocrEnginePreference,
     ocrLanguagePreference: settings.ocrLanguagePreference,
     dictationLanguagePreference: settings.dictationLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -631,6 +688,7 @@ function withRecentVaults(
     startupDestination: settings.startupDestination,
     window: settings.window,
     updates: settings.updates,
+    ocrEnginePreference: settings.ocrEnginePreference,
     ocrLanguagePreference: settings.ocrLanguagePreference,
     dictationLanguagePreference: settings.dictationLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
@@ -741,6 +799,7 @@ function createMachineLocalSettings(input: {
   readonly startupDestination?: StartupDestinationMachineSettings | undefined;
   readonly window?: WindowPreferences | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
+  readonly ocrEnginePreference?: OcrEnginePreferenceMachineSettings | undefined;
   readonly ocrLanguagePreference?: OcrLanguagePreferenceMachineSettings | undefined;
   readonly dictationLanguagePreference?: DictationLanguagePreferenceMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
@@ -773,6 +832,10 @@ function createMachineLocalSettings(input: {
 
   if (input.updates) {
     settings.updates = input.updates;
+  }
+
+  if (input.ocrEnginePreference) {
+    settings.ocrEnginePreference = input.ocrEnginePreference;
   }
 
   if (input.ocrLanguagePreference) {
@@ -808,6 +871,13 @@ function createDefaultOcrLanguagePreferenceSettings(): OcrLanguagePreferenceMach
   return OcrLanguagePreferenceMachineSettingsSchema.parse({
     revision: 0,
     preference: { mode: "automatic" }
+  });
+}
+
+function createDefaultOcrEnginePreferenceSettings(): OcrEnginePreferenceMachineSettings {
+  return OcrEnginePreferenceMachineSettingsSchema.parse({
+    revision: 0,
+    preference: "automatic"
   });
 }
 

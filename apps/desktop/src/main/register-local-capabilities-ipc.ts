@@ -8,11 +8,17 @@ import {
   SetDictationLanguagePreferenceResultSchema,
   OCR_LANGUAGE_PREFERENCE_CHANNEL,
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
+  OCR_ENGINE_PREFERENCE_CHANNEL,
+  SET_OCR_ENGINE_PREFERENCE_CHANNEL,
   TOOLCHAIN_REPAIR_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
   SetOcrLanguagePreferenceRequestSchema,
   SetOcrLanguagePreferenceResultSchema,
+  OcrEnginePreferenceRequestSchema,
+  OcrEnginePreferenceResultSchema,
+  SetOcrEnginePreferenceRequestSchema,
+  SetOcrEnginePreferenceResultSchema,
   ToolchainRepairRequestSchema,
   ToolchainRepairResultSchema,
   PADDLE_OCR_ENGINE_ID,
@@ -48,6 +54,10 @@ import {
   type OcrLanguagePreferenceResult,
   type SetOcrLanguagePreferenceRequest,
   type SetOcrLanguagePreferenceResult,
+  type OcrEnginePreferenceRequest,
+  type OcrEnginePreferenceResult,
+  type SetOcrEnginePreferenceRequest,
+  type SetOcrEnginePreferenceResult,
   type ToolchainRepairRequest,
   type ToolchainRepairResult
 } from "@pige/schemas";
@@ -68,6 +78,12 @@ export interface RegisterLocalCapabilitiesIpcOptions {
   readonly setOcrLanguagePreference: (
     request: SetOcrLanguagePreferenceRequest
   ) => Awaitable<SetOcrLanguagePreferenceResult>;
+  readonly ocrEnginePreference: (
+    request: OcrEnginePreferenceRequest
+  ) => Awaitable<OcrEnginePreferenceResult>;
+  readonly setOcrEnginePreference: (
+    request: SetOcrEnginePreferenceRequest
+  ) => Awaitable<SetOcrEnginePreferenceResult>;
   readonly paddleOcrSummary: (
     request: PaddleOcrSummaryRequest
   ) => Awaitable<PaddleOcrSummary>;
@@ -130,6 +146,22 @@ export function registerLocalCapabilitiesIpc(
     async (_event, request: unknown) => {
       const parsed = OcrLanguagePreferenceRequestSchema.parse(request);
       return OcrLanguagePreferenceResultSchema.parse(await options.ocrLanguagePreference(parsed));
+    }
+  );
+
+  options.ipcMain.handle(
+    OCR_ENGINE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = OcrEnginePreferenceRequestSchema.parse(request);
+      return OcrEnginePreferenceResultSchema.parse(await options.ocrEnginePreference(parsed));
+    }
+  );
+
+  options.ipcMain.handle(
+    SET_OCR_ENGINE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = SetOcrEnginePreferenceRequestSchema.parse(request);
+      return SetOcrEnginePreferenceResultSchema.parse(await options.setOcrEnginePreference(parsed));
     }
   );
 

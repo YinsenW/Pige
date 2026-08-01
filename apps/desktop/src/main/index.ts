@@ -344,6 +344,10 @@ import {
   LocalSettingsOcrLanguagePreferenceStore,
   OcrLanguagePreferenceService
 } from "./services/ocr-language-preference-service";
+import {
+  LocalSettingsOcrEnginePreferenceStore,
+  OcrEnginePreferenceService
+} from "./services/ocr-engine-preference-service";
 import { DictationLanguagePreferenceService } from "./services/dictation-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
@@ -494,6 +498,7 @@ let sourceRefreshService: SourceRefreshService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
+let ocrEnginePreferenceService: OcrEnginePreferenceService | undefined;
 let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let dictationLanguagePreferenceService: DictationLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
@@ -858,7 +863,8 @@ const getPaddleOcrRuntimeComposition = (): PaddleOcrRuntimeComposition => {
   paddleOcrRuntimeComposition ??= createPaddleOcrRuntimeComposition({
     appDataRoot: app.getPath("userData"),
     manifestPath: resolvePaddleOcrManifestPath(),
-    assertAppInstanceWriterLease
+    assertAppInstanceWriterLease,
+    enginePreference: () => getOcrEnginePreferenceService().preference()
   });
   return paddleOcrRuntimeComposition;
 };
@@ -1756,6 +1762,13 @@ const getOcrLanguagePreferenceService = (): OcrLanguagePreferenceService => {
     new LocalSettingsOcrLanguagePreferenceStore(getLocalSettingsStore())
   );
   return ocrLanguagePreferenceService;
+};
+
+const getOcrEnginePreferenceService = (): OcrEnginePreferenceService => {
+  ocrEnginePreferenceService ??= new OcrEnginePreferenceService(
+    new LocalSettingsOcrEnginePreferenceStore(getLocalSettingsStore())
+  );
+  return ocrEnginePreferenceService;
 };
 
 const getDictationLanguagePreferenceService = (): DictationLanguagePreferenceService => {
@@ -3195,6 +3208,8 @@ registerMemoryIpc({
 });
 registerLocalCapabilitiesIpc({
   ipcMain,
+  ocrEnginePreference: (request) => getOcrEnginePreferenceService().read(request),
+  setOcrEnginePreference: (request) => getOcrEnginePreferenceService().set(request),
   dictationLanguagePreference: (request) => getDictationLanguagePreferenceService().read(request),
   setDictationLanguagePreference: (request) => getDictationLanguagePreferenceService().set(request),
   ocrLanguagePreference: (request) => getOcrLanguagePreferenceService().read(request),

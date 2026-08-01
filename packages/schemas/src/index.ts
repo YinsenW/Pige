@@ -4962,6 +4962,45 @@ export const OCR_LANGUAGE_PREFERENCE_CHANNEL =
   "localCapabilities.ocrLanguagePreference" as const;
 export const SET_OCR_LANGUAGE_PREFERENCE_CHANNEL =
   "localCapabilities.setOcrLanguagePreference" as const;
+export const OCR_ENGINE_PREFERENCE_CHANNEL =
+  "localCapabilities.ocrEnginePreference" as const;
+export const SET_OCR_ENGINE_PREFERENCE_CHANNEL =
+  "localCapabilities.setOcrEnginePreference" as const;
+export const OcrEnginePreferenceRequestIdSchema = z.string()
+  .regex(/^ocrenginereq_[a-z0-9]{16,64}$/u);
+export const OcrEnginePreferenceSchema = z.enum(["automatic", "platform_native", "paddleocr_local"]);
+export const OcrEnginePreferenceMachineSettingsSchema = z.object({
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: OcrEnginePreferenceSchema
+}).strict();
+export const OcrEnginePreferenceSummarySchema = OcrEnginePreferenceMachineSettingsSchema.extend({
+  apiVersion: z.literal(1),
+  appliesTo: z.literal("new_ocr_jobs")
+}).strict();
+export const OcrEnginePreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrEnginePreferenceRequestIdSchema
+}).strict();
+const OcrEnginePreferenceResultIdentitySchema = OcrEnginePreferenceRequestSchema;
+export const OcrEnginePreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrEnginePreferenceResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    summary: OcrEnginePreferenceSummarySchema
+  }).strict(),
+  OcrEnginePreferenceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SetOcrEnginePreferenceRequestSchema = OcrEnginePreferenceRequestSchema.extend({
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: OcrEnginePreferenceSchema
+}).strict();
+const OcrEnginePreferenceAuthoritativeResultSchema = OcrEnginePreferenceResultIdentitySchema.extend({
+  summary: OcrEnginePreferenceSummarySchema
+}).strict();
+export const SetOcrEnginePreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrEnginePreferenceAuthoritativeResultSchema.extend({ status: z.literal("committed") }).strict(),
+  OcrEnginePreferenceAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  OcrEnginePreferenceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const OcrLanguagePreferenceRequestIdSchema = z.string()
   .regex(/^ocrlangreq_[a-z0-9]{16,64}$/u);
 export const OcrLanguagePreferenceSchema = z.discriminatedUnion("mode", [
@@ -5088,6 +5127,7 @@ export const MachineLocalSettingsSchema = z.object({
   startupDestination: StartupDestinationMachineSettingsSchema.optional(),
   window: WindowPreferencesSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
+  ocrEnginePreference: OcrEnginePreferenceMachineSettingsSchema.optional(),
   ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.optional(),
   dictationLanguagePreference: DictationLanguagePreferenceMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
@@ -11780,6 +11820,14 @@ export type LocalRerankerMutationResult = z.infer<typeof LocalRerankerMutationRe
 export type LocalRerankerDisableResult = z.infer<typeof LocalRerankerDisableResultSchema>;
 export type LocalRerankerRemoveResult = z.infer<typeof LocalRerankerRemoveResultSchema>;
 export type OcrLanguagePreferenceRequestId = z.infer<typeof OcrLanguagePreferenceRequestIdSchema>;
+export type OcrEnginePreferenceRequestId = z.infer<typeof OcrEnginePreferenceRequestIdSchema>;
+export type OcrEnginePreference = z.infer<typeof OcrEnginePreferenceSchema>;
+export type OcrEnginePreferenceMachineSettings = z.infer<typeof OcrEnginePreferenceMachineSettingsSchema>;
+export type OcrEnginePreferenceSummary = z.infer<typeof OcrEnginePreferenceSummarySchema>;
+export type OcrEnginePreferenceRequest = z.infer<typeof OcrEnginePreferenceRequestSchema>;
+export type OcrEnginePreferenceResult = z.infer<typeof OcrEnginePreferenceResultSchema>;
+export type SetOcrEnginePreferenceRequest = z.infer<typeof SetOcrEnginePreferenceRequestSchema>;
+export type SetOcrEnginePreferenceResult = z.infer<typeof SetOcrEnginePreferenceResultSchema>;
 export type OcrLanguagePreference = z.infer<typeof OcrLanguagePreferenceSchema>;
 export type OcrLanguagePreferenceMachineSettings = z.infer<typeof OcrLanguagePreferenceMachineSettingsSchema>;
 export type OcrLanguagePreferenceSummary = z.infer<typeof OcrLanguagePreferenceSummarySchema>;
