@@ -138,6 +138,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | In-vault managed-copy root (`inVaultSourceAssetRoot` compatibility field) | Vault & Note Storage | `vault_portable` | Source Storage Service | `.pige/config.json` relative path | Yes | `os_permission` | New managed sources; existing sources unchanged |
 | External managed-copy root binding | Vault & Note Storage | `machine_vault_binding` | Source Storage Service | OS app data keyed by `vault_id` and `rootId` | Binding no; backup manifest lists dependency and managed copies are included by default when reachable | `os_permission` | Main-owned directory chooser plus exact dependency validation; atomically repairs the same root ID without renderer path access or a separate confirmation |
 | Backup include/exclude defaults | Vault & Note Storage/Backup flow | mixed | Backup Service | `.pige/config.json` for vault defaults, OS app data for machine choices | Vault defaults yes | `none` | Next backup |
+| Recoverable trash backup inclusion | Vault & Note Storage/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Revision-fenced change for the next backup; active Backup work blocks mutation |
 | User Backup status/actions | Vault & Note Storage | `derived_status` + vault Job | Backup Coordinator, Jobs Service | `.pige/jobs/`; latest completed user Backup derives `lastBackupAt` | Backup Job no; archive/Operation yes | `none` | Durable create; eligible Cancel/Retry; restart adopts |
 | Trash/archive policy | Vault & Note Storage | `vault_portable` | Vault Runtime Service | `.pige/config.json` | Yes | `explicit_confirmation` | Immediate for future deletes |
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
@@ -286,6 +287,7 @@ Default vault backup includes:
 - `.pige/config.json`.
 - `PIGE.md`.
 - Vault-scoped Skills and memory according to backup policy.
+- Recoverable `.pige/trash/` content when the vault's include-trash preference is enabled (default).
 - Non-secret vault preferences.
 
 Default vault backup excludes:

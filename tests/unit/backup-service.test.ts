@@ -286,6 +286,24 @@ describe("backup restore service", () => {
     });
   });
 
+  it("excludes recoverable trash when the durable vault preference is off", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "without-trash.pige-backup.zip");
+    writeVaultFixture(vaultPath);
+    const configPath = path.join(vaultPath, ".pige", "config.json");
+    const config = readVaultConfig(vaultPath);
+    fs.writeFileSync(configPath, `${JSON.stringify({
+      ...config,
+      backup: { ...config.backup, includeTrash: false }
+    }, null, 2)}\n`);
+
+    const created = await new BackupRestoreService().createBackup(vaultPath, backupPath, "0.1.0-test");
+    const archive = await readGeneratedBackup(backupPath);
+    expect(created.manifest?.includes.trash).toBe(false);
+    expect([...archive.entries.keys()].some((entry) => entry.startsWith("vault/.pige/trash/"))).toBe(false);
+    expect(new BackupRestoreService().status(loadVaultSummary(vaultPath), vaultPath).defaultIncludes.trash).toBe(false);
+  });
+
   it("excludes conversation history consistently from the archive, manifest, counts, and restored vault", async () => {
     const { root, vaultPath } = makeVault();
     const backupPath = path.join(root, "no-conversations.pige-backup.zip");

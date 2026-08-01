@@ -36,6 +36,9 @@ import type {
   BackupConversationPreferenceSummary,
   BackupConversationPreferenceUpdateRequest,
   BackupConversationPreferenceUpdateResult,
+  BackupTrashPreferenceSummary,
+  BackupTrashPreferenceUpdateRequest,
+  BackupTrashPreferenceUpdateResult,
   BackupMemoryPreferenceSummary,
   BackupMemoryPreferenceUpdateRequest,
   BackupMemoryPreferenceUpdateResult,
@@ -2597,6 +2600,10 @@ export interface PigeDesktopApi {
     readonly setConversationPreference: (
       request: BackupConversationPreferenceUpdateRequest
     ) => Promise<BackupConversationPreferenceUpdateResult>;
+    readonly trashPreferenceStatus: () => Promise<BackupTrashPreferenceSummary>;
+    readonly setTrashPreference: (
+      request: BackupTrashPreferenceUpdateRequest
+    ) => Promise<BackupTrashPreferenceUpdateResult>;
     readonly memoryPreferenceStatus: () => Promise<BackupMemoryPreferenceSummary>;
     readonly setMemoryPreference: (
       request: BackupMemoryPreferenceUpdateRequest

@@ -31,12 +31,17 @@ import {
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
   BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL,
   BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
+  BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL,
+  BACKUP_SET_TRASH_PREFERENCE_CHANNEL,
   BackupConversationPreferenceSummarySchema,
   BackupConversationPreferenceUpdateRequestSchema,
   BackupConversationPreferenceUpdateResultSchema,
   BackupMemoryPreferenceSummarySchema,
   BackupMemoryPreferenceUpdateRequestSchema,
   BackupMemoryPreferenceUpdateResultSchema,
+  BackupTrashPreferenceSummarySchema,
+  BackupTrashPreferenceUpdateRequestSchema,
+  BackupTrashPreferenceUpdateResultSchema,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
   BackupReconnectDependencyRequestSchema,
@@ -50,6 +55,7 @@ import {
 } from "@pige/schemas";
 import type { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
 import type { BackupConversationPreferenceService } from "./services/backup-conversation-preference-service";
+import type { BackupTrashPreferenceService } from "./services/backup-trash-preference-service";
 import type { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import type { BackupRestoreService } from "./services/backup-service";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
@@ -75,6 +81,7 @@ interface RegisterBackupRestoreIpcOptions {
   readonly getBackupService: () => BackupRestoreService;
   readonly getBackupConversationPreferenceService?: () => BackupConversationPreferenceService;
   readonly getBackupMemoryPreferenceService?: () => BackupMemoryPreferenceService;
+  readonly getBackupTrashPreferenceService?: () => BackupTrashPreferenceService;
   readonly getBackupCoordinator: () => BackupCoordinatorService;
   readonly getRestoreCoordinator: () => RestoreCoordinatorService;
   readonly resumeBackgroundJobs: () => void;
@@ -126,6 +133,19 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       );
       if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId) {
         throw new Error("Invalid Agent memory backup preference response identity.");
+      }
+      return result;
+    });
+  }
+  if (options.getBackupTrashPreferenceService) {
+    options.ipcMain.handle(BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL, () =>
+      BackupTrashPreferenceSummarySchema.parse(options.getBackupTrashPreferenceService!().summary())
+    );
+    options.ipcMain.handle(BACKUP_SET_TRASH_PREFERENCE_CHANNEL, (_event, request: unknown) => {
+      const parsed = BackupTrashPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupTrashPreferenceUpdateResultSchema.parse(options.getBackupTrashPreferenceService!().update(parsed));
+      if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId) {
+        throw new Error("Invalid trash backup preference response identity.");
       }
       return result;
     });
