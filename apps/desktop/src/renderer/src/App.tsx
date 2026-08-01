@@ -1275,7 +1275,7 @@ export function App(): React.JSX.Element {
 
   const adoptMergedNote = (render: NoteRenderResult): void => {
     const vaultId = activeVaultIdRef.current;
-    if (!vaultId || render.summary.pageType !== "note") return;
+    if (!vaultId || !isRelatableKnowledgePage(render)) return;
     const requestId = ++noteOpenSequence.current;
     inlineReferenceSequence.current += 1;
     setSelectedNoteVaultId(vaultId);
@@ -3644,9 +3644,10 @@ export function LibraryPanel(props: {
     const revision = note?.trashEligibility?.revision;
     const activeVaultId = props.activeVaultId;
     const renderContextId = note?.renderContextId;
-    if (!note || note.summary.pageType !== "note" || !revision || !activeVaultId || !renderContextId || !props.onRelateCurrentNote) return { status: "retained" };
+    if (!note || !isRelatableKnowledgePage(note) || !revision || !activeVaultId || !renderContextId || !props.onRelateCurrentNote) return { status: "retained" };
     return submitReaderNoteRelation({
       activeVaultId, currentPageId: note.summary.pageId, renderContextId, expectedRevision: revision,
+      expectedPageType: note.summary.pageType,
       execute: props.onRelateCurrentNote,
     }, target);
   };
@@ -3806,7 +3807,7 @@ export function LibraryPanel(props: {
               ownerIdentity={`${props.activeVaultId ?? ""}:${summary.pageId}:${props.selectedNote.renderContextId ?? ""}:${props.selectedNote.trashEligibility?.revision ?? ""}:${props.selectedNote.archiveEligibility?.revision ?? ""}:${props.selectedNote.restoreEligibility?.revision ?? ""}:${props.selectedNote.renameEligibility?.revision ?? ""}:${props.selectedNote.aliasing?.revision ?? ""}:${props.selectedNote.tagging?.revision ?? ""}`}
               canMoveToTrash={props.selectedNote.trashEligibility?.canTrash === true && Boolean(props.onTrashCurrentNote)}
               canMerge={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision)}
-              canRelate={isNoteEditorEligible(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision && props.onRelateCurrentNote)}
+              canRelate={isRelatableKnowledgePage(props.selectedNote) && Boolean(props.activeVaultId && props.selectedNote.renderContextId && props.selectedNote.trashEligibility?.revision && props.onRelateCurrentNote)}
               canArchive={props.selectedNote.archiveEligibility?.canArchive === true && Boolean(props.onArchiveCurrentNote)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={props.selectedNote.restoreEligibility?.canRestore === true && Boolean(props.onRestoreArchivedNote)} restoreLabels={readerDocumentRestoreLabels(props.t)} canRename={props.selectedNote.renameEligibility?.canRename === true && Boolean(props.onRenameCurrentNote)} renameLabels={readerNoteRenameLabels(props.t)} canManageAliases={Boolean(props.onChangeNoteAlias && (props.selectedNote.aliasing?.canAdd || props.selectedNote.aliasing?.canRemove))} canAddAlias={props.selectedNote.aliasing?.canAdd === true} aliases={props.selectedNote.aliasing?.aliases ?? []} aliasLabels={readerNoteAliasLabels(props.t)} canAddTag={summary.status === "active" && props.selectedNote.tagging?.canEdit === true && Boolean(props.onAddNoteTag)} existingTags={props.selectedNote.tagging?.tags ?? []} existingTopics={props.selectedNote.tagging?.topics ?? []} tagLabels={readerNoteTagLabels(props.t)}
               currentTitle={summary.title}
               labels={readerDocumentActionLabels(props.t)}
@@ -6300,11 +6301,12 @@ function HomeComposer(props: {
     const activeVaultId = activeVaultIdRef.current;
     const renderContextId = note?.renderContextId;
     const revision = note?.trashEligibility?.revision;
-    if (!note || note.summary.pageType !== "note" || !activeVaultId || !renderContextId || !revision) {
+    if (!note || !isRelatableKnowledgePage(note) || !activeVaultId || !renderContextId || !revision) {
       return { status: "retained" };
     }
     return submitReaderNoteRelation({
       activeVaultId, currentPageId: note.summary.pageId, renderContextId, expectedRevision: revision,
+      expectedPageType: note.summary.pageType,
       execute: props.onRelateCurrentNote,
       isCurrent: () => activeVaultIdRef.current === activeVaultId &&
         selectedNoteRef.current?.summary.pageId === note.summary.pageId &&
@@ -6784,7 +6786,7 @@ function HomeComposer(props: {
                   ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}:${selectedNote.archiveEligibility?.revision ?? ""}:${selectedNote.restoreEligibility?.revision ?? ""}:${selectedNote.renameEligibility?.revision ?? ""}:${selectedNote.aliasing?.revision ?? ""}:${selectedNote.tagging?.revision ?? ""}`}
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
                   canMerge={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
-                  canRelate={isNoteEditorEligible(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
+                  canRelate={isRelatableKnowledgePage(selectedNote) && Boolean(props.activeVault && selectedNote.renderContextId && selectedNote.trashEligibility?.revision)}
                   canArchive={selectedNote.archiveEligibility?.canArchive === true && Boolean(props.activeVault && selectedNote.renderContextId)} archiveLabels={readerDocumentArchiveLabels(props.t)} canRestore={selectedNote.restoreEligibility?.canRestore === true && Boolean(props.activeVault && selectedNote.renderContextId)} restoreLabels={readerDocumentRestoreLabels(props.t)} canRename={selectedNote.renameEligibility?.canRename === true && Boolean(props.activeVault && selectedNote.renderContextId)} renameLabels={readerNoteRenameLabels(props.t)} canManageAliases={Boolean(props.activeVault && selectedNote.renderContextId && (selectedNote.aliasing?.canAdd || selectedNote.aliasing?.canRemove))} canAddAlias={selectedNote.aliasing?.canAdd === true} aliases={selectedNote.aliasing?.aliases ?? []} aliasLabels={readerNoteAliasLabels(props.t)} canAddTag={selectedNote.summary.status === "active" && selectedNote.tagging?.canEdit === true && Boolean(props.activeVault && selectedNote.renderContextId)} existingTags={selectedNote.tagging?.tags ?? []} existingTopics={selectedNote.tagging?.topics ?? []} tagLabels={readerNoteTagLabels(props.t)}
                   currentTitle={selectedNote.summary.title}
                   labels={readerDocumentActionLabels(props.t)}
@@ -7395,6 +7397,10 @@ function readerNoteMergeLabels(t: (key: string) => string) {
 
 function isNoteEditorEligible(note: NoteRenderResult): boolean {
   return (note.summary.pageType === "note" || note.summary.pageType === "source") && note.summary.status !== "archived";
+}
+
+function isRelatableKnowledgePage(note: NoteRenderResult): boolean {
+  return note.summary.status === "active" && ["note", "claim", "question", "concept", "entity"].includes(note.summary.pageType);
 }
 
 function noteEditorOpenMatches(request: NoteEditorOpenRequest, result: NoteEditorOpenResult): boolean {

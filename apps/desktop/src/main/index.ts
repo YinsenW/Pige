@@ -1968,7 +1968,9 @@ const getNoteRenameService = (): NoteRenameService => {
 const getNoteRelateService = (): NoteRelateService => {
   noteRelateService ??= new NoteRelateService(
     getNotesService(),
-    getNoteMarkdownEditorService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+    }),
     () => getVaultService().activeVaultPath(),
   );
   return noteRelateService;
@@ -3948,7 +3950,9 @@ app.whenReady().then(async () => {
   libraryTopicRenameService = new LibraryTopicRenameService(getVaultService(), getNotesService());
   noteRelateService = new NoteRelateService(
     getNotesService(),
-    noteMarkdownEditorService,
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+    }),
     () => getVaultService().activeVaultPath(),
   );
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());

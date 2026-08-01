@@ -10,6 +10,8 @@ import {
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 
 const temporaryPaths: string[] = [];
+const relatablePageTypes = ["note", "claim", "question", "concept", "entity"] as const;
+type RelatablePageType = (typeof relatablePageTypes)[number];
 const request = {
   apiVersion: 1 as const,
   requestId: "noterelatereq_abcdefghijklmnop",
@@ -26,7 +28,7 @@ afterEach(() => {
 });
 
 describe("NoteRelateService", () => {
-  it("adds one fixed related_to edge through the existing user edit and Activity owner", async () => {
+  it.each(relatablePageTypes)("adds one fixed related_to edge from an active %s through the existing user edit and Activity owner", async (pageType) => {
     const vaultPath = createVault();
     const assertCurrent = vi.fn(() => true);
     const save = vi.fn(() => ({
@@ -38,11 +40,11 @@ describe("NoteRelateService", () => {
       renderIdentity: `sha256:${"c".repeat(64)}`,
       operationId: "op_20260730_noterelate12345",
     }));
-    const render = vi.fn(async () => relatedRender());
+    const render = vi.fn(async () => relatedRender(pageType));
     const service = new NoteRelateService({
-      resolveTrashTarget: vi.fn(() => readyCurrent(assertCurrent)),
+      resolveTrashTarget: vi.fn(() => readyCurrent(assertCurrent, pageType)),
       render,
-    } as never, { open: vi.fn(() => openedCurrent()), save } as never, () => vaultPath,
+    } as never, { open: vi.fn(() => openedCurrent([], pageType)), save } as never, () => vaultPath,
     () => new Date("2026-07-30T11:00:00.000Z"));
 
     await expect(service.relate("reader_owner", request)).resolves.toMatchObject({
@@ -84,6 +86,13 @@ describe("NoteRelateService", () => {
       resolveTrashTarget: vi.fn(() => readyCurrent(() => false)), render: vi.fn(),
     } as never, { open: vi.fn(() => openedCurrent()), save } as never, () => vaultPath);
     await expect(staleCurrent.relate("reader_owner", request)).resolves.toEqual({ ...request, status: "stale" });
+
+    const mismatchedRender = new NoteRelateService({
+      resolveTrashTarget: vi.fn(() => readyCurrent(() => true, "claim")), render: vi.fn(async () => relatedRender("note")),
+    } as never, { open: vi.fn(() => openedCurrent([], "claim")), save: vi.fn(() => ({
+      status: "committed", operationId: "op_20260730_noterelatemismatch",
+    })) } as never, () => vaultPath);
+    await expect(mismatchedRender.relate("reader_owner", request)).resolves.toEqual({ ...request, status: "failed" });
   });
 
   it("commits one real update_page Activity and restores exact bytes through Undo", async () => {
@@ -184,7 +193,7 @@ function createVault(): string {
   return vaultPath;
 }
 
-function readyCurrent(assertCurrent: () => boolean) {
+function readyCurrent(assertCurrent: () => boolean, pageType: RelatablePageType = "note") {
   return {
     status: "ready" as const,
     activeVaultId: request.activeVaultId,
@@ -193,30 +202,31 @@ function readyCurrent(assertCurrent: () => boolean) {
     pagePath: "wiki/source.md",
     absolutePath: "/private/vault/wiki/source.md",
     pageContentHash: `sha256:${"a".repeat(64)}`,
+    pageType,
     title: "Source note",
     assertCurrent,
   };
 }
 
-function openedCurrent(relatedPageIds: readonly string[] = []) {
+function openedCurrent(relatedPageIds: readonly string[] = [], pageType: RelatablePageType = "note") {
   return {
     status: "opened" as const,
     activeVaultId: request.activeVaultId,
     pageId: request.currentPageId,
     revisionId: `sha256:${"a".repeat(64)}`,
     renderIdentity: `sha256:${"d".repeat(64)}`,
-    markdown: noteMarkdown(request.currentPageId, "Source note", "2026-07-30T09:00:00.000Z", relatedPageIds),
+    markdown: noteMarkdown(request.currentPageId, "Source note", "2026-07-30T09:00:00.000Z", relatedPageIds, pageType),
   };
 }
 
-function noteMarkdown(pageId: string, title: string, updatedAt: string, relatedPageIds: readonly string[] = []): string {
-  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: "2026-07-30T09:00:00.000Z"\nupdated_at: ${JSON.stringify(updatedAt)}\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: ${JSON.stringify(relatedPageIds)}\nprovenance:\n  generated_by: "user"\nnote:\n  note_kind: "user"\n  review_state: "clean"\n---\n\n# ${title}\n\nBody.\n`;
+function noteMarkdown(pageId: string, title: string, updatedAt: string, relatedPageIds: readonly string[] = [], pageType: RelatablePageType = "note"): string {
+  return `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: ${JSON.stringify(pageType)}\ncreated_at: "2026-07-30T09:00:00.000Z"\nupdated_at: ${JSON.stringify(updatedAt)}\nstatus: "active"\nlanguage: "en"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: ${JSON.stringify(relatedPageIds)}\nprovenance:\n  generated_by: "user"\n${pageType === "note" ? 'note:\n  note_kind: "user"\n  review_state: "clean"' : ""}\n---\n\n# ${title}\n\nBody.\n`;
 }
 
-function relatedRender() {
+function relatedRender(pageType: RelatablePageType = "note") {
   return {
     summary: {
-      pageId: request.currentPageId, title: "Source note", pageType: "note" as const, status: "active" as const,
+      pageId: request.currentPageId, title: "Source note", pageType, status: "active" as const,
       pagePath: "wiki/source.md", createdAt: "2026-07-30T09:00:00.000Z",
       updatedAt: "2026-07-30T11:00:00.000Z", sourceIds: [],
     },

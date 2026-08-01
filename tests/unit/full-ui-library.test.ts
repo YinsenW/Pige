@@ -68,6 +68,7 @@ import {
   submitReaderNoteArchive,
   submitReaderNoteRestore,
 } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
+import { submitReaderNoteRelation } from "../../apps/desktop/src/renderer/src/components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
@@ -2100,14 +2101,16 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("relates one selected note to the current Reader and retains the exact target on stale", async () => {
+  it("relates one selected note to the current typed Reader and retains the exact target on stale", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: { unlinkRelation: vi.fn() } } });
     const requests: NoteRelateRequest[] = [];
     const adopted: NoteRenderResult[] = [];
     let mode: "stale" | "committed" = "stale";
     const note: NoteRenderResult = {
       ...readerNote(),
+      summary: { ...readerNote().summary, pageType: "claim" },
       trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` },
     };
     const target = libraryList().pages.find((page) => page.pageId !== note.summary.pageId && page.pageType === "note")!;
@@ -2164,6 +2167,22 @@ describe("full UI Library", () => {
     expect(requests).toHaveLength(2);
     expect(adopted).toEqual([committedRender]);
     await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("retains a typed Reader relation when Main returns a different page type", async () => {
+    const dom = createDom();
+    const initial = readerNote();
+    const note: NoteRenderResult = { ...initial, summary: { ...initial.summary, pageType: "question" },
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const target = libraryList().pages.find((page) => page.pageId !== note.summary.pageId && page.pageType === "note")!;
+    const outcome = await submitReaderNoteRelation({
+      activeVaultId: "vault_20260715_fullui01", currentPageId: note.summary.pageId,
+      renderContextId: note.renderContextId!, expectedRevision: note.trashEligibility!.revision,
+      expectedPageType: note.summary.pageType,
+      execute: async (request) => ({ ...request, status: "committed", render: initial }),
+    }, { pageId: target.pageId, title: target.title, updatedAt: target.updatedAt });
+    expect(outcome).toEqual({ status: "retained" });
     dom.window.close();
   });
 

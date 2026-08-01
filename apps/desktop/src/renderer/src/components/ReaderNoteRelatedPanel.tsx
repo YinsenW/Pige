@@ -60,7 +60,7 @@ export function ReaderNoteRelatedPanel(props: {
       const result = await props.onUnlink(request);
       if (ownerRef.current !== identity || !sameIdentity(request, result)) return;
       if (result.status === "committed" && result.render.summary.pageId === request.currentPageId &&
-          result.render.summary.pageType === "note" && result.render.summary.status === "active") {
+          result.render.summary.pageType === props.note.summary.pageType && result.render.summary.status === "active") {
         setConfirmTarget(null);
         props.onCommitted?.(result.render);
         return;
