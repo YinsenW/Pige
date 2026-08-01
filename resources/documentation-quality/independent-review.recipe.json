@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T06:52:52.000+08:00",
+  "reviewedAt": "2026-08-02T07:05:00.000+08:00",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review bounded immutable Managed Collection history, read-only preview and explicit forward-only restore, plus existing stable table and saved-view edits.",
+    "scope": "Review exact installed Pi package inspection, Main-owned tree and manifest revalidation, honest catalog disclosure, and pathless Settings details.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "68a0eff86052f4af718eda311083ad86a4c19ae5367749b4c6eb8331694cb594"
+    "reviewedSha256": "223b23a91f4515dded3dd39f7b2877393a230da9e6807da55e4db20c35eeffc4"
   },
   "reviewers": [
     {

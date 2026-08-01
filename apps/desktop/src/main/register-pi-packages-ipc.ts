@@ -4,6 +4,8 @@ import {
   PiPackageCatalogQueryResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
+  PiPackageInspectRequestSchema,
+  PiPackageInspectResultSchema,
   PiPackageRegistryQueryResultSchema,
   PiPackageRestoreRequestSchema,
   PiPackageRestoreResultSchema,
@@ -19,6 +21,8 @@ import {
   PiPackageUpdateResultSchema,
   type PiPackageInstallRequest,
   type PiPackageInstallResult,
+  type PiPackageInspectRequest,
+  type PiPackageInspectResult,
   type PiPackageCatalogQueryRequest,
   type PiPackageCatalogQueryResult,
   type PiPackageRegistrySummary,
@@ -45,6 +49,7 @@ export interface RegisterPiPackagesIpcOptions {
   readonly getActiveVaultId: () => string | undefined;
   readonly summary: () => Awaitable<PiPackageRegistryQueryResult>;
   readonly catalogQuery: (request: PiPackageCatalogQueryRequest) => Awaitable<PiPackageCatalogQueryResult>;
+  readonly inspect: (request: PiPackageInspectRequest) => Awaitable<PiPackageInspectResult>;
   readonly install: (request: PiPackageInstallRequest) => Awaitable<PiPackageInstallResult>;
   readonly confirmUninstall: (sender: WebContents, request: PiPackageUninstallRequest) => Awaitable<boolean>;
   readonly uninstall: (request: PiPackageUninstallRequest) => Awaitable<PiPackageUninstallResult>;
@@ -82,6 +87,18 @@ export function registerPiPackagesIpc(options: RegisterPiPackagesIpcOptions): vo
       return options.isTrustedSender(event.sender) ? result : failedCatalogQuery(parsed);
     } catch {
       return failedCatalogQuery(parsed);
+    }
+  });
+
+  options.ipcMain.handle("piPackages.inspect", async (event, request: unknown) => {
+    const parsed = PiPackageInspectRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender)) return failedInspect(parsed);
+    try {
+      const result = PiPackageInspectResultSchema.parse(await options.inspect(parsed));
+      assertInspectIdentity(parsed, result);
+      return options.isTrustedSender(event.sender) ? result : failedInspect(parsed);
+    } catch {
+      return failedInspect(parsed);
     }
   });
 
@@ -264,6 +281,22 @@ function assertCatalogQueryIdentity(
 ): void {
   if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId) {
     throw new Error("Pi package catalog response identity did not match the request.");
+  }
+}
+
+function failedInspect(request: PiPackageInspectRequest): PiPackageInspectResult {
+  return PiPackageInspectResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    packageId: request.packageId,
+    status: "failed"
+  });
+}
+
+function assertInspectIdentity(request: PiPackageInspectRequest, result: PiPackageInspectResult): void {
+  if (result.apiVersion !== request.apiVersion || result.requestId !== request.requestId ||
+    result.packageId !== request.packageId) {
+    throw new Error("Pi package inspection response identity did not match the request.");
   }
 }
 

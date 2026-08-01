@@ -63,6 +63,8 @@ import type {
   PiPackageCatalogQueryResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
+  PiPackageInspectRequest,
+  PiPackageInspectResult,
   PiPackageRegistrySummary,
   PiPackageRestoreRequest,
   PiPackageRestoreResult,
@@ -495,8 +497,8 @@ describe("full UI Settings surface", () => {
     });
 
     const page = dom.window.document.querySelector<HTMLElement>(".settings-general")!;
-    expect(page.querySelectorAll(".settings-section")).toHaveLength(2);
-    expect(page.querySelectorAll(".settings-row")).toHaveLength(7);
+    expect(page.querySelectorAll(".settings-section")).toHaveLength(3);
+    expect(page.querySelectorAll(".settings-row")).toHaveLength(9);
     expect(page.textContent).toContain("Startup & Window");
     expect(page.textContent).toContain("Pige");
     expect(page.textContent).toContain("Adaptive");
@@ -522,7 +524,7 @@ describe("full UI Settings surface", () => {
 
     expect(onOpenAppearance).toHaveBeenCalledOnce();
     expect(onAlwaysOnTopChange).toHaveBeenCalledOnce();
-    expect(ipcRead).toBe(false);
+    expect(ipcRead).toBe(true);
 
     await act(async () => root.unmount());
     dom.window.close();
@@ -3407,6 +3409,88 @@ describe("full UI Settings surface", () => {
       expect(page.textContent).not.toContain("must-not-replace-existing");
     }
     expect(install.mock.calls.map(([request]) => request.expectedRegistryRevision)).toEqual([4, 5, 5]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("inspects an installed Pi package pathlessly and retains verified details on stale refresh", async () => {
+    const dom = createDom();
+    const item = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "@narumitw/pi-btw", { version: "0.34.0" });
+    const initial = piPackageRegistry(7, [item]);
+    const results: PiPackageInspectResult[] = [{
+      apiVersion: 1,
+      requestId: "pi_package_inspect_request_placeholder0000",
+      packageId: item.packageId,
+      status: "ready",
+      registryRevision: 7,
+      inspection: {
+        packageId: item.packageId,
+        packageName: item.packageName,
+        version: item.version,
+        integrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA==",
+        installedAt: "2026-08-02T00:00:00.000Z",
+        state: "installed_disabled",
+        packageTypes: ["extension"],
+        dependencyCount: 0,
+        enabled: false,
+        pinned: false,
+        source: "npm",
+        installationTrust: "community",
+        integrityStatus: "verified",
+        catalogDisclosure: { status: "reviewed", entry: piPackageCatalogEntry() }
+      }
+    }, {
+      apiVersion: 1,
+      requestId: "pi_package_inspect_request_placeholder0000",
+      packageId: item.packageId,
+      status: "stale",
+      registry: piPackageRegistry(8, [item])
+    }];
+    const inspect = vi.fn(async (request: PiPackageInspectRequest): Promise<PiPackageInspectResult> => ({
+      ...results.shift()!,
+      requestId: request.requestId,
+      packageId: request.packageId
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: initial }),
+      catalogQuery: emptyPiPackageCatalogQuery,
+      inspect,
+      install: vi.fn(), uninstall: vi.fn(), update: vi.fn(), rollback: vi.fn(), setPinned: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(PiPackagesSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const inspectButton = buttonNamed(page, "Inspect");
+    await act(async () => {
+      inspectButton.focus();
+      inspectButton.click();
+      await settle(dom);
+    });
+    expect(inspect).toHaveBeenCalledWith(expect.objectContaining({
+      expectedRegistryRevision: 7,
+      packageId: item.packageId
+    }));
+    expect(page.textContent).toContain("Installed files and manifest match the recorded package identity.");
+    expect(page.textContent).toContain("Matches the reviewed catalog disclosure");
+    expect(page.textContent).toContain("MIT");
+    expect(page.textContent).not.toMatch(/relativePath|treeHash|manifestHash|\/private\//u);
+
+    await act(async () => {
+      inspectButton.click();
+      await settle(dom);
+    });
+    await act(async () => {
+      inspectButton.click();
+      await settle(dom);
+    });
+    expect(page.querySelector('[data-package-registry-revision="8"]')).not.toBeNull();
+    expect(page.textContent).toContain("Installed files and manifest match the recorded package identity.");
+    expect(page.textContent).toContain("The package inventory changed.");
+    expect(dom.window.document.activeElement).toBe(inspectButton);
 
     await act(async () => root.unmount());
     dom.window.close();

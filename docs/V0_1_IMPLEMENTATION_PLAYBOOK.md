@@ -685,7 +685,9 @@ Build:
   auth plan confirms exact supply chain/destinations once and runs current-Job ordinals.
   One Pige-owned External/Web adapter confirms each public-origin read; identity or redirect
   drift closes before network.
-- [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations and explicit search/inspection.
+- [B8.09 -> E8.04] Curated Pi package catalog and manager with reviewed recommendations, explicit
+  search, and installed-package inspection that revalidates private tree/manifest identity before
+  projecting exact reviewed disclosure or `unknown`.
 - [B8.10 -> E8.04] Pi package install, disabled trash/restore, update, uninstall, version pinning, rollback, rollback-safe records, and trust/capability/data-boundary disclosure; runtime enable stays isolated.
 
 Deferred from this phase:

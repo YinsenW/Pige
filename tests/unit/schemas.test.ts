@@ -286,6 +286,8 @@ import {
   SetDefaultModelRequestSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
+  PiPackageInspectRequestSchema,
+  PiPackageInspectResultSchema,
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
@@ -4094,6 +4096,45 @@ describe("schemas", () => {
       })).toThrow();
     }
     expect(() => PiPackageInstallRequestSchema.parse({ ...request, version: "latest" })).toThrow();
+  });
+
+  it("keeps installed Pi package inspection identity-bound, verified, and disclosure-safe", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "pi_package_inspect_request_abcdefghijklmnop",
+      expectedRegistryRevision: 4,
+      packageId: "pkg_0123456789abcdef01234567"
+    } as const;
+    const inspection = {
+      packageId: request.packageId,
+      packageName: "@narumitw/pi-btw",
+      version: "0.34.0",
+      integrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA==",
+      installedAt: "2026-08-02T00:00:00.000Z",
+      state: "installed_disabled",
+      packageTypes: ["extension"],
+      dependencyCount: 0,
+      enabled: false,
+      pinned: false,
+      source: "npm",
+      installationTrust: "community",
+      integrityStatus: "verified",
+      catalogDisclosure: { status: "unknown" }
+    } as const;
+    expect(PiPackageInspectRequestSchema.parse(request)).toEqual(request);
+    expect(PiPackageInspectResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, packageId: request.packageId,
+      status: "ready", registryRevision: 4, inspection
+    })).toMatchObject({ status: "ready", inspection: { integrityStatus: "verified" } });
+    expect(() => PiPackageInspectRequestSchema.parse({ ...request, path: "/private/package" })).toThrow();
+    expect(() => PiPackageInspectResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, packageId: request.packageId,
+      status: "ready", registryRevision: 4,
+      inspection: { ...inspection, body: "package code" }
+    })).toThrow();
+    expect(PiPackageInspectResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, packageId: request.packageId, status: "failed"
+    })).toEqual({ apiVersion: 1, requestId: request.requestId, packageId: request.packageId, status: "failed" });
   });
 
   it("keeps Pi package uninstall identity exact and failed results registry-free", () => {

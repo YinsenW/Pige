@@ -770,6 +770,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly catalogQuery: (");
     expect(contractsSource).toContain("request: PiPackageCatalogQueryRequest");
     expect(contractsSource).toContain("Promise<PiPackageCatalogQueryResult>");
+    expect(contractsSource).toContain("request: PiPackageInspectRequest");
+    expect(contractsSource).toContain("Promise<PiPackageInspectResult>");
     expect(contractsSource).toContain("request: PiPackageInstallRequest");
     expect(contractsSource).toContain("readonly uninstall: (");
     expect(contractsSource).toContain("request: PiPackageUninstallRequest");
@@ -784,6 +786,9 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("request: PiPackageSetPinnedRequest");
     expect(contractsSource).toContain("Promise<PiPackageSetPinnedResult>");
     expect(packageApi).toContain('ipcRenderer.invoke("piPackages.summary")');
+    expect(packageApi).toContain('"piPackages.inspect"');
+    expect(packageApi).toContain("PiPackageInspectRequestSchema.parse(request)");
+    expect(packageApi).toContain("PiPackageInspectResultSchema.parse(await ipcRenderer.invoke");
     expect(packageApi).toContain('"piPackages.install"');
     expect(packageApi).toContain("PiPackageInstallRequestSchema.parse(request)");
     expect(packageApi).toContain("PiPackageInstallResultSchema.parse(await ipcRenderer.invoke");

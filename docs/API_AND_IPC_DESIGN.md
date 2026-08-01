@@ -948,8 +948,10 @@ External/Web uninstall/export use the same inert, pathless lifecycle boundary; v
 revalidates its install disclosure and returns disabled.
 
 Pi Package IPC is path/body-free and `summary` authoritative. `catalogQuery` returns reviewed
-identity/disclosure. Install/uninstall/update/rollback confirm; pin/unpin and receipt-owned restore
-do not. Restore binds registry/package/version/SRI/pin/rollback/context, revalidates private trash
+identity/disclosure. `inspect` binds registry/package identity, revalidates the installed tree and
+manifest in Main, and discloses an exact reviewed-catalog match or `unknown` without paths or code.
+Install/uninstall/update/rollback confirm; pin/unpin, inspection and receipt-owned restore do not.
+Restore binds registry/package/version/SRI/pin/rollback/context, revalidates private trash
 and commits disabled without network or code. Readable outcomes include registry; `failed` is
 identity-only. Main adopts verified trees once.
 

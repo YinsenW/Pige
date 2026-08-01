@@ -66,6 +66,28 @@ const catalogEntry = {
   trust: "curated",
   source: "npm"
 } as const;
+const inspectRequest = {
+  apiVersion: 1,
+  requestId: "pi_package_inspect_request_abcdefghijklmnop",
+  expectedRegistryRevision: registry.revision,
+  packageId: registry.packages[0].packageId
+} as const;
+const inspection = {
+  packageId: inspectRequest.packageId,
+  packageName: registry.packages[0].packageName,
+  version: registry.packages[0].version,
+  integrity: restoreRequest.integrity,
+  installedAt: "2026-08-02T00:00:00.000Z",
+  state: "installed_disabled",
+  packageTypes: ["extension"],
+  dependencyCount: 0,
+  enabled: false,
+  pinned: false,
+  source: "npm",
+  installationTrust: "community",
+  integrityStatus: "verified",
+  catalogDisclosure: { status: "unknown" }
+} as const;
 const updateRequest = {
   apiVersion: 1, requestId: "pi_package_update_request_abcdefghijklmnop",
   packageId: registry.packages[0].packageId, expectedRegistryRevision: registry.revision,
@@ -93,6 +115,7 @@ function makeHarness(overrides: {
   readonly getActiveVaultId?: () => string | undefined;
   readonly summary?: () => unknown;
   readonly catalogQuery?: (value: typeof catalogRequest) => unknown;
+  readonly inspect?: (value: typeof inspectRequest) => unknown;
   readonly install?: (value: typeof request) => unknown;
   readonly confirmUninstall?: (value: typeof uninstallRequest) => unknown;
   readonly uninstall?: (value: typeof uninstallRequest) => unknown;
@@ -119,6 +142,14 @@ function makeHarness(overrides: {
     status: "ready",
     entries: [catalogEntry],
     total: 1
+  })));
+  const inspect = vi.fn(overrides.inspect ?? ((value) => ({
+    apiVersion: 1,
+    requestId: value.requestId,
+    packageId: value.packageId,
+    status: "ready",
+    registryRevision: value.expectedRegistryRevision,
+    inspection
   })));
   const confirmUninstall = vi.fn((_sender, value) => overrides.confirmUninstall?.(value) ?? true);
   const uninstall = vi.fn(overrides.uninstall ?? ((value) => ({
@@ -170,6 +201,7 @@ function makeHarness(overrides: {
     getActiveVaultId: overrides.getActiveVaultId ?? (() => "vault_20260728_packages"),
     summary,
     catalogQuery,
+    inspect,
     install,
     confirmUninstall,
     uninstall,
@@ -181,7 +213,7 @@ function makeHarness(overrides: {
     setPinned,
     setEnabled
   });
-  return { handlers, summary, catalogQuery, install, confirmUninstall, uninstall, restore,
+  return { handlers, summary, catalogQuery, inspect, install, confirmUninstall, uninstall, restore,
     confirmUpdate, update, confirmRollback, rollback, setPinned, setEnabled };
 }
 
@@ -189,7 +221,7 @@ describe("registerPiPackagesIpc", () => {
   it("registers the exact package Settings channels and forwards a strict install", async () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
-      "piPackages.summary", "piPackages.catalogQuery", "piPackages.install", "piPackages.uninstall",
+      "piPackages.summary", "piPackages.catalogQuery", "piPackages.inspect", "piPackages.install", "piPackages.uninstall",
       "piPackages.restore", "piPackages.update", "piPackages.rollback", "piPackages.setPinned",
       "piPackages.setEnabled"
     ]);
@@ -202,6 +234,27 @@ describe("registerPiPackagesIpc", () => {
     });
     expect(harness.install).toHaveBeenCalledOnce();
     expect(harness.install).toHaveBeenCalledWith(request);
+  });
+
+  it("inspects one exact installed package without vault or path authority", async () => {
+    const harness = makeHarness({ getActiveVaultId: () => undefined });
+    await expect(call(harness, "piPackages.inspect", inspectRequest)).resolves.toEqual({
+      apiVersion: 1,
+      requestId: inspectRequest.requestId,
+      packageId: inspectRequest.packageId,
+      status: "ready",
+      registryRevision: inspectRequest.expectedRegistryRevision,
+      inspection
+    });
+    expect(harness.inspect).toHaveBeenCalledWith(inspectRequest);
+
+    const swapped = makeHarness({ inspect: (value) => ({
+      apiVersion: 1, requestId: value.requestId, packageId: "pkg_ffffffffffffffffffffffff", status: "failed"
+    }) });
+    await expect(call(swapped, "piPackages.inspect", inspectRequest)).resolves.toEqual({
+      apiVersion: 1, requestId: inspectRequest.requestId, packageId: inspectRequest.packageId, status: "failed"
+    });
+    await expect(call(harness, "piPackages.inspect", { ...inspectRequest, path: "/private/package" })).rejects.toThrow();
   });
 
   it("restores only the exact pathless receipt binding and fences sender drift", async () => {

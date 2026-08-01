@@ -356,6 +356,7 @@ import { createFirstPartyReadonlyNodeOsCapabilityAdapters } from "./services/rea
 import { createFirstPartyCommandCapabilityAdapter } from "./services/command-capability-adapter";
 import { createPiPackageInstallCapabilityAdapter } from "./services/pi-package-capability-adapter";
 import { PiPackageCatalogService } from "./services/pi-package-catalog-service";
+import { PiPackageInspectionService } from "./services/pi-package-inspection-service";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { PiPackageRestoreService } from "./services/pi-package-restore-service";
 import { PiPackageUpdateService } from "./services/pi-package-update-service";
@@ -475,6 +476,7 @@ let firstPartyReadonlyNodeOsCapabilitiesRegistered = false;
 let firstPartyCommandCapabilityRegistered = false;
 let firstPartyPiPackageCapabilityRegistered = false;
 let piPackageCatalogService: PiPackageCatalogService | undefined;
+let piPackageInspectionService: PiPackageInspectionService | undefined;
 let piPackageManagerService: PiPackageManagerService | undefined;
 let piPackageRestoreService: PiPackageRestoreService | undefined;
 let piPackageUpdateService: PiPackageUpdateService | undefined;
@@ -1529,6 +1531,15 @@ const getPiPackageRestoreService = (): PiPackageRestoreService => {
 const getPiPackageCatalogService = (): PiPackageCatalogService => {
   piPackageCatalogService ??= new PiPackageCatalogService(resolvePiPackageCatalogManifestPath());
   return piPackageCatalogService;
+};
+const getPiPackageInspectionService = (): PiPackageInspectionService => {
+  piPackageInspectionService ??= new PiPackageInspectionService({
+    appDataRoot: app.getPath("userData"),
+    manager: getPiPackageManagerService(),
+    catalog: getPiPackageCatalogService(),
+    summary: () => getPiPackageRestoreService().summary()
+  });
+  return piPackageInspectionService;
 };
 
 const getPiPackageInstallTaskService = (): PiPackageInstallTaskService => {
@@ -3530,6 +3541,7 @@ registerPiPackagesIpc({
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   summary: async () => ({ status: "ready", registry: await piPackageRestores.summary() }),
   catalogQuery: (request) => getPiPackageCatalogService().query(request),
+  inspect: (request) => getPiPackageInspectionService().inspect(request),
   install: (request) => getPiPackageInstallTaskService().install(request),
   confirmUninstall: async (sender, request) => {
     try {
