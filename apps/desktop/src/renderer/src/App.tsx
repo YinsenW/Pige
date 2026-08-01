@@ -96,6 +96,8 @@ import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelate
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { resolveAndOpenInlineReference } from "./reader-inline-reference-navigation";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
+import { appendReaderQuoteToDraft, type ReaderQuoteIntoCapture } from "./reader-quote-into-capture";
+import { restoreActivityFocus, restoreActivityOpenFocus, restoreKnowledgeTreeFocus } from "./renderer-focus-restoration";
 import { ReaderSourceCitationPreview, type ReaderSourceCitationPreviewValue } from "./components/ReaderSourceCitationPreview";
 import {
   NoteMarkdownEditor,
@@ -1842,6 +1844,17 @@ export function App(): React.JSX.Element {
     });
   };
 
+  const quoteSelectedNoteIntoCapture = (quote: ReaderQuoteIntoCapture): boolean => {
+    const current = selectedNoteRef.current;
+    if (activeVaultIdRef.current !== quote.activeVaultId || selectedNoteVaultIdRef.current !== quote.activeVaultId ||
+      current?.summary.pageId !== quote.pageId || current.renderContextId !== quote.renderContextId ||
+      quote.selection.pageId !== quote.pageId) return false;
+    setHomeDraftText((draft) => appendReaderQuoteToDraft(draft, quote));
+    navigateHome();
+    window.setTimeout(() => document.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]')?.focus(), 0);
+    return true;
+  };
+
   const navigateLibrarySearch = async (): Promise<void> => {
     if (voiceAssetInstallActiveRef.current) return;
     noteOpenSequence.current += 1;
@@ -2784,6 +2797,7 @@ export function App(): React.JSX.Element {
             onReaderSelectionLinkApplied={refreshReaderSelectionLink}
             onReaderSelectionTransform={revealReaderSelectionTransform}
             onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
+            onQuoteIntoCapture={quoteSelectedNoteIntoCapture}
             selectedNote={selectedNote}
             {...(selectedNoteCitationPreview && selectedNoteCitationPreview.pageId === selectedNote?.summary.pageId
               ? { citationPreview: selectedNoteCitationPreview.preview }
@@ -2865,6 +2879,7 @@ export function App(): React.JSX.Element {
               onReaderSelectionLinkApplied={refreshReaderSelectionLink}
               onReaderSelectionTransform={revealReaderSelectionTransform}
               onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
+              onQuoteIntoCapture={quoteSelectedNoteIntoCapture}
               selectedNote={selectedNote}
               {...(selectedNoteCitationPreview && selectedNoteCitationPreview.pageId === selectedNote?.summary.pageId
                 ? { citationPreview: selectedNoteCitationPreview.preview }
@@ -3296,43 +3311,6 @@ export function App(): React.JSX.Element {
   );
 }
 
-function restoreActivityFocus(operationId: string): void {
-  window.setTimeout(() => {
-    const redoButton = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-activity-redo-id]")).find((element) => element.dataset.activityRedoId === operationId && !element.disabled);
-    const undoButton = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-activity-undo-id]"))
-      .find((element) => element.dataset.activityUndoId === operationId && !element.disabled);
-    const activityRow = Array.from(document.querySelectorAll<HTMLElement>("[data-activity-row-id]"))
-      .find((element) => element.dataset.activityRowId === operationId);
-    const activityTitle = document.querySelector<HTMLElement>("#settings-history-title");
-    const composer = document.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]');
-    (redoButton ?? undoButton ?? activityRow ?? activityTitle ?? composer)?.focus();
-  }, 0);
-}
-
-function restoreActivityOpenFocus(operationId: string): void {
-  window.setTimeout(() => {
-    const openButton = Array.from(
-      document.querySelectorAll<HTMLButtonElement>("[data-activity-open-id]"),
-    ).find(
-      (element) =>
-        element.dataset.activityOpenId === operationId && !element.disabled,
-    );
-    const activityRow = Array.from(
-      document.querySelectorAll<HTMLElement>("[data-activity-row-id]"),
-    ).find((element) => element.dataset.activityRowId === operationId);
-    (openButton ?? activityRow)?.focus();
-  }, 0);
-}
-
-function restoreKnowledgeTreeFocus(focusKey: string | null): void {
-  window.setTimeout(() => {
-    const exact = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-knowledge-open-key]"))
-      .find((element) => element.dataset.knowledgeOpenKey === focusKey && !element.disabled);
-    const treeHeading = document.querySelector<HTMLElement>("#knowledge-tree-heading");
-    (exact ?? treeHeading)?.focus();
-  }, 0);
-}
-
 const libraryKnowledgePageTypes = ["note", "topic", "concept", "entity", "claim", "question"] as const;
 
 function LibrarySidebarTree(props: {
@@ -3516,6 +3494,7 @@ export function LibraryPanel(props: {
   ) => Promise<boolean>;
   readonly onReaderSelectionTransform?: (result: ReaderSelectionTransformResult) => void;
   readonly onReaderSelectionCreateNote?: (result: ReaderSelectionCreateNoteResult) => void;
+  readonly onQuoteIntoCapture?: (quote: ReaderQuoteIntoCapture) => boolean;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: DevelopmentCapability) => void;
   readonly t: (key: string) => string;
@@ -3881,6 +3860,7 @@ export function LibraryPanel(props: {
           {...(props.onReaderSelectionLinkApplied ? { onSelectionLinkApplied: props.onReaderSelectionLinkApplied } : {})}
           {...(props.onReaderSelectionTransform ? { onSelectionTransformResult: props.onReaderSelectionTransform } : {})}
           {...(props.onReaderSelectionCreateNote ? { onSelectionCreateNoteResult: props.onReaderSelectionCreateNote } : {})}
+          {...(props.onQuoteIntoCapture ? { onQuoteIntoCapture: props.onQuoteIntoCapture } : {})}
           related={props.selectedNoteRelated}
           relatedLoadingPageId={props.noteLoadingPageId}
           onOpenRelated={props.onOpenNote} onUnlinkRelated={window.pige.notes.unlinkRelation} onRelatedUnlinked={props.onCurrentNoteRelated ?? props.onCurrentNoteMerged}
@@ -6872,6 +6852,17 @@ function HomeComposer(props: {
                 onSelectionActionResult={props.onReaderSelectionAction}
                 onSelectionTransformResult={revealHomeReaderSelectionTransform}
                 onSelectionCreateNoteResult={props.onReaderSelectionCreateNote}
+                onQuoteIntoCapture={(quote) => {
+                  if (props.activeVault?.vaultId !== quote.activeVaultId || selectedNote.summary.pageId !== quote.pageId ||
+                    selectedNote.renderContextId !== quote.renderContextId || quote.selection.pageId !== quote.pageId) return false;
+                  props.onDraftChange(appendReaderQuoteToDraft(props.draftText, quote));
+                  noteOpenSequence.current += 1;
+                  inlineReferenceSequence.current += 1;
+                  setSelectedNote(null);
+                  setSelectedNoteRelated(null);
+                  window.requestAnimationFrame(() => composerInputRef.current?.focus({ preventScroll: true }));
+                  return true;
+                }}
                 onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)} onSetClaimConfidence={(request) => window.pige.notes.setClaimConfidence(request)} onSetEntityType={(request) => window.pige.notes.setEntityType(request)} onSearchEntityMentions={(request) => window.pige.notes.searchEntityMentions(request)} onChangeEntityMention={(request) => window.pige.notes.changeEntityMention(request)} onSearchQuestionAnswers={(request) => window.pige.notes.searchQuestionAnswers(request)} onChangeQuestionAnswer={(request) => window.pige.notes.changeQuestionAnswer(request)} onSearchClaimContradictions={(request) => window.pige.notes.searchClaimContradictions(request)} onChangeClaimContradiction={(request) => window.pige.notes.changeClaimContradiction(request)} onSearchClaimEvidence={(request) => window.pige.notes.searchClaimEvidence(request)} onChangeClaimEvidence={(request) => window.pige.notes.changeClaimEvidence(request)} onSearchConceptParents={(request) => window.pige.notes.searchConceptParents(request)} onChangeConceptParent={(request) => window.pige.notes.changeConceptParent(request)} onSearchTopicParents={(request) => window.pige.notes.searchTopicParents(request)} onChangeTopicParent={(request) => window.pige.notes.changeTopicParent(request)}
                 onQuestionStateChanged={adoptMergedHomeNote}
                 onClaimConfidenceChanged={adoptMergedHomeNote} onEntityTypeChanged={adoptMergedHomeNote}

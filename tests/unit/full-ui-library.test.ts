@@ -3628,7 +3628,7 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("keeps Copy and quoted Copy local while More owns its keyboard and body-free status", async () => {
+  it("keeps Copy local and sends an exact resolved quote to the capture owner", async () => {
     const dom = createDom();
     const clipboardWrites: string[] = [];
     Object.defineProperty(dom.window.navigator, "clipboard", {
@@ -3643,6 +3643,7 @@ describe("full UI Library", () => {
     const unavailable: string[] = [];
     const transformRequests: ReaderSelectionTransformRequest[] = [];
     const transformResults: ReaderSelectionTransformResult[] = [];
+    const captureQuotes: unknown[] = [];
     await act(async () => {
       root.render(createElement(NoteReader, {
         note: readerNote(),
@@ -3667,6 +3668,7 @@ describe("full UI Library", () => {
           };
         },
         onSelectionTransformResult: (result) => transformResults.push(result),
+        onQuoteIntoCapture: (quote) => { captureQuotes.push(quote); return true; },
         related: null,
         relatedLoadingPageId: null,
         onOpenRelated: async () => undefined,
@@ -3740,7 +3742,7 @@ describe("full UI Library", () => {
     const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
-      "ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"
+      "ask", "createNote", "quoteIntoCapture", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"
     ]);
     expect(dom.window.document.activeElement).toBe(menuItems[0]);
     await act(async () => {
@@ -3759,6 +3761,25 @@ describe("full UI Library", () => {
     });
     expect(container.querySelector('[role="menu"]')).toBeNull();
     await waitFor(dom, () => dom.window.document.activeElement === container.querySelector('[data-selection-action="more"]'));
+    more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
+
+    await act(async () => {
+      more.click();
+      await settle(dom);
+      requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="quoteIntoCapture"]')).click();
+      await settle(dom);
+    });
+    expect(captureQuotes).toEqual([expect.objectContaining({
+      activeVaultId: "vault_20260715_fullui01",
+      pageId: "page_20260715_reader1111",
+      title: "Reader actions",
+      selectedText: "Selected first line\nSelected second line",
+      selection: expect.objectContaining({ selectedContentHash: `sha256:${"b".repeat(64)}` })
+    })]);
+    expect(clipboardWrites).toEqual([]);
+    expect(container.querySelector('[role="toolbar"]')).toBeNull();
+
+    await showSelection();
     more = requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]'));
 
     await act(async () => {

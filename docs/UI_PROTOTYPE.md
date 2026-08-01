@@ -685,7 +685,9 @@ Copy  Quote  Ask  Translate  Polish  Expand  Summarize  More
 
 Action behavior:
 
-- Copy/quote stay local. Other actions submit exact identity to the shared owner; Note, Claim,
+- Copy and Copy as quote stay local. Quote in Home accepts only the exact resolved current selection,
+  appends a Markdown quote to the existing Home draft, opens Home and restores composer focus without
+  submitting. Other actions submit exact identity to the shared owner; Note, Claim,
   Question, Concept, Entity and Topic stage one review, and applied opens only the matching
   authoritative page type. The extra knowledge types stay behind the existing `Turn into…`
   disclosure instead of adding default Reader controls.
