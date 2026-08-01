@@ -2130,6 +2130,50 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("offers an explicit Entity merge and keeps the Reader on stale", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: NoteMergeRequest[] = [];
+    const targetTypes: Array<"note" | "entity"> = [];
+    const entity: NoteRenderResult = {
+      ...readerNote(),
+      summary: { ...readerNote().summary, pageId: "page_20260802_entityreader01", title: "Ada Lovelace",
+        pageType: "entity", sourceIds: [] },
+      entityType: { entityType: "person", canChange: true, revision: `noteeditrev_${"e".repeat(32)}` },
+      trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` }
+    };
+    const target = { pageId: "page_20260802_entitytarget01", title: "Augusta Ada King",
+      updatedAt: "2026-08-02T10:01:00.000Z" };
+    await act(async () => {
+      root.render(createElement(LibraryPanel, {
+        libraryList: libraryList(), selectedNote: entity, selectedNoteRelated: null,
+        noteLoadingPageId: null, error: null, onGoHome: () => undefined,
+        onRefresh: async () => undefined, onSearch: async () => searchResult("unused", []), searchFocusRequest: 0,
+        onOpenNote: async () => undefined, onCloseNote: () => undefined,
+        noteAgentOpen: false, onToggleNoteAgent: () => undefined, noteAgentToggleRef: { current: null },
+        developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
+        activeVaultId: "vault_20260715_fullui01",
+        onLoadNoteMergeTargets: async (_pageId, pageType) => { targetTypes.push(pageType); return [target]; },
+        onMergeCurrentNote: async (request) => { requests.push(request); return { ...request, status: "stale" }; },
+        onCurrentNoteMerged: () => { throw new Error("stale Entity merge must not be adopted"); },
+        onDevelopment: () => undefined, t
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await clickButton(dom, buttonWithLabel(container, "More note actions"));
+    await clickButton(dom, buttonNamed(container, enMessages["entity.merge.title"]));
+    await waitFor(dom, () => container.querySelector("select")?.value === target.pageId);
+    await clickButton(dom, buttonNamed(container, enMessages["entity.merge.confirm"]));
+    expect(targetTypes).toEqual(["entity"]);
+    expect(requests[0]).toMatchObject({ currentPageId: entity.summary.pageId, targetPageId: target.pageId,
+      expectedTargetUpdatedAt: target.updatedAt });
+    expect(container.querySelector(".note-reader")).not.toBeNull();
+    expect(container.querySelector("select")?.value).toBe(target.pageId);
+    expect(dom.window.document.activeElement).toBe(container.querySelector("select"));
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
   it("relates one selected note to the current typed Reader and retains the exact target on stale", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);

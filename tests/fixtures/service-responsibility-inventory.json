@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "f76a9e7469741fc945ac7acd48258183aa821844",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 305,
-  "baselineLines": 129414,
+  "baselineFileCount": 306,
+  "baselineLines": 129955,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -54,6 +54,7 @@
       ["conversation-trash-service.ts", 583, "rd"],
       ["claim-contradiction-service.ts", 189, "rdf"],
       ["entity-mention-service.ts", 174, "rdf"],
+      ["entity-merge-service.ts", 541, "rd"],
       ["entity-type-service.ts", 102, "rdf"],
       ["concept-parent-service.ts", 193, "rdf"],
       ["topic-parent-service.ts", 184, "rdf"],
@@ -338,7 +339,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 305,
+    "serviceOwnerCount": 306,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

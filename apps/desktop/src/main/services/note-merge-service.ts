@@ -12,6 +12,7 @@ import type {
 import { parsePigeFrontmatter, stripPigeFrontmatter } from "@pige/markdown";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import { findMarkdownPageByIdAtSignature, readMarkdownPageContentAtSignature } from "./markdown-page-index";
+import type { EntityMergeService } from "./entity-merge-service";
 import type { NotesTrashResolution } from "./notes-service";
 
 const MAX_NOTE_BYTES = 4 * 1024 * 1024;
@@ -63,16 +64,19 @@ export type NoteMergeServiceResult =
 export class NoteMergeService {
   readonly #vaults: NoteMergeVaultPort;
   readonly #current: NoteMergeCurrentPort;
+  readonly #entities: EntityMergeService | undefined;
   readonly #now: () => Date;
   readonly #randomId: () => string;
 
   constructor(
     vaults: NoteMergeVaultPort,
     current: NoteMergeCurrentPort,
-    dependencies: { readonly now?: () => Date; readonly randomId?: () => string } = {}
+    dependencies: { readonly now?: () => Date; readonly randomId?: () => string;
+      readonly entityMergeService?: EntityMergeService } = {}
   ) {
     this.#vaults = vaults;
     this.#current = current;
+    this.#entities = dependencies.entityMergeService;
     this.#now = dependencies.now ?? (() => new Date());
     this.#randomId = dependencies.randomId ?? randomUUID;
   }
@@ -87,6 +91,8 @@ export class NoteMergeService {
         completeMerge(scope.vaultPath, existing);
         return { status: "committed", operationId: existing.operationId };
       }
+      const entityResult = this.#entities?.merge(ownerId, request);
+      if (entityResult !== undefined) return entityResult;
       const survivor = this.#current.resolveTrashTarget(ownerId, {
         activeVaultId: request.activeVaultId,
         pageId: request.currentPageId,
@@ -124,6 +130,8 @@ export class NoteMergeService {
   }
 
   activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined {
+    const entitySummary = this.#entities?.activitySummary(operation, undo);
+    if (entitySummary) return entitySummary;
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath || operation.kind !== "update_page") return undefined;
     const receipt = findReceiptByOperation(vaultPath, operation.id);
@@ -151,6 +159,8 @@ export class NoteMergeService {
   }
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
+    const entityUndo = this.#entities?.findUndoOperation(operation, operations);
+    if (entityUndo) return entityUndo;
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return undefined;
     const receipt = findReceiptByOperation(vaultPath, operation.id);
@@ -159,6 +169,8 @@ export class NoteMergeService {
   }
 
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
+    const entityResult = this.#entities?.undo(operation);
+    if (entityResult) return entityResult;
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return { status: "not_found", operationId: operation.id };
     const receipt = findReceiptByOperation(vaultPath, operation.id);
@@ -173,6 +185,8 @@ export class NoteMergeService {
   }
 
   redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    const entityResult = this.#entities?.redo(request);
+    if (entityResult) return entityResult;
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return { status: "not_found", operationId: request.operationId };
     try {
@@ -221,7 +235,8 @@ export class NoteMergeService {
       if (readOperation(vaultPath, receipt.operationId)) continue;
       try { completeMerge(vaultPath, receipt); recovered += 1; } catch { failed += 1; }
     }
-    return { recovered, failed };
+    const entities = this.#entities?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 };
+    return { recovered: recovered + entities.recovered, failed: failed + entities.failed };
   }
 
   #scope(activeVaultId: string): { readonly vaultPath: string } | undefined {
