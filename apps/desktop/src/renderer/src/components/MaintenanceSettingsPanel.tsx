@@ -73,6 +73,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const duplicateTopicTriggerRef = useRef<HTMLButtonElement | null>(null);
   const claimSourceTriggerRef = useRef<HTMLButtonElement | null>(null);
   const orphanParentTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const knowledgeHealthRetargetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const cancelResetButtonRef = useRef<HTMLButtonElement>(null);
   const mountedRef = useRef(true);
   const activeVaultIdRef = useRef(props.activeVaultId);
@@ -114,7 +115,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
 
   useEffect(() => {
     if (knowledgeHealthRepairState?.kind !== "committed" ||
-      !["duplicate_topic", "orphan_page"].includes(knowledgeHealthRepairState.issueKind) ||
+      !["broken_link", "duplicate_topic", "orphan_page"].includes(knowledgeHealthRepairState.issueKind) ||
       knowledgeHealthState.kind !== "ready") return;
     const timer = window.setTimeout(() => knowledgeHealthRunButtonRef.current?.focus(), 0);
     return () => window.clearTimeout(timer);
@@ -234,7 +235,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     const reportSequence = knowledgeHealthSequenceRef.current;
     const repairSequence = knowledgeHealthRepairSequenceRef.current + 1;
     knowledgeHealthRepairSequenceRef.current = repairSequence;
-    const issueKey = knowledgeHealthIssueKey(issue);
+    const issueKey = `${knowledgeHealthIssueKey(issue)}:${issue.occurrenceId}`;
     const request = {
       apiVersion: 1 as const,
       requestId: `knowledge_health_repair_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
@@ -264,7 +265,12 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
         ? currentState.result.issues.find((candidate) =>
           candidate.kind === "broken_link" &&
           candidate.page.pageId === issue.page.pageId &&
-          candidate.repairContextId === issue.repairContextId
+          candidate.repairableOccurrences?.some((occurrence) =>
+            occurrence.repairContextId === issue.repairContextId &&
+            occurrence.sourceRevision === issue.sourceRevision &&
+            occurrence.sourceRenderProof === issue.sourceRenderProof &&
+            occurrence.occurrenceId === issue.occurrenceId
+          ) === true
         )
         : undefined;
       if (
@@ -321,8 +327,9 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     }
   };
 
-  const openKnowledgeHealthRetarget = (issue: RepairableBrokenLink): void => {
+  const openKnowledgeHealthRetarget = (issue: RepairableBrokenLink, trigger: HTMLButtonElement): void => {
     if (knowledgeHealthRepairBusyRef.current) return;
+    knowledgeHealthRetargetTriggerRef.current = trigger;
     knowledgeHealthTargetSearchSequenceRef.current += 1;
     setKnowledgeHealthRetargetState({ kind: "open", issue, query: "" });
   };
@@ -789,6 +796,7 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
                 <button className="settings-button" type="button" onClick={() => {
                   knowledgeHealthTargetSearchSequenceRef.current += 1;
                   setKnowledgeHealthRetargetState(null);
+                  window.setTimeout(() => knowledgeHealthRetargetTriggerRef.current?.focus(), 0);
                 }}>
                   {props.t("backup.restoreCancel")}
                 </button>

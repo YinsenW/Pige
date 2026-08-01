@@ -960,12 +960,26 @@ describe("full UI Settings surface", () => {
         repairContextId,
         sourceRevision,
         sourceRenderProof,
-        occurrenceId
+        occurrenceId,
+        repairableOccurrences: [{ ordinal: 1, displayLabel: "Missing page", repairContextId,
+          sourceRevision, sourceRenderProof, occurrenceId }]
       },
       {
         kind: "broken_link",
         page: { pageId: "page_health_manual", title: "Manual page" },
-        unresolvedLinkCount: 2
+        unresolvedLinkCount: 2,
+        repairableOccurrences: [
+          { ordinal: 1, displayLabel: "First missing page",
+            repairContextId: `knowledge_health_repair_context_${"b".repeat(32)}`,
+            sourceRevision: `noteeditrev_${"7".repeat(64)}`,
+            sourceRenderProof: `knowledge_health_render_${"8".repeat(64)}`,
+            occurrenceId: `knowledge_health_occurrence_${"9".repeat(64)}` },
+          { ordinal: 2, displayLabel: "Second missing page",
+            repairContextId: `knowledge_health_repair_context_${"c".repeat(32)}`,
+            sourceRevision: `noteeditrev_${"7".repeat(64)}`,
+            sourceRenderProof: `knowledge_health_render_${"8".repeat(64)}`,
+            occurrenceId: `knowledge_health_occurrence_${"a".repeat(64)}` }
+        ]
       },
       { kind: "orphan_page", page: { pageId: "page_health_orphan_repair", title: "Orphan page" } }
     ];
@@ -1041,8 +1055,10 @@ describe("full UI Settings surface", () => {
     });
 
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
-    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Remove link")).toHaveLength(1);
-    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Choose target")).toHaveLength(1);
+    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Remove link")).toHaveLength(3);
+    expect([...page.querySelectorAll("button")].filter((button) => button.textContent === "Choose target")).toHaveLength(3);
+    expect(page.textContent).toContain("1. First missing page");
+    expect(page.textContent).toContain("2. Second missing page");
     expect(page.textContent).toContain("Manual page");
     expect(page.textContent).toContain("Orphan page");
 
@@ -1333,7 +1349,15 @@ describe("full UI Settings surface", () => {
         repairContextId,
         sourceRevision,
         sourceRenderProof,
-        occurrenceId
+        occurrenceId,
+        repairableOccurrences: [{
+          ordinal: 1,
+          displayLabel: "Missing page",
+          repairContextId,
+          sourceRevision,
+          sourceRenderProof,
+          occurrenceId
+        }]
       }],
       truncated: false
     }));

@@ -3079,10 +3079,14 @@ describe("schemas", () => {
         kind: "broken_link",
         page: { pageId: "page_20260727_broken01", title: "Broken link" },
         unresolvedLinkCount: 1,
-        repairContextId,
-        sourceRevision,
-        sourceRenderProof,
-        occurrenceId
+        repairableOccurrences: [{
+          ordinal: 1,
+          displayLabel: "Missing page",
+          repairContextId,
+          sourceRevision,
+          sourceRenderProof,
+          occurrenceId
+        }]
       }],
       truncated: false
     } as const;
@@ -3092,10 +3096,17 @@ describe("schemas", () => {
       coverage: "partial",
       invalidPageCount: 1
     })).toThrow();
-    expect(() => KnowledgeHealthRunResultSchema.parse({
+    expect(KnowledgeHealthRunResultSchema.parse({
       ...eligibleReport,
       counts: { ...eligibleReport.counts, unresolvedLinkCount: 2 },
       issues: [{ ...eligibleReport.issues[0], unresolvedLinkCount: 2 }]
+    })).toMatchObject({ issues: [{ unresolvedLinkCount: 2 }] });
+    expect(() => KnowledgeHealthRunResultSchema.parse({
+      ...eligibleReport,
+      issues: [{ ...eligibleReport.issues[0], repairableOccurrences: [
+        eligibleReport.issues[0].repairableOccurrences[0],
+        { ...eligibleReport.issues[0].repairableOccurrences[0], ordinal: 1 }
+      ] }]
     })).toThrow();
     expect(() => KnowledgeHealthRunResultSchema.parse({
       ...eligibleReport,
