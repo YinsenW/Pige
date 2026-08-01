@@ -165,6 +165,8 @@ import type {
   LocalDatabaseResetResult,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
+  ProviderApiKeyManagementRequest,
+  ProviderApiKeyManagementResult,
   NoteEditorOpenRequest,
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
@@ -582,6 +584,9 @@ import {
   KnowledgeHealthClaimSourceSearchResultSchema,
   KnowledgeHealthClaimSourceRepairRequestSchema,
   KnowledgeHealthClaimSourceRepairResultSchema,
+  MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
+  ProviderApiKeyManagementRequestSchema,
+  ProviderApiKeyManagementResultSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
@@ -2822,6 +2827,12 @@ const api: PigeDesktopApi = {
   models: {
     summary: async (): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.summary") as Promise<ModelProviderSettingsSummary>,
+    openApiKeyManagement: async (
+      request: ProviderApiKeyManagementRequest
+    ): Promise<ProviderApiKeyManagementResult> => ProviderApiKeyManagementResultSchema.parse(await ipcRenderer.invoke(
+      MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
+      ProviderApiKeyManagementRequestSchema.parse(request)
+    )),
     addPresetProvider: async (request: AddPresetProviderRequest): Promise<ProviderConnectResult> =>
       ipcRenderer.invoke("models.addPresetProvider", request) as Promise<ProviderConnectResult>,
     addManualProvider: async (request: AddManualProviderRequest): Promise<ProviderConnectResult> =>

@@ -1207,7 +1207,7 @@ export interface ProviderPresetSummary {
   readonly fixedBaseUrl: string;
   readonly modelListStrategy: ModelListStrategy;
   readonly cloudBoundary: CloudBoundary;
-  readonly apiKeyManagementUrl?: string;
+  readonly canOpenApiKeyManagement: boolean;
 }
 
 export interface ModelProfileSummary {
@@ -1262,6 +1262,16 @@ export interface AddPresetProviderRequest {
   readonly presetId: string;
   readonly apiKey?: string;
 }
+
+export interface ProviderApiKeyManagementRequest {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+  readonly presetId: string;
+}
+
+export type ProviderApiKeyManagementResult = ProviderApiKeyManagementRequest & {
+  readonly status: "opened" | "unavailable" | "failed";
+};
 
 export interface AddManualProviderRequest {
   readonly displayName: string;
@@ -2659,6 +2669,9 @@ export interface PigeDesktopApi {
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;
+    readonly openApiKeyManagement: (
+      request: ProviderApiKeyManagementRequest
+    ) => Promise<ProviderApiKeyManagementResult>;
     readonly addPresetProvider: (request: AddPresetProviderRequest) => Promise<ProviderConnectResult>;
     readonly addManualProvider: (request: AddManualProviderRequest) => Promise<ProviderConnectResult>;
     readonly refreshProviderModels: (request: RefreshProviderModelsRequest) => Promise<ModelProviderSettingsSummary>;

@@ -35,6 +35,7 @@ import type {
   LibraryTagsRequest,
   LibraryRelatedRequest,
   OpenRecentVaultRequest,
+  ProviderApiKeyManagementRequest,
   ProviderConnectResult,
   RefreshProviderModelsRequest,
   UpdateProviderCredentialRequest,
@@ -91,6 +92,9 @@ import {
   HighRiskConfirmationResolveResultSchema,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
+  MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
+  ProviderApiKeyManagementRequestSchema,
+  ProviderApiKeyManagementResultSchema,
   AddManualModelRequestSchema,
   RefreshProviderModelsRequestSchema,
   AgentSubmitTurnIpcPayloadSchema,
@@ -281,6 +285,7 @@ import { LocalDatabaseService } from "./services/local-database-service";
 import { listMarkdownTagCatalog } from "./services/markdown-page-index";
 import { LocalSettingsStore } from "./services/local-settings";
 import { ModelProviderRegistry } from "./services/model-provider-registry";
+import { openReviewedProviderApiKeyManagement } from "./services/model-provider-presets";
 import { PermissionBrokerService } from "./services/permission-broker-service";
 import { PermissionFullAccessService } from "./services/permission-full-access-service";
 import { PermissionPolicyStore } from "./services/permission-policy-store";
@@ -3565,6 +3570,13 @@ registerDiagnosticsIpc({
   }
 });
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
+ipcMain.handle(MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL, async (
+  _event,
+  request: ProviderApiKeyManagementRequest
+) => ProviderApiKeyManagementResultSchema.parse(await openReviewedProviderApiKeyManagement(
+  ProviderApiKeyManagementRequestSchema.parse(request),
+  (url) => shell.openExternal(url)
+)));
 ipcMain.handle("models.addPresetProvider", async (_event, request: AddPresetProviderRequest) => {
   const parsedRequest = AddPresetProviderRequestSchema.parse(request);
   const validatedRequest: AddPresetProviderRequest = {
