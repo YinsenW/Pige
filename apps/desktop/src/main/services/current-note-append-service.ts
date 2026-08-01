@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { parsePigeFrontmatter } from "@pige/markdown";
+import { parsePigeFrontmatter, stripPigeFrontmatter } from "@pige/markdown";
 import {
   JobRecordSchema,
   OperationRecordSchema,
@@ -29,6 +29,7 @@ import {
   currentNoteConflictRevision,
   projectCurrentNoteConflictLines
 } from "./current-note-conflict-review-service";
+import { CurrentNoteConflictSaveService, currentNoteConflictSavedOperationMatches, readCurrentNoteConflictReviewBase } from "./current-note-conflict-save-service";
 
 const MAX_APPEND_TEXT_BYTES = 16 * 1024;
 const MAX_PAGE_BYTES = 1024 * 1024;
@@ -36,6 +37,7 @@ const MAX_RECORD_BYTES = 256 * 1024;
 const APPEND_TOOL_ID = "pige_append_current_note";
 const APPEND_TOOL_VERSION = "1";
 const conflictReviews = new CurrentNoteConflictReviewService();
+const conflictSaves = new CurrentNoteConflictSaveService();
 
 export interface CurrentNoteAppendInspection {
   readonly pageId: string;
@@ -81,7 +83,7 @@ export type CurrentNoteAppendResult =
     };
 
 export type CurrentNoteAppendProposalDecisionResult =
-  | { readonly status: "applied"; readonly proposal: CurrentNoteAppendProposalPreview; readonly operation: OperationRecord }
+  | { readonly status: "applied"; readonly proposal: CurrentNoteAppendProposalPreview; readonly operation: OperationRecord; readonly createdPageId?: string }
   | { readonly status: "rejected" | "conflicted"; readonly proposal: CurrentNoteAppendProposalPreview }
   | { readonly status: "stale"; readonly proposal?: CurrentNoteAppendProposalPreview }
   | { readonly status: "not_found" };
@@ -259,7 +261,7 @@ export class CurrentNoteAppendService {
     readonly jobId: string;
     readonly proposalId: string;
     readonly expectedRevision: number;
-    readonly decision: "approve" | "reject" | "keep_current" | "apply_proposed";
+    readonly decision: "approve" | "reject" | "keep_current" | "apply_proposed" | "save_proposed_as_new_page";
     readonly expectedCurrentRevision?: string;
   }): CurrentNoteAppendProposalDecisionResult {
     const proposal = readProposal(input.vaultPath, input.proposalId);
@@ -280,7 +282,7 @@ export class CurrentNoteAppendService {
     const existingDecision = readDecision(input.vaultPath, proposal.proposalId);
     const existingOutcome = readOutcome(input.vaultPath, proposal.proposalId);
     if (existingOutcome) {
-      const resolvingConflict = input.decision === "keep_current" || input.decision === "apply_proposed";
+      const resolvingConflict = input.decision === "keep_current" || input.decision === "apply_proposed" || input.decision === "save_proposed_as_new_page";
       if (existingOutcome.outcome !== "conflicted" || !resolvingConflict) {
         if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) {
           throw turnConflict("The current-note append proposal already has another durable decision.");
@@ -337,6 +339,27 @@ export class CurrentNoteAppendService {
           }
         }
       }
+      if (input.decision === "save_proposed_as_new_page") {
+        if (input.expectedRevision !== 3 || !input.expectedCurrentRevision) return {
+          status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome)
+        };
+        const reviewBase = readCurrentNoteConflictReviewBase(input.vaultPath, conflictReviewBasePath(proposal.proposalId), proposal.reviewBaseHash);
+        const parsedBase = parsePigeFrontmatter(reviewBase);
+        if (!parsedBase) throw turnConflict("The append conflict review base is invalid.");
+        const saved = conflictSaves.resolve({
+          vaultPath: input.vaultPath, mutationKind: "append" as const,
+          proposalId: proposal.proposalId, intentHash, jobId: intent.jobId,
+          createdAt: intent.createdAt, sourcePageId: intent.pageId,
+          sourceTitle: parsedBase.frontmatter.title ?? "Untitled note",
+          body: stripPigeFrontmatter(createAppendedMarkdown(reviewBase, intent)).trim(),
+          modelProfileId: intent.modelProfileId, policyContextId: intent.policyContextId, policyHash: intent.policyHash,
+          currentRevision: input.expectedCurrentRevision as `noteeditrev_${string}`,
+          expectedRevision: input.expectedRevision, expectedCurrentRevision: input.expectedCurrentRevision,
+          readPreview: () => this.#preview(input.vaultPath, proposal, intent, existingOutcome)
+        });
+        if (!saved) return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+        return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+      }
       const currentPreview = this.#preview(input.vaultPath, proposal, intent, existingOutcome);
       if (
         currentPreview.state !== "conflicted" || !currentPreview.currentRevision ||
@@ -372,7 +395,7 @@ export class CurrentNoteAppendService {
       });
       return { status: "rejected", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
     }
-    if (input.decision === "keep_current" || input.decision === "apply_proposed") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
+    if (input.decision === "keep_current" || input.decision === "apply_proposed" || input.decision === "save_proposed_as_new_page") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
     if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) throw turnConflict("The current-note append proposal already has another durable decision.");
     if (!existingDecision) {
       const currentPreview = this.#preview(input.vaultPath, proposal, intent);
@@ -488,6 +511,7 @@ export class CurrentNoteAppendService {
       createdAt: intent.createdAt,
       preview: createSafePreview(current, intent.markdown)
     };
+    stageExact(vaultPath, conflictReviewBasePath(proposal.proposalId), current, currentHash);
     persistExactJson(vaultPath, proposalPath(proposal.proposalId), proposal);
     const durable = readProposal(vaultPath, proposal.proposalId);
     if (!durable || stableJson(durable) !== stableJson(proposal)) throw turnConflict("The current-note append proposal identity is occupied by another review.");
@@ -504,7 +528,7 @@ export class CurrentNoteAppendService {
       return {
         proposalId: proposal.proposalId,
         kind: "append_current_note",
-        state: resolution.decision === "apply_proposed" ? "applied" : "rejected",
+        state: resolution.decision === "keep_current" ? "rejected" : "applied",
         revision: 4,
         activeVaultId: intent.activeVaultId,
         pageId: intent.pageId,
@@ -529,11 +553,16 @@ export class CurrentNoteAppendService {
   #decisionResult(vaultPath: string, proposal: AppendProposalRecord, intent: AppendIntentRecord, outcome: ProposalOutcomeRecord): CurrentNoteAppendProposalDecisionResult {
     const preview = this.#preview(vaultPath, proposal, intent, outcome);
     if (outcome.outcome === "applied" || preview.state === "applied") {
-      const operation = readOperation(vaultPath, intent.operationId);
       const resolution = conflictReviews.read({ vaultPath, mutationKind: "append", proposalId: proposal.proposalId, intentHash: proposal.intentHash });
-      if (!operation || (outcome.operationId ?? resolution?.operationId) !== operation.id) throw turnConflict("The applied append proposal is missing its exact Operation.");
-      assertOperationMatchesIntent(operation, intent);
-      return { status: "applied", proposal: preview, operation };
+      const operationId = outcome.operationId ?? resolution?.operationId;
+      const operation = operationId ? readOperation(vaultPath, operationId) : undefined;
+      if (!operation) throw turnConflict("The applied append proposal is missing its exact Operation.");
+      if (resolution?.decision === "save_proposed_as_new_page") {
+        if (!currentNoteConflictSavedOperationMatches(operation, intent, proposal.proposalId, resolution.pageId)) {
+          throw turnConflict("The saved append proposal Operation changed immutable identity.");
+        }
+      } else assertOperationMatchesIntent(operation, intent);
+      return { status: "applied", proposal: preview, operation, ...(resolution?.pageId ? { createdPageId: resolution.pageId } : {}) };
     }
     return { status: outcome.outcome, proposal: preview };
   }
@@ -926,6 +955,7 @@ function jobBindingPath(jobId: string): string {
   return `.pige/agent/current-note-appends/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${jobId}.binding.json`;
 }
 function proposalPath(proposalId: string): string { return `.pige/agent/current-note-append-proposals/${proposalId}.json`; }
+function conflictReviewBasePath(proposalId: string): string { return `.pige/agent/current-note-append-proposals/${proposalId}.review-base.md`; }
 function decisionPath(proposalId: string): string { return `.pige/agent/current-note-append-proposals/${proposalId}.decision.json`; }
 function outcomePath(proposalId: string): string { return `.pige/agent/current-note-append-proposals/${proposalId}.outcome.json`; }
 function operationPath(operationId: string): string {

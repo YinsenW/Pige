@@ -8,7 +8,7 @@ const locales = ["zh-Hans", "en", "ja", "ko", "fr", "de"];
 const reviewedStates = [
   {
     surface: "activity",
-    owner: "apps/desktop/src/renderer/src/App.tsx",
+    owner: "apps/desktop/src/renderer/src/components/ActivityHistorySettingsPanel.tsx",
     states: {
       "activity.empty": "No recent activity",
       "activity.emptyDescription": "Changes made by Pige will appear here when there is something to review.",

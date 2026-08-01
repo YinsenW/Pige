@@ -796,6 +796,23 @@ describe("schemas", () => {
       decision: "apply_proposed",
       expectedCurrentRevision: conflictRevision
     })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: conflictRevision });
+    expect(CurrentNoteAppendProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId: proposal.activeVaultId,
+      pageId: proposal.pageId,
+      jobId: proposal.jobId,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "save_proposed_as_new_page",
+      expectedCurrentRevision: conflictRevision
+    })).toMatchObject({ decision: "save_proposed_as_new_page", expectedCurrentRevision: conflictRevision });
+    expect(CurrentNoteAppendProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied" },
+      operationId: "op_20260728_schemaappend01",
+      createdPageId: "page_20260728_savedappend01"
+    })).toMatchObject({ status: "applied", createdPageId: "page_20260728_savedappend01" });
     expect(() => CurrentNoteAppendProposalDecisionRequestSchema.parse({
       apiVersion: 1,
       activeVaultId: proposal.activeVaultId,
@@ -868,6 +885,12 @@ describe("schemas", () => {
       decision: "apply_proposed",
       expectedCurrentRevision: keepCurrent.expectedCurrentRevision
     })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: keepCurrent.expectedCurrentRevision });
+    expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse({
+      ...request,
+      expectedRevision: 3,
+      decision: "save_proposed_as_new_page",
+      expectedCurrentRevision: keepCurrent.expectedCurrentRevision
+    })).toMatchObject({ decision: "save_proposed_as_new_page", expectedCurrentRevision: keepCurrent.expectedCurrentRevision });
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({ ...keepCurrent, expectedCurrentRevision: undefined })).toThrow();
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({
       ...decision,
@@ -885,6 +908,13 @@ describe("schemas", () => {
       proposal: { ...proposal, state: "applied" },
       operationId: "op_20260730_schemareplace01"
     })).toMatchObject({ status: "applied", proposal: { state: "applied" } });
+    expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...proposal, state: "applied" },
+      operationId: "op_20260730_schemareplace01",
+      createdPageId: "page_20260730_savedreplace01"
+    })).toMatchObject({ status: "applied", createdPageId: "page_20260730_savedreplace01" });
     expect(CurrentNoteReplaceProposalDecisionResultSchema.parse({
       apiVersion: 1,
       status: "not_found"

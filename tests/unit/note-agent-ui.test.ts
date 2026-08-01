@@ -409,6 +409,7 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-kind="removed"]')?.textContent).toContain("Reviewed base line");
     expect(buttonNamed(container, t("note.proposal.manual_edit"))).toBeTruthy();
     expect(buttonNamed(container, t("note.proposal.keep_current"))).toBeTruthy();
+    expect(buttonNamed(container, t("note.proposal.save_proposed_as_new_page"))).toBeTruthy();
     expect(buttonNamed(container, t("note.proposal.apply_proposed"))).toBeTruthy();
     await click(dom, required(buttonNamed(container, t("note.proposal.manual_edit"))));
     expect(onClose).toHaveBeenCalledOnce();
@@ -424,6 +425,75 @@ describe("Note Agent production UI", () => {
       decision: "apply_proposed",
       expectedCurrentRevision: currentRevision
     });
+    await unmount(dom, root);
+  });
+
+  it("saves one conflicted proposed version as a new note and opens the authoritative page", async () => {
+    const dom = createDom();
+    const vaultId = "vault_20260801_currentnotesavenew";
+    const pageId = "page_20260801_currentnotesavenew";
+    const createdPageId = "page_20260801_savedproposal01";
+    const jobId = "job_20260801_currentnotesavenew";
+    const proposalId = "proposal_20260801_currentnotesavenew";
+    const currentRevision = `noteeditrev_${"d".repeat(64)}`;
+    const preview = {
+      proposalId,
+      kind: "append_current_note" as const,
+      state: "conflicted" as const,
+      revision: 3,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      currentRevision,
+      lines: [
+        { kind: "context" as const, text: "Current live line" },
+        { kind: "added" as const, text: "Proposed preserved line" }
+      ]
+    };
+    const conversation = vi.fn().mockResolvedValue(noteAppendReviewTimeline(pageId, jobId, proposalId));
+    const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
+      apiVersion: 1,
+      status: "applied",
+      proposal: { ...preview, state: "applied", revision: 4, currentRevision: undefined },
+      operationId: "op_20260801_savenewproposal1",
+      createdPageId
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        ...noteAgentApi(conversation),
+        agent: {
+          conversation,
+          submitTurn: vi.fn(),
+          currentNoteAppendProposal: vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview }),
+          decideCurrentNoteAppendProposal,
+          onTurnDraft: () => () => undefined
+        }
+      }
+    });
+    const onOpenCitation = vi.fn();
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, { ...currentNoteAgentProps(pageId, vaultId), onOpenCitation }));
+      await settle(dom);
+    });
+
+    await waitFor(dom, () => buttonNamed(container, t("note.proposal.save_proposed_as_new_page")) !== undefined);
+    await click(dom, required(buttonNamed(container, t("note.proposal.save_proposed_as_new_page"))));
+    expect(decideCurrentNoteAppendProposal).toHaveBeenCalledWith({
+      apiVersion: 1,
+      activeVaultId: vaultId,
+      pageId,
+      jobId,
+      proposalId,
+      expectedRevision: 3,
+      decision: "save_proposed_as_new_page",
+      expectedCurrentRevision: currentRevision
+    });
+    expect(onOpenCitation).toHaveBeenCalledWith(createdPageId);
     await unmount(dom, root);
   });
 
@@ -1764,6 +1834,7 @@ describe("Note Agent production UI", () => {
       "note.proposal.description",
       "note.proposal.decisionFailed",
       "note.proposal.later",
+      "note.proposal.save_proposed_as_new_page",
       "note.proposal.line.added",
       "note.proposal.line.context",
       "note.proposal.line.removed",

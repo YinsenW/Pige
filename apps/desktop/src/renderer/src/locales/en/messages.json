@@ -1258,6 +1258,7 @@
   "note.proposal.later": "Later",
   "note.proposal.keep_current": "Keep current note",
   "note.proposal.apply_proposed": "Apply proposed version",
+  "note.proposal.save_proposed_as_new_page": "Save as new note",
   "note.proposal.manual_edit": "Edit manually",
   "note.proposal.line.added": "Added text",
   "note.proposal.line.context": "Unchanged context",

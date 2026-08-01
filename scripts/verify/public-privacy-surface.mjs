@@ -41,6 +41,10 @@ const sourceFacts = {
     "LocalSemanticRetrievalInstallRequest",
     "ASSET_URL",
   ],
+  "apps/desktop/src/main/services/local-reranker-service.ts": [
+    "LocalRerankerInstallRequest",
+    "ASSET_URL",
+  ],
   "apps/desktop/src/main/services/paddle-ocr-lifecycle-service.ts": [
     "PaddleOcrInstallRequest",
     "async install(",
@@ -59,6 +63,7 @@ const sourceFacts = {
 const expectedNetworkPrimitiveOwners = new Set([
   "apps/desktop/src/main/index.ts",
   "apps/desktop/src/main/services/electron-updater-adapter.ts",
+  "apps/desktop/src/main/services/local-reranker-service.ts",
   "apps/desktop/src/main/services/local-semantic-retrieval-service.ts",
   "apps/desktop/src/main/services/model-provider-connection.ts",
   "apps/desktop/src/main/services/paddle-ocr-bundle-materializer.ts",

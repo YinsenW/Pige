@@ -539,7 +539,7 @@ Build:
 - [B6.15 -> E6.10] Retrieval/linking/summary regressions.
 - [B6.16 -> E6.11] Bounded local Dataset query/table and exact refs.
 
-Current Home proves durable cited chat/control/IME/final projection; B6.05/B6.07 prove one Qwen3 lifecycle, body-free rebuild, and 10k/100k warm lexical scale; runtime/vector/hybrid/rerank/package/recovery gaps keep E6.02 partial. B6.10/B6.11 prove cited current-note and Reader action/recovery; broader mutation/platform proof keeps E6.06/PIGE-UI-005 planned. B6.16 proves fenced bounded queries/citations/paging/Open; analytics/scale/package/recovery gaps keep E6.11 planned. B6.12/B6.14 prove main-owned rebuildable tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep E6.07/E6.09 partial.
+Current Home proves durable cited chat/control/IME/final projection; B6.05/B6.06/B6.07 prove one Qwen3 lifecycle, body-free rebuild, local vector/hybrid retrieval, bounded reranking and 10k/100k warm lexical scale; package/recovery gaps keep E6.02 partial. B6.10/B6.11 prove cited current-note and Reader action/recovery, including all four explicit conflict outcomes; broader mutation/platform proof keeps E6.06/PIGE-UI-005 partial. B6.16 proves fenced bounded queries/citations/paging/Open; analytics/scale/package/recovery gaps keep E6.11 planned. B6.12/B6.14 prove main-owned rebuildable tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep E6.07/E6.09 partial.
 
 Deferred from this phase:
 

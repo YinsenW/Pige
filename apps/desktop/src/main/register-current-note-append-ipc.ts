@@ -21,6 +21,7 @@ interface RegisterCurrentNoteAppendIpcOptions {
   readonly activeVaultPath: () => string | undefined;
   readonly getService: () => CurrentNoteAppendService;
   readonly getJobsService: () => JobsService;
+  readonly onCreatedPage?: (vaultPath: string, pageId: string) => void;
 }
 
 export function registerCurrentNoteAppendIpc(options: RegisterCurrentNoteAppendIpcOptions): void {
@@ -86,14 +87,22 @@ export function registerCurrentNoteAppendIpc(options: RegisterCurrentNoteAppendI
           ...(result.proposal ? { proposal: result.proposal } : {})
         });
       }
+      if (result.status === "applied" && result.createdPageId) {
+        options.onCreatedPage?.(binding.vaultPath, result.createdPageId);
+      }
       if (!reconcileReview(jobs, result.proposal, parsed.proposalId, result.status === "applied"
         ? result.operation.id
-        : undefined)) throw new Error("The reviewed append Job did not converge.");
+        : undefined, result.status === "applied" ? result.createdPageId : undefined)) {
+        throw new Error("The reviewed append Job did not converge.");
+      }
       return CurrentNoteAppendProposalDecisionResultSchema.parse({
         apiVersion: 1,
         status: result.status,
         proposal: result.proposal,
-        ...(result.status === "applied" ? { operationId: result.operation.id } : {})
+        ...(result.status === "applied" ? {
+          operationId: result.operation.id,
+          ...(result.createdPageId ? { createdPageId: result.createdPageId } : {})
+        } : {})
       });
     } catch {
       return CurrentNoteAppendProposalDecisionResultSchema.parse({
@@ -129,13 +138,14 @@ function reconcileReview(
     readonly state: "ready" | "resolving" | "applied" | "rejected" | "conflicted";
   },
   expectedProposalId: string,
-  operationId?: string
+  operationId?: string,
+  createdPageId?: string
 ): boolean {
   if (proposal.proposalId !== expectedProposalId || proposal.state === "conflicted" || !isResolvedProposalState(proposal.state)) return true;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const job = jobs.readAgentTurnJob(proposal.jobId);
     if (!job) return false;
-    if (!isExactWaitingReview(job, proposal.proposalId)) return reviewJobConverged(job, proposal.proposalId, proposal.state, operationId);
+    if (!isExactWaitingReview(job, proposal.proposalId)) return reviewJobConverged(job, proposal.proposalId, proposal.state, operationId, createdPageId);
     try {
       const settled = jobs.resolveAgentTurnReview({
         job,
@@ -146,11 +156,14 @@ function reconcileReview(
           stage: "planning",
           ...(operationId ? {
             operationIds: [operationId],
-            outputRefs: [{ kind: "operation", id: operationId, role: "current_note_append_operation" }]
+            outputRefs: [
+              { kind: "operation", id: operationId, role: "current_note_append_operation" },
+              ...(createdPageId ? [{ kind: "page" as const, id: createdPageId, role: "current_note_conflict_saved_page" }] : [])
+            ]
           } : {})
         }
       });
-      return reviewJobConverged(settled, proposal.proposalId, proposal.state, operationId);
+      return reviewJobConverged(settled, proposal.proposalId, proposal.state, operationId, createdPageId);
     } catch {
       // Reread and adopt an exact concurrent settlement before retrying the same review.
     }
@@ -187,7 +200,8 @@ function reviewJobConverged(
   job: JobRecord,
   proposalId: string,
   proposalState: "applied" | "rejected" | "conflicted",
-  operationId: string | undefined
+  operationId: string | undefined,
+  createdPageId?: string
 ): boolean {
   if (!job.proposalIds?.includes(proposalId)) return false;
   if (proposalState === "conflicted") return job.state === "failed_final";
@@ -195,7 +209,8 @@ function reviewJobConverged(
   return proposalState === "rejected" || (
     !!operationId &&
     job.operationIds?.includes(operationId) === true &&
-    job.outputRefs?.some((ref) => ref.kind === "operation" && ref.id === operationId && ref.role === "current_note_append_operation") === true
+    job.outputRefs?.some((ref) => ref.kind === "operation" && ref.id === operationId && ref.role === "current_note_append_operation") === true &&
+    (!createdPageId || job.outputRefs?.some((ref) => ref.kind === "page" && ref.id === createdPageId && ref.role === "current_note_conflict_saved_page") === true)
   );
 }
 

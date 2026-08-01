@@ -55,7 +55,7 @@
     "scope": "Required human-readable Vault root-document validation during creation, explicit open and startup restoration.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "914e2745e6dcdc65b6204fc32b83571045235424ec029b4f4aeaf78ba68d0179"
+    "reviewedSha256": "276ef4d7fdf98d6dd9abb80916ffabb1cd147b733863ea3b57189cc5c090d923"
   },
   "reviewers": [{
     "reviewerId": "vault-root-markdown-review",

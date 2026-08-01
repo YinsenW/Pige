@@ -1258,6 +1258,7 @@
   "note.proposal.later": "Später",
   "note.proposal.keep_current": "Aktuelle Notiz behalten",
   "note.proposal.apply_proposed": "Vorgeschlagene Version anwenden",
+  "note.proposal.save_proposed_as_new_page": "Als neue Notiz speichern",
   "note.proposal.manual_edit": "Manuell bearbeiten",
   "note.proposal.line.added": "Hinzugefügter Text",
   "note.proposal.line.context": "Unveränderter Kontext",
