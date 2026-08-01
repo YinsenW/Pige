@@ -171,6 +171,8 @@ import {
   NoteEditorSaveResultSchema,
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
+  NoteRevealGeneratedRequestSchema,
+  NoteRevealGeneratedResultSchema,
   NoteRenderResultSchema,
   NoteOpenSearchMatchRequestSchema,
   NoteOpenSearchMatchResultSchema,
@@ -4786,6 +4788,25 @@ describe("schemas", () => {
     for (const privateField of ["pagePath", "markdown", "contentHash", "rawError"] as const) {
       expect(() => NoteAliasChangeRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
       expect(() => NoteAliasChangeResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
+    }
+  });
+
+  it("keeps generated-note reveal revision-bound and renderer-path-free", () => {
+    const identity = {
+      apiVersion: 1 as const,
+      requestId: "notegeneratedreveal_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_abcdefgh",
+      currentPageId: "page_20260801_generated1",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      expectedRevision: `noteeditrev_${"b".repeat(64)}`
+    };
+    expect(NoteRevealGeneratedRequestSchema.parse(identity)).toEqual(identity);
+    for (const status of ["revealed", "stale", "not_found", "ineligible", "failed"] as const) {
+      expect(NoteRevealGeneratedResultSchema.parse({ ...identity, status })).toEqual({ ...identity, status });
+    }
+    for (const privateField of ["path", "pagePath", "markdown", "contentHash", "rawError"] as const) {
+      expect(() => NoteRevealGeneratedRequestSchema.parse({ ...identity, [privateField]: "private" })).toThrow();
+      expect(() => NoteRevealGeneratedResultSchema.parse({ ...identity, status: "failed", [privateField]: "private" })).toThrow();
     }
   });
 

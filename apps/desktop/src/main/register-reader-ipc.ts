@@ -21,6 +21,8 @@ import type {
   SourceRefreshPreviewRequest,
   SourceRefreshConfirmRequest,
   NoteRevealSourceRequest,
+  NoteRevealGeneratedRequest,
+  NoteRevealGeneratedResult,
   NoteRenderRequest,
   NoteArchiveCurrentRequest,
   NoteArchiveCurrentResult,
@@ -95,6 +97,9 @@ import {
   SourceRefreshConfirmResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
+  NOTE_REVEAL_GENERATED_CHANNEL,
+  NoteRevealGeneratedRequestSchema,
+  NoteRevealGeneratedResultSchema,
   NOTE_ARCHIVE_CURRENT_CHANNEL,
   NoteArchiveCurrentRequestSchema,
   NoteArchiveCurrentResultSchema,
@@ -171,6 +176,7 @@ import type { ReaderSelectionActionService } from "./services/reader-selection-a
 import type { ReaderSelectionProposalService } from "./services/reader-selection-proposal-service";
 import type { ReaderSelectionCreateNoteActionService } from "./services/reader-selection-create-note-service";
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
+import type { ReaderGeneratedNoteRevealService } from "./services/reader-generated-note-reveal-service";
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import type { SourceRefreshService } from "./services/source-refresh-service";
 import type { NoteTrashService } from "./services/note-trash-service";
@@ -194,6 +200,7 @@ interface RegisterReaderIpcOptions {
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
   readonly getReaderSourceRevealService: () => ReaderSourceRevealService;
+  readonly getReaderGeneratedNoteRevealService: () => ReaderGeneratedNoteRevealService;
   readonly getReaderSourceReconnectService: () => ReaderSourceReconnectService;
   readonly getSourceRefreshService: () => SourceRefreshService;
   readonly getWindow: (sender: WebContents) => BrowserWindow | undefined;
@@ -729,6 +736,21 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
         ? { ...parsed, status: "stale" }
         : await options.getReaderSourceRevealService().reveal(ownerId, parsed)
     );
+  });
+  options.ipcMain.handle(NOTE_REVEAL_GENERATED_CHANNEL, async (
+    event,
+    request: NoteRevealGeneratedRequest
+  ): Promise<NoteRevealGeneratedResult> => {
+    const parsed = NoteRevealGeneratedRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const result = NoteRevealGeneratedResultSchema.parse(
+      ownerId === undefined || event.sender.isDestroyed()
+        ? { ...parsed, status: "stale" }
+        : await options.getReaderGeneratedNoteRevealService().reveal(ownerId, parsed)
+    );
+    return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+      ? result
+      : NoteRevealGeneratedResultSchema.parse({ ...parsed, status: "stale" });
   });
   options.ipcMain.handle(NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL, async (
     event,

@@ -4,6 +4,7 @@ import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import { registerReaderIpc } from "../../apps/desktop/src/main/register-reader-ipc";
 import type { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/services/reader-source-reveal-service";
+import type { ReaderGeneratedNoteRevealService } from "../../apps/desktop/src/main/services/reader-generated-note-reveal-service";
 import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
 import type { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
@@ -50,7 +51,8 @@ function makeHarness(
   noteAliasService?: Partial<NoteAliasService>,
   libraryTopicRenameService?: Partial<LibraryTopicRenameService>,
   questionStateService?: Partial<QuestionStateService>,
-  questionAnswerService?: Partial<QuestionAnswerService>
+  questionAnswerService?: Partial<QuestionAnswerService>,
+  generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -72,6 +74,10 @@ function makeHarness(
     getReaderSourceRevealService: () => {
       if (revealService) return revealService as ReaderSourceRevealService;
       throw new Error("Reader source reveal service was not expected.");
+    },
+    getReaderGeneratedNoteRevealService: () => {
+      if (generatedRevealService) return generatedRevealService as ReaderGeneratedNoteRevealService;
+      throw new Error("Reader generated-note reveal service was not expected.");
     },
     getReaderSourceReconnectService: () => {
       if (reconnectService) return reconnectService as ReaderSourceReconnectService;
@@ -140,6 +146,17 @@ function makeHarness(
   return handlers;
 }
 
+function makeGeneratedRevealHarness(
+  notes: Partial<NotesService>,
+  generatedRevealService: Partial<ReaderGeneratedNoteRevealService>
+) {
+  return makeHarness(
+    notes, undefined, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, vi.fn(),
+    undefined, undefined, undefined, vi.fn(), undefined, undefined, undefined, undefined, undefined,
+    generatedRevealService
+  );
+}
+
 describe("registerReaderIpc", () => {
   it("registers the bounded Notes and ReaderSelection channel owner", () => {
     const handlers = makeHarness({});
@@ -175,6 +192,7 @@ describe("registerReaderIpc", () => {
       "notes.resolveInlineReference",
       "notes.openSourceReference",
       "notes.revealSource",
+      "notes.revealGenerated",
       "notes.reconnectOriginalSource",
       "source.refresh.preview",
       "source.refresh.confirm",
@@ -1010,6 +1028,39 @@ describe("registerReaderIpc", () => {
       .resolves.toEqual({ ...request, status: "revealed" });
     expect(reveal).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     await expect(handlers.get("notes.revealSource")!({ sender: makeSender(16) } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "stale" });
+  });
+
+  it("binds generated-note reveal to the exact tracked Reader owner", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260801_generated1", title: "Generated", pageType: "note",
+        pagePath: "wiki/generated.md", sourceIds: [], status: "active",
+        updatedAt: "2026-08-01T12:00:00.000Z"
+      },
+      html: "<p>Generated</p>", byteSize: 9,
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      revealGeneratedEligibility: { canReveal: true, revision: `noteeditrev_${"b".repeat(64)}` }
+    });
+    const reveal = vi.fn(async (_ownerId: string, request: unknown) => ({
+      ...(request as object), status: "revealed"
+    }));
+    const handlers = makeGeneratedRevealHarness({ render } as Partial<NotesService>, { reveal });
+    const sender = makeSender(117);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, {
+      pageId: "page_20260801_generated1"
+    });
+    const request = {
+      apiVersion: 1, requestId: "notegeneratedreveal_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_abcdefgh", currentPageId: "page_20260801_generated1",
+      renderContextId: `notectx_${"a".repeat(32)}`,
+      expectedRevision: `noteeditrev_${"b".repeat(64)}`
+    } as const;
+
+    await expect(handlers.get("notes.revealGenerated")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toEqual({ ...request, status: "revealed" });
+    expect(reveal).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    await expect(handlers.get("notes.revealGenerated")!({ sender: makeSender(118) } as IpcMainInvokeEvent, request))
       .resolves.toEqual({ ...request, status: "stale" });
   });
 

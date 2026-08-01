@@ -1715,6 +1715,22 @@ export const NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES = 4 * 1024 * 1024;
 export const NOTE_EDITOR_MAX_RENDERED_HTML_UTF8_BYTES = 8 * 1024 * 1024;
 export const NoteEditorRequestIdSchema = z.string().regex(/^noteeditreq_[a-z0-9]{8,64}$/);
 export const NoteEditorRevisionSchema = z.string().regex(/^noteeditrev_[a-z0-9]{32,64}$/);
+export const NOTE_REVEAL_GENERATED_CHANNEL = "notes.revealGenerated" as const;
+export const NoteRevealGeneratedRequestIdSchema = z.string().regex(/^notegeneratedreveal_[a-z0-9]{16,64}$/);
+export const NoteRevealGeneratedRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteRevealGeneratedRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+const NoteRevealGeneratedResultIdentitySchema = NoteRevealGeneratedRequestSchema;
+export const NoteRevealGeneratedResultSchema = z.discriminatedUnion("status", [
+  NoteRevealGeneratedResultIdentitySchema.extend({ status: z.literal("revealed") }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteRevealGeneratedResultIdentitySchema.extend({ status: z.literal(status) }).strict())
+]);
 export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
 export const NoteTrashListRequestIdSchema = z.string().regex(/^notetrashlistreq_[a-z0-9]{16,64}$/);
 export const NoteTrashRestoreRequestIdSchema = z.string().regex(/^notetrashrestorereq_[a-z0-9]{16,64}$/);
@@ -1860,6 +1876,10 @@ export const NoteClaimContradictionsSummarySchema = z.object({
   canEdit: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const NoteRevealGeneratedEligibilitySchema = z.object({
+  canReveal: z.literal(true),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteRenderResultSchema = z.object({
   summary: NoteRenderPageSummarySchema,
   html: NoteRenderedHtmlSchema,
@@ -1869,6 +1889,7 @@ export const NoteRenderResultSchema = z.object({
   archiveEligibility: NoteArchiveEligibilitySchema.optional(),
   restoreEligibility: NoteRestoreEligibilitySchema.optional(),
   historyEligibility: NoteRevisionHistoryEligibilitySchema.optional(),
+  revealGeneratedEligibility: NoteRevealGeneratedEligibilitySchema.optional(),
   renameEligibility: NoteRenameEligibilitySchema.optional(),
   aliasing: NoteAliasingSummarySchema.optional(),
   tagging: NoteTaggingSummarySchema.optional(),
@@ -11658,6 +11679,9 @@ export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSumma
 export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
 export type NoteClaimContradictionsSummary = z.infer<typeof NoteClaimContradictionsSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
+export type NoteRevealGeneratedRequest = z.infer<typeof NoteRevealGeneratedRequestSchema>;
+export type NoteRevealGeneratedResult = z.infer<typeof NoteRevealGeneratedResultSchema>;
+export type NoteRevealGeneratedEligibility = z.infer<typeof NoteRevealGeneratedEligibilitySchema>;
 export type NoteOpenSearchMatchRequest = z.infer<typeof NoteOpenSearchMatchRequestSchema>;
 export type NoteOpenSearchMatchResult = z.infer<typeof NoteOpenSearchMatchResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;

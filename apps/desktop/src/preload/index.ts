@@ -231,6 +231,8 @@ import type {
   SourceReconnectResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
+  NoteRevealGeneratedRequest,
+  NoteRevealGeneratedResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
@@ -764,6 +766,9 @@ import {
   NOTE_REVEAL_SOURCE_CHANNEL,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
+  NOTE_REVEAL_GENERATED_CHANNEL,
+  NoteRevealGeneratedRequestSchema,
+  NoteRevealGeneratedResultSchema,
   NoteResolveInlineReferenceRequestSchema,
   NoteResolveInlineReferenceResultSchema,
   ReaderSelectionActionRequestSchema,
@@ -2306,6 +2311,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           NOTE_REVEAL_SOURCE_CHANNEL,
           NoteRevealSourceRequestSchema.parse(request)
+        )
+      ),
+    revealGenerated: async (
+      request: NoteRevealGeneratedRequest
+    ): Promise<NoteRevealGeneratedResult> =>
+      NoteRevealGeneratedResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_REVEAL_GENERATED_CHANNEL,
+          NoteRevealGeneratedRequestSchema.parse(request)
         )
       ),
     reconnectOriginalSource: async (

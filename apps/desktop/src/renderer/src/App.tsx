@@ -83,6 +83,7 @@ import { WindowModeToggle } from "./components/WindowModeToggle";
 import { ReaderFullscreenToggle } from "./components/ReaderFullscreenToggle";
 import { useWindowControls } from "./components/useWindowControls";
 import { ReaderDocumentActions, readerDocumentArchiveLabels, readerDocumentRestoreLabels, submitReaderNoteArchive, submitReaderNoteRestore, type ReaderNoteArchiveSubmit, type ReaderNoteRestoreSubmit } from "./components/ReaderDocumentActions"; import { readerNoteTagLabels, submitReaderNoteTag, submitReaderNoteTagRemoval, type ReaderNoteTagRemoveSubmit, type ReaderNoteTagSubmit } from "./components/ReaderNoteTagDialog";
+import { ReaderGeneratedNoteRevealAction } from "./components/ReaderGeneratedNoteRevealAction";
 import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialog";
 import { readerNoteRenameLabels, submitReaderNoteRename, type ReaderNoteRenameSubmit } from "./components/ReaderNoteRenameDialog";
 import { readerNoteAliasLabels, submitReaderNoteAliasChange, type ReaderNoteAliasSubmit } from "./components/ReaderNoteAliasDialog"; import { ReaderTopicRenameDialog } from "./components/ReaderTopicRenameDialog";
@@ -3741,6 +3742,8 @@ export function LibraryPanel(props: {
               t={props.t}
               onCommitted={props.onCurrentNoteMerged}
             />
+            <ReaderGeneratedNoteRevealAction activeVaultId={props.activeVaultId} note={props.selectedNote}
+              onReveal={(request) => window.pige.notes.revealGenerated(request)} t={props.t} />
             <ReaderTopicRenameDialog
               note={props.selectedNote}
               {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
@@ -6712,6 +6715,8 @@ function HomeComposer(props: {
                   t={props.t}
                   onCommitted={adoptMergedHomeNote}
                 />
+                <ReaderGeneratedNoteRevealAction activeVaultId={props.activeVault?.vaultId} note={selectedNote}
+                  onReveal={(request) => window.pige.notes.revealGenerated(request)} t={props.t} />
                 <ReaderDocumentActions
                   ownerIdentity={`${props.activeVault?.vaultId ?? ""}:${selectedNote.summary.pageId}:${selectedNote.renderContextId ?? ""}:${selectedNote.trashEligibility?.revision ?? ""}:${selectedNote.archiveEligibility?.revision ?? ""}:${selectedNote.restoreEligibility?.revision ?? ""}:${selectedNote.renameEligibility?.revision ?? ""}:${selectedNote.aliasing?.revision ?? ""}:${selectedNote.tagging?.revision ?? ""}`}
                   canMoveToTrash={selectedNote.trashEligibility?.canTrash === true && Boolean(props.activeVault && selectedNote.renderContextId)}
