@@ -4299,11 +4299,22 @@ Decision:
 
 Reader/Library may rename one exact active note through Main-owned revision CAS, preserving `page_id` while atomically updating title, old-title alias, and deterministic Git-friendly filename.
 
+Rationale:
+
+Stable page identity and exact private before/after images let users reverse a title correction without exposing filesystem authority or losing inbound title links.
+
 Consequences:
 
-The renderer never receives paths. Conflict/stale/ineligible/failure retains draft and durable truth; commit records recoverable `rename_page`, rebuilds indexes, and supports Activity Undo/restart without rewriting body or unrelated frontmatter.
+- The renderer never receives paths. Conflict/stale/ineligible/failure retains draft and durable truth.
+- Commit records recoverable `rename_page`, rebuilds indexes, and supports Activity Undo/restart without rewriting body or unrelated frontmatter.
+- After exact Undo, Redo re-proves restored bytes and destination vacancy, publishes one deterministic forward `rename_page`, and adopts interrupted publication without overwriting drift.
 
-References: `docs/MARKDOWN_SCHEMA.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
 
 ### D-20260731-Exact-Note-Alias-Management
 
