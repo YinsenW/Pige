@@ -63,6 +63,21 @@ describe("NoteRelateService", () => {
     expect(render).toHaveBeenCalledWith({ pageId: request.currentPageId }, "reader_owner");
   });
 
+  it.each(relatablePageTypes)("accepts one explicitly selected active %s target after exact target revalidation", async (targetPageType) => {
+    const vaultPath = createVault(targetPageType);
+    const save = vi.fn(() => ({
+      status: "committed" as const,
+      operationId: "op_20260730_noterelatetarget",
+    }));
+    const service = new NoteRelateService({
+      resolveTrashTarget: vi.fn(() => readyCurrent(() => true)),
+      render: vi.fn(async () => relatedRender()),
+    } as never, { open: vi.fn(() => openedCurrent()), save } as never, () => vaultPath);
+
+    await expect(service.relate("reader_owner", request)).resolves.toMatchObject({ status: "committed" });
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
   it("fails before mutation for target drift, self/duplicate edges, and current Reader drift", async () => {
     const vaultPath = createVault();
     const save = vi.fn();
@@ -181,14 +196,16 @@ describe("NoteRelateService", () => {
   });
 });
 
-function createVault(): string {
+function createVault(targetPageType: RelatablePageType = "note"): string {
   const vaultPath = fs.mkdtempSync(path.join(os.tmpdir(), "pige-note-relate-"));
   temporaryPaths.push(vaultPath);
   fs.mkdirSync(path.join(vaultPath, "wiki"), { recursive: true });
   fs.writeFileSync(path.join(vaultPath, "wiki", "target.md"), noteMarkdown(
     request.targetPageId,
-    "Target note",
+    "Target page",
     request.expectedTargetUpdatedAt,
+    [],
+    targetPageType,
   ));
   return vaultPath;
 }

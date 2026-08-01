@@ -133,7 +133,7 @@ function readTarget(vaultPath: string, pageId: string, expectedUpdatedAt: string
   | { readonly status: "stale" | "not_found" | "ineligible" } {
   const located = findMarkdownPageByIdAtSignature(vaultPath, pageId);
   if (!located) return { status: "not_found" };
-  if (located.page.summary.pageType !== "note" || located.page.summary.status !== "active") {
+  if (!isRelatablePage(located.page.summary.pageType, located.page.summary.status)) {
     return { status: "ineligible" };
   }
   if (located.page.summary.updatedAt !== expectedUpdatedAt || located.signature.sizeBytes > MAX_NOTE_BYTES) {
@@ -141,7 +141,7 @@ function readTarget(vaultPath: string, pageId: string, expectedUpdatedAt: string
   }
   const markdown = readMarkdownPageContentAtSignature(vaultPath, located.signature, MAX_NOTE_BYTES + 1).markdown;
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.id !== pageId || parsed.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") {
+  if (parsed?.frontmatter.id !== pageId || !isRelatablePage(parsed.frontmatter.type, parsed.frontmatter.status)) {
     return { status: "ineligible" };
   }
   const signature = located.signature;
