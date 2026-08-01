@@ -8,6 +8,7 @@ import type {
 import { parsePigeFrontmatter } from "@pige/markdown";
 import { OperationRecordSchema, type OperationRecord } from "@pige/schemas";
 import type { NotesService, NotesTrashResolution } from "./notes-service";
+import { isRenamableKnowledgePage } from "./reader-generated-note-reveal-service";
 
 const MAX_NOTE_BYTES = 4 * 1024 * 1024;
 const RENAME_ROOT = ".pige/note-renames";
@@ -21,6 +22,7 @@ interface RenameReceipt {
   readonly beforePath: string; readonly afterPath: string; readonly beforeImagePath: string;
   readonly afterImagePath: string; readonly beforeHash: string; readonly afterHash: string;
   readonly beforeTitle: string; readonly afterTitle: string; readonly operationId: string; readonly createdAt: string;
+  readonly pageType?: "note" | "claim" | "question" | "concept" | "entity";
   readonly redoOfOperationId?: string; readonly undoOperationId?: string;
 }
 
@@ -42,7 +44,7 @@ export class NoteRenameService {
       if (existing) {
         if (existing.requestDigest !== digestRequest(request)) return closed(request, "stale");
         completeForward(scope.vaultPath, existing);
-        return this.#renderCommitted(ownerId, request, existing.operationId);
+        return this.#renderCommitted(ownerId, request, existing.operationId, existing.pageType ?? "note");
       }
       const target = this.#targets.resolveTrashTarget(ownerId, {
         activeVaultId: request.activeVaultId, pageId: request.currentPageId,
@@ -64,11 +66,11 @@ export class NoteRenameService {
       if (afterPath !== target.pagePath && pathState(resolve(scope.vaultPath, afterPath)) !== undefined) return closed(request, "conflict");
       if (!target.assertCurrent()) return closed(request, "stale");
       const createdAt = this.#now().toISOString();
-      const receipt = createReceipt(scope.vaultPath, request, target, afterPath, Buffer.from(renamed, "utf8"),
+      const receipt = createReceipt(scope.vaultPath, request, target, afterPath, Buffer.from(renamed.markdown, "utf8"), renamed.pageType,
         createOperationId(createdAt, request, this.#randomId()), createdAt);
-      persistIntent(scope.vaultPath, receipt, before, Buffer.from(renamed, "utf8"));
+      persistIntent(scope.vaultPath, receipt, before, Buffer.from(renamed.markdown, "utf8"));
       completeForward(scope.vaultPath, receipt);
-      return this.#renderCommitted(ownerId, request, receipt.operationId);
+      return this.#renderCommitted(ownerId, request, receipt.operationId, receipt.pageType ?? "note");
     } catch (caught) {
       return closed(request, isConflict(caught) ? "conflict" : "failed");
     }
@@ -163,10 +165,12 @@ export class NoteRenameService {
     return { recovered, failed };
   }
 
-  async #renderCommitted(ownerId: string, request: NoteRenameRequest, operationId: string): Promise<NoteRenameResult> {
+  async #renderCommitted(ownerId: string, request: NoteRenameRequest, operationId: string,
+    pageType: NonNullable<RenameReceipt["pageType"]>): Promise<NoteRenameResult> {
     try {
       const render: NoteRenderResult = await this.#targets.render({ pageId: request.currentPageId }, ownerId);
-      return render.renderContextId && render.summary.pageId === request.currentPageId && render.summary.pageType === "note" &&
+      return render.renderContextId && render.summary.pageId === request.currentPageId &&
+        render.summary.pageType === pageType &&
         render.summary.title === request.title
         ? { ...request, status: "committed", operationId, render }
         : closed(request, "failed");
@@ -179,9 +183,12 @@ export class NoteRenameService {
   }
 }
 
-function renameMarkdown(markdown: string, pageId: string, title: string, updatedAt: string): string | undefined {
+function renameMarkdown(markdown: string, pageId: string, title: string, updatedAt: string): {
+  readonly markdown: string; readonly pageType: "note" | "claim" | "question" | "concept" | "entity";
+} | undefined {
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.id !== pageId || parsed.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
+  if (parsed?.frontmatter.id !== pageId || !isRenamableKnowledgePage(parsed.frontmatter.type, parsed.frontmatter.status)) return undefined;
+  const pageType = parsed.frontmatter.type as "note" | "claim" | "question" | "concept" | "entity";
   const beforeTitle = parsed.frontmatter.title?.normalize("NFKC").replace(/\s+/gu, " ").trim();
   if (!beforeTitle || beforeTitle === title) return undefined;
   const titleLines = [...parsed.raw.matchAll(/^title:[^\r\n]*$/gmu)], updatedLines = [...parsed.raw.matchAll(/^updated_at:[^\r\n]*$/gmu)];
@@ -201,7 +208,7 @@ function renameMarkdown(markdown: string, pageId: string, title: string, updated
   if (rawStart < 0) return undefined;
   const result = `${markdown.slice(0, rawStart)}${raw}${markdown.slice(rawStart + parsed.raw.length)}`;
   const verified = parsePigeFrontmatter(result)?.frontmatter;
-  return verified?.id === pageId && verified.type === "note" && verified.title === title ? result : undefined;
+  return verified?.id === pageId && verified.type === pageType && verified.title === title ? { markdown: result, pageType } : undefined;
 }
 
 function insertField(raw: string, line: string): string {
@@ -219,12 +226,13 @@ function renamedPagePath(target: Extract<NotesTrashResolution, { status: "ready"
 }
 
 function createReceipt(vaultPath: string, request: NoteRenameRequest, target: Extract<NotesTrashResolution, { status: "ready" }>,
-  afterPath: string, after: Buffer, operationId: string, createdAt: string): RenameReceipt {
+  afterPath: string, after: Buffer, pageType: NonNullable<RenameReceipt["pageType"]>, operationId: string, createdAt: string): RenameReceipt {
   const root = `${RENAME_ROOT}/${request.requestId}`;
   return { schemaVersion: 1, kind: "note_rename_receipt", requestId: request.requestId,
     requestDigest: digestRequest(request), activeVaultId: request.activeVaultId, pageId: request.currentPageId,
     beforePath: relative(vaultPath, target.absolutePath), afterPath, beforeImagePath: `${root}/before.md`, afterImagePath: `${root}/after.md`,
-    beforeHash: target.pageContentHash, afterHash: hash(after), beforeTitle: target.title, afterTitle: request.title, operationId, createdAt };
+    beforeHash: target.pageContentHash, afterHash: hash(after), beforeTitle: target.title, afterTitle: request.title,
+    operationId, createdAt, pageType };
 }
 
 function createRedoReceipt(parent: RenameReceipt, undo: OperationRecord, createdAt: string): RenameReceipt {
@@ -283,7 +291,7 @@ function createOperation(receipt: RenameReceipt): OperationRecord {
     targetRefs: [{ kind: "page", id: receipt.pageId, checksum: receipt.afterHash }], sourceRefs: [],
     before: { kind: "page", id: receipt.pageId, checksum: receipt.beforeHash },
     after: { kind: "page", id: receipt.pageId, checksum: receipt.afterHash },
-    summary: `Renamed note “${bounded(receipt.beforeTitle)}” to “${bounded(receipt.afterTitle)}”.`, reversible: "yes", warnings: [] });
+    summary: `Renamed knowledge page “${bounded(receipt.beforeTitle)}” to “${bounded(receipt.afterTitle)}”.`, reversible: "yes", warnings: [] });
 }
 
 function createUndoOperation(receipt: RenameReceipt, operation: OperationRecord): OperationRecord {
@@ -291,7 +299,7 @@ function createUndoOperation(receipt: RenameReceipt, operation: OperationRecord)
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" }, kind: "rename_page",
     targetRefs: operation.targetRefs, sourceRefs: [{ kind: "operation", id: operation.id }], before: operation.after,
     after: { kind: "page", id: receipt.pageId, checksum: receipt.beforeHash },
-    summary: `Restored note title “${bounded(receipt.beforeTitle)}”.`, reversible: "no", warnings: [] });
+    summary: `Restored knowledge-page title “${bounded(receipt.beforeTitle)}”.`, reversible: "no", warnings: [] });
 }
 
 function matchesOperation(receipt: RenameReceipt, operation: OperationRecord): boolean {
@@ -340,7 +348,9 @@ function findRedoReceipt(vaultPath: string, operationId: string): RenameReceipt 
 function readReceipt(vaultPath: string, requestId: string): RenameReceipt | undefined {
   const file = receiptPath(vaultPath, requestId); if (!fs.existsSync(file)) return undefined;
   const value = JSON.parse(readExact(file, 64 * 1024).toString("utf8")) as Partial<RenameReceipt>;
-  return value.schemaVersion === 1 && value.kind === "note_rename_receipt" && value.requestId === requestId && typeof value.operationId === "string" ? value as RenameReceipt : undefined;
+  const validPageType = value.pageType === undefined || ["note", "claim", "question", "concept", "entity"].includes(value.pageType);
+  return value.schemaVersion === 1 && value.kind === "note_rename_receipt" && value.requestId === requestId &&
+    typeof value.operationId === "string" && validPageType ? value as RenameReceipt : undefined;
 }
 function receiptPath(vaultPath: string, requestId: string): string { return resolve(vaultPath, `${RENAME_ROOT}/${requestId}/receipt.json`); }
 

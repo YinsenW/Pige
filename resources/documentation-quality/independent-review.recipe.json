@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T12:55:00Z",
+  "reviewedAt": "2026-08-01T13:07:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Exact recoverable lifecycle for every active mutable knowledge-page type while source pages remain protected.",
+    "scope": "Exact reversible title and filename rename for active notes, claims, questions, concepts and entities.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "faf140c390769265ace7c3c38798a8a8bdecafbd71e2df2ead475fc46d8b02b8"
+    "reviewedSha256": "fbeff6c96bb38b5d523b2df6e90256cd1b5712c01ef3a7229c2a875fda389166"
   },
   "reviewers": [{
-    "reviewerId": "knowledge-page-trash-lifecycle-review",
-      "task": "Review exact recoverable active knowledge-page lifecycle",
+    "reviewerId": "typed-page-rename-lifecycle-review",
+      "task": "Review exact reversible typed knowledge-page rename",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews lifecycle truth across data, knowledge, API, UI, Operation and one durable Decision; Development supplies separate Reader, receipt, Activity and restart evidence."
+      "independence": "Planning reviews rename truth across Markdown, knowledge, API, UI, Operation and one durable Decision; Development supplies separate Reader, receipt, Activity and restart evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Reader and Settings reuse one recoverable workflow for notes and all five active typed knowledge pages while source remains protected."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Data, Knowledge, API, UI, Operation and D-20260801-Active-Knowledge-Page-Trash-Lifecycle agree on exact currentness and source exclusion."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Direct service and UI evidence proves claim, question, concept, entity and topic trash/Undo/Redo/restart/restore without claiming remaining lifecycle completion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"The existing NoteTrash receipt, Operation, Activity and UI owners absorb the broader eligibility without a second store or public channel."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"knowledge-page-trash-lifecycle-review","blockerCount":0,"summary":"Existing lifecycle owner documents plus one durable Decision absorb the feature without a new design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Reader exposes one calm Rename page action for five mutable page types while Topic remains reference-aware and source/archived remain protected."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Markdown, Knowledge, API, UI, Operation and D-20260801-Typed-Knowledge-Page-Rename agree on stable ID/type and exact CAS."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Five-type service and Reader matrices prove rename, alias preservation, Activity Undo/Redo and restart without overclaiming remaining Knowledge completion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"The existing rename receipt, Operation, Activity and dialog owners absorb typed pages without a second store or public channel."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Existing lifecycle owner documents plus one durable Decision absorb the feature without a new design document."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Knowledge-page trash lifecycle truth and source exclusion remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/note-trash-service.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-settings-surface.test.ts -t 'active user-authored|projects and revalidates|browses pathless knowledge-page Trash' && npm run typecheck && npm run build","status":"passed","evidence":"Five typed active pages converge through Reader trash, Activity Undo/Redo, restart list and authoritative restore while source and archived pages fail closed."},
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Typed-page rename lifecycle truth and ownership remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/note-rename-service.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-library.test.ts -t 'renames one exact active|projects and revalidates|renames the exact Library Reader' && npm run typecheck && npm run build","status":"passed","evidence":"Five active page types preserve ID/type/body, prior-title alias, exact Activity Undo/Redo/restart and retained Reader drafts."},
     {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Service responsibility, Main and renderer authority boundaries remain enforced without a budget raise."}
   ],
   "coordination": {
-    "taskId": "knowledge-page-trash-lifecycle-bind-20260801",
-    "taskTitle": "Bind recoverable active knowledge-page lifecycle",
+    "taskId": "typed-page-rename-lifecycle-bind-20260801",
+    "taskTitle": "Bind reversible typed knowledge-page rename",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds the active render/revision/path and exact private receipt; renderer sees only safe identities and authoritative restored render.",
-    "acknowledgement": "Planning binds the completed mutable knowledge-page trash lifecycle while source deletion and remaining Knowledge acceptance exits stay open."
+    "compatibility": "Main binds active Vault/render/revision/path and immutable page type; renderer sees only safe identities and authoritative same-type render.",
+    "acknowledgement": "Planning binds typed page rename while Topic reference-aware rename and remaining Knowledge acceptance exits stay separately owned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

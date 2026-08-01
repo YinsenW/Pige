@@ -1417,11 +1417,16 @@ status: "active"
     expect(importedClaim.trashEligibility).toEqual({
       canTrash: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
+    expect(importedClaim.renameEligibility).toEqual({
+      canRename: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
     const source = await notes.render({ pageId: "page_20260801_source001" }, OWNER_ID);
     expect(source.revealGeneratedEligibility).toBeUndefined();
     expect(source.trashEligibility).toBeUndefined();
+    expect(source.renameEligibility).toBeUndefined();
     const archivedClaim = await notes.render({ pageId: "page_20260801_archived01" }, OWNER_ID);
     expect(archivedClaim.trashEligibility).toBeUndefined();
+    expect(archivedClaim.renameEligibility).toBeUndefined();
 
     const current = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     const currentRequest = { ...request, renderContextId: current.renderContextId!,

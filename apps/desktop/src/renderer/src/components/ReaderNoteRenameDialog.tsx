@@ -22,7 +22,9 @@ export async function submitReaderNoteRename(input: {
   readonly currentNote?: () => NoteRenderResult | null | undefined;
 }): Promise<ReaderNoteRenameOutcome> {
   const title = canonicalNoteTitle(input.title), eligibility = input.note?.renameEligibility, renderContextId = input.note?.renderContextId;
-  if (!input.note || input.note.summary.pageType !== "note" || input.note.summary.status !== "active" || !eligibility?.canRename ||
+  const pageType = input.note?.summary.pageType;
+  if (!input.note || !pageType || !["note", "claim", "question", "concept", "entity"].includes(pageType) ||
+    input.note.summary.status !== "active" || !eligibility?.canRename ||
     !input.activeVaultId || !renderContextId || !input.submit || !title || title === input.note.summary.title || title.length > 120 ||
     /[\u0000-\u001f\u007f]/u.test(title)) return { status: "retained" };
   const request: NoteRenameRequest = { apiVersion: 1,
@@ -32,7 +34,7 @@ export async function submitReaderNoteRename(input: {
   try {
     const result = await input.submit(request), current = input.currentNote?.();
     if (!identityMatches(request, result) || (current && !requestMatchesNote(request, current)) || result.status !== "committed" ||
-      result.render.summary.pageId !== request.currentPageId || result.render.summary.pageType !== "note" ||
+      result.render.summary.pageId !== request.currentPageId || result.render.summary.pageType !== pageType ||
       result.render.summary.title !== request.title || !result.render.renderContextId) return { status: "retained" };
     return { status: "committed", render: result.render };
   } catch { return { status: "retained" }; }

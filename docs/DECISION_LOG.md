@@ -4726,6 +4726,38 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260801-Typed-Knowledge-Page-Rename
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+The existing exact `notes.rename` lifecycle applies to active notes, claims, questions, concepts
+and entities. It preserves stable page ID and page type, retains the prior title as an alias and
+owns the deterministic filename change. Topic rename remains with the reference-aware Library
+owner; source and archived pages remain ineligible.
+
+Rationale:
+
+Every mutable typed knowledge page needs a user correction path, while separate mutation families
+or renderer path authority would duplicate risk. The existing private before/after receipt already
+provides exact CAS, restart recovery and Activity Undo/Redo.
+
+Consequences:
+
+- Reader uses one calm Rename page dialog and retains drafts on closed results.
+- Main re-proves Vault, render, revision, path and immutable page type before mutation.
+- Activity language is generic to knowledge pages; old note receipts remain restart-compatible.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

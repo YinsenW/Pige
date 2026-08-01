@@ -27,6 +27,11 @@ export function isTrashableKnowledgePage(pageType: string | undefined, status: s
   return pageType === "note" || Boolean(status === "active" && pageType && TRASHABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType));
 }
 
+const RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES = new Set(["note", "claim", "concept", "entity", "question"]);
+export function isRenamableKnowledgePage(pageType: string | undefined, status: string | undefined): boolean {
+  return Boolean(status === "active" && pageType && RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType));
+}
+
 export function resolveGeneratedNoteReveal(request: NoteRevealGeneratedRequest, input: {
   readonly vaultId: string | undefined; readonly vaultPath: string | undefined;
   readonly ownerEpoch: number | undefined; readonly context: GeneratedNoteRevealContext | undefined;

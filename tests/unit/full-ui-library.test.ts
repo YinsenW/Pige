@@ -1909,10 +1909,15 @@ describe("full UI Library", () => {
     await act(async () => root.unmount()); dom.window.close();
   });
 
-  it("renames the exact Library Reader note and retains the draft on conflict", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "renames the exact Library Reader %s and retains the draft on conflict",
+    async (pageType) => {
     const dom = createDom(), root = createRoot(dom.window.document.querySelector("#root")!);
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: { unlinkRelation: vi.fn() } } });
     const requests: NoteRenameRequest[] = [], adopted: NoteRenderResult[] = []; let mode: "conflict" | "committed" = "conflict";
-    let selected: NoteRenderResult = { ...readerNote(), renameEligibility: { canRename: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const initial = readerNote();
+    let selected: NoteRenderResult = { ...initial, summary: { ...initial.summary, pageType },
+      renameEligibility: { canRename: true, revision: `noteeditrev_${"a".repeat(32)}` } };
     const onRenameCurrentNote = async (request: NoteRenameRequest): Promise<NoteRenameResult> => {
       requests.push(request); return mode === "committed"
         ? { ...request, status: "committed", operationId: "op_20260731_libraryrename123", render: {
@@ -1930,14 +1935,14 @@ describe("full UI Library", () => {
     }));
     await act(async () => { renderPanel(); await settle(dom); });
     const container = dom.window.document.querySelector("#root")!;
-    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Rename note"));
+    await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Rename page"));
     const input = requireElement(container.querySelector<HTMLInputElement>(".confirmation-dialog input"));
     await inputText(dom, input, "  Renamed   Library Note  "); await clickButton(dom, buttonNamed(container, "Rename"));
     expect(requests[0]).toMatchObject({ apiVersion: 1, activeVaultId: "vault_20260715_fullui01",
       currentPageId: selected.summary.pageId, renderContextId: selected.renderContextId,
       expectedRevision: `noteeditrev_${"a".repeat(32)}`, title: "Renamed Library Note" });
     expect(JSON.stringify(requests[0])).not.toMatch(/path|markdown|contentHash/iu);
-    expect(container.textContent).toContain("The note was not renamed. Your title is preserved; review it and try again.");
+    expect(container.textContent).toContain("The page was not renamed. Your title is preserved; review it and try again.");
     expect(input.value).toBe("  Renamed   Library Note  ");
     mode = "committed"; await clickButton(dom, buttonNamed(container, "Rename")); await waitFor(dom, () => adopted.length === 1);
     expect(adopted[0]?.summary.title).toBe("Renamed Library Note"); expect(container.querySelector(".note-reader")).not.toBeNull();

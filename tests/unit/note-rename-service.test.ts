@@ -16,9 +16,11 @@ const request = { apiVersion: 1 as const, requestId: "noterenamereq_abcdefghijkl
   expectedRevision: `noteeditrev_${"a".repeat(64)}`, title: "Renamed Note" };
 
 describe("NoteRenameService", () => {
-  it("renames one exact note and Git-friendly filename, preserves old-title links, and supports repeatable Activity Undo/Redo", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "renames one exact active %s and Git-friendly filename, preserves old-title links, and supports repeatable Activity Undo/Redo",
+    async (pageType) => {
     const fixture = makeFixture();
-    const before = noteMarkdown("Original Note", ["Existing alias"]);
+    const before = noteMarkdown("Original Note", ["Existing alias"], "Keep this body byte-for-byte.", pageId, pageType);
     write(fixture.vaultPath, "wiki/original.md", before);
     write(fixture.vaultPath, "wiki/linker.md", noteMarkdown("Linker", [], "See [[Original Note]].", "page_20260731_linker123456"));
     const service = makeService(fixture, before);
@@ -29,7 +31,7 @@ describe("NoteRenameService", () => {
     const renamedPath = path.join(fixture.vaultPath, "wiki/renamed-note--rename12345678.md");
     expect(fs.existsSync(path.join(fixture.vaultPath, "wiki/original.md"))).toBe(false);
     const renamed = fs.readFileSync(renamedPath, "utf8"), frontmatter = parsePigeFrontmatter(renamed)!.frontmatter;
-    expect(frontmatter).toMatchObject({ id: pageId, title: "Renamed Note", aliases: ["Existing alias", "Original Note"] });
+    expect(frontmatter).toMatchObject({ id: pageId, type: pageType, title: "Renamed Note", aliases: ["Existing alias", "Original Note"] });
     expect(renamed).toContain("Keep this body byte-for-byte.");
 
     const database = new LocalDatabaseService();
@@ -85,7 +87,7 @@ describe("NoteRenameService", () => {
     for (const [markdown, targetCurrent, expected] of [
       [noteMarkdown("Original Note"), false, "stale"],
       [noteMarkdown("Original Note").replace('type: "note"', 'type: "source"'), true, "ineligible"],
-      [noteMarkdown("Original Note").replace('type: "note"', 'type: "concept"'), true, "ineligible"],
+      [noteMarkdown("Original Note").replace('type: "note"', 'type: "topic"'), true, "ineligible"],
       [noteMarkdown("Original Note").replace('status: "active"', 'status: "archived"'), true, "ineligible"],
       [noteMarkdown("Original Note").replace("aliases: []", "aliases:\n  - Existing"), true, "ineligible"]
     ] as const) {
@@ -138,13 +140,14 @@ function makeFixture() {
 
 function makeService(fixture: ReturnType<typeof makeFixture>, before: string, current = true): NoteRenameService {
   const absolutePath = path.join(fixture.vaultPath, "wiki/original.md"), beforeHash = sha(before);
+  const pageType = parsePigeFrontmatter(before)?.frontmatter.type ?? "note";
   const assertCurrent = vi.fn(() => current && fs.existsSync(absolutePath) && sha(fs.readFileSync(absolutePath, "utf8")) === beforeHash);
   return new NoteRenameService(fixture.vaults, {
     resolveTrashTarget: vi.fn(() => ({ status: "ready", activeVaultId: request.activeVaultId, vaultPath: fixture.vaultPath,
       pageId, pagePath: "wiki/original.md", absolutePath, pageContentHash: beforeHash, title: "Original Note", assertCurrent })),
     render: vi.fn(async () => {
       const afterPath = "wiki/renamed-note--rename12345678.md", markdown = fs.readFileSync(path.join(fixture.vaultPath, afterPath), "utf8");
-      return { summary: { pageId, title: "Renamed Note", pageType: "note" as const, status: "active" as const,
+      return { summary: { pageId, title: "Renamed Note", pageType, status: "active" as const,
         pagePath: afterPath, createdAt: "2026-07-31T10:00:00.000Z", updatedAt: "2026-07-31T12:00:00.000Z", sourceIds: [] },
         html: "<h1>Renamed Note</h1>", byteSize: Buffer.byteLength(markdown), renderContextId: `notectx_${"b".repeat(32)}`,
         renameEligibility: { canRename: true, revision: `noteeditrev_${"b".repeat(64)}` } };
@@ -152,8 +155,9 @@ function makeService(fixture: ReturnType<typeof makeFixture>, before: string, cu
   } as never, { now: () => new Date("2026-07-31T12:00:00.000Z"), randomId: () => "rename-random" });
 }
 
-function noteMarkdown(title: string, aliases: readonly string[] = [], body = "Keep this body byte-for-byte.", id = pageId): string {
-  return `---\nid: "${id}"\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: "2026-07-31T10:00:00.000Z"\nupdated_at: "2026-07-31T10:00:00.000Z"\nstatus: "active"\naliases: ${JSON.stringify(aliases)}\nsource_ids: []\n---\n\n# ${title}\n\n${body}\n`;
+function noteMarkdown(title: string, aliases: readonly string[] = [], body = "Keep this body byte-for-byte.", id = pageId,
+  pageType: "note" | "source" | "claim" | "question" | "concept" | "entity" | "topic" = "note"): string {
+  return `---\nid: "${id}"\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "${pageType}"\ncreated_at: "2026-07-31T10:00:00.000Z"\nupdated_at: "2026-07-31T10:00:00.000Z"\nstatus: "active"\naliases: ${JSON.stringify(aliases)}\nsource_ids: []\n---\n\n# ${title}\n\n${body}\n`;
 }
 function write(vaultPath: string, relative: string, content: string): void { const file = path.join(vaultPath, relative); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, content, "utf8"); }
 function sha(content: string | Buffer): `sha256:${string}` { return `sha256:${createHash("sha256").update(content).digest("hex")}`; }

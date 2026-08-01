@@ -6062,13 +6062,13 @@ describe("Home durable Agent conversation UI", () => {
     const activityRegion = container.querySelector(".settings-history-page");
     expect(activityRegion?.textContent).toContain("Knowledge note created: Grounded boundary");
     expect(activityRegion?.textContent).toContain("Knowledge note updated: Refined boundary");
-    expect(activityRegion?.textContent).toContain("Knowledge note renamed: Renamed boundary");
+    expect(activityRegion?.textContent).toContain("Knowledge page renamed: Renamed boundary");
     expect(container.querySelector('[data-activity-row-id="op_20260712_activityfixture"]')?.getAttribute("aria-label"))
       .toBe("Knowledge note created: Grounded boundary (1)");
     expect(container.querySelector('[data-activity-row-id="op_20260712_updateactivity"]')?.getAttribute("aria-label"))
       .toBe("Knowledge note updated: Refined boundary (2)");
     expect(container.querySelector('[data-activity-row-id="op_20260712_renameactivity"]')?.getAttribute("aria-label"))
-      .toBe("Knowledge note renamed: Renamed boundary (3)");
+      .toBe("Knowledge page renamed: Renamed boundary (3)");
     expect(buttonsByAriaLabel(container, createOpenLabel)).toHaveLength(1);
     expect(buttonsByAriaLabel(container, updateOpenLabel)).toHaveLength(1);
 
