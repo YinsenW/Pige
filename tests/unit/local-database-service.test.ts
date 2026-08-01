@@ -563,12 +563,12 @@ Beta conclusion.`
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
     writePage(vaultPath, "wiki/topic.md", {
-      id: "page_20260709_topic1",
+      id: "page_20260709_topic001",
       title: "Knowledge Tree",
       body: "A durable note that can be reached by explicit links."
     });
     writePage(vaultPath, "wiki/research/source.md", {
-      id: "page_20260709_source1",
+      id: "page_20260709_source001",
       title: "Source Note",
       body: `See [[Knowledge Tree]] and [the same topic](../topic.md#details).
 
@@ -579,18 +579,18 @@ Beta conclusion.`
 
     service.rebuild(vaultPath);
 
-    const outgoing = service.relatedPages(vaultPath, { pageId: "page_20260709_source1" });
-    const backlinks = service.relatedPages(vaultPath, { pageId: "page_20260709_topic1" });
+    const outgoing = service.relatedPages(vaultPath, { pageId: "page_20260709_source001" });
+    const backlinks = service.relatedPages(vaultPath, { pageId: "page_20260709_topic001" });
 
     expect(outgoing?.totalOutgoing).toBe(1);
     expect(outgoing?.outgoing).toHaveLength(1);
     expect(outgoing?.outgoing[0]?.summary).toMatchObject({
-      pageId: "page_20260709_topic1",
+      pageId: "page_20260709_topic001",
       title: "Knowledge Tree"
     });
     expect(backlinks?.totalBacklinks).toBe(1);
     expect(backlinks?.backlinks[0]?.summary).toMatchObject({
-      pageId: "page_20260709_source1",
+      pageId: "page_20260709_source001",
       title: "Source Note"
     });
     expect(JSON.stringify(outgoing)).not.toContain("example.com");
@@ -604,11 +604,11 @@ Beta conclusion.`
     const answer = "page_20260801_answernote";
     writePage(vaultPath, "wiki/claim-a.md", {
       id: claimA, title: "Claim A", type: "claim", sourceIds: ["src_20260801_claimalpha"], body: "Claim A.",
-      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: ["${claimB}"]`
+      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: ["src_20260801_claimalpha#p1"]\n  contradicts: ["${claimB}"]`
     });
     writePage(vaultPath, "wiki/claim-b.md", {
       id: claimB, title: "Claim B", type: "claim", sourceIds: ["src_20260801_claimbravo"], body: "Claim B.",
-      extraFrontmatter: "claim:\n  confidence: \"medium\"\n  evidence: []\n  contradicts: []"
+      extraFrontmatter: "claim:\n  confidence: \"medium\"\n  evidence: [\"src_20260801_claimbravo#p1\"]\n  contradicts: []"
     });
     writePage(vaultPath, "wiki/answer.md", {
       id: answer, title: "Answer", sourceIds: ["src_20260801_answernote"], body: "Grounded answer."
@@ -636,7 +636,7 @@ Beta conclusion.`
     expect(service.relatedPages(vaultPath, { pageId: answer })?.backlinks).toMatchObject([
       { relationType: "answers", summary: { pageId: "page_20260801_questionone" } }
     ]);
-    expect(service.relatedPages(vaultPath, { pageId: "page_20260801_questionbad" })?.outgoing).toEqual([]);
+    expect(service.relatedPages(vaultPath, { pageId: "page_20260801_questionbad" })).toBeUndefined();
   });
 
   it("rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge", () => {
@@ -646,7 +646,7 @@ Beta conclusion.`
       id: "page_20260709_tags1234",
       title: "Tagged Knowledge",
       body: "The durable tag set lives in Markdown frontmatter.",
-      tags: ["Research", "research", "  Durable   Knowledge  ", "Ｒｅｓｅａｒｃｈ"]
+      tags: ["Research", "Durable Knowledge"]
     });
     writeRawPage(vaultPath, "wiki/scalar-tags.md", "page_20260709_scalartags", "tags: Research");
     writeRawPage(vaultPath, "wiki/block-tags.md", "page_20260709_blocktags", "tags:\n  - Research");

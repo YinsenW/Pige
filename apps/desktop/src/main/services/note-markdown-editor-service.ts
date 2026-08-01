@@ -9,7 +9,8 @@ import type {
 import {
   extractPigeMarkdownLinkRefs,
   normalizePigeTag,
-  parsePigeFrontmatter
+  parsePigeFrontmatter,
+  parsePigeMarkdownIndexPage
 } from "@pige/markdown";
 import {
   MarkdownPageStatusSchema,
@@ -562,7 +563,7 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
     Buffer.byteLength(markdown, "utf8") > MAX_NOTE_MARKDOWN_EDITOR_BYTES ||
     UNSAFE_TEXT_PATTERN.test(markdown)
   ) return false;
-  const parsed = parsePigeFrontmatter(markdown);
+  const parsed = parsePigeMarkdownIndexPage(markdown);
   if (!parsed) return false;
   const frontmatter = parsed.frontmatter;
   if (
@@ -592,7 +593,7 @@ function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
 }
 function validFrontmatterArrays(
   raw: string,
-  frontmatter: ReturnType<typeof parsePigeFrontmatter> extends infer _T ? NonNullable<ReturnType<typeof parsePigeFrontmatter>>["frontmatter"] : never
+  frontmatter: Readonly<Partial<Record<"aliases" | "tags" | "topics" | "source_ids", readonly string[] | undefined>>>
 ): boolean {
   for (const key of ["aliases", "tags", "topics", "source_ids"] as const) {
     const present = raw.split(/\r?\n/u).some((line) => line.startsWith(`${key}:`));

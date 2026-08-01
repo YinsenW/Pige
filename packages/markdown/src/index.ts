@@ -5,6 +5,12 @@ import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
+import { Document, isSeq, parseDocument } from "yaml";
+import {
+  PigeMarkdownLegacyFrontmatterSchema,
+  PigeMarkdownFrontmatterSchema,
+  type PigeMarkdownFrontmatter
+} from "@pige/schemas";
 
 export const PIGE_MANAGED_BLOCK_START = "<!-- pige:managed:start";
 export const PIGE_MANAGED_BLOCK_END = "<!-- pige:managed:end -->";
@@ -35,6 +41,13 @@ export interface PigeFrontmatterParseResult {
   readonly frontmatter: PigeFrontmatter;
   readonly raw: string;
   readonly bodyStartOffset: number;
+}
+
+export interface PigeMarkdownPageParseResult {
+  readonly frontmatter: PigeMarkdownFrontmatter;
+  readonly raw: string;
+  readonly bodyStartOffset: number;
+  readonly markdownBody: string;
 }
 
 export interface PigeMarkdownRenderResult {
@@ -270,7 +283,8 @@ export function stripPigeFrontmatter(markdown: string): string {
 }
 
 export function parsePigeFrontmatter(markdownPrefix: string): PigeFrontmatterParseResult | undefined {
-  const normalized = markdownPrefix.replace(/^\uFEFF/u, "");
+  const bomLength = markdownPrefix.startsWith("\uFEFF") ? 1 : 0;
+  const normalized = markdownPrefix.slice(bomLength);
   if (!normalized.startsWith("---\n") && !normalized.startsWith("---\r\n")) return undefined;
 
   const firstLineBreak = normalized.indexOf("\n");
@@ -281,8 +295,106 @@ export function parsePigeFrontmatter(markdownPrefix: string): PigeFrontmatterPar
   return {
     raw,
     frontmatter: parseKnownFrontmatterFields(raw),
-    bodyStartOffset: closingMarker.end
+    bodyStartOffset: closingMarker.end + bomLength
   };
+}
+
+export function parsePigeMarkdownPage(markdown: string): PigeMarkdownPageParseResult | undefined {
+  const yaml = readPigeYamlObject(markdown);
+  if (!yaml) return undefined;
+  const frontmatter = PigeMarkdownFrontmatterSchema.safeParse(yaml.value);
+  return frontmatter.success ? pageParseResult(markdown, yaml.parsed, frontmatter.data) : undefined;
+}
+
+export function parsePigeMarkdownIndexPage(markdown: string): PigeMarkdownPageParseResult | undefined {
+  const strict = parsePigeMarkdownPage(markdown);
+  if (strict) return strict;
+  const yaml = readPigeYamlObject(markdown);
+  if (!yaml) return undefined;
+  const legacy = PigeMarkdownLegacyFrontmatterSchema.safeParse(yaml.value);
+  return legacy.success
+    ? pageParseResult(markdown, yaml.parsed, legacy.data as PigeMarkdownFrontmatter)
+    : undefined;
+}
+
+export function rewritePigeMarkdownFrontmatter(
+  markdown: string,
+  patch: Readonly<Record<string, unknown>>
+): string | undefined {
+  const parsed = parsePigeMarkdownPage(markdown);
+  if (!parsed || !isSafeYamlObject(patch)) return undefined;
+  const next = PigeMarkdownFrontmatterSchema.safeParse({ ...parsed.frontmatter, ...patch });
+  if (!next.success) return undefined;
+  const document = new Document(next.data, { schema: "core" });
+  for (const key of ["aliases", "tags", "topics"]) {
+    const node = document.get(key, true);
+    if (isSeq(node)) node.flow = true;
+  }
+  const yaml = document.toString({
+    lineWidth: 0,
+    defaultStringType: "QUOTE_DOUBLE",
+    defaultKeyType: "PLAIN",
+    simpleKeys: true
+  });
+  const bom = markdown.startsWith("\uFEFF") ? "\uFEFF" : "";
+  return `${bom}---\n${yaml}---\n${markdown.slice(parsed.bodyStartOffset)}`;
+}
+
+function isSafeYamlObject(value: unknown, depth = 0): value is Record<string, unknown> {
+  if (depth > 24 || value === null || Array.isArray(value) || typeof value !== "object") return false;
+  const prototype = Object.getPrototypeOf(value) as unknown;
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const record = value as Record<string, unknown>;
+  for (const [key, child] of Object.entries(record)) {
+    if (key === "__proto__" || key === "prototype" || key === "constructor" || key === "<<") return false;
+    if (!isSafeYamlChild(child, depth + 1)) return false;
+  }
+  return true;
+}
+
+function readPigeYamlObject(markdown: string): {
+  readonly parsed: PigeFrontmatterParseResult;
+  readonly value: Record<string, unknown>;
+} | undefined {
+  const parsed = parsePigeFrontmatter(markdown);
+  if (!parsed || new TextEncoder().encode(parsed.raw).byteLength > 64 * 1024) return undefined;
+  try {
+    const document = parseDocument(parsed.raw, { schema: "core", strict: true, uniqueKeys: true });
+    if (document.errors.length > 0 || document.warnings.length > 0 || document.contents === null ||
+      !frontmatterArrayStylesAreValid(document)) return undefined;
+    const value = document.toJS({ maxAliasCount: 0 }) as unknown;
+    return isSafeYamlObject(value) ? { parsed, value } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function frontmatterArrayStylesAreValid(document: ReturnType<typeof parseDocument>): boolean {
+  return ["aliases", "tags", "topics"].every((key) => {
+    const node = document.get(key, true);
+    return node === undefined || (isSeq(node) && node.flow === true);
+  });
+}
+
+function pageParseResult(
+  markdown: string,
+  parsed: PigeFrontmatterParseResult,
+  frontmatter: PigeMarkdownFrontmatter
+): PigeMarkdownPageParseResult {
+  return {
+    raw: parsed.raw,
+    frontmatter,
+    bodyStartOffset: parsed.bodyStartOffset,
+    markdownBody: markdown.slice(parsed.bodyStartOffset)
+  };
+}
+
+function isSafeYamlChild(value: unknown, depth: number): boolean {
+  if (depth > 24) return false;
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.length <= 1_024 && value.every((entry) => isSafeYamlChild(entry, depth + 1));
+  return isSafeYamlObject(value, depth);
 }
 
 export function extractPigeMarkdownLinkRefs(markdown: string): readonly PigeMarkdownLinkRef[] {

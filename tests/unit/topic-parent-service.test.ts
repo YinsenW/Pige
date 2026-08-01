@@ -75,20 +75,21 @@ describe("TopicParentService", () => {
     expect(readTopicParentIds(topicFrontmatter([]).replace("topics: []", "topics: []\ntopics: []"))).toBeUndefined();
   });
 
-  it("fails closed before mutation when any active Topic has malformed hierarchy truth", async () => {
+  it("excludes malformed Topic hierarchy without poisoning a valid parent mutation", async () => {
     const vaultPath = makeVault();
     writeTopic(vaultPath, request.targetPageId, "Broader topic", request.expectedTargetUpdatedAt);
     fs.writeFileSync(path.join(vaultPath, "wiki", "malformed.md"), topicDocument(
       "page_20260801_malformed", "Malformed topic", "2026-08-01T11:30:00.000Z", "active", []
     ).replace("topics: []", "topics: not-an-array"), "utf8");
-    const save = vi.fn();
+    const save = vi.fn(() => ({ status: "committed" as const, operationId: "op_20260801_topicparent3" }));
     const service = new TopicParentService({ resolveManagedPageTarget: vi.fn(() => readyTarget(() => true)),
-      render: vi.fn() } as never, { open: vi.fn(() => openedTopic()), save } as never, () => vaultPath);
+      render: vi.fn(async () => topicRender([parentItem()])) } as never,
+    { open: vi.fn(() => openedTopic()), save } as never, () => vaultPath);
 
     expect(service.search("reader_owner", { ...request, query: "broader" }))
-      .toMatchObject({ status: "ready", candidates: [] });
-    await expect(service.change("reader_owner", request)).resolves.toMatchObject({ status: "ineligible" });
-    expect(save).not.toHaveBeenCalled();
+      .toMatchObject({ status: "ready", candidates: [{ pageId: request.targetPageId }] });
+    await expect(service.change("reader_owner", request)).resolves.toMatchObject({ status: "committed" });
+    expect(save).toHaveBeenCalledOnce();
   });
 });
 

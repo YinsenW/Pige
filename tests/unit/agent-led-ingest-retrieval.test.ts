@@ -1226,7 +1226,7 @@ describe("Agent-selected ingest retrieval tool", () => {
       name: "unbalanced managed block",
       mutate: (markdown: string) => `${markdown}\n<!-- pige:managed:start malformed -->\n`
     }
-  ])("blocks a target with $name before checkpoint or write", ({ mutate }) => {
+  ])("blocks a target with $name before checkpoint or write", ({ name, mutate }) => {
     const fixture = makeVault();
     writeUpdateTargetPage(fixture.vaultPath);
     const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
@@ -1234,6 +1234,12 @@ describe("Agent-selected ingest retrieval tool", () => {
     fs.writeFileSync(targetPath, before, "utf8");
     const prepared = prepareAgentSource(fixture, "Malformed generated Markdown must fail before update staging.");
     const indexed = requireValue(makeUpdateSearchResult(fixture, "existing managed knowledge").results[0]);
+    if (name === "duplicate reserved status field") {
+      expect(() => readCurrentRetrievalPageForMutation(fixture.vaultPath, indexed)).toThrowError(PigeDomainError);
+      expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page")).toEqual([]);
+      expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+      return;
+    }
     const target = readCurrentRetrievalPageForMutation(fixture.vaultPath, indexed);
     let publicationStarts = 0;
 

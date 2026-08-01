@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { NoteImportMarkdownRequest, NoteImportMarkdownResult, VaultSummary } from "@pige/contracts";
-import { parsePigeFrontmatter, stripPigeFrontmatter } from "@pige/markdown";
+import { parsePigeFrontmatter, parsePigeMarkdownPage, stripPigeFrontmatter } from "@pige/markdown";
 import {
   NoteImportMarkdownRequestSchema,
   OperationRecordSchema,
@@ -192,7 +192,7 @@ function prepareImportedMarkdown(
   const suffix = digest(`note-import\0${request.activeVaultId}\0${request.requestId}`).slice(0, 16);
   const pageId = `page_${date}_${suffix}`;
   const markdown = `---\nid: ${JSON.stringify(pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(title)}\ntype: "note"\ncreated_at: ${JSON.stringify(createdAt)}\nupdated_at: ${JSON.stringify(createdAt)}\nstatus: "active"\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "user"\nnote:\n  note_kind: "imported"\n  review_state: "clean"\n---\n\n${body}\n`;
-  if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES || !parsePigeFrontmatter(markdown)) {
+  if (Buffer.byteLength(markdown, "utf8") > MAX_MARKDOWN_BYTES || !parsePigeMarkdownPage(markdown)) {
     throw new Error("invalid imported markdown");
   }
   return { markdown };
@@ -206,7 +206,7 @@ function completeImport(
   assertCurrent();
   const staged = readStage(vaultPath, request.requestId);
   if (!staged) throw new Error("missing import stage");
-  const parsed = parsePigeFrontmatter(staged);
+  const parsed = parsePigeMarkdownPage(staged);
   const pageId = parsed?.frontmatter.id;
   const title = parsed?.frontmatter.title;
   const createdAt = parsed?.frontmatter.created_at;

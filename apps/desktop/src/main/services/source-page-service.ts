@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { PigeDomainError } from "@pige/domain";
+import { parsePigeMarkdownPage } from "@pige/markdown";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { readVerifiedSourceTextPrefix } from "./source-file-access";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
@@ -20,10 +21,7 @@ export interface SourcePageRefreshResult extends SourcePageResult {
   readonly conflict: boolean;
 }
 
-export interface SourcePagePublicationHooks {
-  readonly onPublicationStart?: () => void;
-}
-
+export interface SourcePagePublicationHooks { readonly onPublicationStart?: () => void; }
 interface SourcePageRefreshPending {
   readonly previousChecksum?: string;
   readonly targetChecksum: string;
@@ -369,7 +367,7 @@ function renderSourcePage(input: {
     artifact.kind === "extracted_text" || artifact.kind === "ocr"
   );
 
-  return `---
+  const markdown = `---
 id: ${yamlString(input.pageId)}
 schema_version: 1
 title: ${yamlString(input.title)}
@@ -433,6 +431,8 @@ ${renderUrlReferences(input.sourceRecord)}
 
 No related pages yet.
 `;
+  if (!parsePigeMarkdownPage(markdown)) throw new Error("source_page.invalid_markdown");
+  return markdown;
 }
 
 function createSourceBody(sourceText: SourceTextPreview | undefined): string {

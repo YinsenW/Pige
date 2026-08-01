@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { parsePigeFrontmatter } from "@pige/markdown";
+import { parsePigeMarkdownPage } from "@pige/markdown";
 import {
   AgentSaveAnswerAsNoteRequestSchema,
   AgentSaveAnswerAsNoteResultSchema,
@@ -192,7 +192,7 @@ function createMarkdown(input: {
 }): string {
   const citations = formatCitations(input.citations);
   const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: "note"\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: "active"\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: ${JSON.stringify(input.sourceIds)}\nrelated_page_ids: ${JSON.stringify(input.relatedPageIds)}\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  last_operation_id: ${JSON.stringify(input.operationId)}\n  confidence: "high"\nnote:\n  note_kind: "summary"\n  review_state: "clean"\n---\n\n# ${escapeHeading(input.title)}\n\n${input.body.trim()}${citations}\n`;
-  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {
+  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeMarkdownPage(markdown)) {
     throw new Error("assistant_answer_note.invalid_markdown");
   }
   return markdown;

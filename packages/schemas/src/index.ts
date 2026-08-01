@@ -4989,6 +4989,203 @@ export const SourceRecordLanguageFactSchema = DurableLanguageFactObjectSchema.ex
 export const MarkdownPageLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
   domain: z.literal("markdown_page")
 }).superRefine(refineDurableLanguageFact);
+
+const MarkdownUnsafeTextPattern = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+const MarkdownBoundedTextSchema = z.string().min(1).max(256).refine(
+  (value) => !MarkdownUnsafeTextPattern.test(value),
+  "Markdown frontmatter text must not contain control or bidirectional override characters."
+);
+const MarkdownCanonicalTextSchema = (maximum: number) => z.string().min(1).max(maximum).refine(
+  (value) => !MarkdownUnsafeTextPattern.test(value) &&
+    value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Markdown frontmatter text must use its canonical representation."
+);
+const MarkdownCanonicalTextArraySchema = (maximumItems: number, maximumLength: number) =>
+  z.array(MarkdownCanonicalTextSchema(maximumLength)).max(maximumItems).superRefine((values, context) => {
+    const keys = values.map((value) => value.toLocaleLowerCase("en-US"));
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({ code: "custom", message: "Markdown frontmatter arrays must not contain canonical duplicates." });
+    }
+  });
+const MarkdownStableIdArraySchema = <T extends z.ZodType<string>>(item: T, maximumItems: number) =>
+  z.array(item).max(maximumItems).superRefine((values, context) => {
+    if (new Set(values).size !== values.length) {
+      context.addIssue({ code: "custom", message: "Markdown stable-ID arrays must not contain duplicates." });
+    }
+  });
+const MarkdownProvenanceSchema = z.object({
+  generated_by: z.enum(["pige", "user"]),
+  last_job_id: JobIdSchema.optional(),
+  last_operation_id: OperationIdSchema.optional(),
+  model_profile_id: z.string().min(1).max(128).refine((value) => !MarkdownUnsafeTextPattern.test(value)).optional(),
+  confidence: z.enum(["low", "medium", "high"]).optional()
+}).passthrough();
+const MarkdownSourceRecordPathSchema = z.string().min(1).max(512).refine((value) =>
+  value.startsWith(".pige/source-records/") &&
+  value.endsWith(".json") &&
+  !value.includes("\\") &&
+  !pathHasUnsafeSegment(value),
+  "Source-page sidecar references must remain confined vault-relative JSON paths."
+);
+const MarkdownReadableArtifactIdSchema = z.union([ArtifactIdSchema, LegacySourceDerivedArtifactIdSchema]);
+const MarkdownSourceProjectionSchema = z.object({
+  id: SourceIdSchema,
+  kind: SourceKindSchema,
+  storage_strategy: SourceStorageStrategySchema,
+  source_record_path: MarkdownSourceRecordPathSchema,
+  source_record_schema_version: z.literal(1),
+  source_record_updated_at: z.string().datetime({ offset: true }),
+  source_record_sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u).optional(),
+  captured_at: z.string().datetime({ offset: true }),
+  availability: z.enum(["available", "missing", "changed", "permission_needed", "unknown"]),
+  artifact_ids: MarkdownStableIdArraySchema(MarkdownReadableArtifactIdSchema, 256)
+}).passthrough().superRefine((projection, context) => {
+  if (!projection.source_record_path.endsWith(`/${projection.id}.json`)) {
+    context.addIssue({
+      code: "custom",
+      path: ["source_record_path"],
+      message: "The projected Source ID and Source Record sidecar path must agree."
+    });
+  }
+  for (const forbidden of ["managed_copy_path", "original_uri", "checksum", "artifact_paths"] as const) {
+    if (forbidden in projection) {
+      context.addIssue({
+        code: "custom",
+        path: [forbidden],
+        message: "New source-page projections must not contain operational asset locators."
+      });
+    }
+  }
+});
+const MarkdownNoteFieldsSchema = z.object({
+  note_kind: z.enum(["general", "memo", "summary", "research", "meeting", "draft", "imported"]),
+  review_state: z.enum(["clean", "needs_review"])
+}).passthrough();
+const MarkdownConceptFieldsSchema = z.object({
+  canonical_name: MarkdownBoundedTextSchema,
+  parent_concepts: MarkdownStableIdArraySchema(PageIdSchema, 32),
+  child_concepts: MarkdownStableIdArraySchema(PageIdSchema, 32)
+}).passthrough();
+const MarkdownEntityFieldsSchema = z.object({
+  entity_type: z.enum(["person", "organization", "product", "place", "project", "event", "other"]),
+  canonical_name: MarkdownBoundedTextSchema,
+  identifiers: MarkdownCanonicalTextArraySchema(32, 256)
+}).passthrough();
+const MarkdownClaimFieldsSchema = z.object({
+  confidence: z.enum(["low", "medium", "high"]),
+  evidence: z.array(z.string().min(1).max(768).regex(/^src_\d{8}_[a-z0-9]{8,}#[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]{1,512}$/u)).max(64),
+  contradicts: MarkdownStableIdArraySchema(PageIdSchema, 32)
+}).passthrough();
+const MarkdownQuestionFieldsSchema = z.object({
+  state: z.enum(["open", "partially_answered", "answered", "stale"]),
+  answered_by: MarkdownStableIdArraySchema(PageIdSchema, 32)
+}).passthrough();
+const MarkdownFrontmatterObjectSchema = z.object({
+  id: PageIdSchema,
+  schema_version: z.literal(1),
+  title: MarkdownBoundedTextSchema,
+  type: MarkdownPageTypeSchema,
+  created_at: z.string().datetime({ offset: true }),
+  updated_at: z.string().datetime({ offset: true }),
+  status: MarkdownPageStatusSchema,
+  language: DurableLanguageSchema.optional(),
+  language_basis: DurableLanguageBasisSchema.optional(),
+  language_confidence: z.number().min(0).max(1).optional(),
+  detected_languages: MarkdownStableIdArraySchema(Bcp47LanguageTagSchema, 16).optional(),
+  aliases: MarkdownCanonicalTextArraySchema(64, 120).optional(),
+  tags: MarkdownCanonicalTextArraySchema(12, 48).optional(),
+  topics: MarkdownCanonicalTextArraySchema(8, 80).optional(),
+  entities: MarkdownCanonicalTextArraySchema(64, 120).optional(),
+  source_ids: MarkdownStableIdArraySchema(SourceIdSchema, 64).optional(),
+  related_page_ids: MarkdownStableIdArraySchema(PageIdSchema, 64).optional(),
+  provenance: MarkdownProvenanceSchema.optional(),
+  source: MarkdownSourceProjectionSchema.optional(),
+  note: MarkdownNoteFieldsSchema.optional(),
+  concept: MarkdownConceptFieldsSchema.optional(),
+  entity: MarkdownEntityFieldsSchema.optional(),
+  claim: MarkdownClaimFieldsSchema.optional(),
+  question: MarkdownQuestionFieldsSchema.optional(),
+  topic: z.never().optional()
+}).passthrough();
+
+function pathHasUnsafeSegment(value: string): boolean {
+  return value.split("/").some((segment) => segment.length === 0 || segment === "." || segment === "..");
+}
+
+export const PigeMarkdownFrontmatterSchema = MarkdownFrontmatterObjectSchema.superRefine((frontmatter, context) => {
+  const expectedBlock = frontmatter.type === "topic" ? undefined : frontmatter.type;
+  for (const block of ["source", "note", "concept", "entity", "claim", "question"] as const) {
+    if (block === expectedBlock && frontmatter[block] === undefined) {
+      context.addIssue({ code: "custom", path: [block], message: `The ${frontmatter.type} page block is required.` });
+    } else if (block !== expectedBlock && frontmatter[block] !== undefined) {
+      context.addIssue({ code: "custom", path: [block], message: `The ${block} block does not match page type ${frontmatter.type}.` });
+    }
+  }
+
+  if (frontmatter.language === undefined && frontmatter.language_basis !== undefined) {
+    context.addIssue({ code: "custom", path: ["language_basis"], message: "Language basis requires a recorded language." });
+  } else if (frontmatter.language !== undefined && frontmatter.language_basis !== undefined) {
+    const language = MarkdownPageLanguageFactSchema.safeParse({
+      domain: "markdown_page",
+      language: frontmatter.language,
+      basis: frontmatter.language_basis
+    });
+    if (!language.success) {
+      context.addIssue({ code: "custom", path: ["language"], message: "Markdown language evidence is inconsistent." });
+    }
+  }
+
+  const titleKey = frontmatter.title.normalize("NFKC").replace(/\s+/gu, " ").trim().toLocaleLowerCase("en-US");
+  if (frontmatter.aliases?.some((alias) => alias.toLocaleLowerCase("en-US") === titleKey)) {
+    context.addIssue({ code: "custom", path: ["aliases"], message: "A page title must not be repeated as an alias." });
+  }
+
+  if (frontmatter.type === "source" && frontmatter.source) {
+    const sourceIds = frontmatter.source_ids ?? [];
+    if (sourceIds.length !== 1 || sourceIds[0] !== frontmatter.source.id) {
+      context.addIssue({ code: "custom", path: ["source_ids"], message: "A Source page must bind exactly its projected Source ID." });
+    }
+  }
+
+  if (frontmatter.type === "claim" && frontmatter.claim) {
+    if (frontmatter.claim.evidence.length === 0 && frontmatter.status !== "needs_review") {
+      context.addIssue({ code: "custom", path: ["claim", "evidence"], message: "A current grounded claim requires evidence or needs_review status." });
+    }
+    const sourceIds = new Set(frontmatter.source_ids ?? []);
+    for (const evidence of frontmatter.claim.evidence) {
+      const sourceId = evidence.slice(0, evidence.indexOf("#"));
+      if (!sourceIds.has(sourceId)) {
+        context.addIssue({ code: "custom", path: ["claim", "evidence"], message: "Claim evidence must be represented in source_ids." });
+      }
+    }
+  }
+});
+
+export type PigeMarkdownFrontmatter = z.infer<typeof PigeMarkdownFrontmatterSchema>;
+export const PigeMarkdownLegacyFrontmatterSchema = MarkdownFrontmatterObjectSchema.omit({
+  provenance: true,
+  source: true,
+  note: true,
+  concept: true,
+  entity: true,
+  claim: true,
+  question: true
+}).extend({
+  provenance: z.never().optional(),
+  source: z.record(z.string(), z.unknown()).optional(),
+  note: MarkdownNoteFieldsSchema.partial().optional(),
+  concept: MarkdownConceptFieldsSchema.partial().optional(),
+  entity: MarkdownEntityFieldsSchema.partial().optional(),
+  claim: MarkdownClaimFieldsSchema.partial().optional(),
+  question: MarkdownQuestionFieldsSchema.partial().optional()
+}).passthrough().superRefine((frontmatter, context) => {
+  const expectedBlock = frontmatter.type === "topic" ? undefined : frontmatter.type;
+  for (const block of ["source", "note", "concept", "entity", "claim", "question"] as const) {
+    if (block !== expectedBlock && frontmatter[block] !== undefined) {
+      context.addIssue({ code: "custom", path: [block], message: `The ${block} block does not match legacy page type ${frontmatter.type}.` });
+    }
+  }
+});
 export const OcrArtifactLanguageFactSchema = DurableLanguageFactObjectSchema.extend({
   domain: z.literal("ocr_artifact")
 }).superRefine(refineDurableLanguageFact);

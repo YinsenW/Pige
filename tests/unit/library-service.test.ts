@@ -157,23 +157,23 @@ source_ids: []
     const { vaultPath, vault } = makeVault();
     const library = makeIndexedLibrary(vaultPath, vault);
     writeLibraryPage(vaultPath, "wiki/topic.md", {
-      id: "page_20260709_topic1",
+      id: "page_20260709_topic001",
       title: "Topic",
       body: "Sensitive body detail should stay inside Markdown."
     });
     writeLibraryPage(vaultPath, "wiki/source.md", {
-      id: "page_20260709_source1",
+      id: "page_20260709_source001",
       title: "Source",
       body: "This note links to [[Topic]]."
     });
 
-    const result = library.related({ pageId: "page_20260709_source1" });
+    const result = library.related({ pageId: "page_20260709_source001" });
 
     expect(result.degraded).toBe(false);
     expect(result.totalOutgoing).toBe(1);
     expect(result.outgoing[0]?.summary.title).toBe("Topic");
     expect(result.outgoing[0]?.summary).toEqual({
-      pageId: "page_20260709_topic1",
+      pageId: "page_20260709_topic001",
       title: "Topic",
       pageType: "note",
       status: "active",

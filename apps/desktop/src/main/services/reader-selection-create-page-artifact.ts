@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ReaderSelectionCreatePageAction } from "@pige/contracts";
-import { parsePigeFrontmatter } from "@pige/markdown";
+import { parsePigeMarkdownPage } from "@pige/markdown";
 import { OperationRecordSchema, type JobRecord, type OperationRecord } from "@pige/schemas";
 import { readerSelectionContentRestricted } from "./reader-selection-proposal-service";
 
@@ -42,7 +42,7 @@ export function createReaderSelectionPageMarkdown(input: {
             : 'note:\n  note_kind: "summary"\n  review_state: "clean"';
   const status = pageType === "claim" ? "needs_review" : "active";
   const markdown = `---\nid: ${JSON.stringify(input.pageId)}\nschema_version: 1\ntitle: ${JSON.stringify(input.title)}\ntype: ${JSON.stringify(pageType)}\ncreated_at: ${JSON.stringify(input.createdAt)}\nupdated_at: ${JSON.stringify(input.createdAt)}\nstatus: ${JSON.stringify(status)}\nlanguage: "und"\naliases: []\ntags: []\ntopics: []\nentities: []\nsource_ids: []\nrelated_page_ids: []\nprovenance:\n  generated_by: "pige"\n  last_job_id: ${JSON.stringify(input.jobId)}\n  model_profile_id: ${JSON.stringify(input.modelProfileId)}\n  confidence: "high"\n${typeFields}\n---\n\n# ${escapeHeading(input.title)}\n\n${input.body}\n`;
-  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeFrontmatter(markdown)) {
+  if (Buffer.byteLength(markdown, "utf8") > MAX_PAGE_BYTES || !parsePigeMarkdownPage(markdown)) {
     throw readerSelectionContentRestricted("The generated Reader page is invalid.");
   }
   return markdown;

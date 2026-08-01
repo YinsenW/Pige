@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { parsePigeMarkdownPage } from "@pige/markdown";
 import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
@@ -93,6 +94,11 @@ describe("source page service", () => {
     expect(finalRecord.metadata.sourcePageRefreshPending).toBeUndefined();
     expect(finalRecord.metadata.sourcePageRefreshConflict).toBe(false);
     expect(finalRecord.metadata.knowledgePageChecksum).toBe(checksum(sourcePage));
+    expect(parsePigeMarkdownPage(sourcePage)?.frontmatter.source).toMatchObject({
+      id: captured.sourceId,
+      source_record_path: sourceRecordPath,
+      artifact_ids: ["art_refresh_test"]
+    });
     expect(sourcePage).toContain("Recovered parser text that should appear after restart.");
     expect(sourcePage).toContain("source_record_schema_version: 1");
     expect(sourcePage).toContain(`source_record_updated_at: ${JSON.stringify(finalRecord.updatedAt)}`);

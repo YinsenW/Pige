@@ -399,7 +399,8 @@ function createFixture(options: {
   const pageId = options.pageId ?? "page_20260730_recoverablenote";
   const pagePath = path.join(vaultPath, "wiki", "recoverable-note.md");
   const title = options.title ?? "Recoverable note";
-  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "${title}"\ntype: "${options.pageType ?? "note"}"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: ["src_20260730_recoverable01"]\n${options.generatedBy ? `provenance:\n  generated_by: "${options.generatedBy}"\n` : ""}---\n\n# ${title}\n\nKeep these exact bytes and [[Linked note]].\n`;
+  const pageType = options.pageType ?? "note";
+  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "${title}"\ntype: "${pageType}"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: ["src_20260730_recoverable01"]\n${options.generatedBy ? `provenance:\n  generated_by: "${options.generatedBy}"\n` : ""}${trashPageTypeBlock(pageType, title)}\n---\n\n# ${title}\n\nKeep these exact bytes and [[Linked note]].\n`;
   fs.writeFileSync(pagePath, content, { encoding: "utf8", mode: 0o600 });
   const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
   const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
@@ -419,6 +420,17 @@ function createFixture(options: {
     ownerId: "note_trash_test_owner",
     revision: () => `noteeditrev_${createHash("sha256").update(fs.readFileSync(pagePath)).digest("hex")}`
   };
+}
+
+function trashPageTypeBlock(pageType: "note" | "claim" | "question" | "concept" | "entity" | "topic", title: string): string {
+  switch (pageType) {
+    case "note": return 'note:\n  note_kind: "general"\n  review_state: "clean"';
+    case "claim": return 'claim:\n  confidence: "medium"\n  evidence: ["src_20260730_recoverable01#p1"]\n  contradicts: []';
+    case "question": return 'question:\n  state: "open"\n  answered_by: []';
+    case "concept": return `concept:\n  canonical_name: ${JSON.stringify(title)}\n  parent_concepts: []\n  child_concepts: []`;
+    case "entity": return `entity:\n  entity_type: "other"\n  canonical_name: ${JSON.stringify(title)}\n  identifiers: []`;
+    case "topic": return "";
+  }
 }
 
 async function trashAndUndo(fixture: ReturnType<typeof createFixture>, requestId: string) {

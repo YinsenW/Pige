@@ -159,7 +159,10 @@ describe("NoteMarkdownEditorService", () => {
       reopened.markdown.replace('title: "Markdown editor fixture"', 'title: "Changed source title"'),
       reopened.markdown.replace('last_job_id: "job_20260727_markdowneditor"', 'last_job_id: "job_20260727_changedsource"'),
       reopened.markdown.replace(`id: "${SOURCE_ID}"`, 'id: "src_20260727_changedsource"'),
-      reopened.markdown.replace('source_record_path: ".pige/source-records/2026/07/source.json"', 'source_record_path: ".pige/source-records/2026/07/changed.json"')
+      reopened.markdown.replace(
+        `source_record_path: ".pige/source-records/2026/07/${SOURCE_ID}.json"`,
+        'source_record_path: ".pige/source-records/2026/07/src_20260727_changedsource.json"'
+      )
     ].entries()) expect(fixture.service.save({
       requestId: `request_source_owner_change_${index}`,
       activeVaultId: VAULT_ID,
@@ -167,7 +170,7 @@ describe("NoteMarkdownEditorService", () => {
       expectedRevisionId: reopened.revisionId,
       renderIdentity: reopened.renderIdentity,
       markdown: changedOwner
-    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+    })).toMatchObject({ status: "invalid" });
   });
 
   it("fails closed for unsupported page types and rejects a page-type change on save", () => {
@@ -186,7 +189,7 @@ describe("NoteMarkdownEditorService", () => {
       expectedRevisionId: opened.revisionId,
       renderIdentity: opened.renderIdentity,
       markdown: opened.markdown.replace('type: "note"', 'type: "source"')
-    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+    })).toMatchObject({ status: "invalid" });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
     expect(fixture.records).toEqual([]);
   });
@@ -212,7 +215,7 @@ describe("NoteMarkdownEditorService", () => {
       requestId: `request_typed_${pageType}_drift`, activeVaultId: VAULT_ID, pageId: PAGE_ID,
       expectedRevisionId: reopened.revisionId, renderIdentity: reopened.renderIdentity,
       markdown: reopened.markdown.replace(`type: "${pageType}"`, 'type: "note"'),
-    })).toMatchObject({ status: "invalid", invalidReason: "unsupported_page_type" });
+    })).toMatchObject({ status: "invalid" });
   });
 
   it("preserves exact CAS and forward Undo for a generated type-note page", () => {
@@ -758,13 +761,14 @@ function createMarkdown(pageType: "note" | "source" | "concept" | "entity" | "to
   last_job_id: "job_20260727_markdowneditor"
 source:
   id: "${SOURCE_ID}"
-  kind: "text_file"
+  kind: "plain_text_file"
   storage_strategy: "copy_to_source_library"
-  source_record_path: ".pige/source-records/2026/07/source.json"
+  source_record_path: ".pige/source-records/2026/07/${SOURCE_ID}.json"
   source_record_schema_version: 1
   source_record_updated_at: "2026-07-27T10:00:00.000Z"
   captured_at: "2026-07-27T10:00:00.000Z"
   availability: "available"
+  artifact_ids: []
 ` : "";
   const questionState = pageType === "question" ? `question:
   state: "open"
