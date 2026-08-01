@@ -79,6 +79,7 @@ import {
   KnowledgeActivityListRequestSchema,
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
+  DiagnosticsClearLocalResultSchema,
   AppearanceThemeMutationResultSchema,
   KnowledgeLanguageMutationResultSchema,
   HighRiskConfirmationPendingResultSchema,
@@ -208,6 +209,7 @@ import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
+import { CrashRecoveryService } from "./services/crash-recovery-service";
 import { DiagnosticsLifecycleService } from "./services/diagnostics-lifecycle-service";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
@@ -385,6 +387,7 @@ import { getWindowShellOptions } from "./window-shell-options";
 let vaultService: VaultService | undefined;
 let localSettingsStore: LocalSettingsStore | undefined;
 let diagnosticsService: DiagnosticsService | undefined;
+let crashRecoveryService: CrashRecoveryService | undefined;
 let diagnosticsLifecycleService: DiagnosticsLifecycleService | undefined;
 let localDatabaseService: LocalDatabaseService | undefined;
 let modelProviderRegistry: ModelProviderRegistry | undefined;
@@ -2082,9 +2085,16 @@ const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
 
 const getDiagnosticsService = (): DiagnosticsService => {
   if (!diagnosticsService) {
-    diagnosticsService = new DiagnosticsService(app.getPath("userData"));
+    diagnosticsService = new DiagnosticsService(app.getPath("userData"), {
+      crashRecoverySummary: () => getCrashRecoveryService().summary()
+    });
   }
   return diagnosticsService;
+};
+
+const getCrashRecoveryService = (): CrashRecoveryService => {
+  crashRecoveryService ??= new CrashRecoveryService(app.getPath("userData"));
+  return crashRecoveryService;
 };
 
 const getDiagnosticsLifecycleService = (): DiagnosticsLifecycleService => {
@@ -2330,8 +2340,10 @@ const recordBackgroundFailure = (code: string, fallback: string): void => {
   });
 };
 
-const resumeBackgroundJobs = (): void => {
-  void getBackupCoordinatorService().recoverInterrupted().then((backupRecovery) => {
+const resumeBackgroundJobs = async (): Promise<void> => {
+  try {
+    const backupRecovery = await getBackupCoordinatorService().recoverInterrupted();
+    getCrashRecoveryService().observe({ jobsRecovered: backupRecovery.recovered, jobsNeedRetry: backupRecovery.failed });
     if (backupRecovery.recovered > 0 || backupRecovery.failed > 0) {
       getDiagnosticsService().recordEvent({
         level: backupRecovery.failed > 0 ? "warning" : "info",
@@ -2343,12 +2355,13 @@ const resumeBackgroundJobs = (): void => {
           : "Interrupted Backup Jobs were reconciled from durable checkpoints."
       });
     }
-  }).catch(() => {
+  } catch {
+    getCrashRecoveryService().observe({ jobsNeedRetry: 1 });
     recordBackgroundFailure(
       "backup.recovery_incomplete",
       "Interrupted Backup Jobs could not be reconciled safely."
     );
-  });
+  }
   try {
     const urlSourceHandoffs = getJobsService().reconcilePendingAgentTurnUrlSources();
     if (urlSourceHandoffs.linked > 0 || urlSourceHandoffs.failed > 0) {
@@ -2363,6 +2376,10 @@ const resumeBackgroundJobs = (): void => {
       });
     }
     const sourceHandoffs = getJobsService().reconcilePendingAgentTurnSources();
+    getCrashRecoveryService().observe({
+      capturesPreserved: urlSourceHandoffs.linked + sourceHandoffs.linked,
+      sourcesNeedRepair: urlSourceHandoffs.failed + sourceHandoffs.failed
+    });
     if (sourceHandoffs.linked > 0 || sourceHandoffs.failed > 0) {
       getDiagnosticsService().recordEvent({
         level: sourceHandoffs.failed > 0 ? "warning" : "info",
@@ -2375,6 +2392,7 @@ const resumeBackgroundJobs = (): void => {
       });
     }
     const recovery = getJobsService().recoverInterruptedJobs();
+    getCrashRecoveryService().observe({ jobsRecovered: recovery.requeued, jobsNeedRetry: recovery.failedRetryable });
     if (recovery.requeued > 0 || recovery.failedRetryable > 0) {
       getDiagnosticsService().recordEvent({
         level: "info",
@@ -2465,7 +2483,13 @@ const resumeBackgroundJobs = (): void => {
         message: "Knowledge Undo recovery could not inspect its durable records."
       });
     }
-    void getJobsService().recoverProposalDecisions(getProposalService()).then((result) => {
+    try {
+      const result = await getJobsService().recoverProposalDecisions(getProposalService());
+      getCrashRecoveryService().observe({
+        proposalsRecovered: result.applied + result.rejected + result.conflicted,
+        jobsNeedRetry: result.failed,
+        proposalsAwaitingReview: getProposalService().list({ states: ["ready"], limit: 100 }).proposals.length
+      });
       if (result.applied > 0 || result.rejected > 0 || result.conflicted > 0 || result.failed > 0) {
         getDiagnosticsService().recordEvent({
           level: result.failed > 0 ? "warning" : "info",
@@ -2475,25 +2499,35 @@ const resumeBackgroundJobs = (): void => {
             : "Durable proposal decisions were reconciled after startup."
         });
       }
-    }).catch(() => {
+    } catch {
+      getCrashRecoveryService().observe({ jobsNeedRetry: 1 });
       getDiagnosticsService().recordEvent({
         level: "warning",
         code: "proposal.recovery_failed",
         message: "Durable proposal decision recovery failed."
       });
-    });
+    }
     getJobClassExecutorRegistry().scheduleAll();
     void getJobsService().reapIngressSnapshots().catch(() => recordBackgroundFailure(
       "ingress_snapshot.reap_incomplete",
       "Private ingress snapshot startup reconciliation could not complete safely."
     ));
   } catch {
+    getCrashRecoveryService().observe({ jobsNeedRetry: 1 });
     getDiagnosticsService().recordEvent({
       level: "warning",
       code: "jobs.resume_failed",
       message: "Durable background job recovery failed."
     });
   }
+  const completed = getCrashRecoveryService().complete();
+  if (completed) getDiagnosticsService().recordEvent({
+    level: completed.status === "needs_attention" ? "warning" : "info",
+    code: "crash_recovery.completed",
+    message: completed.status === "needs_attention"
+      ? "Startup recovery completed with items that still need attention."
+      : "Startup recovery completed."
+  });
 };
 
 const scheduleWaitingAgentIngestAfterModelReady = (): void => {
@@ -3340,7 +3374,14 @@ registerDiagnosticsIpc({
   start: (request, destinationPath) => getDiagnosticsLifecycleService().start(request, destinationPath),
   cancel: (request) => getDiagnosticsLifecycleService().cancel(request),
   retry: (request) => getDiagnosticsLifecycleService().retry(request),
-  clear: (request) => getDiagnosticsLifecycleService().clear(request)
+  clear: (request) => {
+    const result = getDiagnosticsLifecycleService().clear(request);
+    if (result.status === "cleared") {
+      getCrashRecoveryService().clearSummary();
+      return DiagnosticsClearLocalResultSchema.parse({ ...result, health: getDiagnosticsService().health() });
+    }
+    return result;
+  }
 });
 ipcMain.handle("models.summary", () => getModelProviderRegistry().summary());
 ipcMain.handle("models.addPresetProvider", async (_event, request: AddPresetProviderRequest) => {
@@ -3642,9 +3683,17 @@ app.whenReady().then(async () => {
     getLocalRagEngineService(),
     getOcrLanguagePreferenceService()
   );
-  diagnosticsService = new DiagnosticsService(app.getPath("userData"));
+  diagnosticsService = new DiagnosticsService(app.getPath("userData"), {
+    crashRecoverySummary: () => getCrashRecoveryService().summary()
+  });
+  crashRecoveryService = new CrashRecoveryService(app.getPath("userData"));
+  const priorCrash = crashRecoveryService.beginSession();
+  if (priorCrash?.status === "recovering") diagnosticsService.recordEvent({
+    level: "warning", code: "crash_recovery.started", message: "Pige is checking durable work after an abnormal exit."
+  });
   getDiagnosticsLifecycleService();
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();
+  crashRecoveryService.observe({ jobsRecovered: restoreRecovery.recovered, jobsNeedRetry: restoreRecovery.failed });
   if (restoreRecovery.recovered > 0 || restoreRecovery.failed > 0) {
     diagnosticsService.recordEvent({
       level: restoreRecovery.failed > 0 ? "warning" : "info",
@@ -3655,6 +3704,7 @@ app.whenReady().then(async () => {
     });
   }
   const relocationRecovery = await getVaultStorageRelocationService().recoverInterrupted();
+  crashRecoveryService.observe({ jobsRecovered: relocationRecovery.recovered, jobsNeedRetry: relocationRecovery.failed });
   if (relocationRecovery.recovered > 0 || relocationRecovery.failed > 0) {
     diagnosticsService.recordEvent({
       level: relocationRecovery.failed > 0 ? "warning" : "info",
@@ -3667,9 +3717,14 @@ app.whenReady().then(async () => {
     });
   }
   initializeActiveDatabase();
+  crashRecoveryService.observe({ indexRebuildRunning: databaseInitializationRebuilds.size > 0 });
   diagnosticsService.recordEvent({ level: "info", code: "app.ready", message: "App ready." });
   createMainWindow();
-  resumeBackgroundJobs();
+  void resumeBackgroundJobs().catch(() => {
+    getCrashRecoveryService().observe({ jobsNeedRetry: 1 });
+    getCrashRecoveryService().complete();
+    recordBackgroundFailure("crash_recovery.incomplete", "Startup recovery could not finish safely.");
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -3693,6 +3748,7 @@ app.on("before-quit", () => {
   diagnosticsLifecycleService?.close();
   restoreCoordinatorService?.close();
   vaultService?.close();
+  crashRecoveryService?.markClean();
 });
 
 function projectBackupJobAction(

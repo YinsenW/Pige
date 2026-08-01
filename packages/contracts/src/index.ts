@@ -1047,6 +1047,18 @@ export interface DiagnosticsHealth {
     readonly status: "ok" | "warning" | "error";
     readonly message: string;
   }[];
+  readonly crashRecovery?: {
+    readonly status: "recovering" | "recovered" | "needs_attention";
+    readonly detectedAt: string;
+    readonly completedAt?: string | undefined;
+    readonly capturesPreserved: number;
+    readonly jobsRecovered: number;
+    readonly jobsNeedRetry: number;
+    readonly proposalsRecovered: number;
+    readonly proposalsAwaitingReview: number;
+    readonly sourcesNeedRepair: number;
+    readonly indexRebuildRunning: boolean;
+  } | undefined;
 }
 
 export type SupportBundleExportResult = DiagnosticsExportSupportBundleResult;

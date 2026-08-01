@@ -400,6 +400,7 @@ import {
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
+  DiagnosticsHealthSchema,
   DiagnosticsExportSupportBundleRequestSchema,
   DiagnosticsExportSupportBundleResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
@@ -2524,7 +2525,7 @@ const api: PigeDesktopApi = {
   },
   diagnostics: {
     health: async (): Promise<DiagnosticsHealth> =>
-      ipcRenderer.invoke("diagnostics.health") as Promise<DiagnosticsHealth>,
+      DiagnosticsHealthSchema.parse(await ipcRenderer.invoke("diagnostics.health")),
     workflowSummary: async (): Promise<DiagnosticsWorkflowSummary> =>
       DiagnosticsWorkflowSummarySchema.parse(await ipcRenderer.invoke(DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL)),
     clearLocalDiagnostics: async (

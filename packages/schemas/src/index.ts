@@ -4277,7 +4277,19 @@ export const DiagnosticsHealthSchema = z.object({
     id: z.string().min(1).max(64).regex(/^[a-z][a-z0-9_]*$/u),
     status: z.enum(["ok", "warning", "error"]),
     message: z.string().min(1).max(240)
-  }).strict()).max(32)
+  }).strict()).max(32),
+  crashRecovery: z.object({
+    status: z.enum(["recovering", "recovered", "needs_attention"]),
+    detectedAt: z.string().datetime({ offset: true }),
+    completedAt: z.string().datetime({ offset: true }).optional(),
+    capturesPreserved: z.number().int().nonnegative().max(1_000_000),
+    jobsRecovered: z.number().int().nonnegative().max(1_000_000),
+    jobsNeedRetry: z.number().int().nonnegative().max(1_000_000),
+    proposalsRecovered: z.number().int().nonnegative().max(1_000_000),
+    proposalsAwaitingReview: z.number().int().nonnegative().max(1_000_000),
+    sourcesNeedRepair: z.number().int().nonnegative().max(1_000_000),
+    indexRebuildRunning: z.boolean()
+  }).strict().optional()
 }).strict();
 export const DiagnosticsSupportBundleJobSummarySchema = z.object({
   jobId: JobIdSchema,

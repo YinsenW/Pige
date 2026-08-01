@@ -8766,6 +8766,25 @@ export function SystemSettingsPanel(props: {
               </button>
             </div>
           </div>
+          {props.diagnosticsHealth?.crashRecovery ? (
+            <div className="settings-row tall" data-crash-recovery-status={props.diagnosticsHealth.crashRecovery.status}>
+              <div className="settings-row-copy">
+                <strong>{props.t("system.crashRecovery")}</strong>
+                <span>{props.t(`system.crashRecovery.${props.diagnosticsHealth.crashRecovery.status}`)}</span>
+                <small>
+                  {props.t("system.crashRecovery.captures")} {props.diagnosticsHealth.crashRecovery.capturesPreserved}
+                  {" · "}{props.t("system.crashRecovery.jobs")} {props.diagnosticsHealth.crashRecovery.jobsRecovered}
+                  {" · "}{props.t("system.crashRecovery.retry")} {props.diagnosticsHealth.crashRecovery.jobsNeedRetry}
+                  {" · "}{props.t("system.crashRecovery.proposals")} {props.diagnosticsHealth.crashRecovery.proposalsRecovered}
+                  {" · "}{props.t("system.crashRecovery.awaitingReview")} {props.diagnosticsHealth.crashRecovery.proposalsAwaitingReview}
+                  {" · "}{props.t("system.crashRecovery.sources")} {props.diagnosticsHealth.crashRecovery.sourcesNeedRepair}
+                </small>
+              </div>
+              <span className={`settings-status ${props.diagnosticsHealth.crashRecovery.status === "needs_attention" ? "degraded" : ""}`}>
+                {props.t(`system.crashRecovery.status.${props.diagnosticsHealth.crashRecovery.status}`)}
+              </span>
+            </div>
+          ) : null}
           <div className="settings-row tall">
             <div className="settings-row-copy">
               <strong>{props.t("system.supportBundle")}</strong>

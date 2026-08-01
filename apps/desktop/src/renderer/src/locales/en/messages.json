@@ -2117,5 +2117,18 @@
   "topic.rename.confirm": "Rename",
   "topic.rename.saving": "Renaming…",
   "topic.rename.stale": "This topic changed. Your title is still here; review and try again.",
-  "topic.rename.failed": "Pige could not rename this topic. Nothing was changed."
+  "topic.rename.failed": "Pige could not rename this topic. Nothing was changed.",
+  "system.crashRecovery": "Startup recovery",
+  "system.crashRecovery.recovering": "Pige is checking durable work after an unexpected exit.",
+  "system.crashRecovery.recovered": "Durable work was checked and safely resumed.",
+  "system.crashRecovery.needs_attention": "Recovery finished, but some items still need attention.",
+  "system.crashRecovery.status.recovering": "Checking",
+  "system.crashRecovery.status.recovered": "Recovered",
+  "system.crashRecovery.status.needs_attention": "Needs attention",
+  "system.crashRecovery.captures": "Captures preserved",
+  "system.crashRecovery.jobs": "Jobs resumed",
+  "system.crashRecovery.retry": "Jobs needing retry",
+  "system.crashRecovery.proposals": "Reviews recovered",
+  "system.crashRecovery.awaitingReview": "Reviews awaiting you",
+  "system.crashRecovery.sources": "Sources needing repair"
 }

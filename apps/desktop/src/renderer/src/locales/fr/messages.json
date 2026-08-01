@@ -2119,5 +2119,18 @@
   "topic.rename.confirm": "Renommer",
   "topic.rename.saving": "Renommage…",
   "topic.rename.stale": "Ce sujet a changé. Votre titre est conservé ; vérifiez-le et réessayez.",
-  "topic.rename.failed": "Pige n’a pas pu renommer ce sujet. Rien n’a été modifié."
+  "topic.rename.failed": "Pige n’a pas pu renommer ce sujet. Rien n’a été modifié.",
+  "system.crashRecovery": "Récupération au démarrage",
+  "system.crashRecovery.recovering": "Pige vérifie le travail durable après un arrêt inattendu.",
+  "system.crashRecovery.recovered": "Le travail durable a été vérifié et repris en toute sécurité.",
+  "system.crashRecovery.needs_attention": "La récupération est terminée, mais certains éléments demandent votre attention.",
+  "system.crashRecovery.status.recovering": "Vérification",
+  "system.crashRecovery.status.recovered": "Récupéré",
+  "system.crashRecovery.status.needs_attention": "Attention requise",
+  "system.crashRecovery.captures": "Captures préservées",
+  "system.crashRecovery.jobs": "Tâches reprises",
+  "system.crashRecovery.retry": "Tâches à relancer",
+  "system.crashRecovery.proposals": "Révisions récupérées",
+  "system.crashRecovery.awaitingReview": "Révisions en attente",
+  "system.crashRecovery.sources": "Sources à réparer"
 }
