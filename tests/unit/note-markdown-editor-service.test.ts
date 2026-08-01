@@ -226,6 +226,33 @@ describe("NoteMarkdownEditorService", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
   });
 
+  it.each(["claim", "question", "concept", "entity"] as const)(
+    "keeps typed %s archive Activity undoable and redoable after restart",
+    (pageType) => {
+      const fixture = createAdapterFixture({
+        pageType, allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true
+      });
+      const opened = requireOpened(fixture.service);
+      const archived = opened.markdown
+        .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z")
+        .replace('status: "active"', "status: archived");
+      const committed = fixture.service.save({
+        requestId: `noteeditreq_archive_${pageType}`,
+        activeVaultId: VAULT_ID, pageId: PAGE_ID,
+        expectedRevisionId: opened.revisionId, renderIdentity: opened.renderIdentity, markdown: archived
+      }, "archive_page");
+      expect(committed.status).toBe("committed");
+      if (committed.status !== "committed") throw new Error("Expected typed archive to commit.");
+      const operation = readOperation(fixture.vaultPath, committed.operationId);
+      const restarted = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+      expect(restarted.activitySummary(operation)).toMatchObject({ kind: "archive_page", canUndo: true });
+      expect(restarted.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+      expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({ operationId: operation.id }))
+        .toMatchObject({ status: "redone" });
+      expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(archived);
+    }
+  );
+
   it("persists restore_page Activity and Undo restores the exact archived bytes", () => {
     const fixture = createAdapterFixture();
     const archived = fixture.markdown
@@ -543,6 +570,8 @@ function createFixture(options: {
   readonly pageRelativePath?: string;
   readonly allowQuestion?: boolean;
   readonly allowConcept?: boolean;
+  readonly allowClaim?: boolean;
+  readonly allowEntity?: boolean;
 } = {}): {
   readonly root: string;
   readonly vaultPath: string;
@@ -570,8 +599,10 @@ function createFixture(options: {
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
       randomId: () => "fixture-random-id",
+      allowClaim: options.allowClaim,
       allowQuestion: options.allowQuestion,
-      allowConcept: options.allowConcept
+      allowConcept: options.allowConcept,
+      allowEntity: options.allowEntity
     }
   );
   return { root, vaultPath, pagePath, markdown, records, vaults, service };
@@ -586,8 +617,10 @@ function createAdapterFixture(options: Parameters<typeof createFixture>[0] = {})
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
       randomId: () => "adapter-fixture-random-id",
+      allowClaim: options.allowClaim,
       allowQuestion: options.allowQuestion,
-      allowConcept: options.allowConcept
+      allowConcept: options.allowConcept,
+      allowEntity: options.allowEntity
     }
   );
   return { ...fixture, adapter, service };

@@ -82,6 +82,7 @@ export async function submitReaderNoteArchive(input: {
       (input.currentNote && !archiveRequestMatchesNote(request, input.currentNote())) ||
       result.status !== "committed" ||
       result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.pageType !== input.note.summary.pageType ||
       result.render.summary.status !== "archived"
     ) return { status: "retained" };
     return { status: "committed", render: result.render };
@@ -114,6 +115,7 @@ export async function submitReaderNoteRestore(input: {
     if (!restoreIdentityMatches(request, result) ||
       (input.currentNote && !restoreRequestMatchesNote(request, input.currentNote())) ||
       result.status !== "committed" || result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.pageType !== input.note.summary.pageType ||
       result.render.summary.status !== "active") return { status: "retained" };
     return { status: "committed", render: result.render };
   } catch {

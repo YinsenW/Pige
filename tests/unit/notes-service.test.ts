@@ -1446,14 +1446,28 @@ status: "active"
     expect(importedClaim.historyEligibility).toEqual({
       canBrowse: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
+    expect(importedClaim.archiveEligibility).toEqual({
+      canArchive: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(importedClaim.restoreEligibility).toEqual({
+      canRestore: false, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
     const source = await notes.render({ pageId: "page_20260801_source001" }, OWNER_ID);
     expect(source.revealGeneratedEligibility).toBeUndefined();
     expect(source.trashEligibility).toBeUndefined();
     expect(source.renameEligibility).toBeUndefined();
+    expect(source.archiveEligibility).toBeUndefined();
+    expect(source.restoreEligibility).toBeUndefined();
     const archivedClaim = await notes.render({ pageId: "page_20260801_archived01" }, OWNER_ID);
     expect(archivedClaim.trashEligibility).toBeUndefined();
     expect(archivedClaim.renameEligibility).toBeUndefined();
     expect(archivedClaim.historyEligibility).toBeUndefined();
+    expect(archivedClaim.archiveEligibility).toEqual({
+      canArchive: false, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(archivedClaim.restoreEligibility).toEqual({
+      canRestore: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
 
     const current = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     const currentRequest = { ...request, renderContextId: current.renderContextId!,
