@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IpcMain, IpcMainInvokeEvent } from "electron";
-import type { CollectionTrashDatasetRequest } from "@pige/schemas";
+import type { CollectionRenameDatasetRequest, CollectionTrashDatasetRequest } from "@pige/schemas";
 import { registerManagedCollectionIpc } from "../../apps/desktop/src/main/register-managed-collection-ipc";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
@@ -345,6 +345,10 @@ function makeHarness(options: {
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, expectedRevisionId: request.expectedRevisionId, status: "not_found" as const
   }));
+  const renameDataset = vi.fn((request: CollectionRenameDatasetRequest) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, expectedRevisionId: request.expectedRevisionId, status: "not_found" as const
+  }));
 
   registerManagedCollectionIpc({
     ipcMain: {
@@ -373,6 +377,7 @@ function makeHarness(options: {
     renameCollectionView,
     trashCollectionView,
     trashDataset,
+    renameDataset,
     trashCollectionColumn,
     trashCollectionRow
   });
@@ -399,6 +404,7 @@ function makeHarness(options: {
     renameCollectionView,
     trashCollectionView,
     trashDataset,
+    renameDataset,
     trashCollectionColumn,
     trashCollectionRow
   };
@@ -429,6 +435,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateView",
       "collections.trashView",
       "collections.trashDataset",
+      "collections.renameDataset",
       "collections.trashColumn",
       "collections.trashRow"
     ]);

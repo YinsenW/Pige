@@ -1318,6 +1318,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "trash_collection_row",
     "trash_dataset",
     "restore_dataset",
+    "rename_dataset",
     "create_memory",
     "update_memory",
     "trash_memory",
@@ -6752,6 +6753,17 @@ export const DatasetRevisionSchema = z.object({
       tableId: TableIdSchema,
       rowId: RowIdSchema,
       undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("dataset_title_rename"),
+      previousTitle: z.string().trim().min(1).max(240),
+      title: z.string().trim().min(1).max(240)
+    }).strict(),
+    z.object({
+      kind: z.literal("dataset_title_rename_undo"),
+      previousTitle: z.string().trim().min(1).max(240),
+      title: z.string().trim().min(1).max(240),
+      undoOfOperationId: OperationIdSchema
     }).strict()
   ]).optional(),
   createdAt: z.string().datetime({ offset: true })
@@ -6759,6 +6771,8 @@ export const DatasetRevisionSchema = z.object({
   if (
     revision.change?.kind !== undefined &&
     revision.change.kind !== "initial_import" &&
+    revision.change.kind !== "dataset_title_rename" &&
+    revision.change.kind !== "dataset_title_rename_undo" &&
     revision.payload.path !== `data/revisions/${revision.id}.sqlite`
   ) {
     context.addIssue({
@@ -7195,6 +7209,7 @@ export const COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL = "collections.updateRollup
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_TRASH_DATASET_CHANNEL = "collections.trashDataset" as const;
+export const COLLECTION_RENAME_DATASET_CHANNEL = "collections.renameDataset" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -7477,6 +7492,7 @@ export const CollectionDatasetSummarySchema = z.object({
   datasetId: DatasetQueryDatasetIdSchema,
   title: z.string().trim().min(1).max(240),
   activeRevisionId: DatasetQueryRevisionIdSchema,
+  canRename: z.boolean().default(false),
   canTrash: z.boolean().default(false),
   tableCount: DatasetQueryCountSchema,
   tables: z.array(CollectionDatasetTableSummarySchema).max(32),
@@ -7840,6 +7856,34 @@ export const CollectionTrashDatasetResultSchema = z.discriminatedUnion("status",
   }).strict(),
   CollectionTrashDatasetIdentitySchema.extend({
     status: z.enum(["stale", "not_found", "ineligible", "failed"])
+  }).strict()
+]);
+
+const CollectionRenameDatasetIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
+export const CollectionRenameDatasetRequestSchema = CollectionRenameDatasetIdentitySchema.extend({
+  title: z.string().trim().min(1).max(240)
+}).strict();
+export const CollectionRenameDatasetResultSchema = z.discriminatedUnion("status", [
+  CollectionRenameDatasetIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    revisionId: DatasetQueryRevisionIdSchema,
+    title: z.string().trim().min(1).max(240)
+  }).strict(),
+  CollectionRenameDatasetIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentRevisionId: DatasetQueryRevisionIdSchema,
+    title: z.string().trim().min(1).max(240)
+  }).strict(),
+  CollectionRenameDatasetIdentitySchema.extend({
+    status: z.enum(["not_found", "ineligible", "failed"])
   }).strict()
 ]);
 
@@ -11358,6 +11402,7 @@ export const OperationRecordSchema = z.object({
     "trash_collection_row",
     "trash_dataset",
     "restore_dataset",
+    "rename_dataset",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -11923,6 +11968,8 @@ export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
 export type CollectionTrashDatasetRequest = z.infer<typeof CollectionTrashDatasetRequestSchema>;
 export type CollectionTrashDatasetResult = z.infer<typeof CollectionTrashDatasetResultSchema>;
+export type CollectionRenameDatasetRequest = z.infer<typeof CollectionRenameDatasetRequestSchema>;
+export type CollectionRenameDatasetResult = z.infer<typeof CollectionRenameDatasetResultSchema>;
 export type LibraryBrowseRequestId = z.infer<typeof LibraryBrowseRequestIdSchema>;
 export type LibraryBrowseSnapshotId = z.infer<typeof LibraryBrowseSnapshotIdSchema>;
 export type LibraryBrowseCursor = z.infer<typeof LibraryBrowseCursorSchema>;

@@ -270,6 +270,7 @@ import { ManagedCollectionRevealService } from "./services/managed-collection-re
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifecycle-service";
+import { ManagedDatasetTitleService } from "./services/managed-dataset-title-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
 import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
 import { AgentConversationExportService } from "./services/agent-conversation-export-service";
@@ -473,6 +474,7 @@ let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
 let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
+let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
 const homeConversationHistory = new AgentConversationHistory();
@@ -2194,6 +2196,11 @@ const getManagedDatasetLifecycleService = (): ManagedDatasetLifecycleService => 
   return managedDatasetLifecycleService;
 };
 
+const getManagedDatasetTitleService = (): ManagedDatasetTitleService => {
+  if (!managedDatasetTitleService) managedDatasetTitleService = new ManagedDatasetTitleService(getVaultService());
+  return managedDatasetTitleService;
+};
+
 const getManagedCollectionCitationService = (): ManagedCollectionCitationService => {
   if (!managedCollectionCitationService) {
     managedCollectionCitationService = new ManagedCollectionCitationService(
@@ -2208,8 +2215,10 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const collections = getManagedCollectionService();
   const views = getManagedCollectionViewService();
   const datasets = getManagedDatasetLifecycleService();
+  const titles = getManagedDatasetTitleService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
-    ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
+    operation.kind === "rename_dataset" ? titles :
+      ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
       ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
         .includes(operation.kind) ? views : collections;
   return {
@@ -2220,9 +2229,10 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const collectionResult = collections.recoverIncompleteOperations();
       const viewResult = views.recoverIncompleteOperations();
       const datasetResult = datasets.recoverIncompleteOperations();
+      const titleResult = titles.recoverIncompleteOperations();
       return {
-        recovered: collectionResult.recovered + viewResult.recovered + datasetResult.recovered,
-        failed: collectionResult.failed + viewResult.failed + datasetResult.failed
+        recovered: collectionResult.recovered + viewResult.recovered + datasetResult.recovered + titleResult.recovered,
+        failed: collectionResult.failed + viewResult.failed + datasetResult.failed + titleResult.failed
       };
     }
   };
@@ -3151,6 +3161,7 @@ registerManagedCollectionIpc({
   renameCollectionView: (request) => getManagedCollectionViewService().renameView(request),
   trashCollectionView: (request) => getManagedCollectionViewService().trashView(request),
   trashDataset: (request) => getManagedDatasetLifecycleService().trash(request),
+  renameDataset: (request) => getManagedDatasetTitleService().rename(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
