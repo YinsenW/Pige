@@ -275,7 +275,12 @@ export function isValidReaderSelectionJobScope(
     (scope.createNoteAction === undefined || (scope.selection !== undefined &&
       ReaderSelectionCreatePageActionSchema.safeParse(scope.createNoteAction).success)) &&
     [scope.transformAction, scope.linkAction, scope.createNoteAction].filter(Boolean).length <= 1 &&
-    !hasSourceBinding;
+    (!hasSourceBinding || (
+      scope.selection === undefined &&
+      scope.transformAction === undefined &&
+      scope.linkAction === undefined &&
+      scope.createNoteAction === undefined
+    ));
 }
 
 export function createReaderSelectionJobRefs(scope: ReaderSelectionJobScope): JobRef[] {

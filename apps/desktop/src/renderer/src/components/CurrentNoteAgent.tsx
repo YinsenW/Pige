@@ -11,7 +11,7 @@ import type {
   PigeErrorSummary,
   ReaderSelectionProposalPreview
 } from "@pige/contracts";
-import type { JobState, Locale } from "@pige/schemas";
+import { AGENT_STAGED_ITEM_MAX_COUNT, type JobState, type Locale } from "@pige/schemas";
 import {
   NoteAgentPanel,
   type NoteAgentAvailability,
@@ -62,6 +62,7 @@ export function CurrentNoteAgent(props: {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<PigeErrorSummary | null>(null);
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [attachments, setAttachments] = useState<readonly File[]>([]);
   const [appendProposal, setAppendProposal] = useState<{
     readonly preview: CurrentNoteMutationProposalPreview;
     readonly errorMessageKey?: string;
@@ -80,6 +81,7 @@ export function CurrentNoteAgent(props: {
   const submitInFlightRef = useRef(false);
   const modelSwitchInFlightRef = useRef(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   activePageIdRef.current = props.pageId;
   activeVaultIdRef.current = props.vaultId;
   currentOutcomeRef.current = currentOutcome;
@@ -149,6 +151,7 @@ export function CurrentNoteAgent(props: {
     setSubmitting(false);
     setError(null);
     setSwitchingModel(false);
+    setAttachments([]);
     setAppendProposal(null);
     setAppendProposalLoadErrorMessageKey(null);
     setDismissedAppendProposalId(null);
@@ -307,7 +310,46 @@ export function CurrentNoteAgent(props: {
     activeDraftRef.current = { clientTurnId, sequence: 0 };
     setLiveDraft(null);
     const followUp = canFollowUp(timeline) ? timeline : undefined;
+    const submittedAttachments = attachments;
     try {
+      if (submittedAttachments.length > 0) {
+        const outcome = await window.pige.agent.submitTurn({
+          schemaVersion: 1,
+          text,
+          inputKind: "file_picker",
+          scope: { kind: "current_note", pageId },
+          locale: props.locale,
+          clientTurnId,
+          stagedItems: submittedAttachments.map((file, ordinal) => ({
+            kind: "file" as const,
+            ordinal,
+            displayName: file.name
+          })),
+          ...(followUp ? {
+            conversationId: followUp.conversationId,
+            expectedTailEventId: followUp.tailEventId
+          } : {})
+        }, submittedAttachments);
+        if (activePageIdRef.current !== pageId || activeVaultIdRef.current !== vaultId) return;
+        if (outcome.state === "failed") {
+          activeDraftRef.current = null;
+          setLiveDraft(null);
+          setError(outcome.error);
+        } else {
+          setDraft("");
+          setAttachments([]);
+          activeDraftRef.current = {
+            clientTurnId,
+            requestId: outcome.requestId,
+            jobId: outcome.jobId,
+            conversationId: outcome.conversationId,
+            conversationEventId: outcome.conversationEventId,
+            sequence: activeDraftRef.current?.sequence ?? 0
+          };
+        }
+        await refreshTimeline();
+        return;
+      }
       const outcome = await window.pige.agent.submitTurn({
         schemaVersion: 1,
         text,
@@ -445,7 +487,24 @@ export function CurrentNoteAgent(props: {
   const panelErrorMessageKey = appendProposalLoadErrorMessageKey ?? effectiveError?.messageKey;
 
   return (
-    <NoteAgentPanel
+    <>
+      <input
+        ref={attachmentInputRef}
+        type="file"
+        multiple
+        hidden
+        tabIndex={-1}
+        onChange={(event) => {
+          const selected = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          if (selected.length === 0) return;
+          setAttachments((current) => [
+            ...current,
+            ...selected.slice(0, Math.max(0, AGENT_STAGED_ITEM_MAX_COUNT - current.length))
+          ]);
+        }}
+      />
+      <NoteAgentPanel
       modal={props.modal}
       noteTitle={props.noteTitle}
       availability={availability}
@@ -465,11 +524,17 @@ export function CurrentNoteAgent(props: {
         ...(visibleProposalError ? { errorMessageKey: visibleProposalError } : {})
       } : null}
       draft={draft}
+      attachments={attachments.map((file, index) => ({
+        key: `${file.name}:${file.size}:${file.lastModified}:${index}`,
+        name: file.name
+      }))}
       models={props.models}
       switchingModel={switchingModel || modelSwitchBlocked}
       onClose={props.onClose}
       onDraftChange={setDraft}
       onSubmit={() => void submit()}
+      onAttach={() => attachmentInputRef.current?.click()}
+      onRemoveAttachment={(index) => setAttachments((current) => current.filter((_, candidate) => candidate !== index))}
       {...(panelErrorMessageKey ? { errorMessageKey: panelErrorMessageKey } : {})}
       {...(latestTurn && (latestTurn.state === "running" || latestTurn.state === "cancel_requested")
         ? { onCancel: () => void cancel() }
@@ -493,7 +558,8 @@ export function CurrentNoteAgent(props: {
         }
       }}
       t={props.t}
-    />
+      />
+    </>
   );
 }
 
