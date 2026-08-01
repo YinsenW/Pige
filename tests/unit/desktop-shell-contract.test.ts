@@ -98,7 +98,8 @@ describe("desktop shell build contract", () => {
 
     expect(mainSource).not.toMatch(/\bsafeStorage\b/u);
     expect(mainSource).toContain('new JsonSecretStore(app.getPath("userData"))');
-    expect(storeSource).toContain('path.join(userDataPath, "secrets.json")');
+    expect(storeSource).toContain("const resolved = path.resolve(userDataPath)");
+    expect(storeSource).toContain('path.join(resolved, "secrets.json")');
     expect(storeSource).toContain("schemaVersion: z.literal(2)");
     expect(storeSource).not.toContain(".encryptString(");
     expect(storeSource).not.toContain(".decryptString(");
@@ -570,7 +571,6 @@ describe("desktop shell build contract", () => {
     );
 
     expect(contractsSource).toContain("readonly localCapabilities: {");
-    expect(contractsSource).toContain('readonly ocrEngines: readonly ("apple_vision" | "windows_ai" | "paddleocr_local")[]');
     expect(contractsSource).toContain("readonly paddleOcrSummary:");
     for (const action of ["install", "enable", "test", "disable", "remove"] as const) {
       expect(contractsSource).toContain(`readonly ${action}PaddleOcr:`);

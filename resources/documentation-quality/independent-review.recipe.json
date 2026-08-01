@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T14:05:00Z",
+  "reviewedAt": "2026-08-01T14:20:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Revision-fenced Global Default selection across Settings, persistent model profiles, restart recovery and Pi runtime binding.",
+    "scope": "Exact-Vault local database reset, rebuildable-root deletion boundary, and durable rebuild completion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "f4d8f9608c02ee959bdd39416de62f9b7d0782c3af791cea3a2f667cd3d0e67c"
+    "reviewedSha256": "8946f4afc08b64289c0cbf7a20a57efe7e89293dba0408686ec36c7a7e662d76"
   },
   "reviewers": [
     {
-      "reviewerId": "default-model-currentness-review",
-      "task": "Review Global Default currentness, restart and runtime binding",
+      "reviewerId": "local-database-reset-review",
+      "task": "Review exact-Vault reset and durable rebuild completion",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the API and acceptance boundary; Development supplies separate schema, stale-CAS, registry reopen, Pi binding and UI evidence."
+      "independence": "Planning reviews the durable-data and repair contract; Development supplies separate Vault binding, reset-root, rebuild Job and shell integration evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "default-model-currentness-review",
+      "reviewerId": "local-database-reset-review",
       "blockerCount": 0,
-      "summary": "Home and Settings bind one visible registry revision; stale choices fail before persistence and leave the current default authoritative."
+      "summary": "One confirmed Settings action retains the reviewed Vault identity through reset and completed rebuild instead of exposing deletion as a terminal state."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "default-model-currentness-review",
+      "reviewerId": "local-database-reset-review",
       "blockerCount": 0,
-      "summary": "Schema, contract, API owner, registry mutation and both renderer callers agree on the same expectedRevision boundary."
+      "summary": "API, Settings, Vault ownership and Local Database design agree that only three rebuildable roots may be removed and the durable rebuild result is authoritative."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "default-model-currentness-review",
+      "reviewerId": "local-database-reset-review",
       "blockerCount": 0,
-      "summary": "Acceptance adds exact stale-CAS and restart evidence while retaining the integrated Settings-to-Pi executable gap as partial."
+      "summary": "E1.08 and E1.09 now name the exact binding, preserved durable classes and completed index_rebuild Job while remaining partial until candidate publication."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "default-model-currentness-review",
+      "reviewerId": "local-database-reset-review",
       "blockerCount": 0,
-      "summary": "The existing Model Provider Registry remains the sole persistence owner and Pi consumers continue resolving only its committed default."
+      "summary": "VaultService remains the sole root-deletion owner and the existing rebuild service remains the sole index_rebuild Job owner."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "default-model-currentness-review",
+      "reviewerId": "local-database-reset-review",
       "blockerCount": 0,
-      "summary": "One API paragraph and the existing acceptance ledger bind the change without a new design document or duplicated runtime contract."
+      "summary": "Five existing owner documents bind the repair without a new design document or duplicated reset/rebuild contract."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/model-provider-registry.test.ts tests/unit/model-settings-error-ui.test.ts tests/unit/desktop-shell-contract.test.ts",
+      "command": "npx vitest run tests/unit/vault-layout.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Strict request parsing, stale rejection, persistent reopen and existing hidden routing controls pass directly."
-    },
-    {
-      "command": "npx vitest run tests/unit/home-agent-conversation-ui.test.ts -t 'loads the App-owned Home model summary|keeps the Home model selection unchanged'",
-      "status": "passed",
-      "evidence": "Both successful and failed Home choices carry a visible model-registry revision without exposing another model role."
+      "evidence": "Wrong-Vault drift fails before deletion, the exact reviewed Vault resets only rebuildable roots, and every durable class remains present."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The revised public request and both production callers compile while the frozen registry ownership budget remains unchanged."
+      "evidence": "The combined reset-and-rebuild result compiles while Vault and rebuild ownership boundaries remain within their frozen budgets."
+    },
+    {
+      "command": "npm run verify:docs && npm run verify:decisions",
+      "status": "passed",
+      "evidence": "API, Local Database, Settings, Playbook and durable decision ownership remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "default-model-cas-bind-20260801",
-    "taskTitle": "Bind revision-fenced Global Default selection",
+    "taskId": "local-database-reset-bind-20260801",
+    "taskTitle": "Bind exact-Vault reset to durable rebuild",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing default-model storage and Pi runtime resolution remain unchanged; only stale renderer mutations lose authority.",
-    "acknowledgement": "Planning keeps E1.12 partial until one integrated Settings-to-restart-to-Pi executable proof exists."
+    "compatibility": "Existing manual rebuild behavior and durable Vault formats remain unchanged; reset now fails closed on binding drift and returns the completed rebuild result.",
+    "acknowledgement": "Planning binds E1.08 and E1.09 to the exact rebuildable-root and durable Job semantics without promoting unrelated acceptance."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
