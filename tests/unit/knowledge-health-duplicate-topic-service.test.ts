@@ -54,6 +54,18 @@ describe("KnowledgeHealthDuplicateTopicService", () => {
     expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.firstPath, "utf8")).toBe(fixture.firstMarkdown);
     expect(fs.readFileSync(fixture.secondPath, "utf8")).toBe(fixture.secondMarkdown);
+    const undo = findOperations(fixture.vaultPath).find(({ id }) => id === `${operation.id}undo`)!;
+    expect(restarted.activitySummary(operation, undo)).toMatchObject({ status: "undone", canRedo: true });
+    const redone = restarted.redo({ operationId: operation.id });
+    expect(redone).toMatchObject({ status: "redone", redoOperationId: expect.any(String) });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("duplicate-topic Redo did not commit");
+    expect(fs.existsSync(fixture.secondPath)).toBe(false);
+    expect(restarted.redo({ operationId: operation.id })).toMatchObject({ status: "already_redone" });
+    const redoOperation = findOperations(fixture.vaultPath).find(({ id }) => id === redone.redoOperationId)!;
+    expect(restarted.undo(redoOperation)).toMatchObject({ status: "undone" });
+    const redoUndo = findOperations(fixture.vaultPath).find(({ id }) => id === `${redoOperation.id}undo`)!;
+    expect(restarted.activitySummary(redoOperation, redoUndo)).toMatchObject({ status: "undone", canRedo: true });
+    expect(restarted.redo({ operationId: redoOperation.id })).toMatchObject({ status: "redone" });
   });
 
   it("fails closed when a projected topic changes before repair", () => {
@@ -71,6 +83,32 @@ describe("KnowledgeHealthDuplicateTopicService", () => {
     })).toMatchObject({ status: "stale" });
     expect(fs.readFileSync(fixture.secondPath, "utf8")).toContain("external edit");
     expect(findOperations(fixture.vaultPath)).toHaveLength(0);
+  });
+
+  it("adopts an interrupted Redo after restart and rejects restored-topic drift", () => {
+    const fixture = createFixture();
+    const projected = fixture.service.project(fixture.vaultPath, runRequest, fixture.snapshot, fixture.issue);
+    if (projected.kind !== "duplicate_topic" || !projected.repairContextId || !projected.pageProofs) throw new Error("proof missing");
+    const request = { apiVersion: 1 as const, requestId: "knowledge_health_duplicate_topic_repair_request_restartredofixture01",
+      activeVaultId: vaultId, reportRequestId: runRequest.requestId, indexGeneration: fixture.snapshot.indexGeneration,
+      issueKind: "duplicate_topic" as const, repairContextId: projected.repairContextId,
+      survivorPageId: projected.pageProofs[0]!.pageId, survivorRevision: projected.pageProofs[0]!.revision,
+      survivorRenderProof: projected.pageProofs[0]!.renderProof, absorbedPageId: projected.pageProofs[1]!.pageId,
+      absorbedRevision: projected.pageProofs[1]!.revision, absorbedRenderProof: projected.pageProofs[1]!.renderProof };
+    const committed = fixture.service.repair(fixture.vaultPath, request);
+    if (committed.status !== "committed") throw new Error("duplicate-topic merge did not commit");
+    const operation = findOperations(fixture.vaultPath).find(({ id }) => id === committed.operationId)!;
+    expect(fixture.service.undo(operation)).toMatchObject({ status: "undone" });
+    const redone = fixture.service.redo({ operationId: operation.id });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("duplicate-topic Redo did not commit");
+    fs.unlinkSync(findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${redone.redoOperationId}.json`))!);
+    const restarted = new KnowledgeHealthDuplicateTopicService(fixture.vaults, fixture.database);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+
+    expect(restarted.undo(findOperations(fixture.vaultPath).find(({ id }) => id === redone.redoOperationId)!))
+      .toMatchObject({ status: "undone" });
+    fs.appendFileSync(fixture.secondPath, "\nexternal drift\n");
+    expect(restarted.redo({ operationId: redone.redoOperationId })).toMatchObject({ status: "stale" });
   });
 });
 

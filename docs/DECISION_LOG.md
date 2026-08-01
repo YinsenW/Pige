@@ -2806,7 +2806,7 @@ Consequences:
 - Standing-authority active-vault knowledge Markdown needs no Permission prompt; Pi core,
   extension, package, or local-tool actions outside that scope stay brokered. Exact BYOK
   destinations retain their separate standing egress authority.
-- Exact create, cited append, bounded tags, and one directed link have Activity/Undo. User Library tag rename, merge, whole-tag removal and single-page removal also regain exact effects through matching-Undo Redo with restart adoption; proposals stay transitional and other mutations remain open.
+- Exact create, cited append, bounded tags, and one directed link have Activity/Undo. User Library tag lifecycle, Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge also regain exact effects through matching-Undo Redo with restart adoption; proposals stay transitional and other mutations remain open.
 - Home uses quiet Activity/details/Undo, not routine confirmation cards.
 
 References:
@@ -4345,6 +4345,36 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+
+### D-20260801-Knowledge-Lifecycle-Redo
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Activity Redo extends the existing exact matching-Undo lifecycle to Library Topic-title rename,
+exact two-note merge, and Knowledge Health duplicate-topic merge. Each Redo derives authority from
+the original receipt plus its exact Undo, publishes one deterministic child Operation, and remains
+reversible as the next forward step.
+
+Rationale:
+
+These user-authored corrections already preserve private before/after images and recoverable trash;
+reusing those durable facts restores an expected desktop history action without renderer path or
+Markdown authority.
+
+Consequences:
+
+- Every bound page, trash target and destination is re-proved before effect; any drift preserves live bytes.
+- A child receipt makes interrupted publication restart-adoptable and supports repeated Undo/Redo without duplicating effects.
+- No new public channel, renderer body/path projection, mutation kind, or broader automatic repair is introduced.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/UI_PROTOTYPE.md`
 
 ## 4. Deferred Decisions

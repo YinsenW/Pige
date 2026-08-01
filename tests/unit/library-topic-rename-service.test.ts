@@ -40,6 +40,20 @@ describe("LibraryTopicRenameService", () => {
     });
     expect(fixture.service.undo(operation)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+    const undo = findOperations(fixture.vaultPath).find((item) => item.id === `${operation.id}undo`)!;
+    expect(fixture.service.activitySummary(operation, undo)).toMatchObject({ status: "undone", canRedo: true });
+    const redone = fixture.service.redo({ operationId: operation.id });
+    expect(redone).toMatchObject({ status: "redone", undoOperationId: undo.id, redoOperationId: expect.any(String) });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("Topic rename Redo did not commit");
+    expect(parsePigeFrontmatter(fs.readFileSync(fixture.pagePath, "utf8"))?.frontmatter.title).toBe("New Topic");
+    expect(fixture.service.redo({ operationId: operation.id })).toMatchObject({
+      status: "already_redone", redoOperationId: redone.redoOperationId
+    });
+    const redoOperation = findOperations(fixture.vaultPath).find((item) => item.id === redone.redoOperationId)!;
+    expect(fixture.service.undo(redoOperation)).toMatchObject({ status: "undone" });
+    const redoUndo = findOperations(fixture.vaultPath).find((item) => item.id === `${redoOperation.id}undo`)!;
+    expect(fixture.service.activitySummary(redoOperation, redoUndo)).toMatchObject({ status: "undone", canRedo: true });
+    expect(fixture.service.redo({ operationId: redoOperation.id })).toMatchObject({ status: "redone" });
   });
 
   it("fails closed on page drift, non-Topic pages, and changed replay input", async () => {
@@ -85,6 +99,28 @@ describe("LibraryTopicRenameService", () => {
     expect(operations[1]?.sourceRefs).toContainEqual({ kind: "operation", id: operation.id });
     expect(fixture.service.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.markdown);
+  });
+
+  it("adopts an interrupted Redo after restart and rejects page drift", async () => {
+    const fixture = createFixture();
+    const committed = await fixture.service.rename("reader_owner", renameRequest());
+    if (committed.status !== "committed") throw new Error("Topic rename did not commit");
+    const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(fixture.service.undo(operation)).toMatchObject({ status: "undone" });
+    const redone = fixture.service.redo({ operationId: operation.id });
+    if (redone.status !== "redone" || !redone.redoOperationId) throw new Error("Topic rename Redo did not commit");
+    fs.unlinkSync(findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${redone.redoOperationId}.json`))!);
+    const restarted = new LibraryTopicRenameService(fixture.vaults, fixture.notes);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(findOperations(fixture.vaultPath).filter((item) => item.id === redone.redoOperationId)).toHaveLength(1);
+
+    const staleFixture = createFixture();
+    const staleCommitted = await staleFixture.service.rename("reader_owner", renameRequest());
+    if (staleCommitted.status !== "committed") throw new Error("Topic rename did not commit");
+    const staleOperation = findOperations(staleFixture.vaultPath).find((item) => item.id === staleCommitted.operationId)!;
+    expect(staleFixture.service.undo(staleOperation)).toMatchObject({ status: "undone" });
+    fs.appendFileSync(staleFixture.pagePath, "\nexternal drift\n");
+    expect(staleFixture.service.redo({ operationId: staleOperation.id })).toMatchObject({ status: "stale" });
   });
 });
 
