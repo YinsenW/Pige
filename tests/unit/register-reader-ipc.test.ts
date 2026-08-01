@@ -17,6 +17,7 @@ import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/serv
 import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
 import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
+import type { ClaimConfidenceService } from "../../apps/desktop/src/main/services/claim-confidence-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
 import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
 import { NoteChangeQuestionAnswerResultSchema } from "@pige/schemas";
@@ -54,7 +55,8 @@ function makeHarness(
   questionStateService?: Partial<QuestionStateService>,
   questionAnswerService?: Partial<QuestionAnswerService>,
   generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>,
-  conceptParentService?: Partial<ConceptParentService>
+  conceptParentService?: Partial<ConceptParentService>,
+  claimConfidenceService?: Partial<ClaimConfidenceService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -102,6 +104,10 @@ function makeHarness(
     getQuestionStateService: () => {
       if (questionStateService) return questionStateService as QuestionStateService;
       throw new Error("Question state service was not expected.");
+    },
+    getClaimConfidenceService: () => {
+      if (claimConfidenceService) return claimConfidenceService as ClaimConfidenceService;
+      throw new Error("Claim confidence service was not expected.");
     },
     getQuestionAnswerService: () => {
       if (questionAnswerService) return questionAnswerService as QuestionAnswerService;
@@ -181,6 +187,7 @@ describe("registerReaderIpc", () => {
       "notes.archiveCurrent",
       "notes.restoreArchived",
       "notes.setQuestionState",
+      "notes.setClaimConfidence",
       "notes.searchQuestionAnswers",
       "notes.changeQuestionAnswer",
       "notes.searchClaimContradictions",
@@ -267,6 +274,31 @@ describe("registerReaderIpc", () => {
     await expect(handlers.get("notes.setQuestionState")!({ sender } as IpcMainInvokeEvent, request))
       .resolves.toMatchObject({ status: "committed", render: { questionState: { state: "answered" } } });
     expect(setState).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds Claim-confidence mutation to the tracked Reader owner and refreshes only after commit", async () => {
+    const request = { apiVersion: 1 as const, requestId: "noteclaimconfreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_claim01", currentPageId: "page_20260801_claim0001",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`, confidence: "high" as const };
+    const render = { summary: { pageId: request.currentPageId, title: "Claim", pageType: "claim" as const,
+      status: "active" as const, pagePath: "claims/claim.md", createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T11:00:00.000Z", sourceIds: [] }, html: "<h1>Claim</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      claimConfidence: { confidence: "high" as const, canChange: true,
+        revision: `noteeditrev_${"b".repeat(64)}` } };
+    const setConfidence = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260801_claimconfidence1", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined,
+      vi.fn(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, { setConfidence });
+    const sender = makeSender(62);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.setClaimConfidence")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", render: { claimConfidence: { confidence: "high" } } });
+    expect(setConfidence).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     expect(refreshed).toHaveBeenCalledTimes(1);
   });
 

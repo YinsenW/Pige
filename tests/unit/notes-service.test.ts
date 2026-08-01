@@ -172,6 +172,31 @@ describe("notes service", () => {
       .resolves.not.toHaveProperty("questionState");
   });
 
+  it("projects exact mutable confidence only for a current valid Claim page", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260801_claimconf1";
+    writePage({
+      vaultPath, fileName: "claim.md", pageId, title: "Claim", pageType: "claim",
+      extraFrontmatter: 'claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []'
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId }, OWNER_ID);
+    expect(rendered.claimConfidence).toEqual({
+      confidence: "medium", canChange: true,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(notes.resolveManagedPageTarget(OWNER_ID, {
+      activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId!,
+      expectedRevision: rendered.claimConfidence!.revision
+    }, "claim")).toMatchObject({ status: "ready", pageId, title: "Claim" });
+
+    writePage({ vaultPath, fileName: "malformed-claim.md", pageId: "page_20260801_claimconf2",
+      title: "Malformed", pageType: "claim",
+      extraFrontmatter: 'claim:\n  confidence: "medium"\n  confidence: "high"\n  evidence: []\n  contradicts: []' });
+    await expect(notes.render({ pageId: "page_20260801_claimconf2" }, OWNER_ID))
+      .resolves.not.toHaveProperty("claimConfidence");
+  });
+
   it("projects five current SourceRecord summaries while retaining failures and omitting unsafe names", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_metadata123";

@@ -5,6 +5,7 @@ import type {
   NoteRevealSourceRequest, NoteRevealSourceResult,
   NoteRenderResult,
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
+  NoteSetClaimConfidenceRequest, NoteSetClaimConfidenceResult,
   NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
@@ -30,6 +31,7 @@ import { NoteReaderSources } from "./NoteReaderSources";
 import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createReaderSelectionAgentTurnId, useReaderSelectionAskState } from "./ReaderSelectionAskDialog"; import { ReaderSelectionCreateChooser } from "./ReaderSelectionCreateChooser";
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
+import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
 import { ReaderConceptParents } from "./ReaderConceptParents";
@@ -96,6 +98,10 @@ export function NoteReader(props: {
     request: NoteSetQuestionStateRequest
   ) => Promise<NoteSetQuestionStateResult>;
   readonly onQuestionStateChanged?: (render: NoteRenderResult) => void;
+  readonly onSetClaimConfidence?: (
+    request: NoteSetClaimConfidenceRequest
+  ) => Promise<NoteSetClaimConfidenceResult>;
+  readonly onClaimConfidenceChanged?: (render: NoteRenderResult) => void;
   readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
   readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
   readonly onSearchClaimContradictions?: (
@@ -893,6 +899,16 @@ export function NoteReader(props: {
               note={props.note}
               onSetState={props.onSetQuestionState}
               onCommitted={props.onQuestionStateChanged}
+              t={props.t}
+            />
+          ) : null}
+          {props.activeVaultId && props.onSetClaimConfidence && props.onClaimConfidenceChanged ? (
+            <ReaderClaimConfidenceControl
+              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.claimConfidence?.revision ?? ""}`}
+              activeVaultId={props.activeVaultId}
+              note={props.note}
+              onSetConfidence={props.onSetClaimConfidence}
+              onCommitted={props.onClaimConfidenceChanged}
               t={props.t}
             />
           ) : null}
