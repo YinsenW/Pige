@@ -314,6 +314,29 @@ describe("notes service", () => {
     expect(rendered.aliasing).toBeUndefined();
   });
 
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "projects active %s aliases and taxonomy without exposing the full Markdown editor", async (pageType) => {
+      const { vaultPath, vault } = makeVault();
+      const pageId = `page_20260801_taxonomy${pageType}`;
+      writePage({ vaultPath, fileName: `${pageType}-taxonomy.md`, pageId, title: `Typed ${pageType}`,
+        pageType, aliases: ["Alternate name"], tags: ["research"] });
+      const notes = makeNotes(vaultPath, vault), rendered = await notes.render({ pageId }, OWNER_ID);
+      expect(rendered.summary.pageType).toBe(pageType);
+      expect(rendered.aliasing).toMatchObject({ aliases: ["Alternate name"], canAdd: true, canRemove: true });
+      expect(rendered.tagging).toMatchObject({ tags: ["research"], topics: [], canAdd: true, canEdit: true });
+      expect(notes.openEditor(OWNER_ID, { apiVersion: 1, requestId: `noteeditreq_taxonomy${pageType}`,
+        activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId! }).status).not.toBe("ready");
+    });
+
+  it.each(["source", "topic"] as const)("does not project alias or taxonomy mutation authority for %s pages", async (pageType) => {
+    const { vaultPath, vault } = makeVault(), pageId = `page_20260801_notaxonomy${pageType}`;
+    writePage({ vaultPath, fileName: `${pageType}-no-taxonomy.md`, pageId, title: `Excluded ${pageType}`,
+      pageType, aliases: ["Private alternate"], tags: ["private-tag"] });
+    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    expect(rendered.aliasing).toBeUndefined();
+    expect(rendered.tagging).toBeUndefined();
+  });
+
   it("opens Source Pages for bounded sidecar edits and keeps other page types out", async () => {
     const { vaultPath, vault } = makeVault();
     const vaults = { current: () => vault, activeVaultPath: () => vaultPath };

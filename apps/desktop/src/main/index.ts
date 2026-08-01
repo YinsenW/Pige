@@ -1921,11 +1921,28 @@ const getConceptParentService = (): ConceptParentService => {
   return conceptParentService;
 };
 const getNoteTagService = (): NoteTagService => {
-  noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
+  noteTagService ??= new NoteTagService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true,
+      allowQuestion: true,
+      allowConcept: true,
+      allowEntity: true
+    })
+  );
   return noteTagService;
 };
 const getNoteAliasService = (): NoteAliasService => {
-  noteAliasService ??= new NoteAliasService(getNotesService(), getNoteMarkdownEditorService(), () => getVaultService().activeVaultPath());
+  noteAliasService ??= new NoteAliasService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true,
+      allowQuestion: true,
+      allowConcept: true,
+      allowEntity: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
   return noteAliasService;
 };
 const getNoteMergeService = (): NoteMergeService => {

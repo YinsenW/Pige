@@ -23,13 +23,14 @@ const editRequest = {
 const removeRequest = { ...request, requestId: "noteremovetagreq_abcdefghijklmnop" };
 
 describe("NoteTagService", () => {
-  it("atomically replaces the exact note tags and topics through one revision-bound editor operation", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "atomically replaces the exact %s tags and topics through one revision-bound editor operation", async (pageType) => {
     const assertCurrent = vi.fn(() => true);
     const save = vi.fn(() => ({ status: "committed" as const, requestId: "noteeditreq_internal",
       activeVaultId: request.activeVaultId, pageId: request.currentPageId, revisionId: `sha256:${"b".repeat(64)}`,
       renderIdentity: `sha256:${"c".repeat(64)}`, operationId: "op_20260731_taxonomy123456" }));
     const service = new NoteTagService({ resolveTrashTarget: vi.fn(() => readyTarget(assertCurrent)),
-      render: vi.fn(async () => taxonomyRender()) } as never, { open: vi.fn(() => openedNote()), save } as never,
+      render: vi.fn(async () => taxonomyRender(pageType)) } as never, { open: vi.fn(() => openedNote(pageType)), save } as never,
       () => new Date("2026-07-31T12:00:00.000Z"));
 
     await expect(service.edit("reader_owner", editRequest)).resolves.toMatchObject({
@@ -47,6 +48,7 @@ describe("NoteTagService", () => {
     const cases = [
       { target: readyTarget(() => false), markdown: openedNote().markdown, status: "stale" },
       { target: readyTarget(() => true), markdown: openedNote().markdown.replace('type: "note"', 'type: "source"'), status: "ineligible" },
+      { target: readyTarget(() => true), markdown: openedNote().markdown.replace('type: "note"', 'type: "topic"'), status: "ineligible" },
       { target: readyTarget(() => true), markdown: openedNote().markdown.replace('status: "active"', 'status: "archived"'), status: "ineligible" },
       { target: readyTarget(() => true), markdown: openedNote().markdown.replace("source_ids: []", 'tags: ["Research", "Reading"]\ntopics: ["Knowledge management"]\nsource_ids: []'), status: "ineligible" }
     ] as const;
@@ -58,7 +60,8 @@ describe("NoteTagService", () => {
       expect(save).not.toHaveBeenCalled();
     }
   });
-  it("adds one canonical tag through the current Reader revision and returns the authoritative render", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "adds one canonical tag through the current %s Reader revision and returns the authoritative render", async (pageType) => {
     const assertCurrent = vi.fn(() => true);
     const save = vi.fn(() => ({
       status: "committed" as const,
@@ -69,16 +72,16 @@ describe("NoteTagService", () => {
       renderIdentity: `sha256:${"c".repeat(64)}`,
       operationId: "op_20260730_addtag12345678"
     }));
-    const render = vi.fn(async () => taggedRender());
+    const render = vi.fn(async () => taggedRender(pageType));
     const service = new NoteTagService({
       resolveTrashTarget: vi.fn(() => readyTarget(assertCurrent)), render
-    } as never, { open: vi.fn(() => openedNote()), save } as never, () => new Date("2026-07-30T12:00:00.000Z"));
+    } as never, { open: vi.fn(() => openedNote(pageType)), save } as never, () => new Date("2026-07-30T12:00:00.000Z"));
 
     await expect(service.add("reader_owner", request)).resolves.toMatchObject({
       ...request,
       status: "committed",
       operationId: "op_20260730_addtag12345678",
-      render: { tagging: { tags: ["Research note"] } }
+      render: { summary: { pageType }, tagging: { tags: ["Research note"] } }
     });
     expect(assertCurrent).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledWith(expect.objectContaining({
@@ -172,23 +175,25 @@ function readyTarget(assertCurrent: () => boolean) {
   };
 }
 
-function openedNote() {
+type TaxonomyPageType = "note" | "claim" | "question" | "concept" | "entity";
+
+function openedNote(pageType: TaxonomyPageType = "note") {
   return {
     status: "opened" as const,
     activeVaultId: request.activeVaultId,
     pageId: request.currentPageId,
     revisionId: `sha256:${"a".repeat(64)}`,
     renderIdentity: `sha256:${"d".repeat(64)}`,
-    markdown: `---\nid: "${request.currentPageId}"\nschema_version: 1\ntitle: "Tagged note"\ntype: "note"\ncreated_at: "2026-07-30T10:00:00.000Z"\nupdated_at: "2026-07-30T10:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: []\n---\n\n# Tagged note\n\nKeep this body.\n`
+    markdown: `---\nid: "${request.currentPageId}"\nschema_version: 1\ntitle: "Tagged note"\ntype: "${pageType}"\ncreated_at: "2026-07-30T10:00:00.000Z"\nupdated_at: "2026-07-30T10:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: []\n---\n\n# Tagged note\n\nKeep this body.\n`
   };
 }
 
-function taggedRender() {
+function taggedRender(pageType: TaxonomyPageType = "note") {
   return {
     summary: {
       pageId: request.currentPageId,
       title: "Tagged note",
-      pageType: "note" as const,
+      pageType,
       status: "active" as const,
       pagePath: "wiki/tags.md",
       createdAt: "2026-07-30T10:00:00.000Z",
@@ -204,6 +209,6 @@ function taggedRender() {
   };
 }
 
-function taxonomyRender() {
-  return { ...taggedRender(), tagging: { ...taggedRender().tagging, tags: [...editRequest.tags], topics: [...editRequest.topics] } };
+function taxonomyRender(pageType: TaxonomyPageType = "note") {
+  return { ...taggedRender(pageType), tagging: { ...taggedRender(pageType).tagging, tags: [...editRequest.tags], topics: [...editRequest.topics] } };
 }

@@ -39,7 +39,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
-import { isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
+import { isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { projectConceptParents } from "./concept-parent-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
@@ -65,7 +65,6 @@ export interface NotesMarkdownRenderer {
   }>;
 }
 export interface NotesSourceRefreshProjectionPort { refreshableSourceIds(sourceIds: readonly string[]): readonly string[] }
-
 interface FileIdentity {
   readonly size: number;
   readonly mtimeMs: number;
@@ -211,11 +210,12 @@ export class NotesService {
           ? {
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
-              historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) },
-              ...(aliases.length === rawAliases.length && aliases.length <= 64 ? { aliasing: { aliases, canAdd: stable.document.summary.status === "active" && aliases.length < 64, canRemove: stable.document.summary.status === "active" && aliases.length > 0, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
-              tagging: { tags: [...(frontmatter?.tags ?? [])], topics: [...(frontmatter?.topics ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }
+              historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) }
             }
           : {}),
+        ...(isTaxonomyKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? {
+          ...(aliases.length === rawAliases.length && aliases.length <= 64 ? { aliasing: { aliases, canAdd: stable.document.summary.status === "active" && aliases.length < 64, canRemove: stable.document.summary.status === "active" && aliases.length > 0, revision: publicEditorRevision(stable.pageContentHash) } } : {}), tagging: { tags: [...(frontmatter?.tags ?? [])], topics: [...(frontmatter?.topics ?? [])], canAdd: stable.document.summary.status === "active" && (frontmatter?.tags?.length ?? 0) < 12, canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }
+        } : {}),
         ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(generatedByPige && stable.document.summary.pageType !== "source"
           ? { revealGeneratedEligibility: { canReveal: true as const, revision: publicEditorRevision(stable.pageContentHash) } }

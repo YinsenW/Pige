@@ -39,7 +39,7 @@ export async function submitReaderNoteTagRemoval(input: {
   const tag = canonicalNoteTag(input.tag), tagKey = canonicalNoteTagKey(tag);
   const eligibility = input.note?.tagging, renderContextId = input.note?.renderContextId;
   const matchingTag = eligibility?.tags.find((existing) => canonicalNoteTagKey(existing) === tagKey);
-  if (!input.note || input.note.summary.pageType !== "note" || input.note.summary.status !== "active" || !eligibility?.canEdit ||
+  if (!input.note || !isTaxonomyKnowledgePageType(input.note.summary.pageType) || input.note.summary.status !== "active" || !eligibility?.canEdit ||
     !input.activeVaultId || !renderContextId || !input.submit || !tagKey || !matchingTag) return { status: "retained" };
   const request: NoteRemoveTagRequest = { apiVersion: 1, requestId: `noteremovetagreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
     activeVaultId: input.activeVaultId, currentPageId: input.note.summary.pageId, renderContextId, expectedRevision: eligibility.revision, tag: matchingTag };
@@ -49,6 +49,7 @@ export async function submitReaderNoteTagRemoval(input: {
       result.renderContextId !== request.renderContextId || result.expectedRevision !== request.expectedRevision || result.tag !== request.tag ||
       (current && (current.summary.pageId !== request.currentPageId || current.renderContextId !== request.renderContextId || current.tagging?.revision !== request.expectedRevision)) ||
       result.status !== "committed" || result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.pageType !== input.note.summary.pageType ||
       result.render.tagging?.tags.some((existing) => canonicalNoteTagKey(existing) === tagKey)) return { status: "retained" };
     return { status: "committed", render: result.render };
   } catch { return { status: "retained" }; }
@@ -68,7 +69,7 @@ export async function submitReaderNoteTag(input: {
   readonly currentNote?: () => NoteRenderResult | null | undefined;
 }): Promise<ReaderNoteTagOutcome> {
   const eligibility = input.note?.tagging, renderContextId = input.note?.renderContextId;
-  if (!input.note || input.note.summary.pageType !== "note" || input.note.summary.status !== "active" || !eligibility?.canEdit ||
+  if (!input.note || !isTaxonomyKnowledgePageType(input.note.summary.pageType) || input.note.summary.status !== "active" || !eligibility?.canEdit ||
     !input.activeVaultId || !renderContextId || !input.submit || !validEntries(input.tags, 12, 48) || !validEntries(input.topics, 8, 80)) return { status: "retained" };
   const request: NoteEditTaxonomyRequest = {
     apiVersion: 1, requestId: `notetaxonomyreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
@@ -81,9 +82,14 @@ export async function submitReaderNoteTag(input: {
       result.renderContextId !== request.renderContextId || result.expectedRevision !== request.expectedRevision ||
       (current && (current.summary.pageId !== request.currentPageId || current.renderContextId !== request.renderContextId || current.tagging?.revision !== request.expectedRevision)) ||
       result.status !== "committed" || result.render.summary.pageId !== request.currentPageId ||
+      result.render.summary.pageType !== input.note.summary.pageType ||
       JSON.stringify(result.render.tagging?.tags) !== JSON.stringify(request.tags) || JSON.stringify(result.render.tagging?.topics) !== JSON.stringify(request.topics)) return { status: "retained" };
     return { status: "committed", render: result.render };
   } catch { return { status: "retained" }; }
+}
+
+function isTaxonomyKnowledgePageType(pageType: NoteRenderResult["summary"]["pageType"]): boolean {
+  return pageType === "note" || pageType === "claim" || pageType === "question" || pageType === "concept" || pageType === "entity";
 }
 
 export function ReaderNoteTagDialog(props: {
