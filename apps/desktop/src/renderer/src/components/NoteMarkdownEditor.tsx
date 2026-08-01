@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -26,6 +27,10 @@ export type NoteMarkdownEditorLabels = Readonly<{
   save: string;
   saving: string;
   cancel: string;
+  discardTitle: string;
+  discardDescription: string;
+  keepEditing: string;
+  discardChanges: string;
   review: string;
   reviewing: string;
   conflictTitle: string;
@@ -85,12 +90,16 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   const [pending, setPending] = useState<"save" | "review" | null>(null);
   const [mode, setMode] = useState<"source" | "preview">("source");
   const [renderedDraft, setRenderedDraft] = useState<RenderedDraft | null>(null);
+  const [discardConfirm, setDiscardConfirm] = useState(false);
   const requestSequenceRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const previewPanelRef = useRef<HTMLElement>(null);
   const pendingScrollRatioRef = useRef(0);
   const currentFileRef = useRef<HTMLTextAreaElement>(null);
   const focusEditorAfterReviewRef = useRef(false);
+  const discardReturnFocusRef = useRef<HTMLElement | null>(null);
+  const keepEditingRef = useRef<HTMLButtonElement>(null);
+  const discardDialogRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     requestSequenceRef.current += 1;
@@ -101,6 +110,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setPending(null);
     setMode("source");
     setRenderedDraft(null);
+    setDiscardConfirm(false);
+    discardReturnFocusRef.current = null;
     pendingScrollRatioRef.current = 0;
     focusEditorAfterReviewRef.current = false;
     window.requestAnimationFrame(() => {
@@ -108,6 +119,11 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
       restoreScrollRatio(previewPanelRef.current, 0);
     });
   }, [propIdentityKey]);
+
+  useLayoutEffect(() => {
+    if (!discardConfirm) return;
+    keepEditingRef.current?.focus();
+  }, [discardConfirm]);
 
   useEffect(() => {
     if (mode !== "preview" || conflictReview) return;
@@ -257,17 +273,41 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setMode("preview");
   };
 
-  const cancel = (): void => {
+  const commitCancel = (): void => {
     requestSequenceRef.current += 1;
+    setDiscardConfirm(false);
+    discardReturnFocusRef.current = null;
     props.onCancel();
     window.requestAnimationFrame(() => props.returnFocusRef.current?.focus());
+  };
+
+  const requestCancel = (initiator?: HTMLElement): void => {
+    if (draft === base.markdown) {
+      commitCancel();
+      return;
+    }
+    discardReturnFocusRef.current = initiator ??
+      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setDiscardConfirm(true);
+  };
+
+  const keepEditing = (): void => {
+    const returnFocus = discardReturnFocusRef.current;
+    discardReturnFocusRef.current = null;
+    setDiscardConfirm(false);
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else if (mode === "source") textareaRef.current?.focus();
+      else previewPanelRef.current?.focus();
+    });
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent): void => {
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      cancel();
+      if (discardConfirm) keepEditing();
+      else requestCancel();
       return;
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -410,10 +450,65 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
           <button type="submit" className="primary" disabled={pending !== null || conflictReview !== null}>
             {pending === "save" ? props.labels.saving : props.labels.save}
           </button>
-          <button type="button" className="ghost" disabled={pending !== null} onClick={cancel}>
+          <button
+            type="button"
+            className="ghost"
+            disabled={pending !== null}
+            onClick={(event) => requestCancel(event.currentTarget)}
+          >
             {props.labels.cancel}
           </button>
         </div>
+        {discardConfirm ? (
+          <div className="confirmation-backdrop">
+            <section
+              ref={discardDialogRef}
+              className="confirmation-dialog"
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="note-markdown-editor-discard-title"
+              aria-describedby="note-markdown-editor-discard-description"
+              onKeyDown={(event) => {
+                if (event.key !== "Tab") return;
+                const controls = Array.from(
+                  discardDialogRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []
+                );
+                const first = controls[0];
+                const last = controls.at(-1);
+                if (!first || !last) {
+                  event.preventDefault();
+                  return;
+                }
+                if (event.shiftKey && document.activeElement === first) {
+                  event.preventDefault();
+                  last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                  event.preventDefault();
+                  first.focus();
+                }
+              }}
+            >
+              <div className="confirmation-icon" aria-hidden="true">!</div>
+              <div className="confirmation-copy">
+                <h2 id="note-markdown-editor-discard-title">{props.labels.discardTitle}</h2>
+                <p id="note-markdown-editor-discard-description">{props.labels.discardDescription}</p>
+              </div>
+              <div className="confirmation-actions">
+                <button
+                  ref={keepEditingRef}
+                  type="button"
+                  className="secondary"
+                  onClick={keepEditing}
+                >
+                  {props.labels.keepEditing}
+                </button>
+                <button type="button" className="primary danger" onClick={commitCancel}>
+                  {props.labels.discardChanges}
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </form>
     </section>
   );
