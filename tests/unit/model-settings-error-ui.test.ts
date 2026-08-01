@@ -33,6 +33,30 @@ afterEach(() => {
 });
 
 describe("Models error ownership", () => {
+  it("connects the reviewed DeepSeek Anthropic service through the existing preset flow", async () => {
+    const dom = createDom();
+    const summary = deepSeekAnthropicSummary();
+    const requests: unknown[] = [];
+    const mount = await mountPanel(dom, summary, modelApi({
+      addPresetProvider: async (request) => {
+        requests.push(request);
+        return summary;
+      }
+    }));
+
+    await openPreset(dom, mount.container, "DeepSeek (Anthropic Messages)");
+    expect(mount.container.textContent).toContain("Anthropic Messages");
+    await setInput(dom, mount.container, "preset-key-deepseek-anthropic", "synthetic-key");
+    await click(dom, buttonNamed(mount.container, enMessages["models.connectService"]));
+    await waitFor(dom, () => requests.length === 1);
+
+    expect(requests).toEqual([{
+      presetId: "deepseek-anthropic",
+      apiKey: "synthetic-key"
+    }]);
+    await unmount(dom, mount.root);
+  });
+
   it("owns an initial Models summary failure and retries only the summary read", async () => {
     const dom = createDom();
     const summary = presetSummary();
@@ -562,6 +586,23 @@ function presetSummary(
   };
 }
 
+function deepSeekAnthropicSummary(): ModelProviderSettingsSummary {
+  return {
+    ...presetSummary(),
+    presets: [{
+      presetId: "deepseek-anthropic",
+      displayName: "DeepSeek (Anthropic Messages)",
+      providerKind: "anthropic_compatible",
+      endpointProtocol: "anthropic_messages",
+      authRequirement: "api_key",
+      fixedBaseUrl: "https://api.deepseek.com/anthropic",
+      modelListStrategy: "list_models",
+      cloudBoundary: "cloud",
+      canOpenApiKeyManagement: true
+    }]
+  };
+}
+
 function connectedSummary(runtimeStatus?: ProviderProfileSummary["runtimeStatus"]): ModelProviderSettingsSummary {
   return {
     ...presetSummary(),
@@ -592,7 +633,10 @@ function modelApi(overrides: {
     readonly presetId: string;
     readonly status: "opened" | "unavailable" | "failed";
   }>;
-  readonly addPresetProvider?: () => Promise<ProviderConnectResult>;
+  readonly addPresetProvider?: (request: {
+    readonly presetId: string;
+    readonly apiKey?: string;
+  }) => Promise<ProviderConnectResult>;
   readonly addManualProvider?: () => Promise<ProviderConnectResult>;
   readonly refreshProviderModels?: () => Promise<ModelProviderSettingsSummary>;
   readonly addManualModel?: () => Promise<ModelProviderSettingsSummary>;

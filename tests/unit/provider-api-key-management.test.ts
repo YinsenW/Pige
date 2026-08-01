@@ -19,6 +19,11 @@ describe("provider API key management", () => {
     expect(openExternal).toHaveBeenCalledExactlyOnceWith("https://platform.openai.com/api-keys");
     expect(result).toEqual({ ...request, status: "opened" });
     expect(JSON.stringify(result)).not.toContain("https://");
+
+    const deepSeek = { ...request, requestId: "providerhelp_deepseekanthropic", presetId: "deepseek-anthropic" };
+    expect(await openReviewedProviderApiKeyManagement(deepSeek, openExternal))
+      .toEqual({ ...deepSeek, status: "opened" });
+    expect(openExternal).toHaveBeenLastCalledWith("https://platform.deepseek.com/api_keys");
   });
 
   it("fails closed for unknown, local, and failed external targets", async () => {
