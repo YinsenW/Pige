@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T04:18:00.000Z",
+  "reviewedAt": "2026-08-02T04:30:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Diagnostics support export binds only an explicitly entered redacted private excerpt, while pathless crash-recovery counts route into existing Activity and referenced-source repair owners without carrying effect authority.",
+    "scope": "Bind the already-merged current-Reader long-page outline and saved-memory record browser to their exact executable acceptance evidence without changing product behavior or widening status.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "69c1c0ce25dea99297de407a363a0acbef7c97d1dc7855f62021857345ab04ad"
+    "reviewedSha256": "90d891850e47114f85306744ec55d99a82116c73886157c7202747d9d58d137d"
   },
   "reviewers": [
     {
-      "reviewerId": "diagnostics-recovery-combined-review",
-      "task": "Review explicit private support excerpt handling and pathless recovery routing",
+      "reviewerId": "recent-feature-acceptance-review",
+      "task": "Review exact acceptance binding for merged Reader outline and memory browser",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the user-visible privacy and recovery boundaries separately from the Main implementation and direct service tests."
+      "independence": "Project review checks merged product tests and current manifest claims separately from the already-completed implementation branches."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "diagnostics-recovery-combined-review",
+      "reviewerId": "recent-feature-acceptance-review",
       "blockerCount": 0,
-      "summary": "The user explicitly reviews one redacted excerpt before export and recovery counts expose only navigation into current owner state."
+      "summary": "The Reader outline is identity-bound and focus-safe while the memory browser retains only a current selected record."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "diagnostics-recovery-combined-review",
+      "reviewerId": "recent-feature-acceptance-review",
       "blockerCount": 0,
-      "summary": "Schemas, Main lifecycle, export envelope, diagnostics owner and Settings agree on excerpt review and authority-free recovery routing."
+      "summary": "The two new evidence rows point to exact merged tests and change no public schema, storage or runtime contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "diagnostics-recovery-combined-review",
+      "reviewerId": "recent-feature-acceptance-review",
       "blockerCount": 0,
-      "summary": "PIGE-DIAG-002 cites direct redaction/export evidence and E1.19 cites recovery routing while their broader gaps remain explicit."
+      "summary": "PIGE-UI-001 now removes the closed long-page gap and PIGE-MEM-001 retains verified status with added browsing evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "diagnostics-recovery-combined-review",
+      "reviewerId": "recent-feature-acceptance-review",
       "blockerCount": 0,
-      "summary": "Bounded preview and recovery components reuse existing storage and repair owners without duplicate IPC or effect logic."
+      "summary": "The bind corrects ledger undercount without reopening product bytes or adding a recurring verification workflow."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "diagnostics-recovery-combined-review",
+      "reviewerId": "recent-feature-acceptance-review",
       "blockerCount": 0,
-      "summary": "Existing diagnostics, privacy and acceptance owners contain both deltas without a new design document or recovery channel."
+      "summary": "Only acceptance evidence, its semantic lock, and the required current review recipe change; no owner document is duplicated."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/diagnostics-export-core.test.ts tests/unit/diagnostics-lifecycle-service.test.ts tests/unit/full-ui-settings-surface.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/reader-inline-reference-ui.test.ts tests/unit/agent-memory-record-browser-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct tests prove legacy envelope compatibility, raw-text redaction, exact preview-bound export, and both recovery-action routes."
+      "evidence": "Merged direct tests prove bounded heading navigation and current-owner memory filtering with focus and owner-drift behavior."
     },
     {
-      "command": "npx vitest run tests/unit/schemas.test.ts -t \"bounds optional diagnostics support categories\" --maxWorkers=1",
+      "command": "npm run typecheck",
       "status": "passed",
-      "evidence": "The strict public schema pairs the private category with one bounded reviewed excerpt and rejects mismatched requests."
+      "evidence": "The merged Reader and memory feature surfaces remain type-safe on current main; this governance-only bind changes no product types."
     },
     {
-      "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
+      "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "The candidate compiles and builds while App and Diagnostics owners remain within protected architecture budgets."
+      "evidence": "The exact evidence selectors, requirement gap text and semantic claims remain structurally and executable-current."
     }
   ],
   "coordination": {
-    "taskId": "diagnostics-recovery-combined-bind-20260802",
-    "taskTitle": "Bind reviewed diagnostics excerpt and actionable recovery routing",
+    "taskId": "recent-feature-acceptance-bind-20260802",
+    "taskTitle": "Bind merged Reader outline and memory browser evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy safe support bundles remain valid, no raw excerpt is retained, and absent recovery callbacks preserve the prior read-only summary.",
-    "acknowledgement": "The private excerpt and actionable recovery slices are bound while broader private selectors, crash-hook review and diagnostic-store breadth remain open."
+    "compatibility": "No runtime, API, durable storage, privacy, permission or release behavior changes.",
+    "acknowledgement": "The bind records two already-merged user features and makes no new completion claim beyond their exact direct evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
