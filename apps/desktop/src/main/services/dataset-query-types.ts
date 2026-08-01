@@ -114,6 +114,11 @@ const DatasetQueryOrderSchema = z.object({
   direction: z.enum(["asc", "desc"])
 }).strict();
 
+const DatasetQueryRelationJoinSchema = z.object({
+  relation: ColumnOpaqueRefSchema,
+  targetTable: TableOpaqueRefSchema
+}).strict();
+
 const DatasetCatalogToolRequestSchema = z.object({
   action: z.literal("catalog")
 }).strict();
@@ -122,6 +127,7 @@ const DatasetQueryOnlyToolRequestSchema = z.object({
   action: z.literal("query"),
   datasetRef: DatasetOpaqueRefSchema,
   tableRef: TableOpaqueRefSchema,
+  join: DatasetQueryRelationJoinSchema.optional(),
   select: z.array(ColumnOpaqueRefSchema).max(DATASET_QUERY_DEFAULT_LIMITS.maxSelectedColumns),
   filters: z.array(DatasetQueryFilterSchema).max(DATASET_QUERY_DEFAULT_LIMITS.maxFilters).optional(),
   groupBy: z.array(ColumnOpaqueRefSchema).max(DATASET_QUERY_DEFAULT_LIMITS.maxGroupByColumns).optional(),
@@ -156,6 +162,13 @@ const DatasetQueryOnlyToolRequestSchema = z.object({
     });
   }
   const aggregateCount = aggregates.length;
+  if (request.join && (aggregates.length > 0 || grouped.length > 0)) {
+    context.addIssue({
+      code: "custom",
+      path: ["join"],
+      message: "The first bounded relation join supports projection, filtering, and ordering only."
+    });
+  }
   for (const [index, order] of (request.orderBy ?? []).entries()) {
     const aggregateMatch = /^aggregate_([1-9][0-9]*)$/u.exec(order.by);
     if (aggregateMatch) {
@@ -231,6 +244,7 @@ export type DatasetQueryCellState = "missing" | "empty" | "null" | "value";
 
 export interface DatasetQueryInternalColumn {
   readonly id: string;
+  readonly tableId?: string;
   readonly name: string;
   readonly ordinal: number;
   readonly logicalType: DatasetLogicalType;
@@ -278,6 +292,15 @@ export interface DatasetQueryWorkerInput {
     readonly columnCount: number;
   };
   readonly columns: readonly DatasetQueryInternalColumn[];
+  readonly join?: {
+    readonly relationColumnId: string;
+    readonly targetTable: {
+      readonly id: string;
+      readonly name: string;
+      readonly rowCount: number;
+      readonly columnCount: number;
+    };
+  };
   readonly plan: DatasetQueryInternalPlan;
   readonly limits: DatasetQueryLimits;
 }
@@ -350,6 +373,7 @@ export function createDatasetQueryPlanHash(request: DatasetQueryWorkerRequest): 
     schemaChecksum: request.binding.schemaChecksum,
     payloadChecksum: request.binding.payloadChecksum,
     tableId: request.table.id,
+    ...(request.join ? { join: request.join } : {}),
     selectColumnIds: request.plan.selectColumnIds,
     filters: request.plan.filters,
     groupByColumnIds: request.plan.groupByColumnIds,

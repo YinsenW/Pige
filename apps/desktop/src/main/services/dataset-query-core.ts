@@ -20,7 +20,7 @@ import {
   type DatasetQueryScalar,
   type DatasetQueryWorkerRequest
 } from "./dataset-query-types";
-
+import { executeDatasetRelationQuery } from "./dataset-relation-query-core";
 const FIXED_TABLE_SQL_SOURCE: readonly (readonly [string, string])[] = [
   ["pige_dataset_meta", `
     CREATE TABLE pige_dataset_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT
@@ -165,7 +165,7 @@ export function executeDatasetQuery(request: DatasetQueryWorkerRequest): Dataset
     database.setAuthorizer(authorizeFixedDatasetRead);
     validateFixedSchema(database);
     validatePayloadBinding(database, request);
-    result = runBoundedPlan(database, request);
+    result = request.join ? executeDatasetRelationQuery(database, request) : runBoundedPlan(database, request);
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
     throw new PigeDomainError(
@@ -424,7 +424,7 @@ function validatePayloadBinding(database: DatabaseSync, request: DatasetQueryWor
   if (columnRows.length !== request.table.columnCount) {
     fail("dataset.query.payload_binding_invalid", "Managed Dataset columns do not match the active schema.");
   }
-  const expectedColumns = new Map(request.columns.map((column) => [column.id, column]));
+  const expectedColumns = new Map(request.columns.filter((column) => (column.tableId ?? request.table.id) === request.table.id).map((column) => [column.id, column]));
   const seenOrdinals = new Set<number>();
   for (const raw of columnRows) {
     const values = expectArrayRow(raw, 4);
@@ -858,9 +858,9 @@ function validateWorkerRequest(request: DatasetQueryWorkerRequest): void {
     request.columns.length === 0 ||
     request.columns.length > request.limits.maxReferencedColumns ||
     new Set(request.columns.map((column) => column.id)).size !== request.columns.length ||
-    new Set(request.columns.map((column) => column.ordinal)).size !== request.columns.length ||
+    new Set(request.columns.map((column) => `${column.tableId ?? request.table.id}:${column.ordinal}`)).size !== request.columns.length ||
     request.columns.some((column) =>
-      !/^column_[a-z0-9]{12,}$/u.test(column.id) ||
+      !/^column_[a-z0-9]{12,}$/u.test(column.id) || (column.tableId !== undefined && !/^table_[a-z0-9]{12,}$/u.test(column.tableId)) ||
       !column.name ||
       byteLength(column.name) > 2_048 ||
       !isSafeCount(column.ordinal) ||

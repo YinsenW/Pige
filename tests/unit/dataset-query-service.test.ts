@@ -12,6 +12,7 @@ import type {
 import {
   DatasetManifestSchema,
   DatasetRevisionSchema,
+  DatasetSchemaRecordSchema,
   JobRecordSchema,
   SourceRecordSchema,
   type OperationRecord
@@ -60,6 +61,40 @@ afterEach(() => {
 });
 
 describe("Dataset Query Service", () => {
+  it("exposes and executes one relation-driven same-Dataset join through opaque catalog refs", async () => {
+    const fixture = await createManagedFixture({ withRelationJoin: true });
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath);
+    const catalogResult = await service.revalidateCatalog(fixture.vaultPath, catalog);
+
+    expect(catalogResult.evidence.modelText).toContain('"relationJoin"');
+    expect(catalogResult.evidence.modelText).toContain('"targetTableRef":"table_2"');
+    const result = await service.execute(fixture.vaultPath, catalog, {
+      action: "query",
+      datasetRef: "dataset_1",
+      tableRef: "table_1",
+      join: { relation: "column_3", targetTable: "table_2" },
+      select: ["column_1", "column_5"],
+      filters: [{ column: "column_5", op: "gt", value: 50 }],
+      orderBy: [{ by: "column_5", direction: "desc" }],
+      limit: 10
+    });
+
+    expect(result.preview).toMatchObject({
+      datasetId: fixture.manifest.datasetId,
+      revisionId: fixture.manifest.activeRevision,
+      tableName: "records → people",
+      returnedRowCount: 1,
+      matchedRowCount: 1
+    });
+    expect(result.preview.rows[0]?.values).toEqual(["Ada", "80"]);
+    expect(result.citations[0]?.evidence.columnIds).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^column_/u)
+    ]));
+    expect(result.evidence.modelText).toContain('"relationJoin"');
+    await expect(service.revalidateResult(fixture.vaultPath, result)).resolves.toMatchObject({ drifted: false });
+  });
+
   it("keeps immutable source evidence bound to the initial revision after the active revision changes", async () => {
     const fixture = await createManagedFixture();
     const sourceBefore = SourceRecordSchema.parse(readJson(fixture.sourceRecordPath));
@@ -318,7 +353,7 @@ describe("Dataset Query Service", () => {
   });
 
   it("runs the real Home Pi tool loop through the bound Dataset service and durable result contract", async () => {
-    const fixture = await createManagedFixture({ privateEvidence: false });
+    const fixture = await createManagedFixture({ privateEvidence: false, withRelationJoin: true });
     const vault = loadVaultSummary(fixture.vaultPath);
     let retrievalCalls = 0;
     const retrieval: HomeAgentRetrievalPort = {
@@ -343,12 +378,13 @@ describe("Dataset Query Service", () => {
               action: "query",
               datasetRef: "dataset_1",
               tableRef: "table_1",
-              select: ["column_1", "column_2"],
-              orderBy: [{ by: "column_2", direction: "desc" }],
+              join: { relation: "column_3", targetTable: "table_2" },
+              select: ["column_1", "column_5"],
+              orderBy: [{ by: "column_5", direction: "desc" }],
               limit: 2
             }
           },
-          { kind: "text", text: "The bounded Dataset contains two rows; the largest amount is 7. [citation_10]" }
+          { kind: "text", text: "The linked people show Grace at the largest rate, 80. [citation_10]" }
         ]
       }),
       undefined,
@@ -358,7 +394,7 @@ describe("Dataset Query Service", () => {
     );
 
     const outcome = await service.submitTurn({
-      text: "Inspect the Dataset and report the largest amount.",
+      text: "Join projects to their linked people and report the largest rate.",
       inputKind: "typed_text",
       locale: "en"
     });
@@ -374,7 +410,7 @@ describe("Dataset Query Service", () => {
         datasetResult: {
           datasetId: fixture.manifest.datasetId,
           revisionId: fixture.manifest.activeRevision,
-          tableName: "records",
+          tableName: "records → people",
           returnedRowCount: 2,
           matchedRowCount: 2
         }
@@ -384,6 +420,19 @@ describe("Dataset Query Service", () => {
     expect(JSON.stringify(outcome)).not.toContain(fixture.vaultPath);
     expect(JSON.stringify(outcome)).not.toContain("SELECT");
     expect(JSON.stringify(outcome)).not.toContain("synthetic-dataset-home-secret");
+    let restartedRuntimeCalls = 0;
+    const restarted = new HomeAgentService(
+      { current: () => vault, activeVaultPath: () => fixture.vaultPath },
+      datasetHomeModels(),
+      retrieval,
+      new JobsService({ current: () => vault, activeVaultPath: () => fixture.vaultPath }),
+      { run: async () => { restartedRuntimeCalls += 1; throw new Error("History reads must not replay the Provider."); } }
+    );
+    expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
+      role: "assistant",
+      answer: { datasetResult: { tableName: "records → people", rows: [{ values: ["Ada", "80"] }, { values: [SQL_HOSTILE_VALUE, "40"] }] } }
+    });
+    expect(restartedRuntimeCalls).toBe(0);
   });
 
   it("writes a replacement egress audit before blocking real Dataset privacy drift", async () => {
@@ -549,7 +598,10 @@ interface ManagedFixture {
   readonly manifest: ReturnType<typeof DatasetManifestSchema.parse>;
 }
 
-async function createManagedFixture(options: { readonly privateEvidence?: boolean } = {}): Promise<ManagedFixture> {
+async function createManagedFixture(options: {
+  readonly privateEvidence?: boolean;
+  readonly withRelationJoin?: boolean;
+} = {}): Promise<ManagedFixture> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-query-service-"));
   roots.push(root);
   createVaultOnDisk({
@@ -611,7 +663,11 @@ async function createManagedFixture(options: { readonly privateEvidence?: boolea
   );
   const bundlePath = onlyEntryPath(path.join(vaultPath, "datasets"));
   const manifestPath = path.join(bundlePath, "dataset.json");
-  const manifest = DatasetManifestSchema.parse(readJson(manifestPath));
+  let manifest = DatasetManifestSchema.parse(readJson(manifestPath));
+  if (options.withRelationJoin) {
+    publishRelationJoinRevision(bundlePath, manifest);
+    manifest = DatasetManifestSchema.parse(readJson(manifestPath));
+  }
   return {
     root,
     vaultPath,
@@ -729,6 +785,141 @@ function publishCollectionEditRevision(fixture: ManagedFixture, revisionId: stri
     schema,
     payload,
     updatedAt: "2026-07-13T01:00:00.000Z"
+  });
+}
+
+function publishRelationJoinRevision(
+  bundlePath: string,
+  manifest: ReturnType<typeof DatasetManifestSchema.parse>
+): void {
+  const revisionId = "dataset_rev_20260801_relationjoin01";
+  const relationColumnId = "column_relationjoin01";
+  const targetTableId = "table_peoplejoin001";
+  const personColumnId = "column_personjoin001";
+  const rateColumnId = "column_ratejoin0001";
+  const previousRevision = DatasetRevisionSchema.parse(readJson(path.join(bundlePath, manifest.revision.path)));
+  const previousSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(bundlePath, manifest.schema.path)));
+  const sourceTable = requireValue(previousSchema.tables[0]);
+  const sourcePayload = path.join(bundlePath, manifest.payload.path);
+  const payloadRelativePath = `data/revisions/${revisionId}.sqlite`;
+  const schemaRelativePath = `schemas/${revisionId}.json`;
+  const revisionRelativePath = `revisions/${revisionId}.json`;
+  const payloadPath = path.join(bundlePath, payloadRelativePath);
+  const schemaPath = path.join(bundlePath, schemaRelativePath);
+  const revisionPath = path.join(bundlePath, revisionRelativePath);
+  fs.mkdirSync(path.dirname(payloadPath), { recursive: true });
+  fs.copyFileSync(sourcePayload, payloadPath);
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
+    const sourceRows = database.prepare(
+      "SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal ASC"
+    ).all(sourceTable.id) as Array<{ row_id?: unknown }>;
+    if (sourceRows.length !== 2 || sourceRows.some(({ row_id }) => typeof row_id !== "string")) {
+      throw new Error("Expected two source rows for the relation query fixture.");
+    }
+    database.prepare("UPDATE pige_dataset_tables SET column_count = column_count + 1 WHERE table_id = ?")
+      .run(sourceTable.id);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(relationColumnId, sourceTable.id, sourceTable.columnCount, "owner", "text",
+        '["pige.relation.single"]', JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(targetTableId, 1, "people", "fixture:people", "{}", "{}", 2, 2);
+    const insertColumn = database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)");
+    insertColumn.run(personColumnId, targetTableId, 0, "person", "text", '["text"]',
+      JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    insertColumn.run(rateColumnId, targetTableId, 1, "rate", "integer", '["integer"]',
+      JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    const insertRow = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
+    insertRow.run("row_personjoin0001", targetTableId, 0, 2);
+    insertRow.run("row_personjoin0002", targetTableId, 1, 3);
+    const insertCell = database.prepare(
+      "INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)"
+    );
+    insertCell.run("row_personjoin0001", personColumnId, "value", "text", "Lin", "Lin", 0,
+      "text", JSON.stringify({ kind: "text", value: "Lin" }));
+    insertCell.run("row_personjoin0001", rateColumnId, "value", "integer", "40", "40", 0,
+      "integer", JSON.stringify({ kind: "integer", value: "40" }));
+    insertCell.run("row_personjoin0002", personColumnId, "value", "text", "Grace", "Grace", 0,
+      "text", JSON.stringify({ kind: "text", value: "Grace" }));
+    insertCell.run("row_personjoin0002", rateColumnId, "value", "integer", "80", "80", 0,
+      "integer", JSON.stringify({ kind: "integer", value: "80" }));
+    insertCell.run(sourceRows[0]!.row_id, relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_personjoin0002" }));
+    insertCell.run(sourceRows[1]!.row_id, relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_personjoin0001" }));
+    database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId);
+    database.exec("COMMIT");
+  } catch (caught) {
+    database.exec("ROLLBACK");
+    throw caught;
+  } finally { database.close(); }
+
+  const schema = DatasetSchemaRecordSchema.parse({
+    ...previousSchema,
+    revisionId,
+    createdAt: "2026-08-01T00:00:00.000Z",
+    tables: [{
+      ...sourceTable,
+      columnCount: sourceTable.columnCount + 1,
+      columns: [...sourceTable.columns, {
+        id: relationColumnId,
+        name: "owner",
+        ordinal: sourceTable.columnCount,
+        sourceType: "pige.relation.single",
+        sourceTypes: ["pige.relation.single"],
+        logicalType: "string",
+        nullable: true,
+        relation: { kind: "pige_single_relation", schemaVersion: 1, targetTableId, targetDisplayColumnId: personColumnId },
+        stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }, {
+      id: targetTableId,
+      name: "people",
+      sourceLocator: "fixture:people",
+      sourceMetadata: {},
+      header: { mode: "absent", used: false },
+      ordinal: 1,
+      rowCount: 2,
+      columnCount: 2,
+      columns: [{
+        id: personColumnId, name: "person", ordinal: 0, sourceType: "text", sourceTypes: ["text"],
+        logicalType: "string", nullable: false, stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }, {
+        id: rateColumnId, name: "rate", ordinal: 1, sourceType: "integer", sourceTypes: ["integer"],
+        logicalType: "integer", nullable: false, stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }]
+  });
+  writeJson(schemaPath, schema);
+  const payload = fileRef(payloadPath, payloadRelativePath, { format: "sqlite" });
+  const schemaRef = fileRef(schemaPath, schemaRelativePath);
+  const revision = DatasetRevisionSchema.parse({
+    ...previousRevision,
+    id: revisionId,
+    parentRevisionId: previousRevision.id,
+    schema: schemaRef,
+    payload,
+    stats: {
+      ...previousRevision.stats,
+      tableCount: 2,
+      rowCount: previousRevision.stats.rowCount + 2,
+      columnCount: previousRevision.stats.columnCount + 3
+    },
+    operationId: "op_20260801_relationjoin01",
+    change: { kind: "collection_relation_add", tableId: sourceTable.id, columnId: relationColumnId,
+      targetTableId, targetDisplayColumnId: personColumnId },
+    createdAt: "2026-08-01T00:00:00.000Z"
+  });
+  writeJson(revisionPath, revision);
+  writeJson(path.join(bundlePath, "dataset.json"), {
+    ...manifest,
+    initialRevision: manifest.initialRevision ?? manifest.activeRevision,
+    activeRevision: revisionId,
+    revision: fileRef(revisionPath, revisionRelativePath),
+    schema: schemaRef,
+    payload,
+    updatedAt: "2026-08-01T00:00:00.000Z"
   });
 }
 

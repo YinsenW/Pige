@@ -51,6 +51,7 @@ import {
   type TableOpaqueRef
 } from "./dataset-query-types";
 import { DatasetQueryWorkerService } from "./dataset-query-worker-service";
+import type { DatasetQueryCatalogEnvelope as CatalogEnvelope } from "./dataset-query-catalog-contract";
 
 const UNTRUSTED_DATASET_START = "<PIGE_UNTRUSTED_DATASET_V1>";
 const UNTRUSTED_DATASET_END = "</PIGE_UNTRUSTED_DATASET_V1>";
@@ -101,44 +102,6 @@ interface BoundDataset {
   readonly ref: DatasetOpaqueRef;
   readonly snapshot: BundleSnapshot;
   readonly tables: readonly BoundTable[];
-}
-
-interface CatalogEnvelope {
-  readonly schemaVersion: 1;
-  readonly status: "ready" | "empty";
-  readonly datasets: readonly {
-    readonly datasetRef: DatasetOpaqueRef;
-    readonly title: string;
-    readonly tables: readonly {
-      readonly tableRef: TableOpaqueRef;
-      readonly name: string;
-      readonly columns: readonly {
-        readonly columnRef: ColumnOpaqueRef;
-        readonly name: string;
-        readonly logicalType: DatasetLogicalType;
-      }[];
-    }[];
-  }[];
-  readonly queryContract: {
-    readonly action: "query";
-    readonly filterOperators: readonly string[];
-    readonly aggregateOperators: readonly string[];
-    readonly orderDirections: readonly string[];
-    readonly aggregateRefs: string;
-    readonly limits: {
-      readonly selectedColumns: number;
-      readonly filters: number;
-      readonly groupByColumns: number;
-      readonly aggregates: number;
-      readonly orderBy: number;
-      readonly rows: number;
-    };
-  };
-  readonly omitted: {
-    readonly datasets: number;
-    readonly tables: number;
-    readonly columns: number;
-  };
 }
 
 interface CatalogState {
@@ -470,6 +433,7 @@ interface VaultRoots {
 interface ResolvedQueryBinding {
   readonly dataset: BoundDataset;
   readonly table: BoundTable;
+  readonly targetTable?: BoundTable; readonly relationColumn?: BoundColumn;
   readonly columnsByRef: ReadonlyMap<ColumnOpaqueRef, BoundColumn>;
 }
 
@@ -676,6 +640,8 @@ function createCatalogEnvelope(
   omittedColumns: number,
   limits: DatasetQueryLimits
 ): CatalogEnvelope {
+  const tableRefs = new Map(datasets.flatMap(({ tables }) => tables.map(({ ref, table }) => [table.id, ref] as const)));
+  const columnRefs = new Map(datasets.flatMap(({ tables }) => tables.flatMap(({ columns }) => columns.map(({ ref, column }) => [column.id, ref] as const))));
   return {
     schemaVersion: 1,
     status: datasets.length > 0 ? "ready" : "empty",
@@ -688,7 +654,13 @@ function createCatalogEnvelope(
         columns: table.columns.map(({ ref, column }) => ({
           columnRef: ref,
           name: column.name,
-          logicalType: column.logicalType
+          logicalType: column.logicalType,
+          ...(column.relation && tableRefs.has(column.relation.targetTableId) && columnRefs.has(column.relation.targetDisplayColumnId)
+            ? { relationJoin: {
+                targetTableRef: tableRefs.get(column.relation.targetTableId)!,
+                targetDisplayColumnRef: columnRefs.get(column.relation.targetDisplayColumnId)!
+              } }
+            : {})
         }))
       }))
     })),
@@ -701,6 +673,7 @@ function createCatalogEnvelope(
       aggregateOperators: ["count", "sum", "min", "max", "avg"],
       orderDirections: ["asc", "desc"],
       aggregateRefs: "aggregate_N refers to the Nth aggregate in this query",
+      relationJoin: "join={relation,targetTable} follows one declared Pige relation; projection/filter/order may use source or target columns",
       limits: {
         selectedColumns: limits.maxSelectedColumns,
         filters: limits.maxFilters,
@@ -773,7 +746,17 @@ function resolveQueryBinding(
   if (!dataset || !table) {
     throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query references an unavailable opaque catalog item.");
   }
-  const columnsByRef = new Map(table.columns.map((column) => [column.ref, column]));
+  const relationColumn = request.join ? table.columns.find((column) => column.ref === request.join?.relation) : undefined;
+  const targetTable = request.join
+    ? dataset.tables.find((candidate) => candidate.ref === request.join?.targetTable)
+    : undefined;
+  if (request.join && (!relationColumn?.column.relation || !targetTable ||
+      relationColumn.column.relation.targetTableId !== targetTable.table.id)) {
+    throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query relation join is not declared by the selected table.");
+  }
+  const queryableColumns = [...table.columns.filter((column) => column !== relationColumn),
+    ...(targetTable ? targetTable.columns : [])];
+  const columnsByRef = new Map(queryableColumns.map((column) => [column.ref, column]));
   const referenced = collectRequestColumnRefs(request);
   if (referenced.size > limits.maxReferencedColumns) {
     throw new PigeDomainError("dataset.query.limit.referenced_columns", "The Dataset query references too many bounded columns.");
@@ -781,11 +764,12 @@ function resolveQueryBinding(
   for (const ref of referenced) {
     const column = columnsByRef.get(ref);
     if (!column) {
-      throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query references a column outside its selected table.");
+      throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query references a column outside its selected relation scope.");
     }
   }
   validateQueryColumnTypes(request, columnsByRef);
-  return { dataset, table, columnsByRef };
+  return { dataset, table, ...(targetTable ? { targetTable } : {}),
+    ...(relationColumn ? { relationColumn } : {}), columnsByRef };
 }
 
 function collectRequestColumnRefs(request: DatasetQueryRequest): Set<ColumnOpaqueRef> {
@@ -884,6 +868,8 @@ function createWorkerInput(
   }));
   const columns: DatasetQueryInternalColumn[] = boundColumns.map(({ column }) => ({
     id: column.id,
+    tableId: binding.dataset.snapshot.schema.tables.find((table) =>
+      table.columns.some((candidate) => candidate.id === column.id))?.id ?? binding.table.table.id,
     name: column.name,
     ordinal: column.ordinal,
     logicalType: column.logicalType
@@ -902,6 +888,17 @@ function createWorkerInput(
       columnCount: binding.table.table.columnCount
     },
     columns,
+    ...(binding.targetTable && binding.relationColumn ? {
+      join: {
+        relationColumnId: binding.relationColumn.column.id,
+        targetTable: {
+          id: binding.targetTable.table.id,
+          name: binding.targetTable.table.name,
+          rowCount: binding.targetTable.table.rowCount,
+          columnCount: binding.targetTable.table.columnCount
+        }
+      }
+    } : {}),
     plan: {
       selectColumnIds: request.select.map(toColumnId),
       filters,
@@ -1009,7 +1006,8 @@ function validateCoreResult(result: DatasetQueryCoreResult, input: PreparedWorke
     result.truncated !== (result.matchedRowCount > result.returnedRowCount) ||
     result.rows.some((row) => row.values.length !== result.columns.length || row.states.length !== result.columns.length) ||
     result.usedColumnIds.length === 0 ||
-    result.usedColumnIds.some((id) => !input.columns.some((column) => column.id === id)) ||
+    result.usedColumnIds.some((id) =>
+      id !== input.join?.relationColumnId && !input.columns.some((column) => column.id === id)) ||
     result.returnedRowIds.length > input.limits.maxResultRows ||
     byteLength(JSON.stringify(result)) > input.limits.maxResultBytes + 1_024
   ) {
@@ -1040,8 +1038,10 @@ function createExecutionResult(
   limits: DatasetQueryLimits
 ): DatasetQueryExecutionResult {
   const refsByColumnId = new Map(
-    binding.table.columns.map(({ ref, column }) => [column.id, ref] as const)
+    [...binding.table.columns, ...(binding.targetTable?.columns ?? [])]
+      .map(({ ref, column }) => [column.id, ref] as const)
   );
+  const resultTableName = binding.targetTable ? `${binding.table.table.name} → ${binding.targetTable.table.name}` : binding.table.table.name;
   const previewColumns = core.columns.map((column) => ({
     key: refsByColumnId.get(column.key) ?? column.key,
     label: column.label,
@@ -1053,7 +1053,7 @@ function createExecutionResult(
     datasetId: binding.dataset.snapshot.manifest.datasetId,
     revisionId: binding.dataset.snapshot.revision.id,
     tableId: binding.table.table.id,
-    tableName: binding.table.table.name,
+    tableName: resultTableName,
     planHash: core.planHash,
     resultHash: core.resultHash,
     columns: previewColumns,
@@ -1070,7 +1070,7 @@ function createExecutionResult(
     kind: "dataset",
     refId: CITATION_REF,
     label: truncateText(
-      `${binding.dataset.snapshot.manifest.title}: ${binding.table.table.name}`,
+      `${binding.dataset.snapshot.manifest.title}: ${resultTableName}`,
       160
     ),
     title: binding.dataset.snapshot.manifest.title,
@@ -1097,7 +1097,8 @@ function createExecutionResult(
     status: "result",
     datasetRef: request.datasetRef,
     tableRef: request.tableRef,
-    tableName: binding.table.table.name,
+    tableName: resultTableName,
+    ...(request.join ? { relationJoin: request.join } : {}),
     planHash: core.planHash,
     resultHash: core.resultHash,
     columns: core.columns.map((column) => ({
