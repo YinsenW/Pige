@@ -1383,6 +1383,14 @@ export interface UpdateProviderCredentialRequest {
   readonly apiKey: string;
 }
 
+export interface UpdateProviderProfileRequest {
+  readonly providerProfileId: string;
+  readonly expectedRevision: string;
+  readonly displayName: string;
+  readonly baseUrl: string;
+  readonly cloudBoundary: CloudBoundary;
+}
+
 export interface DeleteProviderRequest {
   readonly providerProfileId: string;
   readonly expectedRevision: string;
@@ -2872,6 +2880,9 @@ export interface PigeDesktopApi {
     readonly refreshProviderModels: (request: RefreshProviderModelsRequest) => Promise<ModelProviderSettingsSummary>;
     readonly updateProviderCredential: (
       request: UpdateProviderCredentialRequest
+    ) => Promise<ModelProviderSettingsSummary>;
+    readonly updateProviderProfile: (
+      request: UpdateProviderProfileRequest
     ) => Promise<ModelProviderSettingsSummary>;
     readonly deleteProvider: (request: DeleteProviderRequest) => Promise<ModelProviderSettingsSummary>;
     readonly addManualModel: (request: AddManualModelRequest) => Promise<ModelProviderSettingsSummary>;

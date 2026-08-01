@@ -1365,6 +1365,10 @@ describe("desktop shell build contract", () => {
     );
     const credentialHandler = mainSource.slice(
       mainSource.indexOf('ipcMain.handle("models.updateProviderCredential"'),
+      mainSource.indexOf('ipcMain.handle("models.updateProviderProfile"')
+    );
+    const profileHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("models.updateProviderProfile"'),
       mainSource.indexOf('ipcMain.handle("models.deleteProvider"')
     );
     const deleteProviderHandler = mainSource.slice(
@@ -1388,6 +1392,10 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(credentialHandler.indexOf("confirmSettingAction"));
     expect(credentialHandler.indexOf("confirmSettingAction"))
       .toBeLessThan(credentialHandler.indexOf("getModelProviderRegistry().updateProviderCredential(validatedRequest)"));
+    expect(profileHandler.indexOf("UpdateProviderProfileRequestSchema.parse(request)"))
+      .toBeLessThan(profileHandler.indexOf("confirmSettingAction"));
+    expect(profileHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(profileHandler.indexOf("getModelProviderRegistry().updateProviderProfile(validatedRequest)"));
     expect(deleteProviderHandler.indexOf("DeleteProviderRequestSchema.parse(request)"))
       .toBeLessThan(deleteProviderHandler.indexOf("confirmSettingAction"));
     expect(deleteProviderHandler.indexOf("confirmSettingAction"))
@@ -1397,7 +1405,7 @@ describe("desktop shell build contract", () => {
     expect(credentialHandler).not.toContain("oldApiKey");
     expect(deleteProviderHandler).not.toContain("authSecretRef");
     expect(mainSource).not.toContain('title: "Connect this model service?"');
-    for (const channel of ["models.updateProviderCredential", "models.deleteProvider"]) {
+    for (const channel of ["models.updateProviderCredential", "models.updateProviderProfile", "models.deleteProvider"]) {
       expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
     }
@@ -1409,7 +1417,8 @@ describe("desktop shell build contract", () => {
       ["models.addPresetProvider", "models.addManualProvider", "addPresetProvider(validatedRequest)"],
       ["models.addManualProvider", "models.refreshProviderModels", "addManualProvider(validatedRequest)"],
       ["models.refreshProviderModels", "models.updateProviderCredential", "refreshProviderModels("],
-      ["models.updateProviderCredential", "models.deleteProvider", "updateProviderCredential(validatedRequest)"],
+      ["models.updateProviderCredential", "models.updateProviderProfile", "updateProviderCredential(validatedRequest)"],
+      ["models.updateProviderProfile", "models.deleteProvider", "updateProviderProfile(validatedRequest)"],
       ["models.deleteProvider", "models.addManualModel", "deleteProvider(validatedRequest)"],
       ["models.addManualModel", "models.updateModel", "addManualModel({"],
       ["models.updateModel", "models.setDefaultModel", "updateModel({"],

@@ -12414,6 +12414,14 @@ export const UpdateProviderCredentialRequestSchema = z.object({
   apiKey: z.string().trim().min(1).max(16_384)
 }).strict();
 
+export const UpdateProviderProfileRequestSchema = z.object({
+  providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
+  expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  displayName: z.string().trim().min(1).max(80),
+  baseUrl: ProviderBaseUrlSchema,
+  cloudBoundary: CloudBoundarySchema
+}).strict();
+
 export const DeleteProviderRequestSchema = z.object({
   providerProfileId: z.string().regex(/^provider_[a-z0-9_]+$/),
   expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/)
