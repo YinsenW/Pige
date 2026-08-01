@@ -14,6 +14,7 @@ import {
   type SettingsProfileImportPreviewRequest,
   type SettingsProfileImportPreviewResult,
   type SettingsProfilePreferences,
+  type SettingsProfilePreferenceChange,
   type SettingsProfileTransferKey
 } from "@pige/schemas";
 import { LocalSettingsStore, digestSettingsProfilePreferences } from "./local-settings";
@@ -32,6 +33,7 @@ const TRANSFER_KEYS = [
 
 interface PendingPreview {
   readonly preferences: SettingsProfilePreferences;
+  readonly keys: readonly SettingsProfileTransferKey[];
   readonly expectedDigest: string;
   readonly expiresAt: number;
 }
@@ -80,8 +82,13 @@ export class SettingsProfileTransferService {
       const document = SettingsProfileDocumentSchema.parse(JSON.parse(readBoundedNoFollow(sourcePath)));
       const previewId = `settingspreview_${randomBytes(16).toString("hex")}`;
       const current = this.#settings.getSettingsProfilePreferences(this.#fallbackLocale);
+      const changes = settingsProfileChanges(current, document.preferences);
+      if (changes.length === 0) {
+        return SettingsProfileImportPreviewResultSchema.parse({ ...request, status: "current" });
+      }
       this.#previews.set(previewId, {
         preferences: document.preferences,
+        keys: changes.map((change) => change.key),
         expectedDigest: digestSettingsProfilePreferences(current),
         expiresAt: Date.now() + PREVIEW_TTL_MS
       });
@@ -89,7 +96,7 @@ export class SettingsProfileTransferService {
         ...request,
         status: "ready",
         previewId,
-        keys: TRANSFER_KEYS
+        changes
       });
     } catch {
       return SettingsProfileImportPreviewResultSchema.parse({ ...request, status: "failed" });
@@ -122,7 +129,7 @@ export class SettingsProfileTransferService {
       return SettingsProfileImportApplyResultSchema.parse({
         ...request,
         status: "committed",
-        keys: TRANSFER_KEYS
+        keys: preview.keys
       });
     } catch {
       return SettingsProfileImportApplyResultSchema.parse({ ...request, status: "failed" });
@@ -135,6 +142,28 @@ export class SettingsProfileTransferService {
       if (preview.expiresAt <= now) this.#previews.delete(previewId);
     }
   }
+}
+
+function settingsProfileChanges(
+  before: SettingsProfilePreferences,
+  after: SettingsProfilePreferences
+): SettingsProfilePreferenceChange[] {
+  const changes: SettingsProfilePreferenceChange[] = [];
+  const add = <T extends SettingsProfilePreferenceChange>(change: T): void => {
+    if (JSON.stringify(change.before) !== JSON.stringify(change.after)) changes.push(change);
+  };
+  add({ key: "app_locale", before: before.appLocale, after: after.appLocale });
+  add({ key: "appearance", before: before.appearance, after: after.appearance });
+  add({ key: "startup_destination", before: before.startupDestination, after: after.startupDestination });
+  add({ key: "update_channel", before: before.updateChannel, after: after.updateChannel });
+  add({ key: "ocr_engine", before: before.ocrEnginePreference, after: after.ocrEnginePreference });
+  add({ key: "ocr_language", before: before.ocrLanguagePreference, after: after.ocrLanguagePreference });
+  add({
+    key: "dictation_language",
+    before: before.dictationLanguagePreference,
+    after: after.dictationLanguagePreference
+  });
+  return changes;
 }
 
 function readBoundedNoFollow(filePath: string): string {

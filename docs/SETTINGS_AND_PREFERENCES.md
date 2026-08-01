@@ -178,6 +178,9 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | Executable key | Permission requirement | Current enforcement path |
 | --- | --- | --- |
 | `app.locale` | `none` | Validated locale IPC |
+| `appearance.theme` | `none` | Validated appearance IPC and safe preference transfer |
+| `appearance.generatedKnowledgeLanguage` | `none` | Validated appearance IPC, runtime policy projection and safe preference transfer |
+| `startup.destination` | `none` | Revision-fenced next-launch preference and safe preference transfer |
 | `window.layoutMode` | `none` | Validated window-mode IPC |
 | `window.alwaysOnTop` | `none` | Validated window preference IPC |
 | `window.sidebarOpen` | `none` | Validated window preference IPC |
@@ -197,8 +200,10 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
 | `toolchain.health` | `none` | Derived read-only status |
-| `ocr.enginePreference` | `none` | Strict machine-local CAS; each new OCR call reads the authoritative preference and the Main router changes real adapter order with a safe local fallback |
-| `speech.dictationLanguage` | `none` | Strict machine-local CAS; Home availability/install/start resolve the selected language for every new session |
+| `ocr.languagePreference` | `none` | Revision-fenced local capability preference, runtime policy projection and safe preference transfer |
+| `updates.channel` | `none` | Revision-fenced update preference and safe preference transfer |
+| `ocr.enginePreference` | `none` | Strict machine-local CAS; each new OCR call reads the authoritative preference, Main changes real adapter order with a safe local fallback, and safe preference transfer preserves the value |
+| `speech.dictationLanguage` | `none` | Strict machine-local CAS; Home availability/install/start resolve the selected language for every new session, and safe preference transfer preserves the value |
 
 Changing a permission requirement without changing its enforcement path and tests is a contract error. `permission_broker` is fail-closed in `guardSettingAction` until the real broker path supplies an authorization decision.
 
@@ -325,8 +330,10 @@ Settings export:
   appearance and generated-knowledge language, startup destination, update channel,
   OCR engine/language, and dictation language. The versioned JSON file contains values,
   not machine-local revisions.
-- Import first returns a pathless opaque preview, then requires explicit native
-  confirmation and an unchanged safe-preference digest before one atomic settings write.
+- Import first returns either `current` with no mutation authority, or a pathless opaque
+  preview with typed current-to-imported values for only the fields that differ. Apply
+  requires explicit native confirmation and an unchanged safe-preference digest before
+  one atomic settings write, and reports only the fields actually changed.
 - Default export excludes secrets, provider profiles, permission grants, Vault identity
   and paths, recent/dismissed Vault history, external bindings, and window state.
 - Cancelled, stale, malformed, linked, oversized, or failed imports preserve all current

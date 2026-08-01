@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T22:35:53.000Z",
+  "reviewedAt": "2026-08-02T06:40:00.000+08:00",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review safe preference transfer plus the confirmed, revision-fenced and reversible future-capture source-storage preference without migration of existing evidence.",
+    "scope": "Review reviewed safe preference transfer plus the confirmed, revision-fenced and reversible future-capture source-storage preference without migration of existing evidence.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "ee6cb1fd32c3cbb4bc15ab05a3fea7ace6513068aff95c35d83a84ae835403f2"
+    "reviewedSha256": "fbcca3a0998261211396f0e9e83e268ad305ddf169a709e9c20b452d17491f25"
   },
   "reviewers": [
     {
@@ -79,21 +79,21 @@
       "score": 9.8,
       "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "Main owns transfer file dialogs and the source-policy confirmation; public results stay pathless, while cancel, stale and failure preserve current settings and existing evidence bytes."
+      "summary": "Main owns transfer dialogs and source-policy confirmation; renderer receives only typed safe differences, while current, cancel, stale and failure preserve settings, focus and existing evidence bytes."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
       "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "Settings, Jobs, API, decision, schemas, IPC and tests agree that profile transfer excludes authority and source-policy changes affect only future file captures."
+      "summary": "Settings, Jobs, API, decision, schemas, registry, IPC and tests agree on exact safe transfer review and future-only source-policy changes."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
       "reviewerId": "settings-integrity-review",
       "blockerCount": 0,
-      "summary": "PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 gain exact transfer and source-policy evidence while remaining partial for broader setting-owner and mutation coverage."
+      "summary": "PIGE-SETTINGS-001/002 gain exact transfer, executable registry and source-policy evidence while remaining partial for broader setting-owner and restore coverage."
     },
     {
       "id": "ongoing_development_support",
@@ -112,9 +112,9 @@
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/source-storage-preference-service.test.ts tests/unit/source-storage-policy-contract.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/restore-ui.test.ts tests/unit/settings-profile-transfer-service.test.ts tests/unit/register-settings-profile-ipc.test.ts tests/unit/settings-profile-transfer-ui.test.ts",
+      "command": "npx vitest run tests/unit/settings-profile-transfer-service.test.ts tests/unit/register-settings-profile-ipc.test.ts tests/unit/settings-profile-transfer-ui.test.ts tests/unit/settings-registry.test.ts tests/unit/source-storage-preference-service.test.ts tests/unit/source-storage-policy-contract.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/restore-ui.test.ts",
       "status": "passed",
-      "evidence": "Focused service, contract, writer and renderer tests prove safe transfer plus confirmed source-policy CAS, receipt recovery, exact Undo and no migration of existing bytes."
+      "evidence": "Focused service, registry, IPC, writer and renderer tests prove exact safe-difference review, current no-op, focus, confirmed source-policy CAS, receipt recovery, Undo and no migration of existing bytes."
     },
     {
       "command": "git diff --check",
@@ -129,12 +129,12 @@
   ],
   "coordination": {
     "taskId": "settings-integrity-source-policy-20260802",
-    "taskTitle": "Safe preference transfer and reversible source storage policy",
+    "taskTitle": "Reviewed safe preference transfer and reversible source storage policy",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "Existing source bytes, SourceRecords, managed copies, Vault bindings, provider credentials, permission grants and backup behavior remain unchanged.",
-    "acknowledgement": "Safe transfer and reversible future-capture source policy are bound while PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 remain partial for broader coverage."
+    "acknowledgement": "Reviewed safe transfer, executable owners and reversible future-capture source policy are bound while PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 remain partial for broader coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

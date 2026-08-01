@@ -13,6 +13,37 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       permissionRequirement: "none"
     },
     {
+      key: "appearance.theme",
+      page: "Appearance & Language",
+      scope: "machine_local",
+      owner: "Settings Service, Renderer",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "none"
+    },
+    {
+      key: "appearance.generatedKnowledgeLanguage",
+      page: "Appearance & Language",
+      scope: "machine_local",
+      owner: "Settings Service, Agent Orchestrator",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none",
+      agentPolicyEffect: "language.generatedKnowledgeLanguage"
+    },
+    {
+      key: "startup.destination",
+      page: "General",
+      scope: "machine_local",
+      owner: "Window Service, Vault Runtime Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "next_launch",
+      permissionRequirement: "none"
+    },
+    {
       key: "window.layoutMode",
       page: "General",
       scope: "machine_local",
@@ -215,6 +246,37 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       applyBehavior: "immediate",
       permissionRequirement: "none",
       agentPolicyEffect: "language.voiceInputLanguage"
+    },
+    {
+      key: "ocr.enginePreference",
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "OCR Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none"
+    },
+    {
+      key: "ocr.languagePreference",
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "OCR Service, I18N Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none",
+      agentPolicyEffect: "language.ocrLanguageHints"
+    },
+    {
+      key: "updates.channel",
+      page: "Updates & Diagnostics",
+      scope: "machine_local",
+      owner: "Update Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none"
     },
     {
       key: "ocr.excludeLowConfidenceFromSummaries",

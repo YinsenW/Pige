@@ -46,16 +46,40 @@ describe("SettingsProfileTransferService", () => {
     expect(preview.status).toBe("ready");
     expect(JSON.stringify(preview)).not.toContain(source);
     if (preview.status !== "ready") throw new Error("expected ready preview");
+    expect(preview.changes).toEqual([
+      { key: "app_locale", before: "en", after: "fr" },
+      {
+        key: "appearance",
+        before: { themePreference: "dark", generatedKnowledgeLanguage: "follow_query" },
+        after: { themePreference: "light", generatedKnowledgeLanguage: "app_locale" }
+      },
+      { key: "startup_destination", before: "home", after: "library" },
+      { key: "ocr_engine", before: "automatic", after: "paddleocr_local" },
+      {
+        key: "ocr_language",
+        before: { mode: "automatic" },
+        after: { mode: "preferred", language: "fr" }
+      },
+      {
+        key: "dictation_language",
+        before: { mode: "automatic" },
+        after: { mode: "preferred", language: "fr" }
+      }
+    ]);
     const applied = fixture.service.apply({
       apiVersion: 1,
       requestId: "settingsprofilereq_bbbbbbbbbbbbbbbb",
       previewId: preview.previewId
     });
     expect(applied.status).toBe("committed");
+    if (applied.status === "committed") {
+      expect(applied.keys).toEqual(preview.changes.map((change) => change.key));
+    }
     expect(fixture.applied()).toBe(1);
     const current = fixture.store.read();
     expect(current.appLocale).toBe("fr");
     expect(current.appearance?.themePreference).toBe("light");
+    expect(current.updates?.revision).toBe(3);
     expect(current.activeVaultPath).toBe("/private/vault");
     expect(current.recentVaults[0]?.vaultId).toBe("vault_20260802_secret1");
     expect(current.window?.compactSize?.width).toBe(1280);
@@ -64,7 +88,8 @@ describe("SettingsProfileTransferService", () => {
 
   it("fails stale when a safe preference changes after preview", () => {
     const fixture = createFixture();
-    const source = writeProfile(fixture.root, fixture.store.getSettingsProfilePreferences("zh-Hans"));
+    const imported = fixture.store.getSettingsProfilePreferences("zh-Hans");
+    const source = writeProfile(fixture.root, { ...imported, appLocale: "fr" });
     const preview = fixture.service.preview(
       { apiVersion: 1, requestId: "settingsprofilereq_cccccccccccccccc" },
       source
@@ -78,6 +103,22 @@ describe("SettingsProfileTransferService", () => {
     });
     expect(result.status).toBe("stale");
     expect(fixture.store.getAppLocale()).toBe("de");
+    expect(fixture.applied()).toBe(0);
+  });
+
+  it("returns current without minting apply authority when every safe preference already matches", () => {
+    const fixture = createFixture();
+    const source = writeProfile(fixture.root, fixture.store.getSettingsProfilePreferences("zh-Hans"));
+    const result = fixture.service.preview(
+      { apiVersion: 1, requestId: "settingsprofilereq_current000000000" },
+      source
+    );
+    expect(result).toEqual({
+      apiVersion: 1,
+      requestId: "settingsprofilereq_current000000000",
+      status: "current"
+    });
+    expect(JSON.stringify(result)).not.toContain("previewId");
     expect(fixture.applied()).toBe(0);
   });
 

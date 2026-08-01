@@ -916,10 +916,11 @@ Settled updates publish a `change_setting` Operation for Activity/Undo and resta
 invalid, denied, stale, or failed attempts preserve the renderer draft and do not mutate policy.
 
 Settings profile transfer keeps file paths in Main. Export writes only the strict portable
-preference document. Import preview returns an opaque `previewId` and safe key list; apply
-requires native confirmation and rechecks the exact safe-preference digest inside the
-machine-local settings writer lease. Results never disclose paths, file bodies, Vaults,
-credentials, permission grants, recent history, or window state.
+preference document. Import preview returns `current` without mutation authority when no
+safe field differs; otherwise it returns an opaque `previewId` plus typed before/after values
+for the exact changed safe fields. Apply requires native confirmation and rechecks the exact
+safe-preference digest inside the machine-local settings writer lease. Results never disclose
+paths, file bodies, Vaults, credentials, permission grants, recent history, or window state.
 
 `localCapabilities.ocrEnginePreference` returns strict machine-local
 `automatic | platform_native | paddleocr_local` preference plus an integer revision.

@@ -16,7 +16,7 @@ describe("registerSettingsProfileIpc", () => {
         ...request,
         status: "ready",
         previewId: "settingspreview_0123456789abcdef0123456789abcdef",
-        keys: ["app_locale"]
+        changes: [{ key: "app_locale", before: "en", after: "fr" }]
       })),
       hasCurrentPreview: vi.fn(() => true),
       apply: vi.fn((request) => ({ ...request, status: "committed", keys: ["app_locale"] }))
