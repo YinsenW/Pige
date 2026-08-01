@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T21:38:48.787Z",
+  "reviewedAt": "2026-08-01T21:52:25.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review dirty Markdown draft exit confirmation, exact focus restoration and unchanged-draft immediate close without save or identity semantic changes.",
+    "scope": "Review stable-ID Managed Collection table display-name rename, immutable revision publication, Activity Undo/restart and stale draft retention.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "9bf93f1b2cc757c836bfc77e2004742471cd1cd5b69e6c9257be5248c4532312"
+    "reviewedSha256": "7974dc595e8b17af00fd3e91ce065abd8d592b7a643065c2c038a8414a2e6a5c"
   },
   "reviewers": [
     {
-      "reviewerId": "markdown-discard-confirm-review",
-      "task": "Review dirty Markdown draft discard confirmation",
+      "reviewerId": "collection-table-rename-review",
+      "task": "Review stable-ID Managed Collection table rename",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks dirty-vs-unchanged exit behavior, exact focus restoration, identity reset and no-save semantics separately from renderer implementation authorship."
+      "independence": "Project review checks stable table identity, immutable revision and payload preservation, recovery, UI draft retention and renderer authority separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "markdown-discard-confirm-review",
+      "reviewerId": "collection-table-rename-review",
       "blockerCount": 0,
-      "summary": "Dirty Cancel or Escape opens one bounded alert dialog; Keep editing or dialog Escape restores the exact initiator, while confirmed discard alone returns to the Reader opener."
+      "summary": "One bounded inline action renames only the display label, preserves the stable table identity and restores focus after the committed mutation."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "markdown-discard-confirm-review",
+      "reviewerId": "collection-table-rename-review",
       "blockerCount": 0,
-      "summary": "Editor labels, six locale catalogs, App binding and the direct renderer test express the same dirty-draft and unchanged-draft behavior."
+      "summary": "Schema, IPC, durable Dataset revision, Activity vocabulary, six locales and direct UI tests express the same stable-ID rename contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "markdown-discard-confirm-review",
+      "reviewerId": "collection-table-rename-review",
       "blockerCount": 0,
-      "summary": "PIGE-UI-001 cites the direct discard-confirmation evidence while remaining partial for broader editing, history, platform and source work."
+      "summary": "The bounded table rename advances PIGE-VAULT-002 and PIGE-DATA-003 without promoting either broader partial requirement."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "markdown-discard-confirm-review",
+      "reviewerId": "collection-table-rename-review",
       "blockerCount": 0,
-      "summary": "The feature stays renderer-local, reuses existing confirmation primitives and preserves save, stale-review, identity and sanitized-preview ownership."
+      "summary": "The private table service owns CAS, immutable publication and recovery while the renderer retains only a bounded display-name draft."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "markdown-discard-confirm-review",
+      "reviewerId": "collection-table-rename-review",
       "blockerCount": 0,
-      "summary": "One concise editing rule plus existing acceptance and review artifacts record the behavior without a new design document."
+      "summary": "Four concise owner-document edits and the existing inventory record the behavior without adding a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/note-markdown-editor-ui.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/managed-collection-table-contract.test.ts tests/unit/managed-collection-service.test.ts tests/unit/register-managed-collection-ipc.test.ts tests/unit/managed-collection-table-rename-ui.test.ts",
       "status": "passed",
-      "evidence": "Twelve focused editor tests prove unchanged immediate close, dirty confirmation, IME safety, exact focus restoration, confirmed discard and identity reset."
+      "evidence": "Focused contract, service, IPC and UI tests prove stable identity, immutable payload preservation, restart adoption, exact Undo and stale draft retention."
     },
     {
       "command": "git diff --check",
       "status": "passed",
-      "evidence": "The focused renderer, locale and governance delta has no whitespace or conflict-marker defects."
+      "evidence": "The focused schema, service, renderer, locale and governance delta has no whitespace or conflict-marker defects."
     },
     {
       "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "The current UI owner, exact test selector, semantic lock and five-dimensional review snapshot agree on the bounded discard workflow."
+      "evidence": "The current Dataset owner, exact test selector, Operation vocabulary and five-dimensional review snapshot agree on the bounded rename workflow."
     }
   ],
   "coordination": {
-    "taskId": "markdown-discard-confirm-20260802",
-    "taskTitle": "Confirm before discarding an unsaved Markdown draft",
+    "taskId": "collection-table-rename-20260802",
+    "taskTitle": "Rename one stable Managed Collection table",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Save, stale review, preview, unchanged Cancel/Escape, IME and identity-reset behavior remain unchanged; only a dirty exit requires confirmation.",
-    "acknowledgement": "The dirty-draft exit confirmation is bound while PIGE-UI-001 remains partial for its broader open work."
+    "compatibility": "Rows, columns, formulas, relations, views, source names, active table identity and existing Collection mutations remain unchanged.",
+    "acknowledgement": "The stable-ID table display-name rename is bound while PIGE-VAULT-002 and PIGE-DATA-003 remain partial for broader open work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

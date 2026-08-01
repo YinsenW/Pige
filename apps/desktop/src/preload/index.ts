@@ -600,6 +600,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
+  CollectionRenameTableRequestSchema,
+  CollectionRenameTableResultSchema,
   CollectionTrashColumnRequestSchema,
   CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
@@ -1052,6 +1054,8 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
+  CollectionRenameTableRequest,
+  CollectionRenameTableResult,
   CollectionTrashColumnRequest,
   CollectionTrashColumnResult,
   CollectionTrashRowRequest,
@@ -1486,6 +1490,19 @@ async function invokeCollectionRenameColumn(
   ) {
     throw new Error("Invalid Managed Collection column-rename response identity.");
   }
+  return result;
+}
+
+async function invokeCollectionRenameTable(
+  request: CollectionRenameTableRequest
+): Promise<CollectionRenameTableResult> {
+  const parsedRequest = CollectionRenameTableRequestSchema.parse(request);
+  const result = CollectionRenameTableResultSchema.parse(
+    await ipcRenderer.invoke("collections.renameTable", parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.name !== parsedRequest.name) throw new Error("Invalid Managed Collection table-rename response identity.");
   return result;
 }
 
@@ -2358,6 +2375,7 @@ const api: PigeDesktopApi = {
     addRollupColumn: invokeCollectionAddRollupColumn,
     updateRollupColumn: invokeCollectionUpdateRollupColumn,
     renameColumn: invokeCollectionRenameColumn,
+    renameTable: invokeCollectionRenameTable,
     createView: invokeCollectionCreateView,
     updateView: invokeCollectionUpdateView,
     renameView: invokeCollectionRenameView,

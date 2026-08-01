@@ -80,7 +80,9 @@ Two storage profiles share this envelope:
 
 `dataset.json` binds profile, revisions, stable IDs, integrity and compatibility. Collection
 row/field changes publish immutable SQLite/schema/Operation revisions, manifest last. Pige-owned
-view definition update/rename/trash/restore uses stable-ID CAS and forward Undo without changing
+table display-name changes preserve the stable `tableId`, source locator and complete payload while
+publishing a new schema/revision/Operation; Undo restores the prior display name without moving data.
+Pige-owned view definition update/rename/trash/restore uses stable-ID CAS and forward Undo without changing
 the Dataset revision or rows. Trashing the active view selects All Rows. Evidence, originals, old
 revisions and previews stay immutable.
 

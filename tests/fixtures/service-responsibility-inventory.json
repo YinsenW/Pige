@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 313,
-  "baselineLines": 132092,
+  "baselineFileCount": 315,
+  "baselineLines": 132441,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -90,6 +90,7 @@
       ["local-reranker-service.ts", 309, "jpr"],
       ["local-semantic-retrieval-service.ts", 354, "jpr"],
       ["managed-collection-service.ts", 893, "rd"],
+      ["managed-collection-table-service.ts", 323, "rdf"],
       ["managed-collection-citation-service.ts", 159, "rf"],
       ["managed-collection-reveal-service.ts", 90, "p"],
       ["managed-collection-rollup-storage.ts", 391, "rdf"],
@@ -252,6 +253,7 @@
       ["diagnostics-export-core.ts", 633, "df"],
       ["document-parse-job-executor.ts", 180, "jr"],
       ["electron-updater-adapter.ts", 144, "p"],
+      ["manual-update-download-service.ts", 26, "p"],
       ["evidence-assembly-service.ts", 573, "pf"],
       ["external-web-skill-runtime-service.ts", 179, "ap"],
       ["external-text-file-create-service.ts", 260, "prd"],
@@ -346,7 +348,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 313,
+    "serviceOwnerCount": 315,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

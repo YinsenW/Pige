@@ -216,6 +216,8 @@ import {
   type CollectionListResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
+  type CollectionRenameTableRequest,
+  type CollectionRenameTableResult,
   type CollectionTrashColumnRequest,
   type CollectionTrashColumnResult,
   type CollectionOpenRequest,
@@ -1683,7 +1685,7 @@ export function App(): React.JSX.Element {
     request: CollectionAppendDefaultRowRequest
   ): Promise<CollectionAppendDefaultRowResult> => {
     const result = await window.pige.collections.appendDefaultRow(request);
-    if (collectionAppendIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    if (collectionTableIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
     return result;
   };
 
@@ -1700,6 +1702,12 @@ export function App(): React.JSX.Element {
   ): Promise<CollectionRenameColumnResult> => {
     const result = await window.pige.collections.renameColumn(request);
     if (collectionRenameIdentityMatches(request, result) && result.status === "committed") void refreshVaultState();
+    return result;
+  };
+
+  const renameCollectionTable = async (request: CollectionRenameTableRequest): Promise<CollectionRenameTableResult> => {
+    const result = await window.pige.collections.renameTable(request);
+    if (collectionTableIdentityMatches(request, result) && result.status === "committed" && result.name === request.name) void refreshVaultState();
     return result;
   };
 
@@ -2762,6 +2770,7 @@ export function App(): React.JSX.Element {
             onReveal={window.pige.collections.reveal}
             onAddNullableColumn={addCollectionNullableColumn}
             onRenameColumn={renameCollectionColumn}
+            onRenameTable={renameCollectionTable}
             onTrashColumn={trashCollectionColumn}
             onOpenView={openCollectionView}
             onCreateView={createCollectionView}
@@ -7505,9 +7514,9 @@ function collectionCreateViewIdentityMatches(
     result.tableId === request.tableId;
 }
 
-function collectionAppendIdentityMatches(
-  request: CollectionAppendDefaultRowRequest,
-  result: CollectionAppendDefaultRowResult
+function collectionTableIdentityMatches(
+  request: { readonly requestId: string; readonly activeVaultId: string; readonly datasetId: string; readonly tableId: string },
+  result: { readonly requestId: string; readonly activeVaultId: string; readonly datasetId: string; readonly tableId: string }
 ): boolean {
   return result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId &&
