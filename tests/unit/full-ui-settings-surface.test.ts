@@ -4104,7 +4104,12 @@ describe("full UI Settings surface", () => {
       ownedArtifactCount: 0
     };
     let echoOptionalCategories = true;
-    const previewSupportBundle = vi.fn(async (request: { apiVersion: 1; requestId: string; optionalCategories?: readonly ["provider_metadata"] }) => ({
+    const previewSupportBundle = vi.fn(async (request: {
+      apiVersion: 1;
+      requestId: string;
+      optionalCategories?: readonly ("provider_metadata" | "private_excerpt")[];
+      privateExcerpt?: string;
+    }) => ({
       ...request,
       previewId: `supportpreview_${"b".repeat(48)}`,
       generatedAt: "2026-07-16T00:00:00.000Z",
@@ -4114,6 +4119,9 @@ describe("full UI Settings surface", () => {
       expectedRevision: workflow.revision,
       activeVaultId: workflow.activeVaultId,
       selectedOptionalCategories: echoOptionalCategories ? request.optionalCategories ?? [] : [],
+      ...(request.optionalCategories?.includes("private_excerpt") ? {
+        reviewedPrivateExcerpt: { text: "Contact [REDACTED_EMAIL]", redactionApplied: true }
+      } : {}),
       includedCategories: [{ id: "app_runtime", label: "/private/raw-label", included: true, reason: "private body" }],
       excludedCategories: [{ id: "content", label: "RAW CONTENT", included: false, reason: "excluded" }],
       privacyWarnings: [
@@ -4164,12 +4172,26 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("Check for updates");
     expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
     const providerMetadata = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include provider metadata"]'));
+    const privateExcerptToggle = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include a private excerpt"]'));
     expect(providerMetadata.checked).toBe(false);
+    expect(privateExcerptToggle.checked).toBe(false);
 
     await act(async () => {
       providerMetadata.click();
       await settle(dom);
     });
+    await act(async () => {
+      requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include a private excerpt"]')).click();
+      await settle(dom);
+    });
+    const privateExcerptInput = requireElement(panel.querySelector<HTMLTextAreaElement>('textarea[aria-label="Private support excerpt"]'));
+    await act(async () => {
+      textareaValue(dom, privateExcerptInput, "Contact alice@example.test");
+      privateExcerptInput.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      await settle(dom);
+    });
+    expect(privateExcerptInput.value).toBe("Contact alice@example.test");
+    expect(buttonNamed(panel, "Preview and export…").disabled).toBe(false);
 
     await act(async () => {
       buttonNamed(panel, "Refresh").click();
@@ -4183,7 +4205,8 @@ describe("full UI Settings surface", () => {
     });
     expect(previewSupportBundle).toHaveBeenCalledOnce();
     expect(previewSupportBundle).toHaveBeenCalledWith(expect.objectContaining({
-      optionalCategories: ["provider_metadata"]
+      optionalCategories: ["provider_metadata", "private_excerpt"],
+      privateExcerpt: "Contact alice@example.test"
     }));
     expect(panel.textContent).toContain("Preview ready");
     expect(panel.textContent).toContain("App and platform");
@@ -4193,6 +4216,9 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("/private/raw-label");
     expect(panel.textContent).not.toContain("private body");
     expect(panel.textContent).not.toContain("RAW CONTENT");
+    const supportPreview = requireElement(panel.querySelector<HTMLElement>(".system-support-preview"));
+    expect(supportPreview.textContent).toContain("Contact [REDACTED_EMAIL]");
+    expect(supportPreview.textContent).not.toContain("alice@example.test");
 
     await act(async () => {
       providerMetadata.click();

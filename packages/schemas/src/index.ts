@@ -4918,7 +4918,22 @@ export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
   .regex(/^supportpreview_[a-f0-9]{32,64}$/u);
-export const DiagnosticsOptionalSupportCategorySchema = z.enum(["provider_metadata"]);
+export const DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES = 2 * 1024;
+export const DiagnosticsOptionalSupportCategorySchema = z.enum(["provider_metadata", "private_excerpt"]);
+export const DiagnosticsPrivateExcerptTextSchema = z.string().min(1).max(DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES)
+  .refine((value) => value.trim().length > 0, "The private excerpt must contain visible text.")
+  .refine(
+    (value) => new TextEncoder().encode(value).byteLength <= DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES,
+    "The private excerpt exceeds the UTF-8 byte limit."
+  )
+  .refine(
+    (value) => !/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u.test(value),
+    "The private excerpt contains unsupported control characters."
+  );
+export const DiagnosticsReviewedPrivateExcerptSchema = z.object({
+  text: DiagnosticsPrivateExcerptTextSchema,
+  redactionApplied: z.boolean()
+}).strict();
 export const CrashRecoverySummarySchema = z.object({
   recoveryId: z.string().regex(/^crashrecovery_[a-f0-9]{32}$/u),
   status: z.enum(["recovering", "recovered", "needs_attention"]),
@@ -4993,16 +5008,36 @@ export const SupportBundlePreviewSchema = z.object({
   scopeContextId: DiagnosticsScopeContextIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   activeVaultId: VaultIdSchema.nullable(),
-  selectedOptionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(1),
+  selectedOptionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(2),
   includedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
   excludedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
-  privacyWarnings: z.array(z.string().min(1).max(320)).min(1).max(16)
-}).strict();
+  privacyWarnings: z.array(z.string().min(1).max(320)).min(1).max(16),
+  reviewedPrivateExcerpt: DiagnosticsReviewedPrivateExcerptSchema.optional()
+}).strict().superRefine((preview, context) => {
+  const selected = preview.selectedOptionalCategories;
+  if (new Set(selected).size !== selected.length) {
+    context.addIssue({ code: "custom", path: ["selectedOptionalCategories"], message: "Optional support categories must be unique." });
+  }
+  const includesExcerpt = selected.includes("private_excerpt");
+  if (includesExcerpt !== (preview.reviewedPrivateExcerpt !== undefined)) {
+    context.addIssue({ code: "custom", path: ["reviewedPrivateExcerpt"], message: "The reviewed private excerpt must match its selected category." });
+  }
+});
 export const DiagnosticsPreviewSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: DiagnosticsPreviewRequestIdSchema,
-  optionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(1).optional()
-}).strict();
+  optionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(2).optional(),
+  privateExcerpt: DiagnosticsPrivateExcerptTextSchema.optional()
+}).strict().superRefine((request, context) => {
+  const selected = request.optionalCategories ?? [];
+  if (new Set(selected).size !== selected.length) {
+    context.addIssue({ code: "custom", path: ["optionalCategories"], message: "Optional support categories must be unique." });
+  }
+  const includesExcerpt = selected.includes("private_excerpt");
+  if (includesExcerpt !== (request.privateExcerpt !== undefined)) {
+    context.addIssue({ code: "custom", path: ["privateExcerpt"], message: "A private excerpt is required only when its category is selected." });
+  }
+});
 export const DiagnosticsExportSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: DiagnosticsExportRequestIdSchema,
@@ -12875,6 +12910,8 @@ export type DiagnosticsScopeContextId = z.infer<typeof DiagnosticsScopeContextId
 export type DiagnosticsSupportBundleJobSummary = z.infer<typeof DiagnosticsSupportBundleJobSummarySchema>;
 export type DiagnosticsWorkflowSummary = z.infer<typeof DiagnosticsWorkflowSummarySchema>;
 export type SupportBundleCategory = z.infer<typeof SupportBundleCategorySchema>;
+export type DiagnosticsOptionalSupportCategory = z.infer<typeof DiagnosticsOptionalSupportCategorySchema>;
+export type DiagnosticsReviewedPrivateExcerpt = z.infer<typeof DiagnosticsReviewedPrivateExcerptSchema>;
 export type SupportBundlePreview = z.infer<typeof SupportBundlePreviewSchema>;
 export type DiagnosticsPreviewSupportBundleRequest = z.infer<typeof DiagnosticsPreviewSupportBundleRequestSchema>;
 export type DiagnosticsExportSupportBundleRequest = z.infer<typeof DiagnosticsExportSupportBundleRequestSchema>;

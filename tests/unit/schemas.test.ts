@@ -410,6 +410,27 @@ describe("schemas", () => {
       selectedOptionalCategories: ["provider_metadata"],
       providerId: "private-provider"
     })).toThrow();
+
+    const excerptRequest = {
+      apiVersion: 1,
+      requestId: "diagpreviewreq_privateexcerpt000",
+      optionalCategories: ["provider_metadata", "private_excerpt"],
+      privateExcerpt: "A short support passage"
+    } as const;
+    expect(DiagnosticsPreviewSupportBundleRequestSchema.parse(excerptRequest)).toEqual(excerptRequest);
+    expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
+      ...excerptRequest,
+      privateExcerpt: undefined
+    })).toThrow();
+    expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
+      ...excerptRequest,
+      optionalCategories: ["private_excerpt", "private_excerpt"]
+    })).toThrow();
+    expect(SupportBundlePreviewSchema.parse({
+      ...preview,
+      selectedOptionalCategories: excerptRequest.optionalCategories,
+      reviewedPrivateExcerpt: { text: "A short support passage", redactionApplied: false }
+    }).reviewedPrivateExcerpt?.text).toBe("A short support passage");
   });
 
   it("requires the exact model-settings revision when choosing the global default", () => {

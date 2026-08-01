@@ -66,6 +66,13 @@ const PROVIDER_METADATA_CATEGORY = {
   reason: "Aggregate provider types and health only; credentials, URLs, names, and model IDs stay excluded."
 } as const;
 
+const PRIVATE_EXCERPT_CATEGORY = {
+  id: "private_excerpt",
+  label: "Explicitly reviewed private excerpt",
+  included: true,
+  reason: "Only the exact redacted text shown in this preview is exported."
+} as const;
+
 const EXCLUDED_CATEGORIES = [
   {
     id: "secrets",
@@ -94,11 +101,20 @@ const EXCLUDED_PROVIDER_METADATA_CATEGORY = {
   reason: "Provider metadata is included only after explicit preview selection."
 } as const;
 
+const EXCLUDED_PRIVATE_EXCERPT_CATEGORY = {
+  id: "private_excerpt",
+  label: "Private support excerpt",
+  included: false,
+  reason: "A private excerpt is included only after explicit entry and review."
+} as const;
+
 const PRIVACY_WARNINGS = [
   "The bundle is created locally and is not uploaded automatically.",
   "Paths, emails, and common secret patterns are redacted by default.",
   "Review the preview before exporting."
 ] as const;
+const PRIVATE_EXCERPT_WARNING =
+  "The optional excerpt shown below is the exact redacted text that will be exported." as const;
 
 const DIAGNOSTIC_MESSAGES = new Set([
   "Background Agent ingest failed.",
@@ -557,22 +573,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isSupportBundlePreview(value: unknown): boolean {
-  if (!isRecord(value) || !hasExactKeys(value, [
-    "previewId", "generatedAt", "selectedOptionalCategories", "includedCategories", "excludedCategories", "privacyWarnings"
+  if (!isRecord(value) || !Array.isArray(value.selectedOptionalCategories)) return false;
+  const selected = value.selectedOptionalCategories;
+  if (selected.length > 2 || new Set(selected).size !== selected.length ||
+    !selected.every((entry) => entry === "provider_metadata" || entry === "private_excerpt")) return false;
+  const includesProviderMetadata = selected.includes("provider_metadata");
+  const includesPrivateExcerpt = selected.includes("private_excerpt");
+  if (!hasExactKeys(value, [
+    "previewId", "generatedAt", "selectedOptionalCategories", "includedCategories", "excludedCategories", "privacyWarnings",
+    ...(includesPrivateExcerpt ? ["reviewedPrivateExcerpt"] : [])
   ])) return false;
-  const includesProviderMetadata = Array.isArray(value.selectedOptionalCategories) &&
-    value.selectedOptionalCategories.length === 1 && value.selectedOptionalCategories[0] === "provider_metadata";
-  if (!includesProviderMetadata && (!Array.isArray(value.selectedOptionalCategories) || value.selectedOptionalCategories.length !== 0)) {
-    return false;
-  }
   return typeof value.previewId === "string" &&
     /^(?:support_[0-9]{14}|supportpreview_[a-f0-9]{48})$/u.test(value.previewId) &&
     isIsoDate(value.generatedAt) &&
-    matchesExactRecords(value.includedCategories, includesProviderMetadata
-      ? [...INCLUDED_CATEGORIES, PROVIDER_METADATA_CATEGORY] : INCLUDED_CATEGORIES) &&
-    matchesExactRecords(value.excludedCategories, includesProviderMetadata
-      ? EXCLUDED_CATEGORIES : [...EXCLUDED_CATEGORIES, EXCLUDED_PROVIDER_METADATA_CATEGORY]) &&
-    matchesExactStrings(value.privacyWarnings, PRIVACY_WARNINGS);
+    matchesExactRecords(value.includedCategories, [
+      ...INCLUDED_CATEGORIES,
+      ...(includesProviderMetadata ? [PROVIDER_METADATA_CATEGORY] : []),
+      ...(includesPrivateExcerpt ? [PRIVATE_EXCERPT_CATEGORY] : [])
+    ]) &&
+    matchesPrivateExcerptAwareExcludedCategories(
+      value.excludedCategories,
+      includesProviderMetadata,
+      includesPrivateExcerpt
+    ) &&
+    matchesExactStrings(value.privacyWarnings, [
+      ...PRIVACY_WARNINGS,
+      ...(includesPrivateExcerpt ? [PRIVATE_EXCERPT_WARNING] : [])
+    ]) &&
+    (!includesPrivateExcerpt || isReviewedPrivateExcerpt(value.reviewedPrivateExcerpt));
+}
+
+function matchesPrivateExcerptAwareExcludedCategories(
+  value: unknown,
+  includesProviderMetadata: boolean,
+  includesPrivateExcerpt: boolean
+): boolean {
+  const base = [
+    ...EXCLUDED_CATEGORIES,
+    ...(!includesProviderMetadata ? [EXCLUDED_PROVIDER_METADATA_CATEGORY] : [])
+  ];
+  if (includesPrivateExcerpt) return matchesExactRecords(value, base);
+  return matchesExactRecords(value, [...base, EXCLUDED_PRIVATE_EXCERPT_CATEGORY]) ||
+    matchesExactRecords(value, base);
+}
+
+function isReviewedPrivateExcerpt(value: unknown): boolean {
+  return isRecord(value) && hasExactKeys(value, ["text", "redactionApplied"]) &&
+    typeof value.text === "string" && value.text.trim().length > 0 &&
+    Buffer.byteLength(value.text, "utf8") <= 2 * 1024 &&
+    typeof value.redactionApplied === "boolean" &&
+    redactDiagnosticText(value.text) === value.text && redactPaths(value.text) === value.text &&
+    !containsRestrictedModelContent(value.text);
 }
 
 function providerMetadataMatchesPreview(preview: unknown, value: unknown): boolean {

@@ -27,6 +27,7 @@ import {
 } from "@pige/schemas";
 import { DiagnosticsService } from "./diagnostics-service";
 import type { DiagnosticsProviderMetadata } from "./diagnostics-provider-metadata";
+import { reviewDiagnosticsPrivateExcerpt } from "./diagnostics-support-preview";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 import { acquireVaultWriterLease, type VaultWriterLease } from "./vault-writer-lease";
@@ -137,6 +138,9 @@ export class DiagnosticsLifecycleService {
   preview(requestInput: DiagnosticsPreviewSupportBundleRequest): SupportBundlePreview {
     const request = DiagnosticsPreviewSupportBundleRequestSchema.parse(requestInput);
     const selectedOptionalCategories = request.optionalCategories ?? [];
+    const reviewedPrivateExcerpt = request.privateExcerpt === undefined
+      ? undefined
+      : reviewDiagnosticsPrivateExcerpt(request.privateExcerpt);
     const registry = this.#readRegistry();
     const activeVaultId = this.#getActiveVaultId() ?? null;
     const preview = SupportBundlePreviewSchema.parse(this.#diagnostics.previewSupportBundle({
@@ -145,7 +149,8 @@ export class DiagnosticsLifecycleService {
       scopeContextId: scopeContextId(registry.machineScopeId, activeVaultId),
       expectedRevision: registry.revision,
       activeVaultId,
-      selectedOptionalCategories
+      selectedOptionalCategories,
+      ...(reviewedPrivateExcerpt ? { reviewedPrivateExcerpt } : {})
     }));
     if (selectedOptionalCategories.includes("provider_metadata")) {
       if (!this.#providerMetadata) throw lifecycleError("diagnostics.provider_metadata_unavailable");

@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "c726413d661c2011ab3f92bb16121c7cf5becbc6",
+  "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 311,
-  "baselineLines": 131265,
+  "baselineFileCount": 312,
+  "baselineLines": 131337,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -66,6 +66,7 @@
       ["durable-agent-turn-answer.ts", 79, "rd"],
       ["crash-recovery-service.ts", 218, "rd"],
       ["diagnostics-lifecycle-service.ts", 868, "jrd"],
+      ["diagnostics-support-preview.ts", 72, "pf"],
       ["dictation-language-preference-service.ts", 65, ""],
       ["home-agent-attachment-service.ts", 358, "jrd"],
       ["home-grounded-answer-validator.ts", 60, "f"],
@@ -344,7 +345,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 311,
+    "serviceOwnerCount": 312,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

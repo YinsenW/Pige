@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T03:20:00.000Z",
+  "reviewedAt": "2026-08-02T04:18:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Structured local-tool waits route to Local Capabilities and exact preserved OCR and Agent-ingest work resumes immediately after verified PaddleOCR enable or after restart.",
+    "scope": "Diagnostics support export accepts only an explicitly entered bounded private excerpt, redacts it before preview, and exports exactly the reviewed redacted text without automatic vault reads or uploads.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "d1e854ef585a17806e711e7054a38b34daf00d275d0e8fd466d3bf90ea9c1cc4"
+    "reviewedSha256": "99dff7b9b31dc5beae7f49179609b1256042a7af300cd521562b5f1cc90f307f"
   },
   "reviewers": [
     {
-      "reviewerId": "local-tool-wait-resume-review",
-      "task": "Review structured local-tool repair routing and exact in-session recovery",
+      "reviewerId": "diagnostics-private-excerpt-review",
+      "task": "Review explicit private support excerpt preview, redaction and exact export binding",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the Job and renderer-safe repair contract; Development supplies separate IPC, toolchain, scheduler and UI regression evidence."
+      "independence": "Project review checks the user-visible preview and privacy boundary separately from the Main implementation and direct service tests."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "local-tool-wait-resume-review",
+      "reviewerId": "diagnostics-private-excerpt-review",
       "blockerCount": 0,
-      "summary": "The renderer receives only strict dependency kind and repair action while Main retains durable Job, tool and scheduling authority."
+      "summary": "The user explicitly enters and selects one bounded excerpt and sees the exact redacted text before any local export."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "local-tool-wait-resume-review",
+      "reviewerId": "diagnostics-private-excerpt-review",
       "blockerCount": 0,
-      "summary": "Schemas, contracts, Job summaries, Home routing, capability IPC and toolchain recovery use one structured waiting-dependency contract."
+      "summary": "Schemas, Main lifecycle, export envelope and Settings use one paired optional-category and reviewed-excerpt contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "local-tool-wait-resume-review",
+      "reviewerId": "diagnostics-private-excerpt-review",
       "blockerCount": 0,
-      "summary": "PIGE-JOB-004 and E2.11 cite executable exact requeue evidence while legacy and other runtime-capability wait classes remain explicit."
+      "summary": "PIGE-DIAG-002 cites direct redaction/export and Settings evidence while broader selectors and platform evidence remain open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "local-tool-wait-resume-review",
+      "reviewerId": "diagnostics-private-excerpt-review",
       "blockerCount": 0,
-      "summary": "The shared recovery helper eliminates separate startup and explicit-enable scheduling paths while retaining existing scheduler deduplication."
+      "summary": "A private preview owner keeps diagnostics storage below budget and preserves legacy safe-bundle restart compatibility."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "local-tool-wait-resume-review",
+      "reviewerId": "diagnostics-private-excerpt-review",
       "blockerCount": 0,
-      "summary": "Existing Job, API, decision and traceability owners contain the complete delta without adding a new design document or public channel."
+      "summary": "The existing diagnostics and privacy contracts already define reviewed optional excerpts, so no new design document is introduced."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/jobs-service.test.ts tests/unit/local-capabilities-ipc.test.ts tests/unit/toolchain-service.test.ts tests/unit/home-agent-conversation-ui.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/diagnostics-export-core.test.ts tests/unit/diagnostics-lifecycle-service.test.ts tests/unit/full-ui-settings-surface.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused tests cover strict safe wait projection, Home repair routing, explicit enable callback, exact OCR and Agent requeue, restart convergence and deduplication."
+      "evidence": "Direct tests prove legacy envelope compatibility, raw-text redaction, exact preview-bound export, and explicit Settings selection."
+    },
+    {
+      "command": "npx vitest run tests/unit/schemas.test.ts -t \"bounds optional diagnostics support categories\" --maxWorkers=1",
+      "status": "passed",
+      "evidence": "The strict public schema pairs the private category with one bounded reviewed excerpt and rejects mismatched requests."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with Main and App frozen owners kept inside protected architecture budgets."
-    },
-    {
-      "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
-      "status": "passed",
-      "evidence": "Job, API, decision, acceptance and semantic-claim owners agree; remote Verify owns the final concurrent trace execution."
+      "evidence": "The candidate compiles and builds while App and Diagnostics owners remain within protected architecture budgets."
     }
   ],
   "coordination": {
-    "taskId": "local-tool-wait-resume-bind-20260802",
-    "taskTitle": "Bind structured local-tool repair and exact resume acceptance",
+    "taskId": "diagnostics-private-excerpt-bind-20260802",
+    "taskTitle": "Bind explicit reviewed diagnostics private excerpt",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy waiting records without structured dependency metadata remain fail-closed; startup recovery and existing generic Retry behavior remain available.",
-    "acknowledgement": "Planning records the local-tool wait closure while PIGE-JOB-004 and E2.11 remain partial for legacy and unexercised runtime-capability classes."
+    "compatibility": "Legacy safe support bundles without a private-excerpt exclusion row remain valid for restart reconciliation; no raw excerpt is retained.",
+    "acknowledgement": "The optional private excerpt closes one PIGE-DIAG-002 slice while broader private-content selectors and platform/path evidence remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
