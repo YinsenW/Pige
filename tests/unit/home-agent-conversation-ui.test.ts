@@ -35,6 +35,7 @@ import type {
   HighRiskConfirmationPendingResult,
   HighRiskConfirmationResolveRequest,
   HighRiskConfirmationResolveResult,
+  JobChangedEvent,
   JobsListRequest,
   JobSummary,
   KnowledgeActivitySummary,
@@ -6046,6 +6047,61 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("adopts pushed numeric progress and cancellation for a running non-Agent Job", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const running: JobSummary = {
+      id: "job_20260801_datasetprogress",
+      class: "dataset_import",
+      state: "running",
+      stage: "importing",
+      progress: { completedUnits: 2, totalUnits: 10, unit: "row" },
+      sourceId: "src_20260801_datasetprogress",
+      sourceDisplayName: "customers.csv",
+      sourceKind: "csv_file",
+      canReconnectDependency: false,
+      canReconnectBackupDestination: false,
+      canContinueIncomplete: false,
+      canCancel: true,
+      canRetry: false,
+      message: "Dataset import running.",
+      createdAt: "2026-08-01T08:00:00.000Z",
+      updatedAt: "2026-08-01T08:00:00.000Z"
+    };
+    harness.jobs = [running];
+    harness.enforceJobFilters = true;
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButtonByAriaLabel(dom, container, "Expand processing files");
+    await waitFor(dom, () => container.querySelector('[aria-valuenow="20"]') !== null);
+    expect(harness.jobListRequests.some((request) => request.classes?.includes("dataset_import"))).toBe(true);
+    expect(buttonsByAriaLabel(container, "Cancel")).toHaveLength(1);
+
+    await act(async () => {
+      harness.emitJobChanged(jobChangedEvent(running, {
+        progress: { completedUnits: 7, totalUnits: 10, unit: "row" },
+        updatedAt: "2026-08-01T08:00:01.000Z"
+      }));
+      await settle(dom);
+    });
+    expect(container.querySelector('[aria-valuenow="70"]')).not.toBeNull();
+    expect(container.textContent).toContain("70%");
+
+    await act(async () => {
+      harness.emitJobChanged(jobChangedEvent(running, {
+        state: "cancel_requested",
+        canCancel: false,
+        updatedAt: "2026-08-01T08:00:02.000Z"
+      }));
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Cancellation requested");
+    expect(buttonsByAriaLabel(container, "Cancel")[0]?.disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps Activity out of Home and disables repeated Undo from Settings History after durable trash", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -6359,6 +6415,7 @@ interface ConversationHarness {
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
+  readonly jobChangedListeners: Set<(event: JobChangedEvent) => void>;
   readonly reconnectOriginalSourceRequests: ReferencedOriginalReconnectRequest[];
   reconnectOriginalSource: (request: ReferencedOriginalReconnectRequest) => Promise<ReferencedOriginalReconnectResult>;
   readonly setDefaultModelIds: string[];
@@ -6471,6 +6528,7 @@ interface ConversationHarness {
     files?: readonly File[]
   ) => Promise<AgentSubmitTurnResult | AgentStagedSubmitTurnResult>;
   emitDraft: (event: AgentTurnDraftEvent) => void;
+  emitJobChanged: (event: JobChangedEvent) => void;
   emitSpeech: (event: SpeechSessionEvent) => void;
   emitSpeechAsset: (event: SpeechAssetInstallEvent) => void;
 }
@@ -6496,6 +6554,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     retryJobIds: [],
     retryMode: "queued",
     cancelJobIds: [],
+    jobChangedListeners: new Set(),
     reconnectOriginalSourceRequests: [],
     setDefaultModelIds: [],
     speechAvailabilityRequests: [],
@@ -6697,6 +6756,9 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     },
     emitDraft: (event) => {
       for (const listener of harness.draftListeners) listener(event);
+    },
+    emitJobChanged: (event) => {
+      for (const listener of harness.jobChangedListeners) listener(event);
     },
     emitSpeech: (event) => {
       for (const listener of harness.speechListeners) listener(event);
@@ -7021,6 +7083,10 @@ function makePigeApi(harness: ConversationHarness): object {
         invalidJobCount: 0,
         jobs
         };
+      },
+      onChanged: (listener: (event: JobChangedEvent) => void) => {
+        harness.jobChangedListeners.add(listener);
+        return () => harness.jobChangedListeners.delete(listener);
       },
       retry: async ({ jobId }: { readonly jobId: string }) => {
         harness.retryJobIds.push(jobId);
@@ -7826,9 +7892,45 @@ function runningAgentJob(): JobSummary {
     id: "job_20260712_runningfixture",
     class: "agent_turn",
     state: "running",
+    canReconnectDependency: false,
+    canReconnectBackupDestination: false,
+    canContinueIncomplete: false,
+    canCancel: true,
+    canRetry: false,
     message: "Agent turn running",
     createdAt: "2026-07-12T10:00:00.000Z",
     updatedAt: "2026-07-12T10:00:00.000Z"
+  };
+}
+
+function jobChangedEvent(job: JobSummary, overrides: Partial<JobSummary> = {}): JobChangedEvent {
+  const changed = { ...job, ...overrides };
+  return {
+    apiVersion: 1,
+    sequence: 1,
+    activeVaultId: "vault_home_conversation",
+    job: {
+      id: changed.id,
+      class: changed.class,
+      state: changed.state,
+      ...(changed.stage !== undefined ? { stage: changed.stage } : {}),
+      ...(changed.progress !== undefined ? { progress: changed.progress } : {}),
+      ...(changed.sourceId !== undefined ? { sourceId: changed.sourceId } : {}),
+      ...(changed.captureId !== undefined ? { captureId: changed.captureId } : {}),
+      ...(changed.conversationEventId !== undefined ? { conversationEventId: changed.conversationEventId } : {}),
+      ...(changed.sourceDisplayName !== undefined ? { sourceDisplayName: changed.sourceDisplayName } : {}),
+      ...(changed.sourceKind !== undefined ? { sourceKind: changed.sourceKind } : {}),
+      ...(changed.backupKind !== undefined ? { backupKind: changed.backupKind } : {}),
+      canReconnectDependency: changed.canReconnectDependency ?? false,
+      canReconnectBackupDestination: changed.canReconnectBackupDestination ?? false,
+      canContinueIncomplete: changed.canContinueIncomplete ?? false,
+      canCancel: changed.canCancel ?? false,
+      canRetry: changed.canRetry ?? false,
+      ...(changed.error !== undefined ? { error: changed.error } : {}),
+      message: changed.message,
+      createdAt: changed.createdAt,
+      updatedAt: changed.updatedAt
+    }
   };
 }
 

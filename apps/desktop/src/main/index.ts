@@ -90,6 +90,7 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  JOB_CHANGED_EVENT_CHANNEL,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
@@ -233,6 +234,7 @@ import {
   type ProcessQueuedCapturesResult
 } from "./services/jobs-service";
 import { JobCompactionService } from "./services/job-compaction-service";
+import { JobStateEventService } from "./services/job-state-event-service";
 import {
   type DocumentParseJobExecutor,
   type ProcessQueuedParsesResult
@@ -461,6 +463,7 @@ let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
 let jobsService: JobsService | undefined;
 let jobCompactionService: JobCompactionService | undefined;
+let jobStateEventService: JobStateEventService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
@@ -3947,6 +3950,17 @@ app.whenReady().then(async () => {
     getLocalRagEngineService(),
     getOcrLanguagePreferenceService()
   );
+  jobStateEventService = new JobStateEventService(
+    getVaultService(),
+    jobsService,
+    (event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.send(JOB_CHANGED_EVENT_CHANNEL, event);
+        }
+      }
+    }
+  );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"), {
     crashRecoverySummary: () => getCrashRecoveryService().summary(),
     crashRecoveryHistory: () => getCrashRecoveryService().history()
@@ -4012,6 +4026,7 @@ app.on("before-quit", () => {
   appearanceServiceUnsubscribe = undefined;
   appearanceService?.dispose();
   diagnosticsLifecycleService?.close();
+  jobStateEventService?.close();
   restoreCoordinatorService?.close();
   vaultService?.close();
   crashRecoveryService?.markClean();

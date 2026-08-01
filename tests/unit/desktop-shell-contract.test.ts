@@ -17,6 +17,31 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("pushes strict renderer-safe durable Job changes through one typed channel", () => {
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const eventServiceSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/job-state-event-service.ts"), "utf8"
+    );
+
+    expect(schemasSource).toContain('JOB_CHANGED_EVENT_CHANNEL = "jobs.changed"');
+    expect(schemasSource).toContain("JobChangedEventSchema");
+    expect(contractsSource).toContain("readonly onChanged: (listener: (event: JobChangedEvent)");
+    expect(preloadSource).toContain("JobChangedEventSchema.parse(value)");
+    expect(preloadSource).toContain("ipcRenderer.on(JOB_CHANGED_EVENT_CHANNEL, wrapped)");
+    expect(mainSource).toContain("new JobStateEventService(");
+    expect(mainSource).toContain("window.webContents.send(JOB_CHANGED_EVENT_CHANNEL, event)");
+    expect(eventServiceSource).toContain("subscribeJobRecordCommits");
+    for (const privateField of ["path:", "body:", "providerId:", "modelId:", "toolPayload:", "secret:"]) {
+      expect(schemasSource.slice(
+        schemasSource.indexOf("export const JobChangedSummarySchema"),
+        schemasSource.indexOf("const AgentIngestStatementSchema")
+      )).not.toContain(privateField);
+    }
+  });
+
   it("starts and cleanly closes the machine-local crash recovery session", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     expect(mainSource).toContain("crashRecoveryService.beginSession()");
@@ -1589,7 +1614,7 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain("const text = props.draftText");
     expect(homeComposer).toContain("props.onDraftChange(event.target.value)");
     expect(homeComposer).toContain('job.class !== "retrieval_query"');
-    expect(rendererSource).toContain('classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"]');
+    expect(rendererSource).toContain("classes: HOME_JOB_CLASSES");
     const submitHomeInput = homeComposer.slice(
       homeComposer.indexOf("const submitHomeInput"),
       homeComposer.indexOf("const openResult")
@@ -2146,7 +2171,7 @@ describe("desktop shell build contract", () => {
     );
 
     expect(rendererSource).toContain(
-      'states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"]'
+      'states: ["queued", "running", "waiting_dependency", "waiting_permission", "failed_retryable", "failed_final"]'
     );
     expect(rendererSource).toContain('homeJobStateFilter.states.push("awaiting_review")');
     expect(rendererSource).toContain("...homeJobStateFilter");

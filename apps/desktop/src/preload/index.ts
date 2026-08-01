@@ -68,6 +68,7 @@ import type {
   PermissionSetDefaultModeResult,
   JobActionRequest,
   JobActionResult,
+  JobChangedEvent,
   JobsListRequest,
   JobsListResult,
   KnowledgeActivityListRequest,
@@ -616,6 +617,8 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
+  JOB_CHANGED_EVENT_CHANNEL,
+  JobChangedEventSchema,
   PERMISSIONS_CHANGED_CHANNEL,
   PERMISSIONS_REVOKE_GRANT_CHANNEL,
   PERMISSIONS_SET_DEFAULT_MODE_CHANNEL,
@@ -1901,6 +1904,13 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("jobs.cancel", request) as Promise<JobActionResult>,
     retry: async (request: JobActionRequest): Promise<JobActionResult> =>
       ipcRenderer.invoke("jobs.retry", request) as Promise<JobActionResult>,
+    onChanged: (listener: (event: JobChangedEvent) => void): (() => void) => {
+      const wrapped = (_event: IpcRendererEvent, value: unknown): void => {
+        listener(JobChangedEventSchema.parse(value));
+      };
+      ipcRenderer.on(JOB_CHANGED_EVENT_CHANNEL, wrapped);
+      return () => ipcRenderer.removeListener(JOB_CHANGED_EVENT_CHANNEL, wrapped);
+    },
     reconnectOriginalSource: async (
       request: ReferencedOriginalReconnectRequest
     ): Promise<ReferencedOriginalReconnectResult> =>

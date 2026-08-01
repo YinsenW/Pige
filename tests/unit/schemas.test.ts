@@ -116,6 +116,7 @@ import {
   HighRiskConfirmationPendingResultSchema,
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationSummarySchema,
+  JobChangedEventSchema,
   JobRecordSchema,
   KnowledgeActivityListResultSchema,
   KnowledgeActivitySummarySchema,
@@ -6384,6 +6385,39 @@ describe("schemas", () => {
     expect(sourceRecord.original?.displayName).toBe("source.md");
     expect(sourceRecord.artifacts[0]?.size).toBe(42);
     expect(jobRecord.state).toBe("failed_retryable");
+  });
+
+  it("keeps pushed Job changes strict and renderer-safe", () => {
+    const event = JobChangedEventSchema.parse({
+      apiVersion: 1,
+      sequence: 7,
+      activeVaultId: "vault_20260709_jobchanged",
+      job: {
+        id: "job_20260709_jobchanged",
+        class: "dataset_import",
+        state: "running",
+        stage: "importing",
+        progress: { completedUnits: 12, totalUnits: 20, unit: "row" },
+        sourceId: "src_20260709_jobchanged",
+        sourceDisplayName: "accounts.csv",
+        sourceKind: "csv_file",
+        canReconnectDependency: false,
+        canReconnectBackupDestination: false,
+        canContinueIncomplete: false,
+        canCancel: true,
+        canRetry: false,
+        message: "Dataset import running.",
+        createdAt: "2026-07-09T00:00:00.000Z",
+        updatedAt: "2026-07-09T00:00:01.000Z"
+      }
+    });
+
+    expect(event.job.progress).toEqual({ completedUnits: 12, totalUnits: 20, unit: "row" });
+    expect(() => JobChangedEventSchema.parse({
+      ...event,
+      job: { ...event.job, path: "/private/vault/.pige/jobs/job.json" }
+    })).toThrow();
+    expect(() => JobChangedEventSchema.parse({ ...event, sequence: 0 })).toThrow();
   });
 
   it("validates durable confirmation proposals and preserves future extension fields", () => {
