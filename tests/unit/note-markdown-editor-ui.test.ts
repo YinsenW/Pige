@@ -101,7 +101,17 @@ describe("NoteMarkdownEditor", () => {
       "",
       "<script>window.previewWasUnsafe = true</script>"
     ].join("\n");
-    await inputText(harness.dom, harness.textarea(), markdown);
+    const textarea = harness.textarea();
+    Object.defineProperties(harness.dom.window.HTMLTextAreaElement.prototype, {
+      scrollHeight: { configurable: true, get() { return 1000; } },
+      clientHeight: { configurable: true, get() { return 200; } }
+    });
+    textarea.scrollTop = 400;
+    Object.defineProperties(harness.dom.window.HTMLElement.prototype, {
+      scrollHeight: { configurable: true, get() { return this.classList.contains("note-markdown-editor-preview-panel") ? 800 : 0; } },
+      clientHeight: { configurable: true, get() { return this.classList.contains("note-markdown-editor-preview-panel") ? 200 : 0; } }
+    });
+    await inputText(harness.dom, textarea, markdown);
     await click(harness.dom, harness.button("Preview"));
     const preview = await waitForElement<HTMLElement>(
       harness.dom,
@@ -112,9 +122,14 @@ describe("NoteMarkdownEditor", () => {
     expect(preview.textContent).not.toContain("Hidden frontmatter title");
     expect(preview.querySelector("script")).toBeNull();
     expect(preview.querySelector("a")?.hasAttribute("href")).toBe(false);
+    const previewPanel = requireElement(harness.container.querySelector<HTMLElement>(".note-markdown-editor-preview-panel"));
+    await act(async () => settle(harness.dom));
+    expect(previewPanel.scrollTop).toBe(300);
+    previewPanel.scrollTop = 450;
     expect(saveRequests).toHaveLength(0);
     await click(harness.dom, harness.button("Edit"));
     expect(harness.textarea().value).toBe(markdown);
+    expect(harness.textarea().scrollTop).toBe(600);
     expect(harness.dom.window.document.activeElement).toBe(harness.textarea());
     await harness.close();
   });
