@@ -301,6 +301,24 @@ describe("Reader selection proposal service", () => {
     ))).toBe(false);
   });
 
+  it("rejects a Shorten proposal that does not reduce the exact selected bytes", () => {
+    const fixture = makeFixture();
+    const service = makeService(fixture);
+
+    expect(() => service.stage({
+      job: fixture.job,
+      action: "shorten",
+      selection: fixture.selection,
+      selectedText: "selected",
+      replacement: "selected"
+    })).toThrowError(expect.objectContaining({ code: "agent_ingest.update_content_restricted" }));
+    expect(fs.existsSync(path.join(
+      fixture.vaultPath,
+      ".pige",
+      "reader-selection-proposals"
+    ))).toBe(false);
+  });
+
   it("recovers an interrupted resolving proposal idempotently through the same writer", () => {
     const fixture = makeFixture();
     const { service, writer, resolveReview } = makeServiceWithPorts(fixture);

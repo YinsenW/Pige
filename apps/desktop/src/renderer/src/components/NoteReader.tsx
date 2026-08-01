@@ -618,7 +618,7 @@ export function NoteReader(props: {
   };
 
   const submitSelectionTransform = async (
-    action: "translate" | "polish" | "expand",
+    action: "translate" | "polish" | "expand" | "shorten",
     selection: ReaderSelectionIdentity
   ): Promise<void> => {
     if (selectionActionPending) return;
@@ -659,7 +659,7 @@ export function NoteReader(props: {
   const selectionActions = selectionResolution.kind === "resolved"
     ? (["explain", "summarize", "link", "more"] as const)
     : (["copy", "copyAsQuote"] as const);
-  const selectionMoreActions = ["ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"] as const;
+  const selectionMoreActions = ["ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"] as const;
   return (
     <article className="note-reader" ref={readerRef} tabIndex={-1}>
       {selectionAnchor && selectionPosition ? <>
@@ -812,7 +812,7 @@ export function NoteReader(props: {
                   }}
                 >
                   {props.t(action === "createNote" ? "note.selection.turnInto" : `note.selection.${action}`)}
-                  {((action === "translate" || action === "polish" || action === "expand") &&
+                  {((action === "translate" || action === "polish" || action === "expand" || action === "shorten") &&
                   !props.onSubmitSelectionTransform) || (action === "createNote" && !props.onSubmitSelectionCreateNote) ? (
                     <span>{props.t("note.selection.unavailable")}</span>
                   ) : null}

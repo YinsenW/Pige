@@ -3574,7 +3574,7 @@ describe("full UI Library", () => {
     const menuItems = Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(more.getAttribute("aria-expanded")).toBe("true");
     expect(menuItems.map((item) => item.dataset.selectionMoreAction)).toEqual([
-      "ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand"
+      "ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"
     ]);
     expect(dom.window.document.activeElement).toBe(menuItems[0]);
     await act(async () => {

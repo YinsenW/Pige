@@ -5007,13 +5007,13 @@ describe("schemas", () => {
       text: "HOST_EXECUTION_INSTRUCTION",
       inputPresentation: {
         kind: "reader_selection_transform",
-        action: "translate"
+        action: "shorten"
       }
     };
 
     expect(ConversationEventSchema.parse(event).inputPresentation).toEqual({
       kind: "reader_selection_transform",
-      action: "translate"
+      action: "shorten"
     });
     expect(() => ConversationEventSchema.parse({
       ...event,

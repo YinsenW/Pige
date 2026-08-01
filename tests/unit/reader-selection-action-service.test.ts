@@ -154,7 +154,7 @@ describe("Reader selection action service", () => {
     );
     const request = {
       ...actionRequest(fixture.selection, "explain"),
-      action: "polish" as const
+      action: "shorten" as const
     };
 
     const result = await service.submitTransform(request);
@@ -170,13 +170,15 @@ describe("Reader selection action service", () => {
       operationId: "op_20260718_transform12"
     });
     expect(readAppliedOperationId).toHaveBeenCalledWith(expect.objectContaining({
-      action: "polish",
+      action: "shorten",
       selection: fixture.selection
     }));
     expect(submitTurn.mock.calls[0]?.[1]).toMatchObject({
       currentNoteSelection: fixture.selection,
-      currentNoteTransformAction: "polish"
+      currentNoteTransformAction: "shorten"
     });
+    expect(submitTurn.mock.calls[0]?.[0].text).toContain("Shorten the selected passage");
+    expect(submitTurn.mock.calls[0]?.[0].text).toContain("without losing its facts, meaning, or citations");
     expect(JSON.stringify(result)).not.toContain("MAIN_ONLY_REPLACEMENT");
     expect(JSON.stringify(submitTurn.mock.calls[0]?.[0])).not.toContain("SELECTED_PRIVATE_PASSAGE");
   });
