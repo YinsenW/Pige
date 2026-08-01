@@ -12,6 +12,7 @@ export interface DurableAssistantPayload {
   readonly grounding?: AgentTurnAnswer["grounding"];
   readonly citations?: AgentTurnAnswer["citations"];
   readonly datasetResult?: AgentTurnAnswer["datasetResult"];
+  readonly memoryContext?: AgentTurnAnswer["memoryContext"];
 }
 
 export function readDurableAgentTurnAnswer(event: ConversationEvent): AgentTurnAnswer {
@@ -20,7 +21,8 @@ export function readDurableAgentTurnAnswer(event: ConversationEvent): AgentTurnA
     answer: normalized.text,
     grounding: normalized.grounding ?? "general",
     citations: normalized.citations ?? [],
-    ...(normalized.datasetResult === undefined ? {} : { datasetResult: normalized.datasetResult })
+    ...(normalized.datasetResult === undefined ? {} : { datasetResult: normalized.datasetResult }),
+    ...(normalized.memoryContext === undefined ? {} : { memoryContext: normalized.memoryContext })
   };
   assertDurableAssistantIntegrity(event);
   return answer;
@@ -33,7 +35,8 @@ export function normalizeDurableAssistantEvent(event: ConversationEvent): Durabl
   const structured =
     event.answerGrounding !== undefined ||
     event.answerCitations !== undefined ||
-    event.answerDatasetResult !== undefined;
+    event.answerDatasetResult !== undefined ||
+    event.answerMemoryContext !== undefined;
   if (structured && event.answerGrounding === undefined) {
     throw new PigeDomainError("agent_runtime.turn_conflict", "The durable assistant result metadata is incomplete.");
   }
@@ -42,7 +45,8 @@ export function normalizeDurableAssistantEvent(event: ConversationEvent): Durabl
     structured,
     ...(event.answerGrounding === undefined ? {} : { grounding: event.answerGrounding }),
     ...(event.answerCitations === undefined ? {} : { citations: event.answerCitations }),
-    ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
+    ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult }),
+    ...(event.answerMemoryContext === undefined ? {} : { memoryContext: event.answerMemoryContext })
   };
 }
 
@@ -52,13 +56,14 @@ export function assertDurableAssistantIntegrity(event: ConversationEvent): void 
     throw new PigeDomainError("agent_runtime.turn_changed", "The durable assistant result changed after completion.");
   }
   const answer = normalizeDurableAssistantEvent(event);
-  const hashVersion = answer.datasetResult === undefined ? "v1" : "v2";
+  const hashVersion = answer.memoryContext !== undefined ? "v3" : answer.datasetResult === undefined ? "v1" : "v2";
   const expected = hashValue(
     `pige.agent_assistant.${hashVersion}\0${event.jobId}\0${event.parentEventId}\0${JSON.stringify({
       text: answer.text,
       grounding: answer.structured ? answer.grounding : null,
       citations: answer.structured ? answer.citations : null,
-      ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult })
+      ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult }),
+      ...(answer.memoryContext === undefined ? {} : { memoryContext: answer.memoryContext })
     })}`
   );
   if (event.contentHash !== expected) {

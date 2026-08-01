@@ -9380,6 +9380,10 @@ export const AgentAnswerCitationSchema = z.union([
 ]);
 
 const AgentAnswerCitationsSchema = z.array(AgentAnswerCitationSchema).max(8);
+export const AgentMemoryContextUsageSchema = z.object({
+  kind: z.literal("vault_memory"),
+  count: z.number().int().min(1).max(4)
+}).strict();
 
 export const DatasetQueryPreviewColumnSchema = z.object({
   key: z.string().min(1).max(120),
@@ -9602,7 +9606,8 @@ export const ConversationEventSchema = z.object({
     "insufficient_evidence"
   ]).optional(),
   answerCitations: AgentAnswerCitationsSchema.optional(),
-  answerDatasetResult: DatasetQueryPreviewSchema.optional()
+  answerDatasetResult: DatasetQueryPreviewSchema.optional(),
+  answerMemoryContext: AgentMemoryContextUsageSchema.optional()
 }).passthrough().superRefine((event, context) => {
   const citations = event.answerCitations ?? [];
   const citationRefIds = citations.map((citation) => citation.refId);
@@ -9860,7 +9865,8 @@ export const AgentTurnAnswerSchema = z.object({
   grounding: z.enum(["general", "local_knowledge", "source", "insufficient_evidence"]),
   citations: AgentAnswerCitationsSchema,
   retrieval: RetrievalSearchResultSchema.optional(),
-  datasetResult: DatasetQueryPreviewSchema.optional()
+  datasetResult: DatasetQueryPreviewSchema.optional(),
+  memoryContext: AgentMemoryContextUsageSchema.optional()
 }).strict();
 export const AgentConversationCursorSchema = z.string()
   .regex(/^timeline_[a-f0-9]{32}$/)

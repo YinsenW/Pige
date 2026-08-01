@@ -122,7 +122,8 @@ export function selectConversationTimelineMessages(
           answer: event.text,
           grounding: event.answerGrounding,
           citations: event.answerCitations ?? [],
-          ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult })
+          ...(event.answerDatasetResult === undefined ? {} : { datasetResult: event.answerDatasetResult }),
+          ...(event.answerMemoryContext === undefined ? {} : { memoryContext: event.answerMemoryContext })
         }
       } : {})
     });

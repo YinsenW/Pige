@@ -287,6 +287,7 @@
   "home.agentState.running": "Pi Agent가 처리하고 있습니다.",
   "home.agentState.waiting": "Agent가 설정 또는 권한을 기다리고 있습니다.",
   "home.assistantMessage": "Pige",
+  "home.memoryContextIncluded": "포함된 저장 메모리 항목:",
   "home.copyMessage": "답변 복사",
   "home.messageCopied": "답변을 복사했습니다",
   "home.messageCopyFailed": "이 답변을 복사할 수 없습니다",

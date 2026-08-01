@@ -4599,6 +4599,42 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("discloses only the bounded saved-memory count for live and restarted answers", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const completed = completedResult();
+    if (completed.state !== "completed") throw new Error("Expected completed fixture.");
+    const answer = { ...completed.answer, memoryContext: { kind: "vault_memory" as const, count: 2 } };
+    harness.submitTurn = async (request) => {
+      harness.submitRequests.push(request);
+      return { ...completed, answer };
+    };
+    const first = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, first.container, "Use my saved preferences.");
+    await clickButton(dom, first.container, "Send");
+    await waitFor(dom, () => first.container.querySelector('[data-memory-context-count="2"]') !== null);
+    expect(first.container.textContent).toContain("Saved memory items included: 2");
+    expect(first.container.textContent).not.toContain("private memory body");
+    await act(async () => first.root.unmount());
+
+    harness.timeline = {
+      conversationId: completed.conversationId,
+      tailEventId: completed.tailEventId,
+      canFollowUp: true,
+      messages: [{ id: completed.conversationEventId, role: "user", createdAt: "2026-08-01T08:00:00.000Z",
+        text: "Use my saved preferences.", jobId: completed.jobId },
+      { id: completed.tailEventId, role: "assistant", createdAt: "2026-08-01T08:00:01.000Z",
+        text: answer.answer, jobId: completed.jobId, answer }],
+      latestTurn: { jobId: completed.jobId, userEventId: completed.conversationEventId, state: "completed" }
+    };
+    const restarted = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => restarted.container.querySelector('[data-memory-context-count="2"]') !== null);
+    expect(restarted.container.querySelectorAll("[data-memory-context-kind='vault_memory']")).toHaveLength(1);
+
+    await act(async () => restarted.root.unmount());
+    dom.window.close();
+  });
+
   it("renders a bounded Agent-selected Dataset result as an accessible table with exact citations", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

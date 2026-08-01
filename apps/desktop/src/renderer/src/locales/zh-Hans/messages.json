@@ -287,6 +287,7 @@
   "home.agentState.running": "Pi Agent 正在处理。",
   "home.agentState.waiting": "Agent 正在等待设置或授权。",
   "home.assistantMessage": "Pige",
+  "home.memoryContextIncluded": "已纳入的保存记忆：",
   "home.copyMessage": "复制回复",
   "home.messageCopied": "回复已复制",
   "home.messageCopyFailed": "无法复制这条回复",

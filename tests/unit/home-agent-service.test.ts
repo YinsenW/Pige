@@ -719,7 +719,15 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260727_memoryexplicit"
     });
 
-    expect(outcome).toMatchObject({ state: "completed" });
+    expect(outcome).toMatchObject({
+      state: "completed",
+      answer: { memoryContext: { kind: "vault_memory", count: 1 } }
+    });
+    if (outcome.state !== "completed") throw new Error("Expected a completed memory turn.");
+    expect(new AgentTurnConversationStore().readConversationTimeline(
+      fixture.vaultPath,
+      outcome.conversationId
+    )?.messages.at(-1)?.answer?.memoryContext).toEqual({ kind: "vault_memory", count: 1 });
     expect(remembered).toEqual([expect.objectContaining({
       vaultPath: fixture.vaultPath,
       activeVaultId: fixture.vault.vaultId,
@@ -776,12 +784,15 @@ describe("Home Pi Agent service", () => {
       }
     );
 
-    await expect(service.submitTurn({
+    const outcome = await service.submitTurn({
       text: "Remember this preference.",
       inputKind: "typed_text",
       locale: "en",
       clientTurnId: "turn_20260727_memorydisabled"
-    })).resolves.toMatchObject({ state: "completed" });
+    });
+    expect(outcome).toMatchObject({ state: "completed" });
+    if (outcome.state !== "completed") throw new Error("Expected a completed disabled-memory turn.");
+    expect(outcome.answer).not.toHaveProperty("memoryContext");
     expect(recalls).toBe(0);
     expect(observedTools).not.toContain("pige_remember_authored_memory");
     expect(observedUserPrompt).not.toContain("Disabled memory.");

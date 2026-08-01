@@ -287,6 +287,7 @@
   "home.agentState.running": "Pi Agent が処理しています。",
   "home.agentState.waiting": "Agent は設定または許可を待っています。",
   "home.assistantMessage": "Pige",
+  "home.memoryContextIncluded": "参照した保存済みメモリ:",
   "home.copyMessage": "回答をコピー",
   "home.messageCopied": "回答をコピーしました",
   "home.messageCopyFailed": "この回答をコピーできませんでした",
