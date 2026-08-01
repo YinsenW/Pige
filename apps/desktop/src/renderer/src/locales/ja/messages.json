@@ -1212,7 +1212,7 @@
   "conversation.lifecycle.restored": "会話を復元しました。",
   "conversation.lifecycle.failed": "会話の操作を完了できませんでした。",
   "conversation.search": "会話を検索",
-  "conversation.searchPlaceholder": "タイトルまたはプレビュー",
+  "conversation.searchPlaceholder": "タイトルまたは任意のメッセージ",
   "conversation.searchAction": "検索",
   "conversation.searchClear": "検索をクリア",
   "conversation.searchEmpty": "この検索に一致する会話はありません。",

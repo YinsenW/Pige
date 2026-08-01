@@ -9667,6 +9667,12 @@ const AgentConversationHistoryPreviewSchema = z.string()
     (value) => !/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(value),
     "Conversation history preview must be one safe display line."
   );
+export const AgentConversationHistorySearchMatchSchema = z.object({
+  eventId: ConversationEventIdSchema,
+  role: z.enum(["user", "assistant"]),
+  createdAt: z.string().datetime({ offset: true }),
+  safeExcerpt: AgentConversationHistoryPreviewSchema
+}).strict();
 export const AgentConversationTitleSchema = z.string()
   .min(1)
   .max(480)
@@ -9684,6 +9690,7 @@ const AgentConversationHistorySummaryBaseSchema = z.object({
   scope: AgentTurnCurrentNoteScopeSchema.optional(),
   inputPresentation: AgentConversationInputPresentationSchema.optional(),
   latestTurnState: JobStateSchema.optional(),
+  searchMatch: AgentConversationHistorySearchMatchSchema.optional(),
   title: AgentConversationTitleSchema.optional(),
   titleRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional()
 }).strict();
@@ -9726,6 +9733,13 @@ export const AgentConversationHistoryReadyResultSchema = AgentConversationHistor
       code: "custom",
       path: ["conversations"],
       message: "Conversation history identities must be unique."
+    });
+  }
+  if (result.query === undefined && result.conversations.some((summary) => summary.searchMatch !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["conversations"],
+      message: "Conversation search matches require an exact query binding."
     });
   }
   for (let index = 1; index < result.conversations.length; index += 1) {
@@ -11700,6 +11714,7 @@ export type AgentConversationHistoryCursor = z.output<typeof AgentConversationHi
 export type AgentConversationHistoryQuery = z.output<typeof AgentConversationHistoryQuerySchema>;
 export type AgentConversationHistoryListRequest = z.input<typeof AgentConversationHistoryListRequestSchema>;
 export type AgentConversationHistorySummary = z.output<typeof AgentConversationHistorySummarySchema>;
+export type AgentConversationHistorySearchMatch = z.output<typeof AgentConversationHistorySearchMatchSchema>;
 export type AgentConversationHistoryListResult = z.output<typeof AgentConversationHistoryListResultSchema>;
 export type AgentConversationExportRequestId = z.output<typeof AgentConversationExportRequestIdSchema>;
 export type AgentConversationExportRequest = z.input<typeof AgentConversationExportRequestSchema>;

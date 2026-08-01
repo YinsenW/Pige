@@ -4401,26 +4401,41 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
-  it("searches durable title and preview summaries while preserving timeline selection on failure", async () => {
+  it("searches older durable messages, shows a safe excerpt, and jumps to the exact event without replay", async () => {
     const dom = createDom();
     const current = paginatedHomeTimeline();
     const historical: AgentConversationInitialTimeline = {
       kind: "initial",
       conversationId: "conv_20260711_searchhistory01",
-      snapshotTailEventId: "event_20260711_searchassistant01",
-      tailEventId: "event_20260711_searchassistant01",
+      snapshotTailEventId: "evt_20260711_searchassistant01",
+      tailEventId: "evt_20260711_searchassistant01",
       canFollowUp: false,
       messages: [{
-        id: "event_20260711_searchassistant01",
+        id: "evt_20260711_searchassistant01",
         role: "assistant",
         createdAt: "2026-07-11T08:00:01.000Z",
-        text: "Selected durable search result."
+        text: "Recent unrelated tail."
       }],
-      hasEarlier: false
+      hasEarlier: true,
+      nextEarlierCursor: `timeline_${"a".repeat(32)}`
     };
     const harness = createHarness(current);
     harness.loadConversation = async (request) => {
       harness.conversationRequests.push(request);
+      if ("earlierCursor" in request && request.conversationId === historical.conversationId) {
+        return {
+          kind: "earlier",
+          conversationId: historical.conversationId,
+          snapshotTailEventId: historical.snapshotTailEventId,
+          messages: [{
+            id: "evt_20260711_searchmatch001",
+            role: "user",
+            createdAt: "2026-07-11T07:30:00.000Z",
+            text: "Selected durable search result from the launch discussion."
+          }],
+          hasEarlier: false
+        };
+      }
       return request.conversationId === historical.conversationId ? historical : current;
     };
     harness.loadConversationHistory = async (request) => {
@@ -4438,8 +4453,13 @@ describe("Home durable Agent conversation UI", () => {
         updatedAt: "2026-07-11T08:00:01.000Z",
         safePreview: "Preview does not contain the query",
         tailEventId: historical.tailEventId,
-        title: "Launch plan",
-        titleRevision: 1
+        titleRevision: 0,
+        searchMatch: {
+          eventId: "evt_20260711_searchmatch001",
+          role: "user" as const,
+          createdAt: "2026-07-11T07:30:00.000Z",
+          safeExcerpt: "Selected durable search result from the launch discussion."
+        }
       }] : [{
         conversationId: current.conversationId,
         updatedAt: "2026-07-12T08:00:01.000Z",
@@ -4461,7 +4481,7 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, container, enMessages["conversation.history"]);
     await setConversationSearchInputValue(dom, container, "launch");
     await clickButton(dom, container, enMessages["conversation.searchAction"]);
-    await waitFor(dom, () => container.textContent?.includes("Launch plan") === true);
+    await waitFor(dom, () => container.textContent?.includes("Selected durable search result from the launch discussion.") === true);
     expect(harness.conversationHistoryRequests.at(-1)).toMatchObject({
       activeVaultId: "vault_home_conversation",
       query: "launch",
@@ -4470,11 +4490,19 @@ describe("Home durable Agent conversation UI", () => {
 
     const resultRow = Array.from(container.querySelectorAll<HTMLButtonElement>(
       "[data-conversation-history-panel] .conversation-history-open"
-    )).find((button) => button.textContent?.includes("Launch plan"));
+    )).find((button) => button.textContent?.includes("Selected durable search result"));
     if (!resultRow) throw new Error("Search result row not found.");
     await clickElement(dom, resultRow);
     await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
-      ?.includes("Selected durable search result.") === true);
+      ?.includes("Selected durable search result from the launch discussion.") === true);
+    await waitFor(dom, () => (dom.window.document.activeElement as HTMLElement | null)?.dataset.messageId ===
+      "evt_20260711_searchmatch001");
+    expect(harness.conversationRequests.at(-1)).toMatchObject({
+      conversationId: historical.conversationId,
+      snapshotTailEventId: historical.snapshotTailEventId,
+      earlierCursor: historical.nextEarlierCursor,
+      limit: 100
+    });
     const conversationReadCount = harness.conversationRequests.length;
     const submitCount = harness.submitRequests.length;
 
@@ -4482,15 +4510,15 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, container, enMessages["conversation.searchAction"]);
     await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.historyFailed"]) === true);
     expect(container.querySelector(".conversation-timeline-content")?.textContent)
-      .toContain("Selected durable search result.");
-    expect(container.textContent).toContain("Launch plan");
+      .toContain("Selected durable search result from the launch discussion.");
+    expect(container.textContent).toContain("Selected durable search result from the launch discussion.");
     expect(harness.conversationRequests).toHaveLength(conversationReadCount);
     expect(harness.submitRequests).toHaveLength(submitCount);
 
     await clickButton(dom, container, enMessages["conversation.current"]);
     await waitFor(dom, () => container.querySelector(".conversation-timeline-content")?.textContent
       ?.includes("Remember the durable boundary.") === true);
-    expect(harness.conversationHistoryRequests.at(-1)?.query).toBe("launch");
+    expect(harness.conversationHistoryRequests.at(-1)?.query).toBeUndefined();
     expect(harness.conversationRequests.at(-1)).toEqual({ conversationId: current.conversationId, limit: 100 });
 
     await act(async () => root.unmount());

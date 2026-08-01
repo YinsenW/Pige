@@ -641,15 +641,41 @@ describe("schemas", () => {
     for (const privateField of ["path", "body", "providerId", "modelId", "jobId", "toolPayload", "secret"]) {
       expect(() => AgentConversationHistoryListRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
     }
+    const match = {
+      eventId: "evt_20260731_searchmatch01",
+      role: "assistant" as const,
+      createdAt: "2026-07-31T12:00:00.000Z",
+      safeExcerpt: "The earlier durable message contains Launch project."
+    };
     expect(AgentConversationHistoryListResultSchema.parse({
       apiVersion: 1,
       activeVaultId: request.activeVaultId,
       query,
       status: "ready",
       currentConversationId: "conv_20260731_current01",
-      conversations: [],
+      conversations: [{
+        conversationId: "conv_20260731_current01",
+        updatedAt: "2026-07-31T12:00:00.000Z",
+        safePreview: "Latest preview does not contain the query",
+        tailEventId: "evt_20260731_searchtail001",
+        searchMatch: match
+      }],
       hasMore: false
-    })).toMatchObject({ query, status: "ready", conversations: [] });
+    })).toMatchObject({ query, status: "ready", conversations: [{ searchMatch: match }] });
+    expect(() => AgentConversationHistoryListResultSchema.parse({
+      apiVersion: 1,
+      activeVaultId: request.activeVaultId,
+      status: "ready",
+      currentConversationId: "conv_20260731_current01",
+      conversations: [{
+        conversationId: "conv_20260731_current01",
+        updatedAt: "2026-07-31T12:00:00.000Z",
+        safePreview: "Latest preview",
+        tailEventId: "evt_20260731_searchtail001",
+        searchMatch: match
+      }],
+      hasMore: false
+    })).toThrow("exact query binding");
     expect(AgentConversationHistoryListResultSchema.parse({
       apiVersion: 1,
       activeVaultId: request.activeVaultId,

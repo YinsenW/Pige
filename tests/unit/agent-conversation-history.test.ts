@@ -298,7 +298,7 @@ describe("AgentConversationHistory", () => {
     expect(fs.existsSync(path.join(vaultPath, ".pige/conversations/conversations-manifest.json"))).toBe(false);
   });
 
-  it("searches only bounded title and preview projections with exact snapshot and query cursor fences", () => {
+  it("searches every durable message with one bounded match projection and exact snapshot/query cursor fences", () => {
     const vaultPath = createVaultRoot();
     const conversations = new AgentTurnConversationStore();
     const titled = conversations.appendUserTurn(
@@ -307,11 +307,11 @@ describe("AgentConversationHistory", () => {
       { inputKind: "typed_text", locale: "en" },
       { clientTurnId: "turn_20260731_searchtitle0001" }
     );
-    conversations.appendAssistantTurn(
+    const transcriptMatch = conversations.appendAssistantTurn(
       vaultPath,
       titled,
       "job_20260731_searchtitle0001",
-      "Hidden transcript phrase must not become searchable"
+      "Hidden transcript phrase is now discoverable without exposing the whole conversation"
     );
     const preview = conversations.appendUserTurn(
       vaultPath,
@@ -327,6 +327,7 @@ describe("AgentConversationHistory", () => {
     );
     const owner = new AgentConversationHistory();
     const full = owner.list({ activeVaultId: "vault_20260731_search01", vaultPath });
+    expect(full.conversations.every((conversation) => conversation.searchMatch === undefined)).toBe(true);
     const titledSummary = full.conversations.find((item) => item.conversationId === titled.event.conversationId)!;
     const unrelatedSummary = full.conversations.find((item) => item.conversationId === unrelated.event.conversationId)!;
     const titledPath = path.join(vaultPath, ".pige/conversations/2026/07", `${titled.event.conversationId}.jsonl`);
@@ -387,7 +388,17 @@ describe("AgentConversationHistory", () => {
       activeVaultId: "vault_20260731_search01",
       vaultPath,
       query: "transcript phrase"
-    }).conversations).toEqual([]);
+    }).conversations).toEqual([
+      expect.objectContaining({
+        conversationId: titled.event.conversationId,
+        searchMatch: {
+          eventId: transcriptMatch.id,
+          role: "assistant",
+          createdAt: transcriptMatch.createdAt,
+          safeExcerpt: "Hidden transcript phrase is now discoverable without exposing the whole conversation"
+        }
+      })
+    ]);
     expect(createHash("sha256").update(fs.readFileSync(titledPath)).digest("hex")).toBe(titledHash);
 
     expect(owner.setTitle({

@@ -1212,7 +1212,7 @@
   "conversation.lifecycle.restored": "Konversation wiederhergestellt.",
   "conversation.lifecycle.failed": "Die Konversationsaktion konnte nicht abgeschlossen werden.",
   "conversation.search": "Unterhaltungen suchen",
-  "conversation.searchPlaceholder": "Titel oder Vorschau",
+  "conversation.searchPlaceholder": "Titel oder beliebige Nachricht",
   "conversation.searchAction": "Suchen",
   "conversation.searchClear": "Suche löschen",
   "conversation.searchEmpty": "Keine Unterhaltung entspricht dieser Suche.",

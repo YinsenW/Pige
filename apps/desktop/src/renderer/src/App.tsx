@@ -5403,13 +5403,16 @@ function HomeComposer(props: {
 
   const openConversationView = async (
     conversationId: string,
-    view: "current" | "history"
+    view: "current" | "history",
+    expectedTailEventId: string,
+    searchMatchEventId?: string
   ): Promise<boolean> => {
     const result = await refreshConversationResult(conversationId, {
       conversationId,
       ignoreLocalTail: true
     });
-    if (result.status !== "adopted" || result.timeline?.conversationId !== conversationId) return false;
+    if (result.status !== "adopted" || result.timeline?.conversationId !== conversationId ||
+      result.timeline.tailEventId !== expectedTailEventId) return false;
     selectedHistoryConversationIdRef.current = view === "history" ? conversationId : null;
     setSelectedHistoryConversationId(view === "history" ? conversationId : null);
     followConversationRef.current = true;
@@ -5417,6 +5420,11 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
+    if (searchMatchEventId) {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => void conversationPagination.revealEvent(searchMatchEventId));
+      });
+    }
     return true;
   };
 

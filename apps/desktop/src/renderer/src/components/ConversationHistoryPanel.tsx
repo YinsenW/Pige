@@ -33,7 +33,9 @@ export function ConversationHistoryPanel(props: {
   readonly disabled?: boolean;
   readonly onOpenConversation: (
     conversationId: string,
-    view: "current" | "history"
+    view: "current" | "history",
+    expectedTailEventId: string,
+    searchMatchEventId?: string
   ) => Promise<boolean>;
   readonly onConversationTrashed: (conversationId: string) => void;
   readonly t: (key: string) => string;
@@ -79,7 +81,7 @@ export function ConversationHistoryPanel(props: {
 
   const loadHistory = async (
     cursor?: AgentConversationHistoryCursor,
-    query: string | undefined = appliedQuery
+    query: string | null | undefined = appliedQuery
   ): Promise<HistoryState | null> => {
     if (operationRef.current) return null;
     operationRef.current = true;
@@ -87,13 +89,14 @@ export function ConversationHistoryPanel(props: {
     setFailed(false);
     const sequence = ++requestSequenceRef.current;
     const vaultId = props.activeVaultId;
+    const effectiveQuery = query === null ? undefined : query;
     try {
       const result = await window.pige.agent.conversationHistory({
         apiVersion: 1,
         activeVaultId: vaultId,
         limit: 50,
         ...(cursor ? { cursor } : {}),
-        ...(query ? { query } : {})
+        ...(effectiveQuery ? { query: effectiveQuery } : {})
       });
       if (sequence !== requestSequenceRef.current || activeVaultIdRef.current !== vaultId) return null;
       if (result.status !== "ready") {
@@ -109,7 +112,7 @@ export function ConversationHistoryPanel(props: {
         ...(result.nextCursor ? { nextCursor: result.nextCursor } : {})
       };
       setHistory(next);
-      setAppliedQuery(query);
+      setAppliedQuery(effectiveQuery);
       return next;
     } catch {
       if (sequence === requestSequenceRef.current) setFailed(true);
@@ -132,7 +135,7 @@ export function ConversationHistoryPanel(props: {
   };
 
   const open = async (
-    conversationId: string,
+    conversation: AgentConversationHistorySummary,
     view: "current" | "history",
     trigger: HTMLButtonElement
   ): Promise<void> => {
@@ -141,7 +144,12 @@ export function ConversationHistoryPanel(props: {
     setLoading(true);
     setFailed(false);
     try {
-      const opened = await props.onOpenConversation(conversationId, view);
+      const opened = await props.onOpenConversation(
+        conversation.conversationId,
+        view,
+        conversation.tailEventId,
+        conversation.searchMatch?.eventId
+      );
       if (!opened) setFailed(true);
     } finally {
       operationRef.current = false;
@@ -161,12 +169,19 @@ export function ConversationHistoryPanel(props: {
   };
 
   const openCurrent = async (trigger: HTMLButtonElement): Promise<void> => {
-    const current = await loadHistory();
+    const current = await loadHistory(undefined, null);
     if (!current?.currentConversationId) {
       if (current) setFailed(true);
       return;
     }
-    await open(current.currentConversationId, "current", trigger);
+    const summary = current.conversations.find(({ conversationId }) =>
+      conversationId === current.currentConversationId
+    );
+    if (!summary) {
+      setFailed(true);
+      return;
+    }
+    await open(summary, "current", trigger);
   };
 
   const exportConversation = async (conversation: AgentConversationHistorySummary): Promise<void> => {
@@ -344,8 +359,9 @@ export function ConversationHistoryPanel(props: {
         setHistory((current) => ({
           ...current,
           conversations: current.conversations
-            .map((conversation) =>
-              conversation.conversationId === result.summary.conversationId ? result.summary : conversation)
+            .map((conversation) => conversation.conversationId === result.summary.conversationId
+              ? { ...result.summary, ...(conversation.searchMatch ? { searchMatch: conversation.searchMatch } : {}) }
+              : conversation)
             .filter((conversation) => result.status === "stale" || !appliedQuery ||
               matchesConversationQuery(conversation, appliedQuery))
         }));
@@ -444,11 +460,16 @@ export function ConversationHistoryPanel(props: {
                 className="conversation-history-open"
                 aria-current={props.selectedConversationId === conversation.conversationId ? "true" : undefined}
                 disabled={props.disabled || loading || titleEditor?.saving}
-                onClick={(event) => void open(conversation.conversationId, "history", event.currentTarget)}
+                onClick={(event) => void open(conversation, "history", event.currentTarget)}
               >
                 <span>
                   <strong>{conversation.title ?? (conversation.safePreview || props.t("conversation.previewUnavailable"))}</strong>
                   <small>{formatUpdatedAt(conversation.updatedAt, props.locale)}</small>
+                  {conversation.searchMatch ? (
+                    <small data-conversation-search-match={conversation.searchMatch.eventId}>
+                      {props.t(conversation.searchMatch.role === "user" ? "home.userMessage" : "home.assistantMessage")}: {conversation.searchMatch.safeExcerpt}
+                    </small>
+                  ) : null}
                 </span>
               </button>
               <div className="settings-inline-actions">
@@ -562,7 +583,8 @@ function appendUnique(
 function matchesConversationQuery(conversation: AgentConversationHistorySummary, query: string): boolean {
   const needle = normalizeSearchText(query);
   return normalizeSearchText(conversation.title ?? "").includes(needle) ||
-    normalizeSearchText(conversation.safePreview).includes(needle);
+    normalizeSearchText(conversation.safePreview).includes(needle) ||
+    conversation.searchMatch !== undefined;
 }
 
 function normalizeSearchText(value: string): string {

@@ -1212,7 +1212,7 @@
   "conversation.lifecycle.restored": "Conversation restored.",
   "conversation.lifecycle.failed": "The conversation lifecycle action could not be completed.",
   "conversation.search": "Search conversations",
-  "conversation.searchPlaceholder": "Title or preview",
+  "conversation.searchPlaceholder": "Title or any message",
   "conversation.searchAction": "Search",
   "conversation.searchClear": "Clear search",
   "conversation.searchEmpty": "No conversations match this search.",

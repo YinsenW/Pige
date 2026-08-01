@@ -38,6 +38,7 @@ export type ConversationPaginationController = {
   readonly loading: boolean;
   readonly failed: boolean;
   readonly loadEarlier: (trigger: HTMLButtonElement) => Promise<void>;
+  readonly revealEvent: (eventId: string) => Promise<boolean>;
 };
 
 export function projectCompletedConversation(
@@ -77,6 +78,7 @@ export function useConversationPagination(input: {
   const requestSequenceRef = useRef(0);
   const requestActiveRef = useRef(false);
   const pendingRestoreRef = useRef<PendingRestore | null>(null);
+  const pendingRevealRef = useRef<string | null>(null);
   stateRef.current = state;
   latestInputRef.current = input;
 
@@ -155,6 +157,18 @@ export function useConversationPagination(input: {
     });
   }, [input.scrollRef, state.revision]);
 
+  useLayoutEffect(() => {
+    const eventId = pendingRevealRef.current;
+    if (!eventId) return;
+    const target = Array.from(
+      input.scrollRef.current?.querySelectorAll<HTMLElement>("[data-message-id]") ?? []
+    ).find((element) => element.dataset.messageId === eventId);
+    if (!target) return;
+    pendingRevealRef.current = null;
+    target.scrollIntoView?.({ block: "center" });
+    target.focus({ preventScroll: true });
+  }, [input.scrollRef, state.revision]);
+
   const loadEarlier = async (trigger: HTMLButtonElement): Promise<void> => {
     const current = stateRef.current;
     const initial = latestInputRef.current.initial;
@@ -224,6 +238,69 @@ export function useConversationPagination(input: {
     }
   };
 
+  const revealEvent = async (eventId: string): Promise<boolean> => {
+    if (!/^evt_\d{8}_[a-z0-9]{8,}$/u.test(eventId) || requestActiveRef.current) return false;
+    const initial = latestInputRef.current.initial;
+    const current = stateRef.current;
+    if (!initial || current.ownerKey !== latestInputRef.current.ownerKey ||
+      current.conversationId !== initial.conversationId ||
+      current.snapshotTailEventId !== initial.snapshotTailEventId) return false;
+    if (current.messages.some((message) => message.id === eventId)) {
+      pendingRevealRef.current = eventId;
+      setState({ ...current, revision: current.revision + 1 });
+      return true;
+    }
+    requestActiveRef.current = true;
+    setLoading(true);
+    setFailed(false);
+    const sequence = ++requestSequenceRef.current;
+    let messages = current.messages;
+    let hasEarlier = current.hasEarlier;
+    let cursor = current.nextEarlierCursor;
+    try {
+      for (let pageCount = 0; pageCount < 1_024 && hasEarlier && cursor; pageCount += 1) {
+        const page = await window.pige.agent.conversation({
+          conversationId: initial.conversationId,
+          snapshotTailEventId: initial.snapshotTailEventId,
+          earlierCursor: cursor,
+          limit: 100,
+          ...(latestInputRef.current.scope ? { scope: latestInputRef.current.scope } : {})
+        });
+        if (sequence !== requestSequenceRef.current ||
+          !isCurrentPage(current.ownerKey, initial.conversationId, initial.snapshotTailEventId,
+            page, latestInputRef.current, stateRef.current)) return false;
+        messages = prependUnique(page.messages, messages);
+        hasEarlier = page.hasEarlier;
+        cursor = page.nextEarlierCursor;
+        if (messages.some((message) => message.id === eventId)) {
+          const next: PaginationState = {
+            ownerKey: current.ownerKey,
+            conversationId: initial.conversationId,
+            snapshotTailEventId: initial.snapshotTailEventId,
+            messages,
+            hasEarlier,
+            ...(cursor ? { nextEarlierCursor: cursor } : {}),
+            revision: current.revision + 1
+          };
+          stateRef.current = next;
+          pendingRevealRef.current = eventId;
+          setState(next);
+          return true;
+        }
+      }
+      setFailed(true);
+      return false;
+    } catch {
+      if (sequence === requestSequenceRef.current) setFailed(true);
+      return false;
+    } finally {
+      if (sequence === requestSequenceRef.current) {
+        requestActiveRef.current = false;
+        setLoading(false);
+      }
+    }
+  };
+
   const matchesOwner = state.ownerKey === input.ownerKey && (
     !input.initial || !state.conversationId || state.conversationId === input.initial.conversationId
   );
@@ -232,7 +309,8 @@ export function useConversationPagination(input: {
     hasEarlier: matchesOwner ? state.hasEarlier : input.initial?.hasEarlier ?? false,
     loading,
     failed,
-    loadEarlier
+    loadEarlier,
+    revealEvent
   };
 }
 
