@@ -747,6 +747,7 @@ Commands:
 - `settings.setTheme`
 - `settings.setKnowledgeLanguage`
 - `settings.setStartupDestination`
+- `settings.updatePigePolicy`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
 - `models.addPresetProvider`
@@ -785,11 +786,19 @@ Queries:
 - `settings.registry`
 - `settings.appearance`
 - `settings.startupDestination`
+- `settings.pigePolicy`
 - `models.summary`
 - `memory.list`
 - `piPackages.summary`
 - `skills.summary`
 - `system.toolchainHealth`
+
+`settings.pigePolicy` returns the active vault's bounded `PIGE.md` text, required-section
+names, and an opaque content revision without a filesystem path. `settings.updatePigePolicy`
+binds that vault and revision, validates the canonical heading structure and rejects secret-like
+content before confirmation, then re-proves the same bytes and authority before an atomic write.
+Settled updates publish a `change_setting` Operation for Activity/Undo and restart recovery;
+invalid, denied, stale, or failed attempts preserve the renderer draft and do not mutate policy.
 
 Events:
 

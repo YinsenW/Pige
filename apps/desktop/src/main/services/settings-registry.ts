@@ -114,6 +114,17 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       permissionRequirement: "none"
     },
     {
+      key: "vault.pigePolicy",
+      page: "Agent & Memory",
+      scope: "vault_portable",
+      owner: "Vault Service, Agent Orchestrator",
+      storage: "PIGE.md",
+      backedUpByDefault: true,
+      applyBehavior: "requires_confirmation",
+      permissionRequirement: "explicit_confirmation",
+      agentPolicyEffect: "vault.pigePolicy"
+    },
+    {
       key: "models.providerProfiles",
       page: "Models",
       scope: "machine_local",

@@ -960,6 +960,10 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("settings.setTheme"');
     expect(mainSource).toContain("SetThemeRequestSchema.parse(request)");
     expect(mainSource).toContain('ipcMain.handle("settings.setKnowledgeLanguage"');
+    expect(mainSource).toContain("registerPigePolicyIpc({");
+    expect(mainSource).toContain('confirmSettingAction(sender, ["vault.pigePolicy"]');
+    expect(preloadSource).toContain("PigePolicySummarySchema.parse(await ipcRenderer.invoke(PIGE_POLICY_STATUS_CHANNEL))");
+    expect(preloadSource).toContain("PigePolicyUpdateResultSchema.parse(await ipcRenderer.invoke(PIGE_POLICY_UPDATE_CHANNEL, parsed))");
     expect(mainSource).toContain("SetKnowledgeLanguageRequestSchema.parse(request)");
     expect(mainSource).toContain('browserWindow.webContents.send("settings.appearanceChanged"');
     expect(mainSource.indexOf("getAppearanceService();")).toBeLessThan(mainSource.indexOf("createMainWindow(false)"));

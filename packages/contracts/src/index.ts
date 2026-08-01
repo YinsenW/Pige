@@ -39,6 +39,9 @@ import type {
   BackupMemoryPreferenceSummary,
   BackupMemoryPreferenceUpdateRequest,
   BackupMemoryPreferenceUpdateResult,
+  PigePolicySummary,
+  PigePolicyUpdateRequest,
+  PigePolicyUpdateResult,
   BackupReconnectDestinationRequest,
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
@@ -2578,6 +2581,8 @@ export interface PigeDesktopApi {
     ) => Promise<StartupDestinationMutationResult>;
     readonly onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => () => void;
     readonly registry: () => Promise<SettingsRegistrySummary>;
+    readonly pigePolicy: () => Promise<PigePolicySummary>;
+    readonly updatePigePolicy: (request: PigePolicyUpdateRequest) => Promise<PigePolicyUpdateResult>;
   };
   readonly updates: {
     readonly summary: () => Promise<UpdateSummary>;

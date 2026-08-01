@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T08:32:00Z",
+  "reviewedAt": "2026-08-01T09:40:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation, revision-fenced Question state lifecycle, and machine-local persisted dictation language.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation, revision-fenced Question state lifecycle, machine-local persisted dictation language, and the vault PIGE.md policy editor.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "8f495286ebc5da87f7844cc37e27be76f893aa654fe52105badc79996e4503bd"
+    "reviewedSha256": "8bd47de3c61b2c6bd8e32644d8af0d532085fc95ee21c1d791adffb598aa2b51"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
-      "task": "Vault v2, Alpha convergence, governance, Job compaction, grounded knowledge pages, startup destination, Vault relocation/display-name, source reconnect, exact note and Topic rename, tag lifecycle, note merge and duplicate-topic merge Redo, source refresh, Activity history, Agent memory backup, explainable Knowledge Tree density, reviewed Reader exact-selection creation, Question state lifecycle, and persisted dictation language",
+      "task": "Review the pathless, validation-first vault PIGE.md policy editor and its existing governance context",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews the dictation-language contract across API, I18N, Settings and one durable Decision; Development supplies independent typed CAS owner, IPC, persistence and renderer evidence while microphone and asset-install boundaries remain unchanged."
+      "independence": "Planning reviews the PIGE.md contract across Markdown, API, Settings, UI and one durable Decision; Development supplies separate typed CAS, confirmation, persistence, Activity and renderer evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Local Capabilities owns one machine-local dictation-language choice; Home resolves it only for new availability, install and speech-session requests."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, I18N, Settings and D-20260801-Persisted-Dictation-Language agree on strict CAS, six supported choices, new-session application and separate download authority."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Direct schema, service, IPC, registry, Settings and Home tests bind persistence and language resolution without claiming a broader speech or ingest exit."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"A bounded dictation-language owner reuses machine settings and existing Speech capability APIs without duplicating microphone, asset-install or transcription ownership."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing API, I18N and Settings owners plus one durable Decision absorb the feature without a new document, audio persistence, hidden download or status promotion."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Agent & Memory owns one active-vault PIGE.md editor; failed outcomes retain the draft and Activity owns exact committed Undo."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Markdown, API, Settings, UI and D-20260801-Vault-Pige-Policy-Editor agree on structure validation, explicit confirmation and pathless CAS."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Direct schema, service, IPC, registry and Settings tests bind validation, currentness, recovery and Undo without claiming broader Agent preference completion."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"A bounded policy owner reuses existing vault, confirmation, Operation and Activity boundaries without granting mutation authority to content or extensions."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Markdown, API, Settings and UI owners plus one durable Decision absorb the editor without adding a duplicate design document."}
   ],
   "verification": [
     {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Grouped knowledge-lifecycle Redo semantics, owner routing and references remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/library-topic-rename-service.test.ts tests/unit/note-merge-service.test.ts tests/unit/knowledge-health-duplicate-topic-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact matching-Undo lineage, repeated inverse action, multi-page drift closure, Main routing and interrupted Redo adoption are executable."},
+    {"command":"npx vitest run tests/unit/pige-policy-service.test.ts tests/unit/register-pige-policy-ipc.test.ts tests/unit/pige-policy-contract.test.ts tests/unit/pige-policy-settings-ui.test.ts tests/unit/settings-registry.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact validation-before-confirmation, vault/revision CAS, atomic persistence, Activity/Undo recovery and renderer draft retention are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "knowledge-lifecycle-redo-bind-20260801",
-    "taskTitle": "Bind grouped knowledge lifecycle Redo",
+    "taskId": "vault-pige-policy-editor-bind-20260801",
+    "taskTitle": "Bind the vault PIGE.md policy editor",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds each exact topic rename or two-page merge and matching Undo to private before/after/trash receipts, re-proves restored durable state, and publishes one deterministic forward Operation without exposing paths or Markdown.",
-    "acknowledgement": "Planning binds grouped Topic-title, note-merge and duplicate-topic-merge Redo while unrelated restore/Redo families and broader acceptance exits remain open; existing Activity IPC and UI contracts remain unchanged."
+    "compatibility": "Main binds one active-vault policy revision to validated canonical Markdown, explicit confirmation, an atomic receipt and exact matching Undo without exposing a path.",
+    "acknowledgement": "Planning binds the PIGE.md editor while broader Agent behavior preferences and acceptance exits remain open; existing Activity IPC and confirmation contracts remain unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

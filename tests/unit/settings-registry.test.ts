@@ -29,6 +29,15 @@ describe("settings registry", () => {
       storage: ".pige/config.json"
     });
     expect(byKey.get("memory.includeMemoryInBackup")?.agentPolicyEffect).toBeUndefined();
+    expect(byKey.get("vault.pigePolicy")).toMatchObject({
+      page: "Agent & Memory",
+      scope: "vault_portable",
+      storage: "PIGE.md",
+      backedUpByDefault: true,
+      applyBehavior: "requires_confirmation",
+      permissionRequirement: "explicit_confirmation",
+      agentPolicyEffect: "vault.pigePolicy"
+    });
     expect(byKey.get("models.providerApiKeys")?.scope).toBe("secret");
     expect(byKey.get("models.defaultPiAgentModel")?.agentPolicyEffect).toBe("model.defaultModelProfileId");
     expect([...byKey.keys()].filter((key) => key.startsWith("permissions."))).toEqual([]);

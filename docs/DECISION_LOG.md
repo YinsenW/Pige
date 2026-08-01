@@ -4478,6 +4478,39 @@ References:
 - `docs/SETTINGS_AND_PREFERENCES.md`
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 
+### D-20260801-Vault-Pige-Policy-Editor
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Pige exposes the active vault's `PIGE.md` in Settings > Agent & Memory through a bounded,
+pathless editor. Main validates the required policy structure and rejects secret-like content
+before requesting explicit confirmation, then commits only against the same vault, revision,
+and bytes.
+
+Rationale:
+
+`PIGE.md` is the durable vault-level Agent policy, but a required file that users cannot inspect
+or safely edit makes the policy contract unusable. Keeping validation, currentness, and durable
+write authority in Main preserves the local-first boundary without granting policy mutation to
+source content, model output, Skills, or packages.
+
+Consequences:
+
+- The renderer receives bounded Markdown and an opaque revision, never a filesystem path.
+- Invalid, denied, stale, and failed updates preserve the exact local draft and make no change.
+- A committed update is atomic, appears in Activity, supports exact Undo, and recovers after restart.
+- Policy text must not contain credentials or secret-like values.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
