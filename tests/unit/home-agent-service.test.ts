@@ -5651,13 +5651,63 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(runtimeCalls).toBe(1);
   });
 
-  it("rejects scoped attachments and duplicate current-note page identities before Pi", async () => {
-    expect(AgentSubmitTurnRequestSchema.safeParse({
+  it("binds a current note and one preserved attachment into the same Pi evidence turn", async () => {
+    const fixture = makeFixture();
+    const models = makeModels();
+    let observedPrompt = "";
+    let observedTools: readonly string[] = [];
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        observedPrompt = request.systemPrompt;
+        observedTools = request.tools.map((tool) => tool.name);
+        return new PiAgentRuntimeAdapter({ fauxResponses: [
+          { kind: "tool_call", toolName: "pige_read_current_note", args: {} },
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+          { kind: "text", text: "The note and attachment were inspected together. [citation_1] [citation_11]" }
+        ] }).run(request);
+      }
+    };
+    const jobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
+    const service = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      runtime
+    );
+    const sourcePath = path.join(path.dirname(fixture.vaultPath), "mixed-current-note.txt");
+    fs.writeFileSync(sourcePath, "The attachment adds one exact supporting fact.\n", "utf8");
+    const request = {
       text: "Mix this note with an attachment.",
       inputKind: "file_picker",
       scope: { kind: "current_note", pageId: HOME_PAGE_ID },
-      locale: "en"
-    }).success).toBe(false);
+      locale: "en",
+      clientTurnId: "turn_20260801_mixednote001"
+    } as const;
+    expect(AgentSubmitTurnRequestSchema.safeParse(request).success).toBe(true);
+    expect(AgentSubmitTurnRequestSchema.safeParse({ ...request, inputKind: "file_drop" }).success).toBe(false);
+    const prepared = service.prepareSourceTurn(request);
+    expect(prepared.request).toMatchObject({ scope: request.scope });
+    expect(jobs.readAgentTurnJob(prepared.jobId)?.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "page", id: HOME_PAGE_ID, role: "agent_turn_current_note_scope" }),
+      expect.objectContaining({ kind: "source", id: prepared.sourceId, role: "agent_turn_source" })
+    ]));
+    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
+      filePaths: [sourcePath], inputKind: "file_picker", userIntent: request.text, locale: "en"
+    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+
+    const outcome = await service.submitPreparedSourceTurn(prepared);
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      jobId: prepared.jobId,
+      answer: { citations: [{ refId: "citation_1" }, { refId: "citation_11" }] }
+    });
+    expect(observedPrompt).toContain("mixed current-note request with 1 Host-bound attachment");
+    expect(observedTools).toEqual(expect.arrayContaining(["pige_read_current_note", "pige_inspect_source"]));
+  });
+
+  it("rejects duplicate current-note page identities before Pi", async () => {
 
     const fixture = makeFixture();
     fs.writeFileSync(

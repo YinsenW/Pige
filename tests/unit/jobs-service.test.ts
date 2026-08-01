@@ -11,6 +11,7 @@ import { CaptureService, type SourceFetchPort } from "../../apps/desktop/src/mai
 import { DocumentParserService, type DocumentParserPort } from "../../apps/desktop/src/main/services/document-parser-service";
 import { JobCancellationError } from "../../apps/desktop/src/main/services/job-execution-control";
 import { HomeAgentAttachmentService } from "../../apps/desktop/src/main/services/home-agent-attachment-service";
+import { isValidReaderSelectionJobScope } from "../../apps/desktop/src/main/services/reader-selection-job-binding";
 import { backupDestinationDependency } from "../../apps/desktop/src/main/services/backup-destination-reconnect-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
@@ -970,6 +971,23 @@ describe("jobs service", () => {
     }));
     expect(() => jobs.createAgentTurnJob({ ...startedRequest, currentNoteScope }))
       .toThrowError(expect.objectContaining({ code: "agent_runtime.turn_binding_invalid" }));
+  });
+
+  it("permits preserved sources only beside a full current-note evidence scope", () => {
+    const fullNoteScope = {
+      pageId: "page_20260801_mixedscope",
+      bindingHash: `sha256:${"a".repeat(64)}`
+    };
+    expect(isValidReaderSelectionJobScope(fullNoteScope, true)).toBe(true);
+    expect(isValidReaderSelectionJobScope({
+      ...fullNoteScope,
+      selection: {
+        pageId: fullNoteScope.pageId,
+        pageContentHash: `sha256:${"b".repeat(64)}`,
+        span: { unit: "utf8_bytes" as const, start: 0, endExclusive: 4 },
+        selectedContentHash: `sha256:${"c".repeat(64)}`
+      }
+    }, true)).toBe(false);
   });
 
   it("processes queued text captures into source pages and log entries", () => {

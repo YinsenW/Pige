@@ -451,11 +451,11 @@ export const AgentSubmitTurnRequestSchema = z.object({
       message: "Only a follow-up or file picker may continue an existing conversation."
     });
   }
-  if (request.scope && fileInput) {
+  if (request.scope && request.inputKind === "file_drop") {
     context.addIssue({
       code: "custom",
       path: ["scope"],
-      message: "A current-note turn cannot attach another source."
+      message: "A whole-window file drop cannot claim current-note scope."
     });
   }
   if (stagedItems.length > 0 && !fileInput) {

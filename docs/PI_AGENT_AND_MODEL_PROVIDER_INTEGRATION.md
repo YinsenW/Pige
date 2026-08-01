@@ -391,6 +391,12 @@ checked prior messages/64 KiB; history cannot become the result. The pair change
 identity, never Pi semantics. Pige events/Jobs, not Pi sessions, are authoritative;
 compaction/indexing and steer queues remain open.
 
+The Note Agent file picker may preserve a current-note scope beside bounded file attachments
+in that same isolated Pi turn. Host registers the exact current-note reader and source tools,
+requires the note read before attachment inspection, and binds separate page/source refs to one
+Job. It does not merge their authority or register unrelated search, Dataset, URL, Skill, package,
+filesystem or external capabilities.
+
 Home draft streaming is a Pi-owned answer presentation boundary, not raw provider output.
 Pige accepts bounded assistant replacement snapshots from reviewed upstream Pi events
 after transport framing and envelope validation. Draft validity never determines Job success.

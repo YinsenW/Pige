@@ -51,6 +51,61 @@ afterEach(() => {
 });
 
 describe("Note Agent production UI", () => {
+  it("stages removable files and submits them with the exact current-note scope", async () => {
+    const dom = createDom();
+    const conversation = vi.fn().mockResolvedValue(undefined);
+    const submitTurn = vi.fn().mockResolvedValue({
+      requestId: "turn_20260801_mixednoteui",
+      jobId: "job_20260801_mixednoteui",
+      conversationEventId: "evt_20260801_mixednoteui",
+      conversationId: "conversation_mixednoteui",
+      tailEventId: "evt_20260801_mixednoteui",
+      state: "accepted",
+      modelUsage: "none",
+      sourceIds: ["source_mixednoteui"]
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { ...noteAgentApi(conversation), agent: {
+        conversation,
+        submitTurn,
+        onTurnDraft: () => () => undefined
+      } }
+    });
+    const container = dom.window.document.createElement("div");
+    dom.window.document.body.append(container);
+    const { createRoot } = await import("react-dom/client");
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(CurrentNoteAgent, currentNoteAgentProps("page_20260801_mixednoteui")));
+      await settle(dom);
+    });
+    await waitFor(dom, () => required(container.querySelector<HTMLTextAreaElement>("textarea")).disabled === false);
+    const file = new dom.window.File(["supporting evidence"], "supporting.txt", { type: "text/plain", lastModified: 1 });
+    const picker = required(container.querySelector<HTMLInputElement>('input[type="file"]'));
+    Object.defineProperty(picker, "files", { configurable: true, value: [file] });
+    await act(async () => {
+      picker.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+      await settle(dom);
+    });
+    expect(container.querySelector(".attachment-chip")?.textContent).toContain("supporting.txt");
+
+    const textarea = required(container.querySelector<HTMLTextAreaElement>("textarea"));
+    await input(dom, textarea, "Compare the attachment with this note.");
+    await keydown(dom, textarea, { key: "Enter" });
+    await waitFor(dom, () => submitTurn.mock.calls.length === 1);
+
+    expect(submitTurn).toHaveBeenCalledWith(expect.objectContaining({
+      text: "Compare the attachment with this note.",
+      inputKind: "file_picker",
+      scope: { kind: "current_note", pageId: "page_20260801_mixednoteui" },
+      stagedItems: [{ kind: "file", ordinal: 0, displayName: "supporting.txt" }]
+    }), [file]);
+    await waitFor(dom, () => container.querySelector(".attachment-chip") === null);
+    expect(textarea.value).toBe("");
+    await unmount(dom, root);
+  });
+
   it("prepends exact earlier messages once, preserves scroll position, and restores focus", async () => {
     const dom = createDom();
     let resolveEarlier!: (value: unknown) => void;
@@ -979,7 +1034,7 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
-  it("binds one exact current-note scope without attachments or mutation surfaces", async () => {
+  it("binds one exact current-note scope with bounded attachments and no mutation surfaces", async () => {
     const dom = createDom();
     const draftListeners: Array<(event: unknown) => void> = [];
     const conversation = vi.fn().mockResolvedValue(undefined);
@@ -1116,7 +1171,7 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-provisional="true"]')).toBeNull();
     expect(buttonNamed(container, "Current note · quote")).toBeDefined();
     expect(container.querySelector(".proposal-panel")).toBeNull();
-    expect(container.querySelector(".attach-button")).toBeNull();
+    expect(container.querySelector(".attach-button")).not.toBeNull();
 
     await unmount(dom, root);
   });

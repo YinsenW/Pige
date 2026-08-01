@@ -626,6 +626,13 @@ kinds reject it. Home snapshots `canFollowUp`; stale/mixed identity fails before
 never falls back. `agent.conversation` returns <=100 bounded messages, exact tail,
 `canFollowUp` and safe latest Job without paths, Provider data or raw errors.
 
+A current-note `file_picker` turn may also carry the ordinary bounded staged-file set. Main
+binds the exact current page and preserved Source Records into one Agent Job; the renderer
+does not supply citation, source or storage authority. Pi must read the current note first,
+then may inspect only those exact Host-bound attachments. The page and each attachment keep
+separate evidence refs; this combination grants no ambient search, Dataset, URL or external
+capability. `file_drop` remains unscoped.
+
 `agent.conversationHistory` returns <=50 safe summaries; its optional <=120-code-point query
 matches only title/`safePreview`. Open reuses `agent.conversation`, the sole follow-up authority.
 Cursors bind vault/query/snapshot/boundary; drift fails before append. Trash/restore revision-bind

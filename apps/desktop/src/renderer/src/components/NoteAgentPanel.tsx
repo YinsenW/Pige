@@ -60,6 +60,7 @@ export function NoteAgentPanel(props: {
   readonly pagination?: ConversationPaginationController;
   readonly proposal: NoteAgentProposal | null;
   readonly draft: string;
+  readonly attachments?: readonly { readonly key: string; readonly name: string }[];
   readonly models: readonly NoteAgentModelOption[];
   readonly switchingModel: boolean;
   readonly errorMessageKey?: string;
@@ -69,6 +70,7 @@ export function NoteAgentPanel(props: {
   readonly onCancel?: () => void;
   readonly onRetry?: () => void;
   readonly onAttach?: () => void;
+  readonly onRemoveAttachment?: (index: number) => void;
   readonly onOpenModels?: (opener: HTMLButtonElement) => void;
   readonly onSelectModel?: (modelId: string) => Promise<boolean>;
   readonly onOpenCitation?: (pageId: string) => void;
@@ -438,6 +440,26 @@ export function NoteAgentPanel(props: {
         </div>
 
         <div className="note-composer-wrap">
+          {props.attachments?.length ? (
+            <div className="attachment-strip visible" aria-label={props.t("home.attachedFiles")}>
+              <div className="attachment-list">
+                {props.attachments.map((attachment, index) => (
+                  <div className="attachment-chip" key={attachment.key}>
+                    <span className="attachment-chip-copy">{attachment.name}</span>
+                    <button
+                      className="icon-button"
+                      type="button"
+                      aria-label={`${props.t("home.removeAttachment")}: ${attachment.name}`}
+                      disabled={props.availability !== "ready" || !props.onRemoveAttachment}
+                      onClick={() => props.onRemoveAttachment?.(index)}
+                    >
+                      <PigeIcon name="close" size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <section className="note-composer" aria-label={props.t("note.agentComposer")}>
             <textarea
               aria-label={props.t("note.agentComposer")}
