@@ -67,6 +67,7 @@ import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
+import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
 import { DiagnosticsJobCard, PrivateExcerptSupportOption, ProviderMetadataSupportOption, SupportBundlePreviewCard,
   SupportBundlePreviewTrigger, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
@@ -8630,15 +8631,7 @@ export function SystemSettingsPanel(props: {
             </div>
             <span className="settings-status">{props.t("system.publicAlpha")}</span>
           </div>
-          <div className="settings-row">
-            <div className="settings-row-copy">
-              <strong>{props.t("system.autoDownload")}</strong>
-              <span>{props.t("system.autoDownloadDescription")}</span>
-            </div>
-            <button className="settings-button" type="button" disabled title={props.t("development.state.unavailable")}>
-              {props.t("development.state.unavailable")}
-            </button>
-          </div>
+          <ManualUpdateDownloadAction t={props.t} />
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.updateStatus")}</strong>

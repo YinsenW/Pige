@@ -4478,6 +4478,9 @@ describe("full UI Settings surface", () => {
         applyResolvers.push(resolve);
       })
     );
+    const openManualDownload = vi.fn(async (request: import("@pige/contracts").UpdateManualDownloadRequest) =>
+      ({ ...request, status: "opened" as const })
+    );
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
@@ -4493,6 +4496,7 @@ describe("full UI Settings surface", () => {
           check,
           download,
           apply,
+          openManualDownload,
           onStatusChanged: vi.fn((listener: typeof statusListener) => {
             statusListener = listener;
             return unsubscribe;
@@ -4518,7 +4522,13 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("Support bundle");
     expect(panel.textContent).toContain("0.1.0");
     expect(panel.textContent).toContain("Not checked yet");
-    expect(buttonNamed(panel, "Temporarily unavailable. Nothing was changed.").disabled).toBe(true);
+    const manualDownload = buttonNamed(panel, "Open downloads");
+    expect(manualDownload.disabled).toBe(false);
+    await act(async () => { manualDownload.click(); await settle(dom); await settle(dom); });
+    expect(openManualDownload).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^updatemanualreq_[a-z0-9]{32}$/u)
+    });
 
     await act(async () => {
       buttonNamed(panel, "Check for updates").click();

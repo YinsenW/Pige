@@ -61,6 +61,7 @@ import type {
   UpdateApplyRequest,
   UpdateCheckRequest,
   UpdateDownloadRequest,
+  UpdateManualDownloadRequest,
   UpdateStatusEvent,
   UpdateSourceStoragePolicyRequest,
   VaultMigrationApplyRequest,
@@ -125,6 +126,8 @@ import {
   UpdateCheckResultSchema,
   UpdateDownloadRequestSchema,
   UpdateDownloadResultSchema,
+  UpdateManualDownloadRequestSchema,
+  UpdateManualDownloadResultSchema,
   UpdateApplyRequestSchema,
   UpdateApplyResultSchema,
   UpdateStatusEventSchema,
@@ -432,6 +435,7 @@ import {
   type TaskExecutionRecipeToolRoots
 } from "./services/task-execution-recipe-service";
 import { NoNetworkUpdateCheckAdapter, UpdateService } from "./services/update-service";
+import { ManualUpdateDownloadService } from "./services/manual-update-download-service";
 import { SkillRegistryService } from "./services/skill-registry-service";
 import { ScopedSkillRegistryService } from "./services/scoped-skill-registry-service";
 import { SkillUrlInstallService } from "./services/skill-url-install-service";
@@ -566,6 +570,7 @@ let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let dictationLanguagePreferenceService: DictationLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
+let manualUpdateDownloadService: ManualUpdateDownloadService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
 let scopedSkillRegistryService: ScopedSkillRegistryService | undefined;
 let skillUrlInstallService: SkillUrlInstallService | undefined;
@@ -1122,6 +1127,11 @@ const getUpdateService = (): UpdateService => {
     });
   }
   return updateService;
+};
+
+const getManualUpdateDownloadService = (): ManualUpdateDownloadService => {
+  manualUpdateDownloadService ??= new ManualUpdateDownloadService((url) => shell.openExternal(url));
+  return manualUpdateDownloadService;
 };
 
 const hasUpdateBlockingWork = (): boolean => {
@@ -4009,6 +4019,11 @@ ipcMain.handle("updates.download", (_event, request: UpdateDownloadRequest) =>
 ipcMain.handle("updates.apply", async (_event, request: UpdateApplyRequest) =>
   UpdateApplyResultSchema.parse(
     await getUpdateService().apply(UpdateApplyRequestSchema.parse(request))
+  )
+);
+ipcMain.handle("updates.openManualDownload", async (_event, request: UpdateManualDownloadRequest) =>
+  UpdateManualDownloadResultSchema.parse(
+    await getManualUpdateDownloadService().open(UpdateManualDownloadRequestSchema.parse(request))
   )
 );
 ipcMain.handle("system.toolchainHealth", recoverReadyLocalCapabilities);

@@ -1499,6 +1499,15 @@ export interface UpdateApplyResult {
   readonly summary: UpdateSummary;
 }
 
+export interface UpdateManualDownloadRequest {
+  readonly apiVersion: 1;
+  readonly requestId: string;
+}
+
+export interface UpdateManualDownloadResult extends UpdateManualDownloadRequest {
+  readonly status: "opened" | "busy" | "failed";
+}
+
 export interface UpdateStatusEvent {
   readonly apiVersion: 1;
   readonly requestId: string;
@@ -2910,6 +2919,9 @@ export interface PigeDesktopApi {
     readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>;
     readonly download: (request: UpdateDownloadRequest) => Promise<UpdateDownloadResult>;
     readonly apply: (request: UpdateApplyRequest) => Promise<UpdateApplyResult>;
+    readonly openManualDownload: (
+      request: UpdateManualDownloadRequest
+    ) => Promise<UpdateManualDownloadResult>;
     readonly onStatusChanged: (listener: (event: UpdateStatusEvent) => void) => () => void;
   };
   readonly backup: {

@@ -5581,6 +5581,7 @@ export const UpdatePhaseSchema = z.enum([
 export const UpdateCheckRequestIdSchema = z.string().regex(/^updatereq_[a-z0-9]{16,64}$/u);
 export const UpdateDownloadRequestIdSchema = z.string().regex(/^updatedownloadreq_[a-z0-9]{16,64}$/u);
 export const UpdateApplyRequestIdSchema = z.string().regex(/^updateapplyreq_[a-z0-9]{16,64}$/u);
+export const UpdateManualDownloadRequestIdSchema = z.string().regex(/^updatemanualreq_[a-z0-9]{16,64}$/u);
 export const UpdateRequestIdSchema = z.union([
   UpdateCheckRequestIdSchema,
   UpdateDownloadRequestIdSchema,
@@ -5739,6 +5740,17 @@ export const UpdateApplyResultSchema = z.object({
   requestId: UpdateApplyRequestIdSchema,
   version: UpdateVersionSchema,
   summary: UpdateSummarySchema
+}).strict();
+
+export const UpdateManualDownloadRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateManualDownloadRequestIdSchema
+}).strict();
+
+export const UpdateManualDownloadResultSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: UpdateManualDownloadRequestIdSchema,
+  status: z.enum(["opened", "busy", "failed"])
 }).strict();
 
 export const UpdateStatusEventSchema = z.object({
@@ -13012,6 +13024,8 @@ export type UpdateDownloadResult = z.infer<typeof UpdateDownloadResultSchema>;
 export type UpdateApplyRequestId = z.infer<typeof UpdateApplyRequestIdSchema>;
 export type UpdateApplyRequest = z.infer<typeof UpdateApplyRequestSchema>;
 export type UpdateApplyResult = z.infer<typeof UpdateApplyResultSchema>;
+export type UpdateManualDownloadRequest = z.infer<typeof UpdateManualDownloadRequestSchema>;
+export type UpdateManualDownloadResult = z.infer<typeof UpdateManualDownloadResultSchema>;
 export type UpdateMachineSettings = z.infer<typeof UpdateMachineSettingsSchema>;
 export type AppearanceThemePreference = z.infer<typeof AppearanceThemePreferenceSchema>;
 export type GeneratedKnowledgeLanguage = z.infer<typeof GeneratedKnowledgeLanguageSchema>;

@@ -417,6 +417,8 @@ import type {
   UpdateCheckResult,
   UpdateDownloadRequest,
   UpdateDownloadResult,
+  UpdateManualDownloadRequest,
+  UpdateManualDownloadResult,
   UpdateStatusEvent,
   UpdateSummary,
   UpdateSourceStoragePolicyRequest,
@@ -935,6 +937,8 @@ import {
   UpdateCheckResultSchema,
   UpdateDownloadRequestSchema,
   UpdateDownloadResultSchema,
+  UpdateManualDownloadRequestSchema,
+  UpdateManualDownloadResultSchema,
   UpdateStatusEventSchema,
   UpdateSummarySchema,
   SkillDiscardStagedRequestSchema,
@@ -3256,6 +3260,12 @@ const api: PigeDesktopApi = {
     apply: async (request: UpdateApplyRequest): Promise<UpdateApplyResult> => {
       const parsedRequest = UpdateApplyRequestSchema.parse(request);
       return UpdateApplyResultSchema.parse(await ipcRenderer.invoke("updates.apply", parsedRequest));
+    },
+    openManualDownload: async (request: UpdateManualDownloadRequest): Promise<UpdateManualDownloadResult> => {
+      const parsedRequest = UpdateManualDownloadRequestSchema.parse(request);
+      return UpdateManualDownloadResultSchema.parse(
+        await ipcRenderer.invoke("updates.openManualDownload", parsedRequest)
+      );
     },
     onStatusChanged: (listener: (event: UpdateStatusEvent) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
