@@ -55,7 +55,7 @@
     "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit and Library tag lifecycle Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "7b58e1bc252a94aab29769fc89a3f1468afd8e3733820a5ec73317a9b1ebf2da"
+    "reviewedSha256": "a382c2ffdffc9bd21a16d0ceff6f133a71874be0fb50896f3c145fb7cc064335"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
