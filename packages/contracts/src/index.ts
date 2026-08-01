@@ -1692,7 +1692,7 @@ export interface LibraryRelatedRequest {
 export interface LibraryRelatedPage {
   readonly summary: LibraryPageSummary;
   readonly relation: "outgoing" | "backlink";
-  readonly relationType: "links_to" | "related_to" | "mentions_entity";
+  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "answers";
   readonly target: string;
 }
 

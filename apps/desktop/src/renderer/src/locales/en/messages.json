@@ -1065,6 +1065,8 @@
   "note.preview": "Preview",
   "note.reader": "Reader",
   "note.related": "Related",
+  "note.relatedType.answers": "Answers this question",
+  "note.relatedType.contradicts": "Contradicts this claim",
   "note.relatedEmpty": "No related notes yet.",
   "note.relatedLoading": "Reading related notes...",
   "note.relatedUnavailable": "Related notes are unavailable.",

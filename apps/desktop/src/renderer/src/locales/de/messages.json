@@ -1065,6 +1065,8 @@
   "note.preview": "Vorschau",
   "note.reader": "Leser",
   "note.related": "Verknüpft",
+  "note.relatedType.answers": "Beantwortet diese Frage",
+  "note.relatedType.contradicts": "Widerspricht dieser Aussage",
   "note.relatedEmpty": "Noch keine verknüpften Notizen.",
   "note.relatedLoading": "Verknüpfte Notizen werden gelesen...",
   "note.relatedUnavailable": "Verknüpfte Notizen sind nicht verfügbar.",

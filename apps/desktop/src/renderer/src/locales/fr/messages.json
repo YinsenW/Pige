@@ -1065,6 +1065,8 @@
   "note.preview": "Aperçu",
   "note.reader": "Lecteur",
   "note.related": "Liens",
+  "note.relatedType.answers": "Répond à cette question",
+  "note.relatedType.contradicts": "Contredit cette affirmation",
   "note.relatedEmpty": "Aucune note liée pour le moment.",
   "note.relatedLoading": "Lecture des notes liées...",
   "note.relatedUnavailable": "Notes liées indisponibles.",

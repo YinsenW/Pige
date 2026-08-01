@@ -11,6 +11,7 @@ import {
 import {
   MarkdownPageStatusSchema,
   MarkdownPageTypeSchema,
+  PageIdSchema,
   type MarkdownPageType
 } from "@pige/schemas";
 import { createVaultRelativePathResolver } from "./vault-layout";
@@ -30,6 +31,8 @@ export interface MarkdownPageKnowledgeFields {
   readonly topics: readonly string[];
   readonly entities: readonly string[];
   readonly relatedPageIds: readonly string[];
+  readonly claimContradicts: readonly string[];
+  readonly questionAnswers: readonly string[];
 }
 export interface MarkdownPageScanResult {
   readonly pages: readonly MarkdownPageRecord[];
@@ -312,7 +315,13 @@ function readMarkdownPageRecord(
       tags: normalizePigeTags(rawTags ?? [], rawTags?.length ?? 12),
       topics: sanitizeKnowledgeRefs(parsed.frontmatter.topics),
       entities: sanitizeKnowledgeRefs(parsed.frontmatter.entities),
-      relatedPageIds: sanitizeKnowledgeRefs(parsed.frontmatter.related_page_ids)
+      relatedPageIds: sanitizeKnowledgeRefs(parsed.frontmatter.related_page_ids),
+      claimContradicts: summary.pageType === "claim"
+        ? readNestedPageIds(parsed.raw, "claim", "contradicts")
+        : [],
+      questionAnswers: summary.pageType === "question"
+        ? readNestedPageIds(parsed.raw, "question", "answered_by")
+        : []
     }
   } : undefined;
 }
@@ -487,6 +496,25 @@ function sanitizeKnowledgeRefs(values: readonly string[] | undefined): readonly 
     .map(normalizeTitle)
     .filter((value) => value.length > 0 && value.length <= 256);
   return Array.from(new Set(normalized)).slice(0, 64);
+}
+
+function readNestedPageIds(raw: string, section: "claim" | "question", field: string): readonly string[] {
+  const lines = raw.split(/\r?\n/u);
+  const starts = lines.flatMap((line, index) => line === `${section}:` ? [index] : []);
+  if (starts.length !== 1) return [];
+  const end = lines.findIndex((line, index) => index > starts[0]! && /^\S/u.test(line));
+  const prefix = `  ${field}:`;
+  const values = lines.slice(starts[0]! + 1, end < 0 ? undefined : end)
+    .filter((line) => line.startsWith(prefix));
+  if (values.length !== 1) return [];
+  try {
+    const parsed = JSON.parse(values[0]!.slice(prefix.length).trim()) as unknown;
+    if (!Array.isArray(parsed) || parsed.length > 32) return [];
+    const pageIds = parsed.filter((value): value is string => PageIdSchema.safeParse(value).success);
+    return pageIds.length === parsed.length ? Array.from(new Set(pageIds)) : [];
+  } catch {
+    return [];
+  }
 }
 
 function normalizeTitle(title: string): string {
