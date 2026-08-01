@@ -11120,6 +11120,56 @@ export const JobCompactionSummarySchema = z.object({
   durationMs: z.number().int().nonnegative().optional()
 }).strict();
 
+const AgentKnowledgeOutcomeRefSchema = z.object({
+  kind: z.enum(["source", "dataset", "dataset_revision", "page", "proposal", "operation"]),
+  id: z.string().min(1),
+  role: z.string().min(1).max(120)
+}).strict();
+
+export const AgentKnowledgeOutcomeSummarySchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.enum(["created", "updated", "linked", "skipped", "failed", "needs_attention"]),
+  knowledgeFields: z.array(z.enum([
+    "title",
+    "summary",
+    "key_points",
+    "citations",
+    "relationships",
+    "tags",
+    "dataset"
+  ])).max(7).refine((fields) => new Set(fields).size === fields.length, "Knowledge fields must be unique."),
+  citationRefs: z.array(AgentKnowledgeOutcomeRefSchema).max(16),
+  writeRefs: z.array(AgentKnowledgeOutcomeRefSchema).max(16),
+  operationIds: z.array(OperationIdSchema).max(16).refine(
+    (operationIds) => new Set(operationIds).size === operationIds.length,
+    "Outcome Operation IDs must be unique."
+  ),
+  undoOperationIds: z.array(OperationIdSchema).max(16).refine(
+    (operationIds) => new Set(operationIds).size === operationIds.length,
+    "Outcome Undo Operation IDs must be unique."
+  ),
+  recoveryRefs: z.array(AgentKnowledgeOutcomeRefSchema).min(1).max(16),
+  failureCode: z.string().regex(/^[a-z][a-z0-9_.-]{2,119}$/u).optional()
+}).strict().superRefine((outcome, context) => {
+  const operationIds = new Set(outcome.operationIds);
+  for (const operationId of outcome.undoOperationIds) {
+    if (!operationIds.has(operationId)) {
+      context.addIssue({
+        code: "custom",
+        path: ["undoOperationIds"],
+        message: "Outcome Undo Operation IDs must also be committed Operation IDs."
+      });
+    }
+  }
+  if ((outcome.kind === "failed") !== (outcome.failureCode !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["failureCode"],
+      message: "Only failed outcomes must include a stable failure code."
+    });
+  }
+});
+
 export const JobRecordSchema = z.object({
   schemaVersion: z.literal(1).default(1),
   id: JobIdSchema,
@@ -11185,6 +11235,7 @@ export const JobRecordSchema = z.object({
     usedShell: z.boolean(),
     accessedExternalFiles: z.boolean()
   }).optional(),
+  agentKnowledgeOutcome: AgentKnowledgeOutcomeSummarySchema.optional(),
   compaction: JobCompactionSummarySchema.optional(),
   message: z.string().min(1)
 }).strict().superRefine((job, context) => {
@@ -11212,6 +11263,13 @@ export const JobRecordSchema = z.object({
       message: "A compacted Job must include exactly one compaction summary."
     });
   }
+  if (job.agentKnowledgeOutcome && job.class !== ["agent", "ingest"].join("_")) {
+    context.addIssue({
+      code: "custom",
+      path: ["agentKnowledgeOutcome"],
+      message: "Only a source-bound Agent ingest Job may retain a knowledge outcome."
+    });
+  }
 });
 
 export const JOB_CHANGED_EVENT_CHANNEL = "jobs.changed" as const;
@@ -11237,6 +11295,7 @@ export const JobChangedSummarySchema = z.object({
   canContinueIncomplete: z.boolean(),
   canCancel: z.boolean(),
   canRetry: z.boolean(),
+  agentKnowledgeOutcome: AgentKnowledgeOutcomeSummarySchema.optional(),
   error: PigeErrorSummarySchema.optional(),
   message: z.string().min(1),
   createdAt: z.string().datetime({ offset: true }),
@@ -12231,6 +12290,7 @@ export type KnowledgeHealthClaimSourceRepairRequest = z.infer<typeof KnowledgeHe
 export type KnowledgeHealthClaimSourceRepairResult = z.infer<typeof KnowledgeHealthClaimSourceRepairResultSchema>;
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
+export type AgentKnowledgeOutcomeSummary = z.infer<typeof AgentKnowledgeOutcomeSummarySchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
 export type JobChangedEvent = z.infer<typeof JobChangedEventSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;

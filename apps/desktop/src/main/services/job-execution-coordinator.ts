@@ -3,6 +3,7 @@ import {
   JobRecordSchema,
   PigeErrorSummarySchema,
   type JobCheckpoint,
+  type AgentKnowledgeOutcomeSummary,
   type JobRecord,
   type JobRef,
   type JobStage,
@@ -91,6 +92,7 @@ const FACT_KEYS = new Set([
   "policyHash",
   "activeVaultId",
   "privacy",
+  "agentKnowledgeOutcome",
   "message"
 ]);
 
@@ -108,6 +110,7 @@ export interface JobExecutionFactsPatch {
   readonly policyHash?: string;
   readonly activeVaultId?: string;
   readonly privacy?: JobPrivacy;
+  readonly agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary;
   readonly message?: string;
 }
 
@@ -330,6 +333,7 @@ export class JobExecutionCoordinator {
       cancellation,
       finishedAt: undefined,
       waitingDependency: undefined,
+      agentKnowledgeOutcome: undefined,
       error: undefined
     });
   }
@@ -1059,6 +1063,7 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
     ...(facts.policyHash ? { policyHash: facts.policyHash } : {}),
     ...(facts.activeVaultId ? { activeVaultId: facts.activeVaultId } : {}),
     ...(facts.privacy ? { privacy: mergePrivacy(job.privacy, facts.privacy) } : {}),
+    ...(facts.agentKnowledgeOutcome ? { agentKnowledgeOutcome: facts.agentKnowledgeOutcome } : {}),
     ...(facts.message ? { message: facts.message } : {})
   };
 }

@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "8955a53d366d9f64323a2ee1c4896c7353627457",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 283,
-  "baselineLines": 125717,
+  "baselineFileCount": 285,
+  "baselineLines": 126011,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -20,6 +20,7 @@
     ],
     "authority_reliability": [
       ["agent-ingest-publication-authority.ts", 137, "jrd"],
+      ["agent-knowledge-outcome.ts", 192, "jrd"],
       ["agent-conversation-capture-reference.ts", 114, "rd"],
       ["agent-conversation-export-service.ts", 182, "prd"],
       ["agent-conversation-history.ts", 538, "r"],
@@ -46,6 +47,7 @@
       ["conversation-context-compaction-service.ts", 134, "rd"],
       ["conversation-trash-service.ts", 583, "rd"],
       ["claim-contradiction-service.ts", 189, "rdf"],
+      ["entity-type-service.ts", 102, "rdf"],
       ["concept-parent-service.ts", 193, "rdf"],
       ["external-file-publication-protocol.ts", 183, "prd"],
       ["generated-note-file.ts", 515, "rdf"],
@@ -316,7 +318,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 283,
+    "serviceOwnerCount": 285,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

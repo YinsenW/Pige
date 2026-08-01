@@ -115,6 +115,19 @@ export function ActivityHistorySettingsPanel(props: {
           aria-label={`${label} ${progress}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
           <span className="progress-fill" style={{ "--progress": `${progress}%` } as CSSProperties} />
         </span>}
+        {job.agentKnowledgeOutcome ? <span data-agent-knowledge-outcome={job.agentKnowledgeOutcome.kind}>
+          {props.t(`activity.agentOutcome.${job.agentKnowledgeOutcome.kind}`)}
+          {job.agentKnowledgeOutcome.knowledgeFields.length > 0
+            ? ` · ${job.agentKnowledgeOutcome.knowledgeFields.length} ${props.t("activity.agentOutcome.fields")}` : ""}
+          {job.agentKnowledgeOutcome.citationRefs.length > 0
+            ? ` · ${job.agentKnowledgeOutcome.citationRefs.length} ${props.t("activity.agentOutcome.citations")}` : ""}
+          {job.agentKnowledgeOutcome.writeRefs.length > 0
+            ? ` · ${job.agentKnowledgeOutcome.writeRefs.length} ${props.t("activity.agentOutcome.writes")}` : ""}
+          {job.agentKnowledgeOutcome.recoveryRefs.length > 0
+            ? ` · ${job.agentKnowledgeOutcome.recoveryRefs.length} ${props.t("activity.agentOutcome.recovery")}` : ""}
+          {job.agentKnowledgeOutcome.undoOperationIds.length > 0
+            ? ` · ${props.t("activity.agentOutcome.undoAvailable")}` : ""}
+        </span> : null}
         {job.error ? <span>{props.t(job.error.messageKey)}</span> : null}
         {failure ? <span role="alert">{props.t(failure === "retry" ? "activity.jobRetryFailed" : "activity.jobCancelFailed")}</span> : null}
       </div>
