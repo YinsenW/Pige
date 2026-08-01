@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,60 @@ afterEach(() => {
 });
 
 describe("NoteTrashService", () => {
+  it("trashes one exact Pige-generated claim and converges through Undo, Redo, restart, and public restore", async () => {
+    const fixture = createFixture({
+      pageId: "page_20260801_recoverclaim1",
+      pageType: "claim",
+      title: "Recoverable claim",
+      generatedBy: "pige"
+    });
+    const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
+    expect(rendered.trashEligibility).toEqual({
+      canTrash: true,
+      revision: fixture.revision()
+    });
+    const trashed = fixture.service.trash(fixture.ownerId, {
+      apiVersion: 1,
+      requestId: "notetrashreq_generatedclaim1234",
+      activeVaultId: fixture.vault.vaultId,
+      currentPageId: fixture.pageId,
+      renderContextId: rendered.renderContextId!,
+      expectedRevision: rendered.trashEligibility!.revision
+    });
+    expect(trashed).toMatchObject({ status: "committed" });
+
+    const restarted = new NoteTrashService(fixture.vaults, fixture.notes);
+    const activity = new KnowledgeActivityService(fixture.vaults, undefined, undefined, undefined, restarted);
+    const trashOperation = readOperation(fixture.vaultPath, trashed.operationId!);
+    expect(activity.undo({ operationId: trashOperation.id })).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.content);
+
+    const redone = new NoteTrashRedoService(fixture.vaults, {
+      now: () => new Date("2026-08-01T12:01:00.000Z")
+    }).redo({ operationId: trashOperation.id });
+    expect(redone).toMatchObject({ status: "redone" });
+    const listed = restarted.list({
+      apiVersion: 1,
+      requestId: "notetrashlistreq_generatedclaim12",
+      activeVaultId: fixture.vault.vaultId
+    });
+    expect(listed).toMatchObject({ status: "ready", notes: [{
+      pageId: fixture.pageId,
+      title: "Recoverable claim",
+      canRestore: true
+    }] });
+    if (listed.status !== "ready" || !listed.notes[0]) throw new Error("Expected one recoverable claim.");
+    expect(new NoteTrashService(fixture.vaults, fixture.notes).restore({
+      apiVersion: 1,
+      requestId: "notetrashrestorereq_generatedclaim12",
+      activeVaultId: fixture.vault.vaultId,
+      pageId: fixture.pageId,
+      trashOperationId: listed.notes[0].trashOperationId,
+      expectedTrashRevision: listed.notes[0].expectedTrashRevision
+    })).toMatchObject({ status: "committed" });
+    expect((await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId)).summary.pageType).toBe("claim");
+  });
+
   it("lists pathless recoverable notes after restart and restores one exact receipt into Reader truth", async () => {
     const fixture = createFixture();
     const rendered = await fixture.notes.render({ pageId: fixture.pageId }, fixture.ownerId);
@@ -326,7 +381,12 @@ describe("NoteTrashService", () => {
   });
 });
 
-function createFixture() {
+function createFixture(options: {
+  readonly pageId?: string;
+  readonly pageType?: "note" | "claim" | "question" | "concept" | "entity" | "topic";
+  readonly title?: string;
+  readonly generatedBy?: "pige" | "user";
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-note-trash-"));
   roots.push(root);
   createVaultOnDisk({
@@ -338,9 +398,10 @@ function createFixture() {
   });
   const vaultPath = path.join(root, "Trash Notes");
   const vault = loadVaultSummary(vaultPath);
-  const pageId = "page_20260730_recoverablenote";
+  const pageId = options.pageId ?? "page_20260730_recoverablenote";
   const pagePath = path.join(vaultPath, "wiki", "recoverable-note.md");
-  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "Recoverable note"\ntype: "note"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: ["src_20260730_recoverable01"]\n---\n\n# Recoverable note\n\nKeep these exact bytes and [[Linked note]].\n`;
+  const title = options.title ?? "Recoverable note";
+  const content = `---\nid: "${pageId}"\nschema_version: 1\ntitle: "${title}"\ntype: "${options.pageType ?? "note"}"\ncreated_at: "2026-07-30T12:00:00.000Z"\nupdated_at: "2026-07-30T12:00:00.000Z"\nstatus: "active"\naliases: []\nsource_ids: ["src_20260730_recoverable01"]\n${options.generatedBy ? `provenance:\n  generated_by: "${options.generatedBy}"\n` : ""}---\n\n# ${title}\n\nKeep these exact bytes and [[Linked note]].\n`;
   fs.writeFileSync(pagePath, content, { encoding: "utf8", mode: 0o600 });
   const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
   const editor = new NoteMarkdownEditorService(vaults, { recordPageUpdate: () => undefined });
@@ -358,11 +419,7 @@ function createFixture() {
     pagePath,
     content,
     ownerId: "note_trash_test_owner",
-    revision: () => {
-      const opened = editor.open({ activeVaultId: vault.vaultId, pageId });
-      if (opened.status !== "opened") throw new Error("The fixture note did not open.");
-      return `noteeditrev_${opened.revisionId.slice("sha256:".length)}`;
-    }
+    revision: () => `noteeditrev_${createHash("sha256").update(fs.readFileSync(pagePath)).digest("hex")}`
   };
 }
 

@@ -69,7 +69,7 @@ export function NoteTrashRestorePanel(props: {
         result.expectedTrashRevision !== note.expectedTrashRevision) return;
       if (result.status === "committed") {
         if (!result.render.renderContextId || result.render.summary.pageId !== note.pageId ||
-          result.render.summary.pageType !== "note" || result.render.summary.status !== "active") {
+          result.render.summary.pageType === "source" || result.render.summary.status !== "active") {
           setNotice("failed");
           return;
         }

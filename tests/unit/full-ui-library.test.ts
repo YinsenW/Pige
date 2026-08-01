@@ -1702,14 +1702,16 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("moves only an eligible current note to recoverable Trash and retains the Reader on stale", async () => {
+  it("moves an eligible generated knowledge page to recoverable Trash and retains the Reader on stale", async () => {
     const dom = createDom();
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: {} } });
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: NoteTrashCurrentRequest[] = [];
     let committed = 0;
     let mode: "stale" | "committed" = "stale";
     const note: NoteRenderResult = {
       ...readerNote(),
+      summary: { ...readerNote().summary, pageType: "claim", title: "Generated claim" },
       trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` }
     };
     const onTrashCurrentNote = async (request: NoteTrashCurrentRequest): Promise<NoteTrashCurrentResult> => {
@@ -1773,7 +1775,7 @@ describe("full UI Library", () => {
     });
     expect(requests[0]?.requestId).toMatch(/^notetrashreq_[a-z0-9]{16,64}$/u);
     expect(container.querySelector(".note-reader")).not.toBeNull();
-    expect(container.textContent).toContain("The note remains open.");
+    expect(container.textContent).toContain("The knowledge page remains open.");
     expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Cancel"));
     expect(committed).toBe(0);
 

@@ -39,7 +39,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
-import { isPigeGeneratedFrontmatter, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
+import { isPigeGeneratedFrontmatter, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
@@ -47,7 +47,6 @@ export interface NotesVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
 }
-
 export interface NotesInlineReferenceIndexPort {
   inlineReferenceRevision(vaultPath: string): string | undefined;
   inlineReferenceCandidates(
@@ -59,14 +58,12 @@ export interface NotesInlineReferenceIndexPort {
     }
   ): readonly LibraryPageSummary[] | undefined;
 }
-
 export interface NotesMarkdownRenderer {
   (markdown: string): Promise<{
     readonly html: string;
     readonly selectionSegments?: readonly PigeMarkdownSelectionSegment[];
   }>;
 }
-
 export interface NotesSourceRefreshProjectionPort { refreshableSourceIds(sourceIds: readonly string[]): readonly string[] }
 
 interface FileIdentity {
@@ -206,9 +203,12 @@ export class NotesService {
         ownerId === undefined ? undefined : this.#sourceRefresh?.refreshableSourceIds(stable.document.summary.sourceIds)),
       ...(renderContextId ? {
         renderContextId,
+        ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status, generatedByPige)
+          ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } }
+          : {}),
         ...(stable.document.summary.pageType === "note"
           ? {
-              trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) }, renameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
+              renameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) },
               restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) },
               historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) },
@@ -477,8 +477,8 @@ export class NotesService {
       publicRevision: publicEditorRevision, isCurrent: (candidate) => this.#matchesCurrentPage(candidate as NoteRenderContext),
       readContext: () => this.#readRenderContext(ownerId, request.renderContextId) });
   }
-  resolveTrashTarget(ownerId: string, input: NotesManagedPageTargetInput): NotesTrashResolution { return this.resolveManagedPageTarget(ownerId, input, "note"); }
-  resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question" | "claim"): NotesTrashResolution {
+  resolveTrashTarget(ownerId: string, input: NotesManagedPageTargetInput): NotesTrashResolution { return this.resolveManagedPageTarget(ownerId, input, "trashable_page"); }
+  resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question" | "claim" | "trashable_page"): NotesTrashResolution {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vault || !vaultPath || vault.vaultId !== input.activeVaultId) return { status: "stale" };
@@ -501,8 +501,10 @@ export class NotesService {
       }
       return { status: "stale" };
     }
-    if (context.pageType !== pageType) return { status: "ineligible" };
-    const title = parsePigeFrontmatter(context.markdown)?.frontmatter.title?.replace(/\s+/gu, " ").trim();
+    const parsed = parsePigeFrontmatter(context.markdown);
+    const trashable = isTrashableKnowledgePage(context.pageType, parsed?.frontmatter.status, context.generatedByPige);
+    if (pageType === "trashable_page" ? !trashable : context.pageType !== pageType) return { status: "ineligible" };
+    const title = parsed?.frontmatter.title?.replace(/\s+/gu, " ").trim();
     if (!title) return { status: "ineligible" };
     return {
       status: "ready",
