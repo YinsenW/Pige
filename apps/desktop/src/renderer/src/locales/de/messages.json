@@ -151,6 +151,7 @@
   "backup.restoreApply": "Wiederherstellen",
   "backup.restoreCancel": "Abbrechen",
   "backup.restoreFailed": "Pige konnte diese Wiederherstellung nicht sicher fortsetzen. Versuchen Sie es erneut.",
+  "backup.restoreUnsupported": "Dieses Backup verwendet ein neueres Datenschema. Aktualisieren Sie Pige vor der Wiederherstellung.",
   "backup.restoreInvalid": "Dieses Backup kann nicht wiederhergestellt werden, weil die Prüfung ungültige Dateien gefunden hat.",
   "backup.restoreBlocked": "Blockiert",
   "backup.restoreMode": "Wiederherstellen als",

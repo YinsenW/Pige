@@ -1707,6 +1707,10 @@ function projectRestoreWarning(warning: RestorePreviewWarning): RestorePreviewWa
 
 function projectRestorePreviewResult(result: RestorePreviewResult): RestorePreviewResult {
   if (result.status === "canceled") return { status: "canceled" };
+  if (result.status === "unsupported") {
+    if (result.reason !== "schema_newer") throw new Error("Invalid unsupported restore preview response.");
+    return { status: "unsupported", reason: "schema_newer" };
+  }
   const permittedModes = result.permittedModes.filter(isRestoreMode);
   if (!isRestoreMode(result.defaultMode) || !permittedModes.includes(result.defaultMode)) {
     throw new Error("Invalid restore preview response.");

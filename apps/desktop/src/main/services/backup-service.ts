@@ -19,7 +19,7 @@ import type {
   RestorePreviewWarning,
   VaultSummary
 } from "@pige/contracts";
-import { PIGE_APP_MIN_VERSION, PigeDomainError } from "@pige/domain";
+import { PIGE_APP_MIN_VERSION, PIGE_VAULT_SCHEMA_VERSION, PigeDomainError } from "@pige/domain";
 import { parsePigeFrontmatter } from "@pige/markdown";
 import {
   BackupDomainSchemaVersionsSchema,
@@ -28,6 +28,7 @@ import {
   JobIdSchema,
   SourceRecordSchema,
   VaultIdSchema,
+  VaultManifestCompatibilityHeaderSchema,
   VaultManifestSchema,
   type BackupDomainSchemaVersions,
   type BackupManifest,
@@ -42,6 +43,8 @@ import {
   type BackupManagedCopyDependencyIdentity,
   type BackupManagedCopyRepairProof
 } from "./backup-managed-copy-binding";
+import { assertRestoreArchiveSchemaCompatibility } from "./backup-restore-schema-compatibility";
+import { createMaterializedRestoreManifest, materializeExternalManagedCopyManifestFiles, migrateRestoredDurableDomains } from "./backup-restore-materialization";
 import {
   filterAgentMemoryBackupPaths,
   includesAgentMemoryInBackup,
@@ -836,7 +839,8 @@ export class BackupRestoreService {
     try {
       const manifest = await readBackupManifest(archive.descriptor);
       const validation = await validateBackupZip(archive.descriptor, manifest);
-      await readAndAssertArchivedVaultManifest(archive.descriptor, manifest);
+      const archivedVaultManifest = await readAndAssertArchivedVaultManifest(archive.descriptor, manifest);
+      await assertRestoreArchiveSchemaCompatibility(backupPath, manifest, archivedVaultManifest);
       await readAndAssertArchivedExternalManagedCopies(archive.descriptor, manifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
@@ -882,7 +886,8 @@ export class BackupRestoreService {
       assertArchiveDigest(archive.initialSnapshot, input.archiveDigest);
       const sourceManifest = await readBackupManifest(archive.descriptor);
       const validation = await validateBackupZip(archive.descriptor, sourceManifest, input.signal);
-      await readAndAssertArchivedVaultManifest(archive.descriptor, sourceManifest);
+      const archivedVaultManifest = await readAndAssertArchivedVaultManifest(archive.descriptor, sourceManifest);
+      await assertRestoreArchiveSchemaCompatibility(backupPath, sourceManifest, archivedVaultManifest);
       await readAndAssertArchivedExternalManagedCopies(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
@@ -940,12 +945,21 @@ export class BackupRestoreService {
       throwIfBackupAborted(input.signal);
 
       materializeExternalManagedCopies(staging, sourceManifest);
+      const migratedManifest = migrateRestoredDurableDomains({
+        stagingPath: staging.path,
+        sourceManifest,
+        sourceVaultManifest: archivedVaultManifest,
+        assertStaging: () => assertRestoreStagingIdentity(staging!),
+        snapshotFile: snapshotRestoredFile,
+        deriveDomainSchemaVersions: deriveBackupDomainSchemaVersions
+      });
       const materializedManifest = materializeRestoreIdentity(
         staging,
-        sourceManifest,
+        migratedManifest,
         backupIdentity.backupId,
         input.mode,
-        input.resultVaultId
+        input.resultVaultId,
+        true
       );
       await reportRestoreCorePhase(input.onPhase, checkpointContext, "durable_domains_migrated");
       throwIfBackupAborted(input.signal);
@@ -1000,6 +1014,7 @@ export class BackupRestoreService {
     );
     assertRestoreDestinationIdentity(input.destinationIdentity, destinationCoordinates);
     const archive = openRestoreArchive(backupPath);
+    let expectedStaging: RestoreStagingHandle | undefined;
     try {
       assertRestorePreviewMatches(backupPath, archive.initialSnapshot, input.archivePreviewToken);
       assertArchiveDigest(archive.initialSnapshot, input.archiveDigest);
@@ -1009,6 +1024,7 @@ export class BackupRestoreService {
         archive.descriptor,
         sourceManifest
       );
+      await assertRestoreArchiveSchemaCompatibility(backupPath, sourceManifest, sourceVaultManifest);
       await readAndAssertArchivedExternalManagedCopies(archive.descriptor, sourceManifest);
       const snapshotAfterValidation = snapshotRestoreArchive(archive);
       assertSameRestoreArchive(
@@ -1022,14 +1038,44 @@ export class BackupRestoreService {
         throw new PigeDomainError("restore.backup_invalid", "Committed restore source validation failed.");
       }
       const backupIdentity = resolveBackupIdentity(sourceManifest, snapshotAfterValidation.checksum);
-      const materializedManifest = createMaterializedRestoreManifest(
-        sourceManifest,
-        sourceVaultManifest,
-        backupIdentity.backupId,
-        input.mode,
-        input.resultVaultId
-      );
       const binding = createRestoreApplyBinding(input, destinationCoordinates);
+      let materializedManifest: BackupManifest;
+      if (sourceVaultManifest.vault_schema_version === 1) {
+        expectedStaging = createRestoreStagingDirectory(
+          destinationCoordinates.parentPath,
+          destinationCoordinates,
+          input.pathSafety,
+          binding
+        );
+        await extractBackupVault(archive.descriptor, sourceManifest, expectedStaging);
+        validateExtractedRestore(expectedStaging.path, sourceManifest, [RESTORE_STAGING_MARKER]);
+        materializeExternalManagedCopies(expectedStaging, sourceManifest);
+        const migratedManifest = migrateRestoredDurableDomains({
+          stagingPath: expectedStaging.path,
+          sourceManifest,
+          sourceVaultManifest,
+          assertStaging: () => assertRestoreStagingIdentity(expectedStaging!),
+          snapshotFile: snapshotRestoredFile,
+          deriveDomainSchemaVersions: deriveBackupDomainSchemaVersions
+        });
+        materializedManifest = materializeRestoreIdentity(
+          expectedStaging,
+          migratedManifest,
+          backupIdentity.backupId,
+          input.mode,
+          input.resultVaultId,
+          true
+        );
+        validateExtractedRestore(expectedStaging.path, materializedManifest, [RESTORE_STAGING_MARKER]);
+      } else {
+        materializedManifest = createMaterializedRestoreManifest(
+          sourceManifest,
+          sourceVaultManifest,
+          backupIdentity.backupId,
+          input.mode,
+          input.resultVaultId
+        );
+      }
       const publication = captureCommittedRestorePublication(
         destinationCoordinates,
         input.pathSafety,
@@ -1057,6 +1103,7 @@ export class BackupRestoreService {
       };
     } finally {
       fs.closeSync(archive.descriptor);
+      if (expectedStaging) removeOwnedRestoreStagingDirectory(expectedStaging);
     }
   }
 }
@@ -1945,9 +1992,25 @@ async function readAndAssertArchivedVaultManifest(
   if (!manifestText) {
     throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is missing.");
   }
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(manifestText) as unknown;
+  } catch {
+    throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is not compatible.");
+  }
+  const header = VaultManifestCompatibilityHeaderSchema.safeParse(decoded);
+  if (!header.success) {
+    throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest identity is invalid.");
+  }
+  if (header.data.vault_schema_version > PIGE_VAULT_SCHEMA_VERSION) {
+    throw new PigeDomainError(
+      "restore.schema_unsupported",
+      "This backup uses a newer Vault schema than this version of Pige can restore."
+    );
+  }
   let vaultManifest: VaultManifest;
   try {
-    vaultManifest = VaultManifestSchema.parse(JSON.parse(manifestText) as unknown);
+    vaultManifest = VaultManifestSchema.parse(decoded);
   } catch {
     throw new PigeDomainError("restore.backup_invalid", "Backup vault manifest is not compatible.");
   }
@@ -2876,7 +2939,8 @@ function materializeRestoreIdentity(
   sourceManifest: BackupManifest,
   backupId: string,
   mode: RestoreIdentityMode,
-  resultVaultId: string
+  resultVaultId: string,
+  filesAlreadyMaterialized = false
 ): BackupManifest {
   const sourceVaultManifest = readVaultManifest(staging.path);
   if (
@@ -2890,7 +2954,8 @@ function materializeRestoreIdentity(
     sourceVaultManifest,
     backupId,
     mode,
-    resultVaultId
+    resultVaultId,
+    filesAlreadyMaterialized
   );
   if (mode === "replace_existing") return materialized;
   const restoredVaultManifest = VaultManifestSchema.parse({
@@ -2911,48 +2976,6 @@ function materializeRestoreIdentity(
     throw new PigeDomainError("restore.result_invalid", "Restored clone identity failed exact readback.");
   }
   return materialized;
-}
-
-function createMaterializedRestoreManifest(
-  sourceManifest: BackupManifest,
-  sourceVaultManifest: VaultManifest,
-  backupId: string,
-  mode: RestoreIdentityMode,
-  resultVaultId: string
-): BackupManifest {
-  let files = materializeExternalManagedCopyManifestFiles(sourceManifest);
-  if (mode === "replace_existing") {
-    return {
-      ...sourceManifest,
-      backupId,
-      fileCount: files.length,
-      totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-      files
-    };
-  }
-  const restoredVaultManifest = VaultManifestSchema.parse({
-    ...sourceVaultManifest,
-    vault_id: resultVaultId,
-    origin_vault_id: sourceManifest.vaultId,
-    restored_from_backup_id: backupId
-  });
-  const body = Buffer.from(`${JSON.stringify(restoredVaultManifest, null, 2)}\n`, "utf8");
-  const restoredManifestFile = {
-    path: RESTORE_COMMIT_ENTRY,
-    size: body.byteLength,
-    checksum: `sha256:${createHash("sha256").update(body).digest("hex")}`
-  };
-  files = files.map((file) => file.path === RESTORE_COMMIT_ENTRY
-    ? restoredManifestFile
-    : file);
-  return {
-    ...sourceManifest,
-    backupId,
-    vaultId: resultVaultId,
-    fileCount: files.length,
-    totalBytes: files.reduce((sum, file) => sum + file.size, 0),
-    files
-  };
 }
 
 function materializeExternalManagedCopies(
@@ -3007,29 +3030,6 @@ function materializeExternalManagedCopies(
     }
   }
   removeEmptyExternalManagedCopyArchiveDirectories(staging, mappings);
-}
-
-function materializeExternalManagedCopyManifestFiles(
-  sourceManifest: BackupManifest
-): BackupManifestFile[] {
-  const mappings = sourceManifest.externalManagedCopies ?? [];
-  const byArchivePath = new Map(mappings.map((mapping) => [mapping.archivePath, mapping]));
-  const bySourceRecordPath = new Map(mappings.map((mapping) => [mapping.sourceRecordPath, mapping]));
-  return sourceManifest.files.map((file) => {
-    const payload = byArchivePath.get(file.path);
-    if (payload) {
-      return { path: payload.restorePath, size: payload.size, checksum: payload.checksum };
-    }
-    const sourceRecord = bySourceRecordPath.get(file.path);
-    if (sourceRecord) {
-      return {
-        path: sourceRecord.sourceRecordPath,
-        size: sourceRecord.restoredSourceRecordSize,
-        checksum: sourceRecord.restoredSourceRecordChecksum
-      };
-    }
-    return file;
-  });
 }
 
 function removeEmptyExternalManagedCopyArchiveDirectories(

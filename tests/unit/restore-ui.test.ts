@@ -443,6 +443,29 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("explains a newer unsupported backup without opening an apply surface", async () => {
+    const dom = createDom();
+    const harness = createHarness(blockedOnboarding(), {
+      status: "unsupported",
+      reason: "schema_newer"
+    });
+    const { container, root } = await mountApp(dom, makePigeApi(harness));
+    await advanceToVault(dom, container);
+    const restore = button(container, "Restore Backup");
+    restore.focus();
+    await click(dom, restore);
+
+    await waitFor(dom, () => container.textContent?.includes(
+      "This backup was created with a newer data schema"
+    ) ?? false);
+    expect(container.textContent).not.toContain("Restore preview");
+    expect(container.textContent).not.toContain("Restore as New Vault");
+    await waitFor(dom, () => dom.window.document.activeElement === restore);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("defaults first-run restore to the eligible clone mode and fails safely without duplicate apply", async () => {
     const dom = createDom();
     const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());

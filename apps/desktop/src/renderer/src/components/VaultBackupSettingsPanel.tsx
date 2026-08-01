@@ -77,6 +77,11 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
         restoreFocus(previewButtonRef);
         return;
       }
+      if (result.status === "unsupported") {
+        setRestoreErrorKey("backup.restoreUnsupported");
+        restoreFocus(previewButtonRef);
+        return;
+      }
       const mode = restoreDefaultMode(result);
       if (!mode) {
         setRestoreErrorKey("backup.restoreFailed");
