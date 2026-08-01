@@ -427,6 +427,7 @@ import {
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
@@ -445,6 +446,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionUpdateViewRequestSchema,
+  CollectionUpdateViewResultSchema,
   CollectionRenameViewRequestSchema,
   CollectionRenameViewResultSchema,
   CollectionTrashViewRequestSchema,
@@ -771,6 +774,8 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionUpdateViewRequest,
+  CollectionUpdateViewResult,
   CollectionRenameViewRequest,
   CollectionRenameViewResult,
   CollectionTrashViewRequest,
@@ -1196,6 +1201,23 @@ async function invokeCollectionRenameView(
     result.tableId !== parsedRequest.tableId ||
     result.viewId !== parsedRequest.viewId
   ) throw new Error("Invalid Managed Collection view-rename response identity.");
+  return result;
+}
+
+async function invokeCollectionUpdateView(
+  request: CollectionUpdateViewRequest
+): Promise<CollectionUpdateViewResult> {
+  const parsedRequest = CollectionUpdateViewRequestSchema.parse(request);
+  const result = CollectionUpdateViewResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_UPDATE_VIEW_CHANNEL, parsedRequest)
+  );
+  if (
+    result.requestId !== parsedRequest.requestId ||
+    result.activeVaultId !== parsedRequest.activeVaultId ||
+    result.datasetId !== parsedRequest.datasetId ||
+    result.tableId !== parsedRequest.tableId ||
+    result.viewId !== parsedRequest.viewId
+  ) throw new Error("Invalid Managed Collection view-update response identity.");
   return result;
 }
 
@@ -1873,6 +1895,7 @@ const api: PigeDesktopApi = {
     addLookupColumn: invokeCollectionAddLookupColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
+    updateView: invokeCollectionUpdateView,
     renameView: invokeCollectionRenameView,
     trashView: invokeCollectionTrashView,
     trashColumn: invokeCollectionTrashColumn,

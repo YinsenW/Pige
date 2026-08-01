@@ -25,6 +25,8 @@ import type {
   CollectionCellEditResult,
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionUpdateViewRequest,
+  CollectionUpdateViewResult,
   CollectionRenameViewRequest,
   CollectionRenameViewResult,
   CollectionTrashViewRequest,
@@ -45,10 +47,8 @@ import {
   ManagedCollectionCitationPanel,
   ManagedCollectionPanel
 } from "../../apps/desktop/src/renderer/src/components/ManagedCollectionPanel";
-import {
-  ActivityHistorySettingsPanel,
-  DatasetAnswerResult
-} from "../../apps/desktop/src/renderer/src/App";
+import { DatasetAnswerResult } from "../../apps/desktop/src/renderer/src/App";
+import { ActivityHistorySettingsPanel } from "../../apps/desktop/src/renderer/src/components/ActivityHistorySettingsPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -1487,6 +1487,64 @@ describe("ManagedCollectionPanel", () => {
     dom.window.close();
   });
 
+  it("edits one saved view definition, preserves its stale draft, and restores selector focus", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = savedView("view_20260728_editview001", "Editable");
+    const concurrent = { ...initial, viewRevision: 2 };
+    const committed = { ...initial, viewRevision: 3,
+      filter: { operator: "eq" as const, columnId: "column_name000001", value: "Alpha" },
+      sort: { columnId: "column_total00001", direction: "desc" as const } };
+    const base = collectionSnapshot("dataset_rev_20260728_revision0001", "Alpha");
+    const requests: CollectionUpdateViewRequest[] = [];
+    await act(async () => {
+      root.render(createElement(CollectionViewHarness, {
+        initialSnapshot: withViews(base, [initial], initial.viewId),
+        onOpen: async () => null,
+        onCreate: notFoundCreateViewResult,
+        onUpdate: async (request) => {
+          requests.push(request);
+          return requests.length === 1
+            ? { ...viewMutationIdentity(request), status: "stale", currentViewRevision: 2,
+              snapshot: withViews(base, [concurrent], concurrent.viewId) }
+            : { ...viewMutationIdentity(request), status: "committed", operationId: "op_20260728_viewupdate01",
+              snapshot: withViews(base, [committed], committed.viewId) };
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit view"));
+    const operator = requireElement(container.querySelector<HTMLSelectElement>("#collection-view-filter-operator"));
+    await selectValue(dom, operator, "eq");
+    const filterValue = requireElement(container.querySelector<HTMLInputElement>("#collection-view-filter-value"));
+    await act(async () => { filterValue.focus(); await settle(dom); });
+    await inputText(dom, filterValue, "Alpha");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-view-sort-column")), "column_total00001");
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-view-sort-direction")), "desc");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests[0]).toMatchObject({
+      expectedRevisionId: base.revisionId,
+      expectedViewRevision: 1,
+      viewId: initial.viewId,
+      filter: committed.filter,
+      sort: committed.sort
+    });
+    expect(container.textContent).toContain("The collection changed. Your view draft is preserved.");
+    expect(requireElement(container.querySelector<HTMLInputElement>("#collection-view-filter-value")).value).toBe("Alpha");
+    expect(dom.window.document.activeElement).toBe(requireElement(container.querySelector<HTMLInputElement>('input[type="checkbox"]')));
+
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests.map(({ expectedViewRevision }) => expectedViewRevision)).toEqual([1, 2]);
+    const selector = requireElement(container.querySelector<HTMLSelectElement>("#collection-view-select"));
+    expect(selector.value).toBe(initial.viewId);
+    expect(container.textContent).toContain("View definition saved as a new revision.");
+    expect(dom.window.document.activeElement).toBe(selector);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("renames the active owned view with exact CAS and falls back to All rows after trash", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -1760,11 +1818,14 @@ describe("ManagedCollectionPanel", () => {
           canUndo: true
         }],
         undoingId: null,
+        redoingId: null,
         openingId: null,
         blockedIds: [],
         locale: "en",
         onOpen: async (activity) => { opened.push(activity.operationId); },
         onUndo: async (operationId) => { undone.push(operationId); },
+        onRedo: async () => undefined,
+        hasMore: false, loadingMore: false, loadMoreFailed: false, onLoadMore: async () => false,
         t
       }));
       await settle(dom);
@@ -1772,7 +1833,7 @@ describe("ManagedCollectionPanel", () => {
     const container = dom.window.document.querySelector("#root")!;
     expect(container.textContent).toContain("Collection cell updated: Customers");
     await click(dom, buttonNamed(container, "Open"));
-    await click(dom, buttonNamed(container, "Undo"));
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-activity-undo-id="op_20260727_collection01"]')));
     expect(opened).toEqual(["op_20260727_collection01"]);
     expect(undone).toEqual(["op_20260727_collection01"]);
 
@@ -1816,11 +1877,14 @@ describe("ManagedCollectionPanel", () => {
           },
         ],
         undoingId: null,
+        redoingId: null,
         openingId: null,
         blockedIds: [],
         locale: "en",
         onOpen: async (activity) => { opened.push(activity.operationId); },
         onUndo: async () => undefined,
+        onRedo: async () => undefined,
+        hasMore: false, loadingMore: false, loadMoreFailed: false, onLoadMore: async () => false,
         t,
       }));
       await settle(dom);
@@ -1860,18 +1924,21 @@ describe("ManagedCollectionPanel", () => {
           canUndo: true
         }],
         undoingId: null,
+        redoingId: null,
         openingId: null,
         blockedIds: [],
         locale: "en",
         onOpen: async () => undefined,
         onUndo: async (operationId) => { undone.push(operationId); },
+        onRedo: async () => undefined,
+        hasMore: false, loadingMore: false, loadMoreFailed: false, onLoadMore: async () => false,
         t
       }));
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
     expect(container.textContent).toContain("Collection row moved to trash: Customers");
-    await click(dom, buttonNamed(container, "Undo"));
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-activity-undo-id="op_20260728_collectiontrash01"]')));
     expect(undone).toEqual(["op_20260728_collectiontrash01"]);
 
     await act(async () => root.unmount());
@@ -1899,18 +1966,21 @@ describe("ManagedCollectionPanel", () => {
           canUndo: true
         }],
         undoingId: null,
+        redoingId: null,
         openingId: null,
         blockedIds: [],
         locale: "en",
         onOpen: async () => undefined,
         onUndo: async (operationId) => { undone.push(operationId); },
+        onRedo: async () => undefined,
+        hasMore: false, loadingMore: false, loadMoreFailed: false, onLoadMore: async () => false,
         t
       }));
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
     expect(container.textContent).toContain("Collection field moved to trash: Customers");
-    await click(dom, buttonNamed(container, "Undo"));
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-activity-undo-id="op_20260728_collectiontrashcolumn01"]')));
     expect(undone).toEqual(["op_20260728_collectiontrashcolumn01"]);
 
     await act(async () => root.unmount());
@@ -1938,18 +2008,21 @@ describe("ManagedCollectionPanel", () => {
           canUndo: true
         }],
         undoingId: null,
+        redoingId: null,
         openingId: null,
         blockedIds: [],
         locale: "en",
         onOpen: async () => undefined,
         onUndo: async (operationId) => { undone.push(operationId); },
+        onRedo: async () => undefined,
+        hasMore: false, loadingMore: false, loadMoreFailed: false, onLoadMore: async () => false,
         t
       }));
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
     expect(container.textContent).toContain("Collection view moved to trash: Priority items");
-    await click(dom, buttonNamed(container, "Undo"));
+    await click(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-activity-undo-id="op_20260728_collectionview01"]')));
     expect(undone).toEqual(["op_20260728_collectionview01"]);
 
     await act(async () => root.unmount());
@@ -2197,6 +2270,7 @@ function CollectionViewHarness(props: {
   readonly initialSnapshot: CollectionSnapshot;
   readonly onOpen: (viewId?: string) => Promise<CollectionSnapshot | null>;
   readonly onCreate: (request: CollectionCreateViewRequest) => Promise<CollectionCreateViewResult>;
+  readonly onUpdate?: (request: CollectionUpdateViewRequest) => Promise<CollectionUpdateViewResult>;
   readonly onRename?: (request: CollectionRenameViewRequest) => Promise<CollectionRenameViewResult>;
   readonly onTrash?: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
 }): React.JSX.Element {
@@ -2214,6 +2288,7 @@ function CollectionViewHarness(props: {
       return next;
     },
     onCreateView: props.onCreate,
+    onUpdateView: props.onUpdate ?? notFoundUpdateViewResult,
     onRenameView: props.onRename ?? notFoundRenameViewResult,
     onTrashView: props.onTrash ?? notFoundTrashViewResult,
     onAppendDefaultRow: notFoundAppendResult,
@@ -2479,7 +2554,7 @@ function savedView(
   filter: CollectionViewSummary["filter"] = { operator: "is_null", columnId: "column_name000001" },
   sort: CollectionViewSummary["sort"] = { columnId: "column_name000001", direction: "asc" }
 ): CollectionViewSummary {
-  return { viewId, viewRevision: 1, name, filter, sort, canRename: true, canTrash: true };
+  return { viewId, viewRevision: 1, name, filter, sort, canEdit: true, canRename: true, canTrash: true };
 }
 
 function withViews(
@@ -2740,7 +2815,7 @@ function createViewIdentity(request: CollectionCreateViewRequest) {
   };
 }
 
-function viewMutationIdentity(request: CollectionRenameViewRequest | CollectionTrashViewRequest) {
+function viewMutationIdentity(request: CollectionRenameViewRequest | CollectionUpdateViewRequest | CollectionTrashViewRequest) {
   return { ...createViewIdentity(request), viewId: request.viewId };
 }
 
@@ -2794,6 +2869,12 @@ async function notFoundCreateViewResult(
 async function notFoundRenameViewResult(
   request: CollectionRenameViewRequest
 ): Promise<CollectionRenameViewResult> {
+  return { ...viewMutationIdentity(request), status: "not_found" };
+}
+
+async function notFoundUpdateViewResult(
+  request: CollectionUpdateViewRequest
+): Promise<CollectionUpdateViewResult> {
   return { ...viewMutationIdentity(request), status: "not_found" };
 }
 

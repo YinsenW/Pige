@@ -421,6 +421,100 @@ describe("ManagedCollectionViewService", () => {
     expect(fs.readFileSync(path.join(fixture.bundlePath, "dataset.json"))).toEqual(manifestBytes);
     expect(fs.readFileSync(path.join(fixture.bundlePath, manifest.payload.path))).toEqual(payloadBytes);
   }, 30_000);
+
+  it("updates one owned view definition with exact CAS, replay, Activity Undo, and restart", async () => {
+    const fixture = await makeFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionViewService(port, directExecutor);
+    const manifest = readManifest(fixture.bundlePath);
+    const schema = DatasetSchemaRecordSchema.parse(readJson(path.join(fixture.bundlePath, manifest.schema.path)));
+    const table = required(schema.tables[0]);
+    const nameColumn = required(table.columns[0]);
+    const countColumn = required(table.columns[1]);
+    const created = await service.createView({
+      apiVersion: 1,
+      requestId: "collection_request_vieweditcreate01",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      expectedRevisionId: manifest.activeRevision,
+      name: "Editable",
+      filter: { operator: "is_null", columnId: nameColumn.id },
+      sort: { columnId: countColumn.id, direction: "asc" }
+    });
+    if (created.status !== "committed") throw new Error("View creation failed");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "collection_request_vieweditcommit01",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId,
+      expectedRevisionId: manifest.activeRevision,
+      expectedViewRevision: 1,
+      filter: { operator: "eq" as const, columnId: nameColumn.id, value: "Alpha" },
+      sort: { columnId: countColumn.id, direction: "desc" as const }
+    };
+    await expect(service.updateView({ ...request, requestId: "collection_request_vieweditbadcol01",
+      filter: { ...request.filter, columnId: "column_missing000001" } })).resolves.toMatchObject({
+      status: "ineligible", snapshot: { views: [{ viewId: created.viewId, canEdit: true }] }
+    });
+    const updated = await service.updateView(request);
+    expect(updated).toMatchObject({
+      status: "committed",
+      snapshot: {
+        revisionId: manifest.activeRevision,
+        activeViewId: created.viewId,
+        views: [{ viewId: created.viewId, viewRevision: 2, name: "Editable",
+          filter: request.filter, sort: request.sort, canEdit: true }]
+      }
+    });
+    if (updated.status !== "committed") throw new Error("View update failed");
+    await expect(new ManagedCollectionViewService(port, directExecutor).updateView(request)).resolves.toEqual(updated);
+    await expect(service.updateView({ ...request, sort: { ...request.sort, direction: "asc" } }))
+      .rejects.toMatchObject({ code: "collection.request_conflict" });
+    await expect(service.updateView({ ...request, requestId: "collection_request_vieweditstale001" }))
+      .resolves.toMatchObject({ status: "stale", currentViewRevision: 2,
+        snapshot: { views: [{ viewId: created.viewId, viewRevision: 2 }] } });
+    const operation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${updated.operationId}.json`
+    )));
+    expect(operation).toMatchObject({ kind: "update_collection_view", reversible: "yes" });
+    expect(service.activitySummary(operation)).toMatchObject({
+      kind: "update_collection_view", targetLabel: "Editable", canUndo: true
+    });
+    const undone = await service.undo(operation, manifest.activeRevision);
+    expect(undone).toMatchObject({ status: "undone", revisionId: manifest.activeRevision });
+    await expect(new ManagedCollectionViewService(port, directExecutor).open({
+      apiVersion: 1,
+      requestId: "collection_request_vieweditopen0001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId
+    })).resolves.toMatchObject({
+      status: "ready",
+      snapshot: { activeViewId: created.viewId, views: [{ viewRevision: 3,
+        filter: { operator: "is_null", columnId: nameColumn.id },
+        sort: { columnId: countColumn.id, direction: "asc" } }] }
+    });
+    const cleared = await new ManagedCollectionViewService(port, directExecutor).updateView({
+      apiVersion: 1,
+      requestId: "collection_request_vieweditclear001",
+      activeVaultId: vault.vaultId,
+      datasetId: manifest.datasetId,
+      tableId: table.id,
+      viewId: created.viewId,
+      expectedRevisionId: manifest.activeRevision,
+      expectedViewRevision: 3
+    });
+    expect(cleared).toMatchObject({ status: "committed", snapshot: { activeViewId: created.viewId,
+      totalRowCount: 3, views: [{ viewId: created.viewId, viewRevision: 4 }] } });
+    if (cleared.status !== "committed") throw new Error("View definition clear failed");
+    expect(cleared.snapshot.views[0]).not.toHaveProperty("filter");
+    expect(cleared.snapshot.views[0]).not.toHaveProperty("sort");
+  }, 30_000);
 });
 
 async function makeFixture(rowCount = 3) {

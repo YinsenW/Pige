@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   CollectionCreateViewRequest,
   CollectionCreateViewResult,
+  CollectionUpdateViewRequest,
+  CollectionUpdateViewResult,
   CollectionRenameViewRequest,
   CollectionRenameViewResult,
   CollectionTrashViewRequest,
@@ -12,11 +14,15 @@ import type {
 } from "@pige/schemas";
 
 type ViewDraft = {
+  readonly viewId?: string;
+  readonly expectedViewRevision?: number;
   readonly expectedRevisionId: string;
   readonly name: string;
+  readonly filterEnabled: boolean;
   readonly filterColumnId: string;
   readonly filterOperator: "eq" | "is_null";
   readonly filterValue: string;
+  readonly sortEnabled: boolean;
   readonly sortColumnId: string;
   readonly sortDirection: "asc" | "desc";
 };
@@ -28,7 +34,7 @@ type RenameDraft = {
   readonly name: string;
 };
 
-type ViewNotice = "created" | "renamed" | "trashed" | "stale" | "duplicate" | "ineligible" | "not_found" | "failed" | "open_failed";
+type ViewNotice = "created" | "updated" | "renamed" | "trashed" | "stale" | "duplicate" | "ineligible" | "not_found" | "failed" | "open_failed";
 
 export function ManagedCollectionViewControls(props: {
   readonly activeVaultId: string;
@@ -36,6 +42,7 @@ export function ManagedCollectionViewControls(props: {
   readonly blocked: boolean;
   readonly onOpenView: (viewId?: string) => Promise<CollectionSnapshot | null>;
   readonly onCreateView: (request: CollectionCreateViewRequest) => Promise<CollectionCreateViewResult>;
+  readonly onUpdateView: (request: CollectionUpdateViewRequest) => Promise<CollectionUpdateViewResult>;
   readonly onRenameView: (request: CollectionRenameViewRequest) => Promise<CollectionRenameViewResult>;
   readonly onTrashView: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
@@ -55,6 +62,7 @@ export function ManagedCollectionViewControls(props: {
   const activeViewRef = useRef(`${activeView?.viewId ?? ""}:${activeView?.viewRevision ?? 0}`);
   const selectRef = useRef<HTMLSelectElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const filterToggleRef = useRef<HTMLInputElement | null>(null);
   const pendingSelectFocusRef = useRef(false);
   const pendingDraftFocusRef = useRef(false);
   ownerKeyRef.current = ownerKey;
@@ -77,7 +85,7 @@ export function ManagedCollectionViewControls(props: {
     if (busy) return;
     if (pendingDraftFocusRef.current && (draft || renameDraft)) {
       pendingDraftFocusRef.current = false;
-      nameRef.current?.focus();
+      (draft?.viewId ? filterToggleRef.current : nameRef.current)?.focus();
       return;
     }
     if (!pendingSelectFocusRef.current) return;
@@ -130,14 +138,16 @@ export function ManagedCollectionViewControls(props: {
   };
 
   const createView = async (): Promise<void> => {
-    if (!draft) return;
-    const filterColumn = props.snapshot.columns.find(({ columnId }) => columnId === draft.filterColumnId);
-    const sortColumn = props.snapshot.columns.find(({ columnId }) => columnId === draft.sortColumnId);
+    if (!draft || draft.viewId) return;
+    const filterColumn = draft.filterEnabled
+      ? props.snapshot.columns.find(({ columnId }) => columnId === draft.filterColumnId) : undefined;
+    const sortColumn = draft.sortEnabled
+      ? props.snapshot.columns.find(({ columnId }) => columnId === draft.sortColumnId) : undefined;
     const value = draft.filterOperator === "eq" && filterColumn
       ? parseFilterValue(draft.filterValue, filterColumn.logicalType)
       : undefined;
-    if (!filterColumn || !sortColumn || draft.name.trim().length === 0 ||
-        (draft.filterOperator === "eq" && value === undefined)) return;
+    if (draft.name.trim().length === 0 || (draft.filterEnabled && (!filterColumn ||
+        (draft.filterOperator === "eq" && value === undefined))) || (draft.sortEnabled && !sortColumn)) return;
     const sequence = beginAction();
     if (sequence === null) return;
     const request: CollectionCreateViewRequest = {
@@ -148,10 +158,10 @@ export function ManagedCollectionViewControls(props: {
       tableId: props.snapshot.tableId,
       expectedRevisionId: draft.expectedRevisionId,
       name: draft.name.trim(),
-      filter: draft.filterOperator === "is_null"
+      ...(filterColumn ? { filter: draft.filterOperator === "is_null"
         ? { operator: "is_null", columnId: filterColumn.columnId }
-        : { operator: "eq", columnId: filterColumn.columnId, value: value as Exclude<CollectionScalarValue, null> },
-      sort: { columnId: sortColumn.columnId, direction: draft.sortDirection }
+        : { operator: "eq", columnId: filterColumn.columnId, value: value as Exclude<CollectionScalarValue, null> } } : {}),
+      ...(sortColumn ? { sort: { columnId: sortColumn.columnId, direction: draft.sortDirection } } : {})
     };
     const expectedOwnerKey = ownerKey;
     try {
@@ -178,6 +188,52 @@ export function ManagedCollectionViewControls(props: {
     } finally {
       finishAction(sequence, expectedOwnerKey);
     }
+  };
+
+  const updateView = async (): Promise<void> => {
+    if (!draft?.viewId || draft.expectedViewRevision === undefined) return;
+    const filterColumn = draft.filterEnabled
+      ? props.snapshot.columns.find(({ columnId }) => columnId === draft.filterColumnId) : undefined;
+    const sortColumn = draft.sortEnabled
+      ? props.snapshot.columns.find(({ columnId }) => columnId === draft.sortColumnId) : undefined;
+    const value = draft.filterOperator === "eq" && filterColumn
+      ? parseFilterValue(draft.filterValue, filterColumn.logicalType) : undefined;
+    if ((draft.filterEnabled && (!filterColumn || (draft.filterOperator === "eq" && value === undefined))) ||
+        (draft.sortEnabled && !sortColumn)) return;
+    const request: CollectionUpdateViewRequest = {
+      apiVersion: 1, requestId: createCollectionRequestId(), activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId, tableId: props.snapshot.tableId,
+      viewId: draft.viewId, expectedRevisionId: draft.expectedRevisionId,
+      expectedViewRevision: draft.expectedViewRevision,
+      ...(filterColumn ? { filter: draft.filterOperator === "is_null"
+        ? { operator: "is_null", columnId: filterColumn.columnId }
+        : { operator: "eq", columnId: filterColumn.columnId, value: value as Exclude<CollectionScalarValue, null> } } : {}),
+      ...(sortColumn ? { sort: { columnId: sortColumn.columnId, direction: draft.sortDirection } } : {})
+    };
+    const sequence = beginAction();
+    if (sequence === null) return;
+    const expectedOwnerKey = ownerKey;
+    try {
+      const result = await props.onUpdateView(request);
+      if (sequence !== requestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
+          revisionRef.current !== request.expectedRevisionId ||
+          activeViewRef.current !== `${request.viewId}:${request.expectedViewRevision}` ||
+          !viewMutationIdentityMatches(request, result)) return;
+      if ("snapshot" in result && !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
+      if (result.status === "committed") {
+        setDraft(null); setNotice("updated"); pendingSelectFocusRef.current = true; return;
+      }
+      if ("snapshot" in result) {
+        const current = result.snapshot.views.find(({ viewId }) => viewId === request.viewId);
+        setDraft((local) => local && current?.canEdit ? { ...local,
+          expectedRevisionId: result.snapshot.revisionId, expectedViewRevision: current.viewRevision } : local);
+      }
+      setNotice(result.status); pendingDraftFocusRef.current = true;
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        setNotice("failed"); pendingDraftFocusRef.current = true;
+      }
+    } finally { finishAction(sequence, expectedOwnerKey); }
   };
 
   const renameView = async (): Promise<void> => {
@@ -254,17 +310,17 @@ export function ManagedCollectionViewControls(props: {
     } finally { finishAction(sequence, expectedOwnerKey); }
   };
 
-  const filterColumn = draft
+  const filterColumn = draft?.filterEnabled
     ? props.snapshot.columns.find(({ columnId }) => columnId === draft.filterColumnId)
     : undefined;
   const equalitySupported = filterColumn ? supportsEquality(filterColumn.logicalType) : false;
   const equalityValue = draft && filterColumn && draft.filterOperator === "eq"
     ? parseFilterValue(draft.filterValue, filterColumn.logicalType)
     : undefined;
-  const createDisabled = !draft || draft.name.trim().length === 0 || !filterColumn ||
-    !props.snapshot.columns.some(({ columnId }) => columnId === draft.sortColumnId) ||
-    (draft.filterOperator === "eq" && equalityValue === undefined);
-  const createDraft = draft as ViewDraft;
+  const saveDisabled = !draft || (!draft.viewId && draft.name.trim().length === 0) ||
+    (draft.filterEnabled && (!filterColumn || (draft.filterOperator === "eq" && equalityValue === undefined))) ||
+    (draft.sortEnabled && !props.snapshot.columns.some(({ columnId }) => columnId === draft.sortColumnId));
+  const viewDraft = draft as ViewDraft;
 
   return (
     <section className="settings-card settings-row tall" aria-label={props.t("collection.views")}>
@@ -296,9 +352,11 @@ export function ManagedCollectionViewControls(props: {
               setDraft({
                 expectedRevisionId: props.snapshot.revisionId,
                 name: "",
+                filterEnabled: true,
                 filterColumnId: firstColumn.columnId,
                 filterOperator: supportsEquality(firstColumn.logicalType) ? "eq" : "is_null",
                 filterValue: "",
+                sortEnabled: true,
                 sortColumnId: firstColumn.columnId,
                 sortDirection: "asc"
               });
@@ -307,6 +365,26 @@ export function ManagedCollectionViewControls(props: {
           >
             {props.t("collection.createView")}
           </button>
+          {activeView?.canEdit ? (
+            <button type="button" className="settings-button" disabled={props.blocked || busy}
+              onClick={() => {
+                const firstColumn = props.snapshot.columns[0];
+                if (!firstColumn) return;
+                setNotice(null);
+                setDraft({ viewId: activeView.viewId, expectedViewRevision: activeView.viewRevision,
+                  expectedRevisionId: props.snapshot.revisionId, name: activeView.name,
+                  filterEnabled: activeView.filter !== undefined,
+                  filterColumnId: activeView.filter?.columnId ?? firstColumn.columnId,
+                  filterOperator: activeView.filter?.operator ?? (supportsEquality(firstColumn.logicalType) ? "eq" : "is_null"),
+                  filterValue: activeView.filter?.operator === "eq" ? String(activeView.filter.value) : "",
+                  sortEnabled: activeView.sort !== undefined,
+                  sortColumnId: activeView.sort?.columnId ?? firstColumn.columnId,
+                  sortDirection: activeView.sort?.direction ?? "asc" });
+                pendingDraftFocusRef.current = true;
+              }}>
+              {props.t("collection.editView")}
+            </button>
+          ) : null}
           {activeView?.canRename ? (
             <button type="button" className="settings-button" disabled={props.blocked || busy}
               onClick={() => {
@@ -341,39 +419,36 @@ export function ManagedCollectionViewControls(props: {
         </form>
       ) : (
         <form
-          aria-label={props.t("collection.createView")}
-          onSubmit={(event) => { event.preventDefault(); void createView(); }}
+          aria-label={props.t(viewDraft.viewId ? "collection.editView" : "collection.createView")}
+          onSubmit={(event) => { event.preventDefault(); void (viewDraft.viewId ? updateView() : createView()); }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && !busy && !event.nativeEvent.isComposing) {
+              event.preventDefault(); setDraft(null); setNotice(null); pendingSelectFocusRef.current = true;
+            }
+          }}
         >
-          <label htmlFor="collection-view-name">{props.t("collection.viewName")}</label>
-          <input
-            ref={nameRef}
-            id="collection-view-name"
-            className="settings-input"
-            value={createDraft.name}
-            maxLength={120}
-            disabled={busy}
-            onChange={(event) => { setDraft({ ...createDraft, name: event.target.value }); setNotice(null); }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
-                setDraft(null);
-                setNotice(null);
-                pendingSelectFocusRef.current = true;
-              }
-            }}
-          />
+          {!viewDraft.viewId ? <>
+            <label htmlFor="collection-view-name">{props.t("collection.viewName")}</label>
+            <input ref={nameRef} id="collection-view-name" className="settings-input" value={viewDraft.name}
+              maxLength={120} disabled={busy}
+              onChange={(event) => { setDraft({ ...viewDraft, name: event.target.value }); setNotice(null); }} />
+          </> : null}
+          <label><input ref={filterToggleRef} type="checkbox" checked={viewDraft.filterEnabled} disabled={busy}
+            onChange={(event) => { setDraft({ ...viewDraft, filterEnabled: event.target.checked }); setNotice(null); }} />
+            {props.t("collection.useFilter")}</label>
+          {viewDraft.filterEnabled ? <>
           <label htmlFor="collection-view-filter-column">{props.t("collection.filterField")}</label>
           <select
             id="collection-view-filter-column"
             className="settings-input"
-            value={createDraft.filterColumnId}
+            value={viewDraft.filterColumnId}
             disabled={busy}
             onChange={(event) => {
               const nextColumn = props.snapshot.columns.find(({ columnId }) => columnId === event.target.value);
               setDraft({
-                ...createDraft,
+                ...viewDraft,
                 filterColumnId: event.target.value,
-                filterOperator: nextColumn && supportsEquality(nextColumn.logicalType) ? createDraft.filterOperator : "is_null"
+                filterOperator: nextColumn && supportsEquality(nextColumn.logicalType) ? viewDraft.filterOperator : "is_null"
               });
               setNotice(null);
             }}
@@ -384,34 +459,39 @@ export function ManagedCollectionViewControls(props: {
           <select
             id="collection-view-filter-operator"
             className="settings-input"
-            value={createDraft.filterOperator}
+            value={viewDraft.filterOperator}
             disabled={busy}
             onChange={(event) => {
-              setDraft({ ...createDraft, filterOperator: event.target.value as ViewDraft["filterOperator"] });
+              setDraft({ ...viewDraft, filterOperator: event.target.value as ViewDraft["filterOperator"] });
               setNotice(null);
             }}
           >
             {equalitySupported ? <option value="eq">{props.t("collection.filterEquals")}</option> : null}
             <option value="is_null">{props.t("collection.filterIsEmpty")}</option>
           </select>
-          {createDraft.filterOperator === "eq" && filterColumn ? (
+          {viewDraft.filterOperator === "eq" && filterColumn ? (
             <FilterValueEditor
-              value={createDraft.filterValue}
+              value={viewDraft.filterValue}
               logicalType={filterColumn.logicalType}
               disabled={busy}
               label={props.t("collection.filterValue")}
               falseLabel={props.t("collection.filterFalse")}
               trueLabel={props.t("collection.filterTrue")}
-              onChange={(filterValue) => { setDraft({ ...createDraft, filterValue }); setNotice(null); }}
+              onChange={(filterValue) => { setDraft({ ...viewDraft, filterValue }); setNotice(null); }}
             />
           ) : null}
+          </> : null}
+          <label><input type="checkbox" checked={viewDraft.sortEnabled} disabled={busy}
+            onChange={(event) => { setDraft({ ...viewDraft, sortEnabled: event.target.checked }); setNotice(null); }} />
+            {props.t("collection.useSort")}</label>
+          {viewDraft.sortEnabled ? <>
           <label htmlFor="collection-view-sort-column">{props.t("collection.sortField")}</label>
           <select
             id="collection-view-sort-column"
             className="settings-input"
-            value={createDraft.sortColumnId}
+            value={viewDraft.sortColumnId}
             disabled={busy}
-            onChange={(event) => { setDraft({ ...createDraft, sortColumnId: event.target.value }); setNotice(null); }}
+            onChange={(event) => { setDraft({ ...viewDraft, sortColumnId: event.target.value }); setNotice(null); }}
           >
             {props.snapshot.columns.map((column) => <option key={column.columnId} value={column.columnId}>{column.label}</option>)}
           </select>
@@ -419,18 +499,19 @@ export function ManagedCollectionViewControls(props: {
           <select
             id="collection-view-sort-direction"
             className="settings-input"
-            value={createDraft.sortDirection}
+            value={viewDraft.sortDirection}
             disabled={busy}
             onChange={(event) => {
-              setDraft({ ...createDraft, sortDirection: event.target.value as ViewDraft["sortDirection"] });
+              setDraft({ ...viewDraft, sortDirection: event.target.value as ViewDraft["sortDirection"] });
               setNotice(null);
             }}
           >
             <option value="asc">{props.t("collection.ascending")}</option>
             <option value="desc">{props.t("collection.descending")}</option>
           </select>
-          <button type="submit" className="settings-button primary" disabled={busy || createDisabled}>
-            {props.t(busy ? "collection.creatingView" : "collection.save")}
+          </> : null}
+          <button type="submit" className="settings-button primary" disabled={busy || saveDisabled}>
+            {props.t(busy ? "collection.savingView" : "collection.save")}
           </button>
           <button
             type="button"
@@ -443,7 +524,7 @@ export function ManagedCollectionViewControls(props: {
         </form>
       )}
       {notice ? (
-        <div className={`settings-inline-status ${["created", "renamed", "trashed"].includes(notice) ? "success" : "error"}`} role="status" aria-live="polite">
+        <div className={`settings-inline-status ${["created", "updated", "renamed", "trashed"].includes(notice) ? "success" : "error"}`} role="status" aria-live="polite">
           {props.t(`collection.view_${notice}`)}
         </div>
       ) : null}
@@ -529,8 +610,8 @@ function viewIdentityMatches(
 }
 
 function viewMutationIdentityMatches(
-  request: CollectionRenameViewRequest | CollectionTrashViewRequest,
-  result: CollectionRenameViewResult | CollectionTrashViewResult
+  request: CollectionRenameViewRequest | CollectionUpdateViewRequest | CollectionTrashViewRequest,
+  result: CollectionRenameViewResult | CollectionUpdateViewResult | CollectionTrashViewResult
 ): boolean {
   return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
     result.datasetId === request.datasetId && result.tableId === request.tableId && result.viewId === request.viewId;

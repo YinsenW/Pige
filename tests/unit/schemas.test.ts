@@ -56,6 +56,8 @@ import {
   CollectionAppendDefaultRowResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionUpdateViewRequestSchema,
+  CollectionUpdateViewResultSchema,
   CollectionRenameViewRequestSchema,
   CollectionRenameViewResultSchema,
   CollectionTrashViewRequestSchema,
@@ -1465,6 +1467,37 @@ describe("schemas", () => {
       operationId: "op_20260728_viewrename1",
       snapshot: renamedSnapshot
     }).status).toBe("committed");
+    const updateIdentity = { ...mutationIdentity, requestId: "collection_request_viewupdateabcdef" };
+    const updateRequest = CollectionUpdateViewRequestSchema.parse({
+      ...updateIdentity,
+      expectedRevisionId: request.expectedRevisionId,
+      expectedViewRevision: 1,
+      filter: { operator: "is_null", columnId: "column_abcdef123456" },
+      sort: { columnId: "column_bcdefa123456", direction: "asc" }
+    });
+    expect(updateRequest).not.toHaveProperty("name");
+    const updatedSnapshot = { ...snapshot, views: [{ ...view, viewRevision: 2,
+      canEdit: true, canRename: true, canTrash: true,
+      filter: updateRequest.filter, sort: updateRequest.sort }] };
+    expect(CollectionUpdateViewResultSchema.parse({
+      ...updateIdentity,
+      status: "committed",
+      operationId: "op_20260728_viewupdate1",
+      snapshot: updatedSnapshot
+    })).toMatchObject({ status: "committed", snapshot: { revisionId: request.expectedRevisionId } });
+    expect(CollectionUpdateViewResultSchema.parse({
+      ...updateIdentity,
+      status: "stale",
+      currentViewRevision: 2,
+      snapshot: updatedSnapshot
+    }).status).toBe("stale");
+    expect(() => CollectionUpdateViewRequestSchema.parse({ ...updateRequest, rawSql: "select private" })).toThrow();
+    expect(() => CollectionUpdateViewResultSchema.parse({
+      ...updateIdentity,
+      status: "stale",
+      currentViewRevision: 1,
+      snapshot: updatedSnapshot
+    })).toThrow("current immutable view identity");
     expect(CollectionTrashViewRequestSchema.parse({
       ...mutationIdentity,
       requestId: "collection_request_viewtrashabcdefg",

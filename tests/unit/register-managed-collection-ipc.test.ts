@@ -99,6 +99,14 @@ const renameViewRequest = {
   expectedViewRevision: 2,
   name: "Renamed"
 } as const;
+const updateViewRequest = {
+  ...openRequest,
+  requestId: "collection_request_viewupdateabcdef",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  viewId: "view_abcdefghijkl",
+  expectedViewRevision: 2,
+  filter: { operator: "is_null", columnId: "column_abcdefghijkl" }
+} as const;
 const trashViewRequest = {
   ...openRequest,
   requestId: "collection_request_viewtrashabcdefg",
@@ -134,6 +142,7 @@ function makeHarness(options: {
   readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
+  readonly updateCollectionView?: (request: typeof updateViewRequest) => unknown;
   readonly renameCollectionView?: (request: typeof renameViewRequest) => unknown;
   readonly trashCollectionView?: (request: typeof trashViewRequest) => unknown;
   readonly trashCollectionColumn?: (request: typeof trashColumnRequest) => unknown;
@@ -262,6 +271,10 @@ function makeHarness(options: {
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, viewId: request.viewId, status: "not_found"
   })));
+  const updateCollectionView = vi.fn(options.updateCollectionView ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, viewId: request.viewId, status: "not_found"
+  })));
   const trashCollectionView = vi.fn(options.trashCollectionView ?? ((request) => ({
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, viewId: request.viewId, status: "not_found"
@@ -285,6 +298,7 @@ function makeHarness(options: {
     editRelationCollectionCell,
     renameCollectionColumn,
     createCollectionView,
+    updateCollectionView,
     renameCollectionView,
     trashCollectionView,
     trashCollectionColumn,
@@ -304,6 +318,7 @@ function makeHarness(options: {
     editRelationCollectionCell,
     renameCollectionColumn,
     createCollectionView,
+    updateCollectionView,
     renameCollectionView,
     trashCollectionView,
     trashCollectionColumn,
@@ -328,14 +343,18 @@ describe("registerManagedCollectionIpc", () => {
       "collections.renameColumn",
       "collections.createView",
       "collections.renameView",
+      "collections.updateView",
       "collections.trashView",
       "collections.trashColumn",
       "collections.trashRow"
     ]);
   });
 
-  it("strictly binds view rename and trash to trusted sender, vault, and exact view identity", async () => {
+  it("strictly binds view update, rename, and trash to trusted sender, vault, and exact view identity", async () => {
     const accepted = makeHarness();
+    await expect(accepted.handlers.get("collections.updateView")!(
+      { sender: {} } as IpcMainInvokeEvent, updateViewRequest
+    )).resolves.toMatchObject({ status: "not_found", viewId: updateViewRequest.viewId });
     await expect(accepted.handlers.get("collections.renameView")!(
       { sender: {} } as IpcMainInvokeEvent, renameViewRequest
     )).resolves.toMatchObject({ status: "not_found", viewId: renameViewRequest.viewId });
@@ -343,9 +362,13 @@ describe("registerManagedCollectionIpc", () => {
       { sender: {} } as IpcMainInvokeEvent, trashViewRequest
     )).resolves.toMatchObject({ status: "not_found", viewId: trashViewRequest.viewId });
     expect(accepted.renameCollectionView).toHaveBeenCalledWith(renameViewRequest);
+    expect(accepted.updateCollectionView).toHaveBeenCalledWith(updateViewRequest);
     expect(accepted.trashCollectionView).toHaveBeenCalledWith(trashViewRequest);
     await expect(accepted.handlers.get("collections.renameView")!(
       { sender: {} } as IpcMainInvokeEvent, { ...renameViewRequest, rawSql: "select 1" }
+    )).rejects.toThrow();
+    await expect(accepted.handlers.get("collections.updateView")!(
+      { sender: {} } as IpcMainInvokeEvent, { ...updateViewRequest, body: "private" }
     )).rejects.toThrow();
 
     const untrusted = makeHarness({ isTrustedSender: () => false });
@@ -353,6 +376,9 @@ describe("registerManagedCollectionIpc", () => {
       { sender: {} } as IpcMainInvokeEvent, trashViewRequest
     )).resolves.toMatchObject({ status: "failed", viewId: trashViewRequest.viewId });
     expect(untrusted.trashCollectionView).not.toHaveBeenCalled();
+    await expect(untrusted.handlers.get("collections.updateView")!(
+      { sender: {} } as IpcMainInvokeEvent, updateViewRequest
+    )).resolves.toMatchObject({ status: "failed", viewId: updateViewRequest.viewId });
 
     const swapped = makeHarness({ renameCollectionView: (request) => ({
       apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,

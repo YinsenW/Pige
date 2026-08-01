@@ -1280,6 +1280,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_lookup",
     "rename_collection_column",
     "create_collection_view",
+    "update_collection_view",
     "rename_collection_view",
     "trash_collection_view",
     "restore_collection_view",
@@ -6329,6 +6330,7 @@ export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormu
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
+export const COLLECTION_UPDATE_VIEW_CHANNEL = "collections.updateView" as const;
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
@@ -6382,6 +6384,7 @@ export const CollectionViewSummarySchema = z.object({
   viewId: ViewIdSchema,
   viewRevision: z.number().int().positive(),
   name: CollectionViewNameSchema,
+  canEdit: z.boolean().default(false),
   canRename: z.boolean().default(false),
   canTrash: z.boolean().default(false),
   filter: CollectionViewFilterSchema.optional(),
@@ -7038,6 +7041,14 @@ export const CollectionRenameViewRequestSchema = z.object({
   name: CollectionViewNameSchema
 }).strict();
 
+export const CollectionUpdateViewRequestSchema = z.object({
+  ...CollectionViewMutationIdentityShape,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  expectedViewRevision: z.number().int().positive(),
+  filter: CollectionViewFilterSchema.optional(),
+  sort: CollectionViewSortSchema.optional()
+}).strict();
+
 export const CollectionTrashViewRequestSchema = z.object({
   ...CollectionViewMutationIdentityShape,
   expectedRevisionId: DatasetQueryRevisionIdSchema,
@@ -7498,6 +7509,22 @@ export const CollectionRenameViewResultSchema = z.discriminatedUnion("status", [
   CollectionViewMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]).superRefine((result, context) => validateCollectionViewMutationResult(result, context, "rename"));
 
+export const CollectionUpdateViewResultSchema = z.discriminatedUnion("status", [
+  CollectionViewMutationResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionViewMutationResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentViewRevision: z.number().int().positive(),
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionViewMutationResultIdentitySchema.extend({ status: z.literal("ineligible"), snapshot: CollectionSnapshotSchema }).strict(),
+  CollectionViewMutationResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionViewMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => validateCollectionViewMutationResult(result, context, "update"));
+
 export const CollectionTrashViewResultSchema = z.discriminatedUnion("status", [
   CollectionViewMutationResultIdentitySchema.extend({
     status: z.literal("committed"),
@@ -7517,7 +7544,7 @@ export const CollectionTrashViewResultSchema = z.discriminatedUnion("status", [
 function validateCollectionViewMutationResult(
   result: { readonly status: string; readonly datasetId: string; readonly tableId: string; readonly viewId: string; readonly currentViewRevision?: number; readonly snapshot?: z.infer<typeof CollectionSnapshotSchema> },
   context: z.RefinementCtx,
-  action: "rename" | "trash"
+  action: "rename" | "update" | "trash"
 ): void {
   if (!result.snapshot) return;
   if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
@@ -7531,10 +7558,13 @@ function validateCollectionViewMutationResult(
   if (result.status === "committed" && action === "rename" && (!view || view.viewRevision <= 1)) {
     context.addIssue({ code: "custom", path: ["viewId"], message: "A renamed Collection view must retain its stable identity at a later revision." });
   }
+  if (result.status === "committed" && action === "update" && (!view || view.viewRevision <= 1)) {
+    context.addIssue({ code: "custom", path: ["viewId"], message: "An updated Collection view must retain its stable identity at a later revision." });
+  }
   if (result.status === "stale" && view && view.viewRevision !== result.currentViewRevision) {
     context.addIssue({ code: "custom", path: ["currentViewRevision"], message: "Stale Collection view snapshots must expose current immutable view identity." });
   }
-  if (result.status === "ineligible" && view && (action === "rename" ? view.canRename : view.canTrash)) {
+  if (result.status === "ineligible" && action !== "update" && view && (action === "rename" ? view.canRename : view.canTrash)) {
     context.addIssue({ code: "custom", path: ["snapshot", "views"], message: "Ineligible Collection view actions must fail closed." });
   }
 }
@@ -9977,6 +10007,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_lookup",
     "rename_collection_column",
     "create_collection_view",
+    "update_collection_view",
     "rename_collection_view",
     "trash_collection_view",
     "restore_collection_view",
@@ -10574,6 +10605,8 @@ export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColum
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
 export type CollectionCreateViewResult = z.infer<typeof CollectionCreateViewResultSchema>;
+export type CollectionUpdateViewRequest = z.infer<typeof CollectionUpdateViewRequestSchema>;
+export type CollectionUpdateViewResult = z.infer<typeof CollectionUpdateViewResultSchema>;
 export type CollectionRenameViewRequest = z.infer<typeof CollectionRenameViewRequestSchema>;
 export type CollectionRenameViewResult = z.infer<typeof CollectionRenameViewResultSchema>;
 export type CollectionTrashViewRequest = z.infer<typeof CollectionTrashViewRequestSchema>;

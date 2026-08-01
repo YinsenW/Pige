@@ -5,6 +5,7 @@ import {
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
@@ -25,6 +26,8 @@ import {
   CollectionCellEditResultSchema,
   CollectionCreateViewRequestSchema,
   CollectionCreateViewResultSchema,
+  CollectionUpdateViewRequestSchema,
+  CollectionUpdateViewResultSchema,
   CollectionRenameViewRequestSchema,
   CollectionRenameViewResultSchema,
   CollectionTrashViewRequestSchema,
@@ -57,6 +60,8 @@ import {
   type CollectionCellEditResult,
   type CollectionCreateViewRequest,
   type CollectionCreateViewResult,
+  type CollectionUpdateViewRequest,
+  type CollectionUpdateViewResult,
   type CollectionRenameViewRequest,
   type CollectionRenameViewResult,
   type CollectionTrashViewRequest,
@@ -120,6 +125,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly createCollectionView: (
     request: CollectionCreateViewRequest
   ) => CollectionCreateViewResult | Promise<CollectionCreateViewResult>;
+  readonly updateCollectionView: (
+    request: CollectionUpdateViewRequest
+  ) => CollectionUpdateViewResult | Promise<CollectionUpdateViewResult>;
   readonly renameCollectionView: (
     request: CollectionRenameViewRequest
   ) => CollectionRenameViewResult | Promise<CollectionRenameViewResult>;
@@ -310,6 +318,12 @@ function failedCreateView(request: CollectionCreateViewRequest): CollectionCreat
 
 function failedRenameView(request: CollectionRenameViewRequest): CollectionRenameViewResult {
   return CollectionRenameViewResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
+    activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
+    viewId: request.viewId, status: "failed" });
+}
+
+function failedUpdateView(request: CollectionUpdateViewRequest): CollectionUpdateViewResult {
+  return CollectionUpdateViewResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
     activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
     viewId: request.viewId, status: "failed" });
 }
@@ -636,6 +650,22 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     ) throw new Error("Managed Collection view-rename response identity did not match the request.");
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedRenameView(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_UPDATE_VIEW_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionUpdateViewRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedUpdateView(parsed);
+    }
+    let rawResult: CollectionUpdateViewResult;
+    try { rawResult = await options.updateCollectionView(parsed); } catch { return failedUpdateView(parsed); }
+    const result = CollectionUpdateViewResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId || result.viewId !== parsed.viewId) {
+      throw new Error("Managed Collection view-update response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedUpdateView(parsed);
   });
 
   options.ipcMain.handle(COLLECTION_TRASH_VIEW_CHANNEL, async (event, request: unknown) => {
