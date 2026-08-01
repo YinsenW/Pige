@@ -16,6 +16,7 @@ import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import type { NotesService } from "./notes-service";
 
 const MAX_NOTE_BYTES = 4 * 1024 * 1024;
+const RELATABLE_PAGE_TYPES = new Set(["note", "claim", "question", "concept", "entity"]);
 type NoteRelateTargetPort = Pick<NotesService, "resolveTrashTarget" | "render">;
 type NoteRelateEditorPort = Pick<NoteMarkdownEditorService, "open" | "save">;
 
@@ -77,7 +78,7 @@ export class NoteRelateService {
     if (
       !renderContextId ||
       render.summary.pageId !== request.currentPageId ||
-      render.summary.pageType !== "note" ||
+      render.summary.pageType !== current.pageType ||
       render.summary.status !== "active"
     ) return closed(request, "failed");
     return { ...request, status: "committed", operationId: saved.operationId, render: { ...render, renderContextId } };
@@ -120,7 +121,7 @@ export class NoteRelateService {
       return unlinkClosed(request, "failed");
     }
     if (!render.renderContextId || render.summary.pageId !== request.currentPageId ||
-      render.summary.pageType !== "note" || render.summary.status !== "active") {
+      render.summary.pageType !== current.pageType || render.summary.status !== "active") {
       return unlinkClosed(request, "failed");
     }
     return { ...request, status: "committed", operationId: saved.operationId, render: { ...render, renderContextId: render.renderContextId } };
@@ -157,7 +158,7 @@ function readTarget(vaultPath: string, pageId: string, expectedUpdatedAt: string
 
 function relateMarkdown(markdown: string, targetPageId: string, now: string): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
+  if (!parsed || !isRelatablePage(parsed.frontmatter.type, parsed.frontmatter.status)) return undefined;
   const related = readInlinePageIds(parsed.raw);
   if (!Array.isArray(related) || related.length >= 64 || related.includes(targetPageId) ||
       related.some((pageId) => !PageIdSchema.safeParse(pageId).success)) return undefined;
@@ -174,7 +175,7 @@ function relateMarkdown(markdown: string, targetPageId: string, now: string): st
 
 function unlinkMarkdown(markdown: string, targetPageId: string, now: string): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
+  if (!parsed || !isRelatablePage(parsed.frontmatter.type, parsed.frontmatter.status)) return undefined;
   const related = readInlinePageIds(parsed.raw);
   if (!Array.isArray(related) || !related.includes(targetPageId) ||
       related.some((pageId) => !PageIdSchema.safeParse(pageId).success)) return undefined;
@@ -187,6 +188,10 @@ function unlinkMarkdown(markdown: string, targetPageId: string, now: string): st
     .replace(/^related_page_ids:[^\r\n]*$/mu, `related_page_ids: ${JSON.stringify(related.filter((pageId) => pageId !== targetPageId))}`)
     .replace(/^updated_at:[^\r\n]*$/mu, `updated_at: ${JSON.stringify(updatedAt)}`);
   return `${markdown.slice(0, rawStart)}${nextRaw}${markdown.slice(rawStart + parsed.raw.length)}`;
+}
+
+function isRelatablePage(pageType: unknown, status: unknown): boolean {
+  return status === "active" && typeof pageType === "string" && RELATABLE_PAGE_TYPES.has(pageType);
 }
 
 function readInlinePageIds(raw: string): readonly string[] | undefined {

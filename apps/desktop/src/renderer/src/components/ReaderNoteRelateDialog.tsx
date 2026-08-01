@@ -23,6 +23,7 @@ export interface ReaderNoteRelateSubmit {
   readonly currentPageId: string;
   readonly renderContextId: string;
   readonly expectedRevision: string;
+  readonly expectedPageType: NoteRenderResult["summary"]["pageType"];
   readonly execute: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
   readonly isCurrent?: () => boolean;
 }
@@ -48,7 +49,7 @@ export async function submitReaderNoteRelation(
       !noteRelateIdentityMatches(request, result) ||
       result.status !== "committed" ||
       result.render.summary.pageId !== request.currentPageId ||
-      result.render.summary.pageType !== "note"
+      result.render.summary.pageType !== binding.expectedPageType
     ) return { status: "retained" };
     return { status: "committed", render: result.render };
   } catch {

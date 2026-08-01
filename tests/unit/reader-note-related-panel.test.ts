@@ -19,7 +19,7 @@ afterEach(() => {
   Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
 });
 
-describe("Reader note relationships", () => {
+describe("Reader knowledge-page relationships", () => {
   it("submits one exact unlink and adopts only an authoritative committed render", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -87,7 +87,7 @@ describe("Reader note relationships", () => {
 });
 
 const note = {
-  summary: { pageId: "page_20260731_unlinksource", title: "Source", pageType: "note" as const, status: "active" as const,
+  summary: { pageId: "page_20260731_unlinksource", title: "Source", pageType: "claim" as const, status: "active" as const,
     pagePath: "wiki/source.md", createdAt: "2026-07-31T09:00:00.000Z", updatedAt: "2026-07-31T10:00:00.000Z", sourceIds: [] },
   html: "<h1>Source</h1>", byteSize: 64,
   renderContextId: "notectx_0123456789abcdef0123456789abcdef",
