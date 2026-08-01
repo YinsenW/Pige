@@ -4511,6 +4511,43 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("shows the bounded recovery outcome from an abnormal previous session", async () => {
+    const dom = createDom();
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { diagnostics: { workflowSummary: vi.fn(async () => ({
+        apiVersion: 1, revision: 0, scopeContextId: `diagctx_${"a".repeat(48)}`,
+        activeVaultId: null, localOnly: true, ownedArtifactCount: 0
+      })) } }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SystemSettingsPanel, {
+        surface: "diagnostics", locale: "en", supportBundlePreview: null,
+        diagnosticsHealth: {
+          status: "degraded", checkedAt: "2026-08-01T01:02:00.000Z", localOnly: true,
+          recentErrorCount: 0, checks: [], crashRecovery: {
+            status: "needs_attention", detectedAt: "2026-08-01T01:00:00.000Z",
+            completedAt: "2026-08-01T01:01:00.000Z", capturesPreserved: 2,
+            jobsRecovered: 3, jobsNeedRetry: 1, proposalsRecovered: 1, proposalsAwaitingReview: 2,
+            sourcesNeedRepair: 0, indexRebuildRunning: false
+          }
+        },
+        onRefreshDiagnostics: async () => undefined,
+        onSupportBundlePreviewChange: vi.fn(), t
+      }));
+      await settle(dom);
+    });
+    const recovery = dom.window.document.querySelector<HTMLElement>('[data-crash-recovery-status="needs_attention"]')!;
+    expect(recovery.textContent).toContain("Recovery finished, but some items still need attention.");
+    expect(recovery.textContent).toContain("Captures preserved 2");
+    expect(recovery.textContent).toContain("Jobs resumed 3");
+    expect(recovery.textContent).toContain("Jobs needing retry 1");
+    expect(recovery.textContent).not.toContain("job_");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("presents connected services and exact high-risk confirmation without standing permission modes", async () => {
     const dom = createDom();
     let ipcRead = false;

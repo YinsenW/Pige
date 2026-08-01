@@ -127,6 +127,7 @@ interface DiagnosticsServiceOptions {
   readonly maxSegmentBytes?: number;
   readonly maxStringBytes?: number;
   readonly exporter?: DiagnosticsExportPort;
+  readonly crashRecoverySummary?: () => DiagnosticsHealth["crashRecovery"];
 }
 
 interface PersistedDiagnosticEvent extends DiagnosticEvent {
@@ -148,6 +149,7 @@ export class DiagnosticsService {
   readonly #maxSegmentBytes: number;
   readonly #maxStringBytes: number;
   readonly #exporter: DiagnosticsExportPort;
+  readonly #crashRecoverySummary: () => DiagnosticsHealth["crashRecovery"];
   #currentSegmentBytes: number | undefined;
   #nextExpiryAtMs: number | undefined;
   #storeBytes: number | undefined;
@@ -179,6 +181,7 @@ export class DiagnosticsService {
       "maxStringBytes"
     );
     this.#exporter = options.exporter ?? new DiagnosticsExportWorkerService();
+    this.#crashRecoverySummary = options.crashRecoverySummary ?? (() => undefined);
   }
 
   health(): DiagnosticsHealth {
@@ -198,12 +201,14 @@ export class DiagnosticsService {
       checks.push({ id: "diagnostics_store", status: "error", message: "Local diagnostics store is unavailable." });
     }
 
+    const crashRecovery = this.#crashRecoverySummary();
     return {
       status: checks.some((check) => check.status === "error") ? "degraded" : "ok",
       checkedAt,
       localOnly: true,
       recentErrorCount,
-      checks
+      checks,
+      ...(crashRecovery ? { crashRecovery } : {})
     };
   }
 

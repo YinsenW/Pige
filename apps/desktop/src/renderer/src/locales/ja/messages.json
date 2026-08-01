@@ -2119,5 +2119,18 @@
   "topic.rename.confirm": "名前を変更",
   "topic.rename.saving": "変更中…",
   "topic.rename.stale": "このトピックは変更されています。入力したタイトルは保持されました。確認して再試行してください。",
-  "topic.rename.failed": "トピック名を変更できませんでした。変更はありません。"
+  "topic.rename.failed": "トピック名を変更できませんでした。変更はありません。",
+  "system.crashRecovery": "起動時の復旧",
+  "system.crashRecovery.recovering": "予期しない終了後の永続データを確認しています。",
+  "system.crashRecovery.recovered": "永続データを確認し、安全に再開しました。",
+  "system.crashRecovery.needs_attention": "復旧は完了しましたが、確認が必要な項目があります。",
+  "system.crashRecovery.status.recovering": "確認中",
+  "system.crashRecovery.status.recovered": "復旧済み",
+  "system.crashRecovery.status.needs_attention": "要確認",
+  "system.crashRecovery.captures": "保護したキャプチャ",
+  "system.crashRecovery.jobs": "再開したジョブ",
+  "system.crashRecovery.retry": "再試行が必要なジョブ",
+  "system.crashRecovery.proposals": "復旧したレビュー",
+  "system.crashRecovery.awaitingReview": "確認待ちのレビュー",
+  "system.crashRecovery.sources": "修復が必要なソース"
 }

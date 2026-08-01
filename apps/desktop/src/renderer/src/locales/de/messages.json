@@ -2119,5 +2119,18 @@
   "topic.rename.confirm": "Umbenennen",
   "topic.rename.saving": "Wird umbenannt…",
   "topic.rename.stale": "Dieses Thema wurde geändert. Ihr Titel bleibt erhalten; prüfen Sie ihn und versuchen Sie es erneut.",
-  "topic.rename.failed": "Pige konnte dieses Thema nicht umbenennen. Es wurde nichts geändert."
+  "topic.rename.failed": "Pige konnte dieses Thema nicht umbenennen. Es wurde nichts geändert.",
+  "system.crashRecovery": "Startwiederherstellung",
+  "system.crashRecovery.recovering": "Pige prüft dauerhafte Arbeit nach einem unerwarteten Beenden.",
+  "system.crashRecovery.recovered": "Dauerhafte Arbeit wurde geprüft und sicher fortgesetzt.",
+  "system.crashRecovery.needs_attention": "Die Wiederherstellung ist abgeschlossen, einige Elemente benötigen Aufmerksamkeit.",
+  "system.crashRecovery.status.recovering": "Prüfung",
+  "system.crashRecovery.status.recovered": "Wiederhergestellt",
+  "system.crashRecovery.status.needs_attention": "Aktion erforderlich",
+  "system.crashRecovery.captures": "Erhaltene Erfassungen",
+  "system.crashRecovery.jobs": "Fortgesetzte Aufgaben",
+  "system.crashRecovery.retry": "Aufgaben zum Wiederholen",
+  "system.crashRecovery.proposals": "Wiederhergestellte Prüfungen",
+  "system.crashRecovery.awaitingReview": "Ausstehende Prüfungen",
+  "system.crashRecovery.sources": "Quellen zur Reparatur"
 }

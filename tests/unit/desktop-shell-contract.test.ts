@@ -17,6 +17,15 @@ import {
 import { getWindowShellOptions } from "../../apps/desktop/src/main/window-shell-options";
 
 describe("desktop shell build contract", () => {
+  it("starts and cleanly closes the machine-local crash recovery session", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(mainSource).toContain("crashRecoveryService.beginSession()");
+    expect(mainSource).toContain("crashRecoveryService?.markClean()");
+    expect(mainSource).toContain("getCrashRecoveryService().observe({ jobsRecovered: recovery.requeued");
+    expect(mainSource).toContain("getCrashRecoveryService().complete()");
+    expect(mainSource).toContain("crashRecoverySummary: () => getCrashRecoveryService().summary()");
+  });
+
   it("composes image source refresh with the local OCR owner", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const composition = mainSource.slice(
@@ -337,7 +346,10 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("DiagnosticsClearLocalResultSchema.parse(");
     expect(preloadSource).toContain("DIAGNOSTICS_CLEAR_LOCAL_CHANNEL");
     expect(mainSource).toContain("registerDiagnosticsIpc({");
-    expect(mainSource).toContain("clear: (request) => getDiagnosticsLifecycleService().clear(request)");
+    expect(mainSource).toContain("const result = getDiagnosticsLifecycleService().clear(request)");
+    expect(mainSource).toContain('if (result.status === "cleared") {');
+    expect(mainSource).toContain("getCrashRecoveryService().clearSummary()");
+    expect(mainSource).toContain("health: getDiagnosticsService().health()");
     expect(diagnosticsIpcSource).toContain("DiagnosticsClearLocalRequestSchema.parse(input)");
     expect(diagnosticsIpcSource).toContain("options.isTrustedSender(event.sender)");
     expect(diagnosticsIpcSource).toContain("await options.clear(request)");

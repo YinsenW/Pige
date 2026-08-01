@@ -14,6 +14,7 @@ import {
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
   DiagnosticsWorkflowSummarySchema,
+  DiagnosticsHealthSchema,
   type DiagnosticsClearLocalRequest,
   type DiagnosticsClearLocalResult,
   type DiagnosticsExportSupportBundleRequest,
@@ -45,7 +46,7 @@ export interface RegisterDiagnosticsIpcOptions {
 export function registerDiagnosticsIpc(options: RegisterDiagnosticsIpcOptions): void {
   options.ipcMain.handle("diagnostics.health", async (event) => {
     if (!options.isTrustedSender(event.sender)) throw new Error("Untrusted diagnostics sender.");
-    return options.health();
+    return DiagnosticsHealthSchema.parse(await options.health());
   });
   options.ipcMain.handle(DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL, async (event) => {
     if (!options.isTrustedSender(event.sender)) throw new Error("Untrusted diagnostics sender.");

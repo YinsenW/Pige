@@ -2117,5 +2117,18 @@
   "topic.rename.confirm": "重命名",
   "topic.rename.saving": "正在重命名…",
   "topic.rename.stale": "此主题已更改。你输入的标题仍保留，请检查后重试。",
-  "topic.rename.failed": "Pige 无法重命名此主题，未做任何更改。"
+  "topic.rename.failed": "Pige 无法重命名此主题，未做任何更改。",
+  "system.crashRecovery": "启动恢复",
+  "system.crashRecovery.recovering": "Pige 正在检查意外退出前已持久化的工作。",
+  "system.crashRecovery.recovered": "已检查持久化工作并安全恢复。",
+  "system.crashRecovery.needs_attention": "恢复已完成，但仍有项目需要处理。",
+  "system.crashRecovery.status.recovering": "正在检查",
+  "system.crashRecovery.status.recovered": "已恢复",
+  "system.crashRecovery.status.needs_attention": "需要处理",
+  "system.crashRecovery.captures": "已保留捕获",
+  "system.crashRecovery.jobs": "已恢复任务",
+  "system.crashRecovery.retry": "需重试任务",
+  "system.crashRecovery.proposals": "已恢复审阅",
+  "system.crashRecovery.awaitingReview": "待处理审阅",
+  "system.crashRecovery.sources": "需修复来源"
 }
