@@ -328,6 +328,12 @@ import type {
   NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest,
   NoteChangeConceptParentResult,
+  NoteTopicParentItem,
+  NoteTopicParentsSummary,
+  NoteSearchTopicParentsRequest,
+  NoteSearchTopicParentsResult,
+  NoteChangeTopicParentRequest,
+  NoteChangeTopicParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -793,6 +799,12 @@ export type {
   NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest,
   NoteChangeConceptParentResult,
+  NoteTopicParentItem,
+  NoteTopicParentsSummary,
+  NoteSearchTopicParentsRequest,
+  NoteSearchTopicParentsResult,
+  NoteChangeTopicParentRequest,
+  NoteChangeTopicParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -2553,6 +2565,12 @@ export interface PigeDesktopApi {
     readonly changeConceptParent: (
       request: NoteChangeConceptParentRequest
     ) => Promise<NoteChangeConceptParentResult>;
+    readonly searchTopicParents: (
+      request: NoteSearchTopicParentsRequest
+    ) => Promise<NoteSearchTopicParentsResult>;
+    readonly changeTopicParent: (
+      request: NoteChangeTopicParentRequest
+    ) => Promise<NoteChangeTopicParentResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
     readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;

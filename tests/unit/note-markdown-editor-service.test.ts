@@ -490,6 +490,26 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  parent_concepts: ["page_20260801_parentconcept"]');
   });
 
+  it("records an allowed topic hierarchy update and converges Undo and Redo after restart", () => {
+    const fixture = createAdapterFixture({ pageType: "topic", allowTopic: true });
+    const opened = requireOpened(fixture.service);
+    const markdown = opened.markdown
+      .replace("topics: []", 'topics: ["page_20260801_parenttopic"]')
+      .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z");
+    const committed = fixture.service.save({ requestId: "noteeditreq_topicparentfixture", activeVaultId: VAULT_ID,
+      pageId: PAGE_ID, expectedRevisionId: opened.revisionId, renderIdentity: opened.renderIdentity, markdown });
+    expect(committed.status).toBe("committed");
+    if (committed.status !== "committed") throw new Error("Expected topic parent update to commit.");
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const restarted = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+    expect(restarted.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
+    expect(restarted.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("topics: []");
+    expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({ operationId: operation.id,
+      expectedRevisionId: operation.before?.id })).toMatchObject({ status: "redone", revisionId: committed.revisionId });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('topics: ["page_20260801_parenttopic"]');
+  });
+
   it("recovers only an exact interrupted forward Undo and remains idempotent", () => {
     const fixture = createAdapterFixture();
     const committed = commitEdit(fixture);
@@ -596,6 +616,7 @@ function createFixture(options: {
   readonly allowQuestion?: boolean;
   readonly allowConcept?: boolean;
   readonly allowEntity?: boolean;
+  readonly allowTopic?: boolean;
 } = {}): {
   readonly root: string;
   readonly vaultPath: string;
@@ -626,7 +647,8 @@ function createFixture(options: {
       allowClaim: options.allowClaim,
       allowQuestion: options.allowQuestion,
       allowConcept: options.allowConcept,
-      allowEntity: options.allowEntity
+      allowEntity: options.allowEntity,
+      allowTopic: options.allowTopic
     }
   );
   return { root, vaultPath, pagePath, markdown, records, vaults, service };
@@ -644,7 +666,8 @@ function createAdapterFixture(options: Parameters<typeof createFixture>[0] = {})
       allowClaim: options.allowClaim,
       allowQuestion: options.allowQuestion,
       allowConcept: options.allowConcept,
-      allowEntity: options.allowEntity
+      allowEntity: options.allowEntity,
+      allowTopic: options.allowTopic
     }
   );
   return { ...fixture, adapter, service };

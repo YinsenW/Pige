@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T15:45:00Z",
+  "reviewedAt": "2026-08-01T15:38:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E2.08 accepted-file ingress snapshot freeze, restart recovery and cleanup.",
+    "scope": "PIGE-KNOW-003 exact reversible Topic hierarchy closure and Reader authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "174477bf6c8fd54b1e9c435c624f7143fad2ef9ba3e5e29efc2f9be7ded10c4a"
+    "reviewedSha256": "57c17e45e7ecf45d3f90e1c8abac7446d60b33f29837c30f744680b5b5fbe2db"
   },
   "reviewers": [
     {
-      "reviewerId": "accepted-file-ingress-review",
-      "task": "Review E2.08 accepted-file snapshot lifecycle and restart convergence",
+      "reviewerId": "topic-hierarchy-review",
+      "task": "Review reversible Topic hierarchy authority and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,75 +70,72 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews Source Storage and Job recovery contracts; Development supplies separate freeze ordering, immutable restart publication and cleanup evidence."
+      "independence": "Planning reviews the hierarchy and acceptance contract; Development supplies separate schema, service, restart recovery and Reader UI evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "accepted-file-ingress-review",
+      "reviewerId": "topic-hierarchy-review",
       "blockerCount": 0,
-      "summary": "Pre-Send staging remains side-effect free; accepted Send freezes every file before publication and releases only exact unpublished private staging."
+      "summary": "Topic parents have one bounded Markdown direction while child edges remain rebuildable rather than duplicated."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "accepted-file-ingress-review",
+      "reviewerId": "topic-hierarchy-review",
       "blockerCount": 0,
-      "summary": "Source Storage, data ownership and Job recovery agree that retry and restart read immutable snapshots rather than mutable original paths."
+      "summary": "Markdown, knowledge model, strict IPC, Reader UI and Operation recovery agree on one parent-ID vocabulary."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "accepted-file-ingress-review",
+      "reviewerId": "topic-hierarchy-review",
       "blockerCount": 0,
-      "summary": "E2.08 is verified by direct complete-set freeze, missing-original restart publication and interrupted-staging cleanup tests."
+      "summary": "PIGE-KNOW-003 is verified by executable relation, merge, conflict, Concept and Topic hierarchy evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "accepted-file-ingress-review",
+      "reviewerId": "topic-hierarchy-review",
       "blockerCount": 0,
-      "summary": "Bounded accepted-file ingress and restart owners contain lifecycle mechanics while CaptureService remains below its frozen architecture ceiling."
+      "summary": "One bounded Topic owner reuses the existing editor and Reader boundaries without adding a Job or graph store."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "accepted-file-ingress-review",
+      "reviewerId": "topic-hierarchy-review",
       "blockerCount": 0,
-      "summary": "Existing Source Storage and Job recovery owners record the closure; no renderer contract, durable format or parallel design document was added."
+      "summary": "Existing knowledge, Markdown, API, UI and recovery owners hold the decision without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-file-ingress-recovery-service.test.ts tests/unit/home-agent-attachment-service.test.ts tests/unit/capture-service.test.ts tests/unit/ingress-snapshot-service.test.ts",
+      "command": "npx vitest run tests/unit/topic-parent-service.test.ts tests/unit/reader-topic-parents-ui.test.ts tests/unit/note-markdown-editor-service.test.ts",
       "status": "passed",
-      "evidence": "Forty focused tests prove complete-set freeze ordering, immutable restart publication, live-path drift rejection and private staging cleanup."
+      "evidence": "Exact search, add/remove, malformed/cycle fences, Reader focus and restart-safe Undo/Redo pass directly."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "Ingress recovery compiles and builds while CaptureService remains below its governed no-growth ceiling."
+      "evidence": "The hierarchy candidate compiles and builds while the new bounded service is responsibility-inventory bound."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Source Storage, Job recovery, acceptance projection and protected service inventory remain aligned."
+      "evidence": "Knowledge, Markdown, API, UI, recovery, acceptance and semantic-claim owners remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "accepted-file-ingress-bind-20260801",
-    "taskTitle": "Bind E2.08 accepted-file ingress recovery",
+    "taskId": "topic-hierarchy-bind-20260801",
+    "taskTitle": "Bind reversible Topic hierarchy closure",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing renderer, capture DTO and SourceRecord formats remain unchanged; only private Main-owned snapshot lifecycle and startup recovery gain behavior.",
-    "acknowledgement": "Planning promotes E2.08 and PIGE-VAULT-003 from complete-set freeze, restart adoption and exact cleanup evidence while broader Job recovery remains open."
+    "compatibility": "Existing Topic Markdown remains readable; exact parent IDs use the bounded common field and derived children need no migration.",
+    "acknowledgement": "Planning promotes PIGE-KNOW-003 from exact relation, merge, conflict, hierarchy and restart-safe Activity evidence."
   },
   "resolvedBlockers": [],
-  "nonBlockingRisks": [
-    "macOS signed-package qualification remains open.",
-    "Windows public qualification is deferred by current project policy."
-  ]
+  "nonBlockingRisks": []
 }

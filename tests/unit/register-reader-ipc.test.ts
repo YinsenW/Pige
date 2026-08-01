@@ -21,6 +21,7 @@ import type { ClaimConfidenceService } from "../../apps/desktop/src/main/service
 import type { EntityTypeService } from "../../apps/desktop/src/main/services/entity-type-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
 import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
+import type { TopicParentService } from "../../apps/desktop/src/main/services/topic-parent-service";
 import { NoteChangeQuestionAnswerResultSchema } from "@pige/schemas";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
@@ -58,7 +59,8 @@ function makeHarness(
   generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>,
   conceptParentService?: Partial<ConceptParentService>,
   claimConfidenceService?: Partial<ClaimConfidenceService>,
-  entityTypeService?: Partial<EntityTypeService>
+  entityTypeService?: Partial<EntityTypeService>,
+  topicParentService?: Partial<TopicParentService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -125,6 +127,10 @@ function makeHarness(
     getConceptParentService: () => {
       if (conceptParentService) return conceptParentService as ConceptParentService;
       throw new Error("Concept parent service was not expected.");
+    },
+    getTopicParentService: () => {
+      if (topicParentService) return topicParentService as TopicParentService;
+      throw new Error("Topic parent service was not expected.");
     },
     getNoteTagService: () => {
       if (noteTagService) return noteTagService as NoteTagService;
@@ -201,6 +207,8 @@ describe("registerReaderIpc", () => {
       "notes.changeClaimContradiction",
       "notes.searchConceptParents",
       "notes.changeConceptParent",
+      "notes.searchTopicParents",
+      "notes.changeTopicParent",
       "notes.addTag",
       "notes.editTaxonomy",
       "notes.rename",

@@ -551,6 +551,13 @@ Vault/concept/render/revision plus one exact broader concept and `add | remove`;
 backlinks/Knowledge Tree from that single durable direction. Closed outcomes are path/body-free and
 retain Reader state; the existing `update_page` Activity lifecycle owns Undo, Redo, and restart.
 
+`notes.searchTopicParents` and `notes.changeTopicParent` provide the equivalent bounded Topic
+hierarchy workflow. Search returns only active Topic ID/title/update identity; change binds exact
+Vault/Topic/render/revision plus one current parent and `add | remove`. Main rejects malformed or
+cyclic hierarchy truth before effect, changes only the durable parent-ID direction, and returns the
+authoritative Topic render after commit. Closed outcomes are path/body-free and preserve Reader
+state; Activity Undo/Redo and restart reuse the same `update_page` lifecycle.
+
 Reader reference query contract:
 
 - `notes.openSourceReference` accepts exact request/vault/page/render/source identity and returns

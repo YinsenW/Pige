@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "cd627199c50f5e565745caa9a082aa88129a5368",
+  "baseline": "3f0732847ba8e8164d949f6cfb7c9258b08d8704",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 291,
-  "baselineLines": 126709,
+  "baselineFileCount": 292,
+  "baselineLines": 126893,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -50,6 +50,7 @@
       ["claim-contradiction-service.ts", 189, "rdf"],
       ["entity-type-service.ts", 102, "rdf"],
       ["concept-parent-service.ts", 193, "rdf"],
+      ["topic-parent-service.ts", 184, "rdf"],
       ["external-file-publication-protocol.ts", 183, "prd"],
       ["generated-note-file.ts", 515, "rdf"],
       ["agent-turn-publication.ts", 386, "jrd"],
@@ -324,7 +325,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 291,
+  "serviceOwnerCount": 292,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

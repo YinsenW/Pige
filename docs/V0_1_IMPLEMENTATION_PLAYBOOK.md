@@ -605,6 +605,10 @@ Deferred from this phase:
 Exit criteria:
 
 - [E7.01] Evidence-bound reversible edits auto-apply with Operation/Undo; irreversible/security/destination/conflict/stricter-policy exceptions use durable stale-checked decisions. Evidence covers exact create, cited append, bounded tags, one directed link, one exact user note-edit Redo, and stable page Open; broad history, other mutations, broader restore/redo, exceptions, CAS, and packaged platforms remain open.
+`PIGE-KNOW-003` is verified within that still-broader Exit: exact relation, merge, contradiction,
+  Concept/Topic hierarchy and conflict paths now auto-apply only when current and reversible, with
+  pathless closed outcomes plus restart-safe Activity Undo/Redo; E7.01 remains partial for unrelated
+  mutation families and packaged breadth.
 - [E7.02] Memory is inspectable, provenance-linked, scoped, reversible, exportable, and independent from note/source deletion.
 - [E7.03] Conversation history remains readable and restart-safe without duplicating large source assets or saved note bodies.
 - [E7.04] Compaction preserves event identity, source/job/operation references, decisions, and user-visible summaries while discarding only rebuildable detail.

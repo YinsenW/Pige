@@ -170,6 +170,11 @@ Phase 3 bridge generated knowledge pages:
 - One deterministic `create_page` Operation binds the page to its Job; retry/restart adopts the
   same page and Operation instead of duplicating durable effects.
 
+For a `topic` page, the common inline `topics` array stores at most 8 stable parent Topic page IDs.
+It is the sole durable hierarchy direction; children are rebuilt from those parent edges. Explicit
+Reader mutation rejects malformed, duplicate, missing, inactive, self, or cyclic parent truth and
+uses the reversible `update_page` lifecycle without changing the Topic body or stable ID.
+
 ### 5.3 Concept Page
 
 ```yaml
