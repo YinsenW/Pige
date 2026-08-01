@@ -3069,6 +3069,7 @@ export function App(): React.JSX.Element {
             <ActivityHistorySettingsPanel
               activeVaultId={activeVault?.vaultId ?? null}
               activities={activityList?.activities ?? []}
+              jobs={recentJobs}
               hasMore={activityList?.hasMore === true}
               loadingMore={activityHistoryLoadingMore}
               loadMoreFailed={activityHistoryLoadFailed}
@@ -3078,6 +3079,7 @@ export function App(): React.JSX.Element {
               onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); void refreshLibrary(); if (opened) { setView("library"); setSettingsOpen(false); } return opened; }}
               onUndo={undoActivity}
               onLoadMore={loadMoreActivityHistory}
+              onCancelJob={cancelJob}
               onRedo={redoActivity}
               t={t}
             />

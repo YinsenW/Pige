@@ -371,7 +371,7 @@ export class JobsService {
       .filter((job) => classes.size === 0 || classes.has(job.class))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, limit)
-      .map((job) => toJobSummary(vaultPath, job));
+      .map((job) => toJobSummary(vaultPath, job, this.#activeExecutions.has(job.id)));
 
     return {
       scannedAt: new Date().toISOString(),
@@ -388,7 +388,7 @@ export class JobsService {
     if (!activeVault || !vaultPath || job.activeVaultId !== activeVault.vaultId) {
       throw new PigeDomainError("job.binding_changed", "The Job no longer belongs to the active vault.");
     }
-    return toJobSummary(vaultPath, job);
+    return toJobSummary(vaultPath, job, this.#activeExecutions.has(job.id));
   }
 
   readJobClass(jobId: string): JobClass | undefined {
@@ -4143,7 +4143,7 @@ function listJsonFiles(root: string): string[] {
 }
 
 type JobRef = NonNullable<JobRecord["inputRefs"]>[number];
-function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
+function toJobSummary(vaultPath: string, job: JobRecord, hasActiveExecution = false): JobSummary {
   const sourceRecord = job.sourceId ? readSourceRecord(vaultPath, job.sourceId) : undefined;
   const backupKind = job.class === "backup"
     ? job.inputRefs?.some((ref) => ref.role === "backup_destination")
@@ -4167,11 +4167,38 @@ function toJobSummary(vaultPath: string, job: JobRecord): JobSummary {
     canReconnectDependency: canReconnectDependency(job),
     canReconnectBackupDestination: canReconnectBackupDestination(job),
     canContinueIncomplete: canContinueIncomplete(job),
+    canCancel: canCancelJob(job, hasActiveExecution),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt
   };
+}
+
+const GENERIC_CANCEL_CLASSES = new Set<JobClass>([
+  "capture",
+  "parse",
+  "ocr",
+  "dataset_import",
+  "agent_turn",
+  "retrieval_query",
+  "index_rebuild"
+]);
+
+const COOPERATIVE_RUNNING_CANCEL_CLASSES = new Set<JobClass>([
+  "parse",
+  "ocr",
+  "dataset_import",
+  "agent_turn",
+  "index_rebuild"
+]);
+
+function canCancelJob(job: JobRecord, hasActiveExecution: boolean): boolean {
+  if (!GENERIC_CANCEL_CLASSES.has(job.class)) return false;
+  if (job.state === "running") {
+    return hasActiveExecution && COOPERATIVE_RUNNING_CANCEL_CLASSES.has(job.class);
+  }
+  return CANCELABLE_STATES.has(job.state) && job.cancellation?.durableWritesApplied !== true;
 }
 
 function canReconnectDependency(job: JobRecord): boolean {
