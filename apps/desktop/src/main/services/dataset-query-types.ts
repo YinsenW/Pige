@@ -119,8 +119,12 @@ const DatasetQueryRelationHopSchema = z.object({
   targetTable: TableOpaqueRefSchema
 }).strict();
 
-const DatasetQueryRelationJoinSchema = DatasetQueryRelationHopSchema.extend({
+const DatasetQuerySecondRelationHopSchema = DatasetQueryRelationHopSchema.extend({
   next: DatasetQueryRelationHopSchema.optional()
+}).strict();
+
+const DatasetQueryRelationJoinSchema = DatasetQueryRelationHopSchema.extend({
+  next: DatasetQuerySecondRelationHopSchema.optional()
 }).strict();
 
 const DatasetCatalogToolRequestSchema = z.object({
@@ -166,13 +170,6 @@ const DatasetQueryOnlyToolRequestSchema = z.object({
     });
   }
   const aggregateCount = aggregates.length;
-  if (request.join && (aggregates.length > 0 || grouped.length > 0)) {
-    context.addIssue({
-      code: "custom",
-      path: ["join"],
-      message: "Bounded relation joins support projection, filtering, and ordering only."
-    });
-  }
   for (const [index, order] of (request.orderBy ?? []).entries()) {
     const aggregateMatch = /^aggregate_([1-9][0-9]*)$/u.exec(order.by);
     if (aggregateMatch) {

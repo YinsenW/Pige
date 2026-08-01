@@ -101,7 +101,7 @@ describe("Dataset Query Service", () => {
     const catalog = await service.createCatalog(fixture.vaultPath);
     const catalogResult = await service.revalidateCatalog(fixture.vaultPath, catalog);
 
-    expect(catalogResult.evidence.modelText).toContain("at most two declared Pige relations");
+    expect(catalogResult.evidence.modelText).toContain("at most three declared Pige relations");
     expect(catalogResult.evidence.modelText).toContain('"targetTableRef":"table_3"');
     const request = {
       action: "query" as const,
@@ -142,6 +142,57 @@ describe("Dataset Query Service", () => {
         next: { relation: "column_5", targetTable: "table_3" }
       }
     })).rejects.toMatchObject({ code: "dataset.query.ref_invalid" });
+  });
+
+  it("executes a declared three-hop grouped aggregate and rejects a fourth hop at the tool boundary", async () => {
+    const fixture = await createManagedFixture({ withTwoHopRelation: true });
+    const service = new DatasetQueryService(directExecutor);
+    const catalog = await service.createCatalog(fixture.vaultPath);
+    const request = {
+      action: "query" as const,
+      datasetRef: "dataset_1" as const,
+      tableRef: "table_1" as const,
+      join: {
+        relation: "column_3" as const,
+        targetTable: "table_2" as const,
+        next: {
+          relation: "column_6" as const,
+          targetTable: "table_3" as const,
+          next: { relation: "column_8" as const, targetTable: "table_4" as const }
+        }
+      },
+      select: ["column_9" as const],
+      groupBy: ["column_9" as const],
+      aggregates: [{ op: "sum" as const, column: "column_5" as const }],
+      orderBy: [{ by: "aggregate_1" as const, direction: "desc" as const }],
+      limit: 10
+    };
+
+    const result = await service.execute(fixture.vaultPath, catalog, request);
+    expect(result.preview).toMatchObject({
+      tableName: "records → people → regions → countries",
+      returnedRowCount: 2,
+      matchedRowCount: 2,
+      columns: [{ label: "country" }, { label: "sum(rate)", aggregate: "sum" }],
+      rows: [{ values: ["US", 80] }, { values: ["UK", 40] }]
+    });
+    expect(result.citations[0]?.evidence.columnIds).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^column_/u)
+    ]));
+    expect(result.evidence.modelText).toContain('"aggregate":"sum"');
+    expect(() => DatasetQueryToolRequestSchema.parse({
+      ...request,
+      join: {
+        ...request.join,
+        next: {
+          ...request.join.next,
+          next: {
+            ...request.join.next.next,
+            next: { relation: "column_9", targetTable: "table_1" }
+          }
+        }
+      }
+    })).toThrow();
   });
 
   it("keeps immutable source evidence bound to the initial revision after the active revision changes", async () => {
@@ -402,7 +453,7 @@ describe("Dataset Query Service", () => {
   });
 
   it("runs the real Home Pi tool loop through the bound Dataset service and durable result contract", async () => {
-    const fixture = await createManagedFixture({ privateEvidence: false, withRelationJoin: true });
+    const fixture = await createManagedFixture({ privateEvidence: false, withTwoHopRelation: true });
     const vault = loadVaultSummary(fixture.vaultPath);
     let retrievalCalls = 0;
     const retrieval: HomeAgentRetrievalPort = {
@@ -427,13 +478,19 @@ describe("Dataset Query Service", () => {
               action: "query",
               datasetRef: "dataset_1",
               tableRef: "table_1",
-              join: { relation: "column_3", targetTable: "table_2" },
-              select: ["column_1", "column_5"],
-              orderBy: [{ by: "column_5", direction: "desc" }],
+              join: { relation: "column_3", targetTable: "table_2", next: {
+                relation: "column_6", targetTable: "table_3", next: {
+                  relation: "column_8", targetTable: "table_4"
+                }
+              } },
+              select: ["column_9"],
+              groupBy: ["column_9"],
+              aggregates: [{ op: "sum", column: "column_5" }],
+              orderBy: [{ by: "aggregate_1", direction: "desc" }],
               limit: 2
             }
           },
-          { kind: "text", text: "The linked people show Grace at the largest rate, 80. [citation_10]" }
+          { kind: "text", text: "The three-hop grouped totals are US 80 and UK 40. [citation_10]" }
         ]
       }),
       undefined,
@@ -443,7 +500,7 @@ describe("Dataset Query Service", () => {
     );
 
     const outcome = await service.submitTurn({
-      text: "Join projects to their linked people and report the largest rate.",
+      text: "Follow the project, person, region, and country relations and total rates by country.",
       inputKind: "typed_text",
       locale: "en"
     });
@@ -459,7 +516,7 @@ describe("Dataset Query Service", () => {
         datasetResult: {
           datasetId: fixture.manifest.datasetId,
           revisionId: fixture.manifest.activeRevision,
-          tableName: "records → people",
+          tableName: "records → people → regions → countries",
           returnedRowCount: 2,
           matchedRowCount: 2
         }
@@ -479,7 +536,10 @@ describe("Dataset Query Service", () => {
     );
     expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
       role: "assistant",
-      answer: { datasetResult: { tableName: "records → people", rows: [{ values: ["Ada", "80"] }, { values: [SQL_HOSTILE_VALUE, "40"] }] } }
+      answer: { datasetResult: {
+        tableName: "records → people → regions → countries",
+        rows: [{ values: ["US", 80] }, { values: ["UK", 40] }]
+      } }
     });
     expect(restartedRuntimeCalls).toBe(0);
   });
@@ -986,6 +1046,9 @@ function publishSecondRelationJoinRevision(
   const relationColumnId = "column_regionjoin001";
   const targetTableId = "table_regionsjoin01";
   const regionColumnId = "column_regionname001";
+  const countryRelationColumnId = "column_countryjoin01";
+  const countryTableId = "table_countriesjoin1";
+  const countryColumnId = "column_countryname01";
   const previousRevision = DatasetRevisionSchema.parse(readJson(path.join(bundlePath, manifest.revision.path)));
   const previousSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(bundlePath, manifest.schema.path)));
   const peopleTable = requireValue(previousSchema.tables.find(({ id }) => id === peopleTableId));
@@ -1007,13 +1070,23 @@ function publishSecondRelationJoinRevision(
       .run(relationColumnId, peopleTableId, peopleTable.columnCount, "region", "text",
         '["pige.relation.single"]', JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
     database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(targetTableId, 2, "regions", "fixture:regions", "{}", "{}", 2, 1);
+      .run(targetTableId, 2, "regions", "fixture:regions", "{}", "{}", 2, 2);
     database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(regionColumnId, targetTableId, 0, "region", "text", '["text"]',
+        JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(countryRelationColumnId, targetTableId, 1, "country", "text", '["pige.relation.single"]',
+        JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(countryTableId, 3, "countries", "fixture:countries", "{}", "{}", 2, 1);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(countryColumnId, countryTableId, 0, "country", "text", '["text"]',
         JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
     const insertRow = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
     insertRow.run("row_regionjoin0001", targetTableId, 0, 4);
     insertRow.run("row_regionjoin0002", targetTableId, 1, 5);
+    insertRow.run("row_countryjoin001", countryTableId, 0, 6);
+    insertRow.run("row_countryjoin002", countryTableId, 1, 7);
     const insertCell = database.prepare(
       "INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)"
     );
@@ -1021,6 +1094,14 @@ function publishSecondRelationJoinRevision(
       "text", JSON.stringify({ kind: "text", value: "North" }));
     insertCell.run("row_regionjoin0002", regionColumnId, "value", "text", "South", "South", 0,
       "text", JSON.stringify({ kind: "text", value: "South" }));
+    insertCell.run("row_regionjoin0001", countryRelationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_countryjoin001" }));
+    insertCell.run("row_regionjoin0002", countryRelationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_countryjoin002" }));
+    insertCell.run("row_countryjoin001", countryColumnId, "value", "text", "US", "US", 0,
+      "text", JSON.stringify({ kind: "text", value: "US" }));
+    insertCell.run("row_countryjoin002", countryColumnId, "value", "text", "UK", "UK", 0,
+      "text", JSON.stringify({ kind: "text", value: "UK" }));
     insertCell.run("row_personjoin0001", relationColumnId, "value", "pige.relation.single", null, null, null,
       "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_regionjoin0002" }));
     insertCell.run("row_personjoin0002", relationColumnId, "value", "pige.relation.single", null, null, null,
@@ -1058,9 +1139,28 @@ function publishSecondRelationJoinRevision(
       header: { mode: "absent", used: false },
       ordinal: 2,
       rowCount: 2,
-      columnCount: 1,
+      columnCount: 2,
       columns: [{
         id: regionColumnId, name: "region", ordinal: 0, sourceType: "text", sourceTypes: ["text"],
+        logicalType: "string", nullable: false, stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }, {
+        id: countryRelationColumnId, name: "country", ordinal: 1, sourceType: "pige.relation.single",
+        sourceTypes: ["pige.relation.single"], logicalType: "string", nullable: true,
+        relation: { kind: "pige_single_relation", schemaVersion: 1, targetTableId: countryTableId,
+          targetDisplayColumnId: countryColumnId },
+        stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }, {
+      id: countryTableId,
+      name: "countries",
+      sourceLocator: "fixture:countries",
+      sourceMetadata: {},
+      header: { mode: "absent", used: false },
+      ordinal: 3,
+      rowCount: 2,
+      columnCount: 1,
+      columns: [{
+        id: countryColumnId, name: "country", ordinal: 0, sourceType: "text", sourceTypes: ["text"],
         logicalType: "string", nullable: false, stats: { missing: 0, empty: 0, null: 0, value: 2 }
       }]
     }]
@@ -1076,9 +1176,9 @@ function publishSecondRelationJoinRevision(
     payload,
     stats: {
       ...previousRevision.stats,
-      tableCount: previousRevision.stats.tableCount + 1,
-      rowCount: previousRevision.stats.rowCount + 2,
-      columnCount: previousRevision.stats.columnCount + 2
+      tableCount: previousRevision.stats.tableCount + 2,
+      rowCount: previousRevision.stats.rowCount + 4,
+      columnCount: previousRevision.stats.columnCount + 4
     },
     operationId: "op_20260802_relationjoin02",
     change: { kind: "collection_relation_add", tableId: peopleTableId, columnId: relationColumnId,
