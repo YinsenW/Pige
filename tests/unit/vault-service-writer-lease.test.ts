@@ -190,6 +190,32 @@ describe("VaultService writer lease lifecycle", () => {
     expect(harness.control(secondVault.path).releaseCount).toBe(0);
   });
 
+  it("preserves the current Vault and its restart binding when a new destination fails validation", async () => {
+    const root = makeTempRoot();
+    electronMocks.getPath.mockImplementation((name: string) => path.join(root, `electron-${name}`));
+    const current = makeVault(root, "Current");
+    const settings = makeSettingsStore(root, "failure-retention-settings");
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    service.openPath(current.path);
+
+    const createParent = path.join(root, "new-vaults");
+    const blockedTarget = path.join(createParent, "Blocked");
+    fs.mkdirSync(blockedTarget, { recursive: true });
+    fs.writeFileSync(path.join(blockedTarget, "user-file.txt"), "keep", "utf8");
+    electronMocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [createParent] });
+
+    await expect(service.create({} as never, { vaultName: "Blocked" })).rejects.toMatchObject({
+      code: "vault_path_not_empty"
+    });
+    expect(fs.readFileSync(path.join(blockedTarget, "user-file.txt"), "utf8")).toBe("keep");
+    expect(service.current()).toMatchObject({ vaultId: current.summary.vaultId });
+
+    service.close();
+    const restarted = trackService(new VaultService(settings, () => false, harness.factory));
+    expect(restarted.current()).toMatchObject({ vaultId: current.summary.vaultId });
+  });
+
   it("preserves the current vault and settings when the next lease cannot be acquired", () => {
     const root = makeTempRoot();
     const currentVault = makeVault(root, "Current");

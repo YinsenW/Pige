@@ -154,7 +154,45 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
   assertNoAncestorVault(vaultPath);
   assertCreatableVaultDirectory(vaultPath);
 
-  fs.mkdirSync(vaultPath, { recursive: true });
+  fs.mkdirSync(parentDirectory, { recursive: true });
+  const stagingPath = fs.mkdtempSync(path.join(parentDirectory, ".pige-vault-create-"));
+  let removedEmptyTarget = false;
+  let published = false;
+  try {
+    writeNewVaultTree(stagingPath, vaultName, now, options.locale);
+    const stagedInspection = inspectVaultCompatibility(stagingPath);
+    if (stagedInspection.status !== "current") {
+      throw new PigeDomainError("vault_create_invalid", "The staged vault did not pass validation.");
+    }
+    loadVaultSummary(stagingPath);
+
+    // Revalidate after all staging work. A destination that appeared or gained
+    // contents while the vault was built must win without any mutation.
+    assertCreatableVaultDirectory(vaultPath);
+    if (fs.existsSync(vaultPath)) {
+      fs.rmdirSync(vaultPath);
+      removedEmptyTarget = true;
+    }
+    fs.renameSync(stagingPath, vaultPath);
+    published = true;
+    return loadVaultSummary(vaultPath);
+  } catch (caught) {
+    if (!published && fs.existsSync(stagingPath)) {
+      fs.rmSync(stagingPath, { recursive: true, force: true });
+    }
+    if (removedEmptyTarget && !fs.existsSync(vaultPath)) {
+      fs.mkdirSync(vaultPath);
+    }
+    throw caught;
+  }
+}
+
+function writeNewVaultTree(
+  vaultPath: string,
+  vaultName: string,
+  now: Date,
+  locale: VaultManifest["default_locale"] | undefined
+): void {
   for (const relative of [
     ...PIGE_DURABLE_ROOTS,
     ...PIGE_REBUILDABLE_ROOTS,
@@ -172,20 +210,20 @@ export function createVaultOnDisk(options: CreateVaultOnDiskOptions): VaultSumma
     created_at: timestamp,
     updated_at: timestamp,
     app_min_version: PIGE_APP_MIN_VERSION,
-    default_locale: options.locale ?? "zh-Hans",
+    default_locale: locale ?? "zh-Hans",
     durable_roots: [...PIGE_DURABLE_ROOTS],
     rebuildable_roots: [...PIGE_REBUILDABLE_ROOTS]
   });
 
   const config = getDefaultVaultConfig();
 
-  writeJson(path.join(vaultPath, ".pige/manifest.json"), manifest);
   writeJson(path.join(vaultPath, ".pige/config.json"), config);
   fs.writeFileSync(path.join(vaultPath, "PIGE.md"), createDefaultPigePolicyMarkdown(manifest, vaultName), "utf8");
   fs.writeFileSync(path.join(vaultPath, "index.md"), createDefaultIndexMarkdown(vaultName, timestamp), "utf8");
   fs.writeFileSync(path.join(vaultPath, "log.md"), createDefaultLogMarkdown(timestamp), "utf8");
-
-  return loadVaultSummary(vaultPath);
+  // The manifest is the compatibility/publication marker and is written last
+  // inside the private staging tree before the directory is atomically renamed.
+  writeJson(path.join(vaultPath, ".pige/manifest.json"), manifest);
 }
 
 export function loadVaultSummary(vaultPathInput: string): VaultSummary {

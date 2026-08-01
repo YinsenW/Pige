@@ -73,6 +73,7 @@ Default paths:
 Creation behavior:
 
 - `vault.create` uses a trusted OS folder picker for the parent folder and a user-visible vault name.
+- Main builds and validates a new Vault in a private sibling staging directory, then publishes it with one directory rename. A failed build removes only that private staging directory, preserves any current Vault and the first-run name draft, and leaves the same destination retryable.
 - Pige creates `PIGE.md`, `index.md`, `log.md`, `.pige/manifest.json`, `.pige/config.json`, and default folders.
 - If the suggested default folder already contains a compatible Pige vault, offer to open it.
 - If the suggested default folder exists but is not a Pige vault, offer to choose a different folder or create a named subfolder.

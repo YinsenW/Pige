@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Exact reversible title and filename rename for active notes, claims, questions, concepts and entities.",
+    "scope": "Atomic validated first-run Vault creation, failure retention and restart-safe activation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "fbeff6c96bb38b5d523b2df6e90256cd1b5712c01ef3a7229c2a875fda389166"
+    "reviewedSha256": "1b3f9ad7dd1c1dd640c1342415510c4067b7e385455d88b675b9296f9c728797"
   },
   "reviewers": [{
-    "reviewerId": "typed-page-rename-lifecycle-review",
-      "task": "Review exact reversible typed knowledge-page rename",
+    "reviewerId": "atomic-vault-creation-review",
+      "task": "Review atomic validated first-run Vault publication",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews rename truth across Markdown, knowledge, API, UI, Operation and one durable Decision; Development supplies separate Reader, receipt, Activity and restart evidence."
+      "independence": "Planning reviews onboarding, API, storage and one durable Decision; Development supplies separate staging, retry, binding-retention and restart evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Reader exposes one calm Rename page action for five mutable page types while Topic remains reference-aware and source/archived remain protected."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Markdown, Knowledge, API, UI, Operation and D-20260801-Typed-Knowledge-Page-Rename agree on stable ID/type and exact CAS."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Five-type service and Reader matrices prove rename, alias preservation, Activity Undo/Redo and restart without overclaiming remaining Knowledge completion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"The existing rename receipt, Operation, Activity and dialog owners absorb typed pages without a second store or public channel."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"typed-page-rename-lifecycle-review","blockerCount":0,"summary":"Existing lifecycle owner documents plus one durable Decision absorb the feature without a new design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"First-run keeps one trusted picker and name field while failed creation remains retryable without exposing partial storage."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Onboarding, API and D-20260801-Atomic-Vault-Creation-Publication agree on private staging, validation and one final rename."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Direct layout and service tests prove atomic publication, retry, current-binding retention and restart without overclaiming broader Vault acceptance."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"The existing Vault layout and service owners absorb publication safety without a second public channel, renderer path authority or durable format."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Two existing owner sections plus one durable Decision record the behavior without creating another design document."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Typed-page rename lifecycle truth and ownership remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/note-rename-service.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-library.test.ts -t 'renames one exact active|projects and revalidates|renames the exact Library Reader' && npm run typecheck && npm run build","status":"passed","evidence":"Five active page types preserve ID/type/body, prior-title alias, exact Activity Undo/Redo/restart and retained Reader drafts."},
-    {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Service responsibility, Main and renderer authority boundaries remain enforced without a budget raise."}
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"First-run Vault creation truth and ownership remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/vault-layout.test.ts tests/unit/vault-service-writer-lease.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Private staging publishes once, failed publication retries cleanly, and current Vault binding survives failure and restart."},
+    {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Vault storage responsibility and renderer authority boundaries remain enforced without a new owner or budget raise."}
   ],
   "coordination": {
-    "taskId": "typed-page-rename-lifecycle-bind-20260801",
-    "taskTitle": "Bind reversible typed knowledge-page rename",
+    "taskId": "atomic-vault-creation-bind-20260801",
+    "taskTitle": "Bind atomic validated first-run Vault creation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds active Vault/render/revision/path and immutable page type; renderer sees only safe identities and authoritative same-type render.",
-    "acknowledgement": "Planning binds typed page rename while Topic reference-aware rename and remaining Knowledge acceptance exits stay separately owned."
+    "compatibility": "Main owns the selected parent path, private staging tree, validation and writer-lease activation; renderer retains only name and safe result state.",
+    "acknowledgement": "Planning binds atomic creation while broader Vault storage classification and Settings breadth remain separately owned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
