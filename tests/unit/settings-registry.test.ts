@@ -50,7 +50,8 @@ describe("settings registry", () => {
       storage: "OS app data/settings.json",
       backedUpByDefault: false,
       applyBehavior: "immediate",
-      permissionRequirement: "none"
+      permissionRequirement: "none",
+      agentPolicyEffect: "language.voiceInputLanguage"
     });
     expect(byKey.get("ocr.excludeLowConfidenceFromSummaries")).toMatchObject({
       page: "Local Capabilities",

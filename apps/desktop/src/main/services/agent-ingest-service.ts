@@ -66,7 +66,9 @@ import {
   type AgentIngestToolOutput,
   type AgentIngestUpdateToolInput
 } from "./agent-ingest-tool-registry";
-import { buildAgentRuntimePolicyContext, knowledgeLanguagePolicyInstruction } from "./agent-policy-context";
+import { assertAgentModelBoundaryAllowedByPolicy, assertAgentRuntimePolicyCurrent,
+  knowledgeLanguagePolicyInstruction, resolveAgentRuntimePolicyContext, vaultPolicyInstruction,
+  type AgentIngestCapabilitySnapshot } from "./agent-policy-context";
 import {
   writeSingleWriterFileAtomic as writeFileAtomic,
   writeSingleWriterJsonAtomic as writeJsonAtomic
@@ -126,22 +128,6 @@ export interface AgentIngestRetrievalPort {
 export interface AgentIngestProposalPort {
   findForJob(vaultPath: string, jobId: string): ConfirmationProposal | undefined;
   stage(vaultPath: string, request: StageProposalRequest): StageProposalResult;
-}
-
-export interface AgentIngestCapabilitySnapshot {
-  readonly localDatabaseStatus: AgentRuntimePolicyContext["localCapabilities"]["localDatabase"];
-  readonly parserToolchainReady: boolean;
-  readonly datasetToolchainReady?: boolean;
-  readonly ocrEngines: AgentRuntimePolicyContext["localCapabilities"]["ocrEngines"];
-  readonly ocrLanguageHints?: readonly string[];
-  readonly appLocale?: AgentRuntimePolicyContext["language"]["appLocale"];
-  readonly generatedKnowledgeLanguage?: AgentRuntimePolicyContext["language"]["generatedKnowledgeLanguage"];
-  readonly speechInputAvailable: boolean;
-  readonly embeddingModelInstalled: boolean;
-  readonly lexicalSearchAvailable: boolean;
-  readonly vectorSearchAvailable: boolean;
-  readonly rerankerAvailable: boolean;
-  readonly excludeLowConfidenceOcrFromSummaries: boolean;
 }
 
 export interface AgentIngestCapabilityPort {
@@ -863,12 +849,14 @@ export class AgentIngestService {
     let currentSourceRecord = SourceRecordSchema.parse(sourceRecord);
     let currentEvidencePack = await this.#evidence.assemble(vaultPath, currentSourceRecord);
     const capabilitySnapshot = this.#capabilities.snapshot();
-    const policy = buildAgentRuntimePolicyContext(vaultPath, {
+    const resolvedPolicy = resolveAgentRuntimePolicyContext(vaultPath, {
       jobId: job.id,
       defaultModel,
       defaultProvider,
       ...capabilitySnapshot
     });
+    const policy = resolvedPolicy.policy;
+    assertAgentModelBoundaryAllowedByPolicy(policy);
     currentEvidencePack = applyOcrSummaryEvidencePolicy(currentSourceRecord, currentEvidencePack, policy);
     if (
       currentEvidencePack.fragments.length === 0 &&
@@ -911,6 +899,17 @@ export class AgentIngestService {
     const authorizeCurrentModelTurn = async (): Promise<void> => {
       hooks.throwIfCancellationRequested?.();
       hooks.assertSourceCurrent?.(currentSourceRecord);
+      const currentDefaultModel = this.#models.getDefaultModel();
+      const currentDefaultProvider = this.#models.getDefaultProvider();
+      if (!currentDefaultModel || !currentDefaultProvider) {
+        throw new PigeDomainError("model_provider.binding_changed", "The default runtime binding became unavailable.");
+      }
+      assertAgentRuntimePolicyCurrent(policy, vaultPath, {
+        jobId: job.id,
+        defaultModel: currentDefaultModel,
+        defaultProvider: currentDefaultProvider,
+        ...this.#capabilities.snapshot()
+      });
       const promptContextResult = createAgentIngestPromptContext(currentSourceRecord, currentEvidencePack, policy);
       const retrievalAudit = retrievalSelection
         ? readRetrievalEvidenceAuditSnapshot(
@@ -964,7 +963,7 @@ export class AgentIngestService {
     };
 
     await authorizeCurrentModelTurn();
-    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguagePolicyInstruction(policy.language)}` + (proposalStageAvailable
+    const systemPrompt = `${createSystemPrompt(proposalStageAvailable)}\n${knowledgeLanguagePolicyInstruction(policy.language)}\n${vaultPolicyInstruction(resolvedPolicy.vaultPolicyMarkdown)}` + (proposalStageAvailable
       ? "\nUse pige_stage_knowledge_note_proposal when the generated note should wait for explicit human review. Staging does not apply or publish the proposed Markdown."
       : "");
     const userPrompt = createUserPrompt(currentPromptContext, hooks.userTurn);

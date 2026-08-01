@@ -4296,6 +4296,9 @@ export const AgentRuntimePolicyContextSchema = z.object({
   jobId: z.string().min(1).max(160),
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   vaultId: VaultIdSchema,
+  vaultPolicy: z.object({
+    revision: z.string().regex(/^pigepolicyrev_[a-f0-9]{64}$/u)
+  }).strict(),
   sourceStorage: z.object({
     defaultStrategy: SourceStorageStrategySchema,
     sourceAssetRootKind: SourceAssetRootKindSchema,

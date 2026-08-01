@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { AgentRuntimePolicyContext } from "@pige/contracts";
 import type { JobRecord } from "@pige/schemas";
 import { PigeDomainError } from "@pige/domain";
 
@@ -66,6 +67,7 @@ export type AgentContextPack = z.infer<typeof AgentContextPackSchema>;
 
 export interface AgentContextPackMemory {
   readonly id: string;
+  readonly kind: AgentRuntimePolicyContext["memory"]["allowedMemoryScopes"][number];
   readonly title: string;
   readonly body: string;
   readonly updatedAt: string;

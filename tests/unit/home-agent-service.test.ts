@@ -109,6 +109,10 @@ afterEach(() => {
 describe("Home Pi Agent service", () => {
   it("applies the bound knowledge-language preference to new Home Agent turns", async () => {
     const fixture = makeFixture();
+    const policyPath = path.join(fixture.vaultPath, "PIGE.md");
+    fs.writeFileSync(policyPath, fs.readFileSync(policyPath, "utf8").replace(
+      "## Agent Review Rules", "## Agent Review Rules\n\n- Keep & <vault-only> edits attributable."
+    ), "utf8");
     let systemPrompt = "";
     const runtime = {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
@@ -150,6 +154,167 @@ describe("Home Pi Agent service", () => {
     expect(outcome).toMatchObject({ state: "completed" });
     expect(systemPrompt).toContain("newly generated durable knowledge in the configured app language fr");
     expect(systemPrompt).toContain("do not translate preserved source bodies");
+    expect(systemPrompt).toContain("Keep &amp; &lt;vault-only&gt; edits attributable.");
+    expect(systemPrompt).toContain("current explicit user instruction outrank them");
+  });
+
+  it("fails closed before a second model turn when PIGE.md changes", async () => {
+    const fixture = makeFixture();
+    let observedDrift: unknown;
+    let modelTurns = 0;
+    const runtime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        try {
+          await request.beforeModelTurn?.();
+          modelTurns += 1;
+          fs.appendFileSync(path.join(fixture.vaultPath, "PIGE.md"), "\n");
+          await request.beforeModelTurn?.();
+        } catch (caught) {
+          observedDrift = caught;
+          throw caught;
+        }
+        throw new Error("PIGE.md drift must prevent a second model turn.");
+      }
+    };
+    const outcome = await new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      runtime
+    ).submitQuery({ query: "Summarize the vault." });
+
+    expect(observedDrift).toMatchObject({ code: "permission.binding_changed" });
+    expect(outcome).toMatchObject({ state: "failed", error: { code: "permission.binding_changed" } });
+    expect(modelTurns).toBe(1);
+  });
+
+  it("blocks Home model execution when local-only policy is bound to a cloud provider", async () => {
+    const fixture = makeFixture();
+    let runtimeCalls = 0;
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      new JobsService(fixture.vaults),
+      {
+        run: async () => {
+          runtimeCalls += 1;
+          throw new Error("Blocked policy must not invoke the model runtime.");
+        }
+      },
+      { snapshot: () => ({
+        localDatabaseStatus: "ready",
+        parserToolchainReady: true,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        excludeLowConfidenceOcrFromSummaries: true,
+        cloudSendPolicy: "local_only"
+      }) }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Summarize my notes.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260802_localonly001"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "failed",
+      error: { code: "model_provider.egress_blocked" }
+    });
+    expect(runtimeCalls).toBe(0);
+  });
+
+  it("enforces policy-owned memory scopes and retrieval budget before each Home model turn", async () => {
+    const fixture = makeFixture();
+    let observedSearch: RetrievalSearchRequest | undefined;
+    let observedUserPrompt = "";
+    let observedContextPack: PiAgentRunRequest["contextPack"];
+    const memory = {
+      recall: () => [
+        {
+          id: "memory_20260802_preference01",
+          kind: "preference" as const,
+          title: "Concise answers",
+          body: "Prefer concise answers.",
+          updatedAt: "2026-08-02T00:00:00.000Z"
+        },
+        {
+          id: "memory_20260802_profile0001",
+          kind: "profile" as const,
+          title: "Private profile",
+          body: "This profile scope must be excluded.",
+          updatedAt: "2026-08-02T00:01:00.000Z"
+        }
+      ],
+      rememberPreference: () => ({ id: "memory_20260802_unused0001" })
+    };
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        onSearch: (request) => { observedSearch = request; }
+      }),
+      new JobsService(fixture.vaults),
+      {
+        run: async (request) => {
+          observedUserPrompt = request.userPrompt;
+          observedContextPack = request.contextPack;
+          await request.beforeModelTurn?.();
+          const search = request.tools.find((tool) => tool.name === "pige_search_knowledge");
+          if (!search) throw new Error("Missing Home search tool.");
+          const signal = new AbortController().signal;
+          await search.execute({}, signal, { toolCallId: "pi_tool_policy_budget", signal });
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, search.name, {
+            answer: "The local evidence is available. [citation_2]",
+            citationRefs: ["citation_2"],
+            grounding: "local_knowledge"
+          });
+        }
+      },
+      { snapshot: () => ({
+        localDatabaseStatus: "ready",
+        parserToolchainReady: true,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: true,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        excludeLowConfidenceOcrFromSummaries: true,
+        allowedMemoryScopes: ["preference"],
+        maxSnippetsForCloudSynthesis: 3
+      }) },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      memory
+    );
+
+    const outcome = await service.submitTurn({
+      text: "What is the launch plan?",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260802_policybudget01"
+    });
+
+    expect(outcome).toMatchObject({ state: "completed" });
+    expect(observedSearch?.limit).toBe(3);
+    expect(observedUserPrompt).toContain("Prefer concise answers.");
+    expect(observedUserPrompt).not.toContain("This profile scope must be excluded.");
+    expect(observedContextPack?.memoryRefs).toEqual([
+      expect.objectContaining({ id: "memory_20260802_preference01" })
+    ]);
   });
 
   it("keeps all five citation namespaces disjoint and rejects conflicting identities", () => {
@@ -667,6 +832,7 @@ describe("Home Pi Agent service", () => {
     const memory = {
       recall: () => [{
         id: "memory_20260727_existingpref01",
+        kind: "preference" as const,
         title: "Concise summaries",
         body: "Prefer concise summaries.",
         updatedAt: "2026-07-27T00:00:00.000Z"

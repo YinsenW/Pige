@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { OperationRecordSchema } from "@pige/schemas";
 import {
   PigePolicyService,
+  readPigePolicyForAgent,
   type PigePolicyPreparedUpdate
 } from "../../apps/desktop/src/main/services/pige-policy-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -34,6 +35,17 @@ function operation(vaultPath: string) {
 }
 
 describe("PigePolicyService", () => {
+  it("exposes only an exact validated policy snapshot to the Agent owner", () => {
+    const value = fixture();
+    const snapshot = readPigePolicyForAgent(value.vaultPath);
+    expect(snapshot).toMatchObject({ markdown: value.service().summary().markdown });
+    expect(snapshot.revision).toMatch(/^pigepolicyrev_[a-f0-9]{64}$/u);
+    fs.appendFileSync(path.join(value.vaultPath, "PIGE.md"), "\napi_key=sk_abcdefghijklmnopqrstuv\n");
+    expect(() => readPigePolicyForAgent(value.vaultPath)).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.policy_invalid" })
+    );
+  });
+
   it("validates, confirms through a prepared boundary, commits once, and replays exactly", () => {
     const value = fixture();
     const before = value.service().summary();

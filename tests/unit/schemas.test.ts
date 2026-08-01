@@ -5728,6 +5728,7 @@ describe("schemas", () => {
       jobId: "job_20260801_policy01",
       policyHash: `sha256:${"a".repeat(64)}`,
       vaultId: "vault_20260709_ab12cd",
+      vaultPolicy: { revision: `pigepolicyrev_${"a".repeat(64)}` },
       sourceStorage: {
         defaultStrategy: "copy_to_source_library" as const,
         sourceAssetRootKind: "inside_vault" as const,

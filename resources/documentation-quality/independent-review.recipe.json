@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T02:45:00.000Z",
+  "reviewedAt": "2026-08-02T03:04:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Backup default inclusion, exact destination reconnect and default exclusion acceptance now reflects the already-shipped durable service, IPC, UI and negative archive evidence.",
+    "scope": "Typed Agent Runtime Policy now binds validated PIGE.md, model locality, language, memory, retrieval, OCR, permission and source-storage owners with model-turn currentness enforcement.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "e4f4e22a9bf4cf7da095191857e8d68e2a53b6791c2b3fda5df9a9ac3e230879"
+    "reviewedSha256": "499084ae75772409ec2e3a54e3bf249ae2f83d91dbd00dcffbdf18eac8d5128e"
   },
   "reviewers": [
     {
-      "reviewerId": "backup-acceptance-review",
-      "task": "Review exact Backup inclusion, destination repair and exclusion evidence",
+      "reviewerId": "agent-policy-enforcement-review",
+      "task": "Review typed Agent policy compilation and effect-owner enforcement",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews Backup acceptance facts; existing service, archive, IPC and renderer tests supply separate executable evidence."
+      "independence": "Planning reviews policy contracts and acceptance while separate schema, Home, ingest, Vault, OCR, permission, source-storage and backup tests execute the owner boundaries."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "backup-acceptance-review",
+      "reviewerId": "agent-policy-enforcement-review",
       "blockerCount": 0,
-      "summary": "Vault settings exposes exact destination reconnect and portable inclusion controls without renderer path authority."
+      "summary": "The existing PIGE.md editor remains pathless while Agent owners consume only validated bytes and a typed revision."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "backup-acceptance-review",
+      "reviewerId": "agent-policy-enforcement-review",
       "blockerCount": 0,
-      "summary": "Backup data ownership, durable Job recovery, strict IPC and the acceptance projection agree on the shipped behavior."
+      "summary": "Runtime schema, PIGE.md ownership, policy hash, prompt boundary and Home/ingest currentness use one consistent authority order."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "backup-acceptance-review",
+      "reviewerId": "agent-policy-enforcement-review",
       "blockerCount": 0,
-      "summary": "PIGE-BACKUP-001, PIGE-BACKUP-002 and E9.01 cite current direct evidence with no remaining acceptance gap."
+      "summary": "PIGE-PROMPT-002 and E1.06 cite direct owner tests for every canonical policy domain and have no remaining acceptance gap."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "backup-acceptance-review",
+      "reviewerId": "agent-policy-enforcement-review",
       "blockerCount": 0,
-      "summary": "The existing Backup owners retain destination currentness, manifest coverage, exclusion and Operation responsibilities."
+      "summary": "Policy resolution stays in the bounded policy owner; Home, ingest, OCR, memory, retrieval, permission, source and backup retain effect ownership."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "backup-acceptance-review",
+      "reviewerId": "agent-policy-enforcement-review",
       "blockerCount": 0,
-      "summary": "Only the acceptance and independent-review locks change because product and owner documentation already describe the behavior."
+      "summary": "Four existing owner documents and one durable decision record the semantic delta without creating another design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/backup-service.test.ts tests/unit/backup-coordinator-service.test.ts tests/unit/backup-conversation-preference-service.test.ts tests/unit/backup-conversation-preference-ui.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/backup-destination-reconnect-ui.test.ts tests/unit/restore-ui.test.ts",
+      "command": "npx vitest run tests/unit/agent-policy-context.test.ts tests/unit/pige-policy-service.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-ingest-service.test.ts tests/unit/ocr-summary-evidence-policy.test.ts tests/unit/capture-service.test.ts tests/unit/permission-policy-store.test.ts tests/unit/permission-broker-service.test.ts tests/unit/backup-memory-preference-service.test.ts",
       "status": "passed",
-      "evidence": "Focused archive, coordinator, preference, registrar and renderer tests cover inclusion, reconnect restart/currentness and all exclusion classes."
+      "evidence": "Focused policy, Vault, Home, ingest, OCR, capture, permission and backup-owner tests cover compilation, currentness and concrete enforcement."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The existing Backup implementation compiles, builds and remains within protected architecture ownership."
+      "evidence": "The policy implementation compiles, builds and keeps the frozen Home and ingest owners within architecture budgets."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Independent snapshot and semantic claims agree with the completed Backup acceptance; remote Verify owns final trace execution."
+      "evidence": "Independent snapshot, decision and semantic claims agree with the executable policy acceptance; remote Verify owns final trace execution."
     }
   ],
   "coordination": {
-    "taskId": "backup-acceptance-closure-20260802",
-    "taskTitle": "Bind complete Backup inclusion, reconnect and exclusion acceptance",
+    "taskId": "agent-policy-enforcement-20260802",
+    "taskTitle": "Bind typed Agent policy and effect-owner enforcement",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No Backup runtime, archive format, renderer contract or restore behavior changes; only stale acceptance ownership is corrected.",
-    "acknowledgement": "Planning records the current direct evidence and promotes only PIGE-BACKUP-001, PIGE-BACKUP-002 and their exact E9.01 exit."
+    "compatibility": "The public Agent policy schema adds only a PIGE.md revision; no renderer API, secret, path, raw settings or durable policy body is exposed.",
+    "acknowledgement": "Planning records the exact owner matrix and promotes only PIGE-PROMPT-002 and E1.06 after executable policy currentness and enforcement pass."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
