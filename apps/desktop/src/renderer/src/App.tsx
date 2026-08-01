@@ -918,7 +918,7 @@ export function App(): React.JSX.Element {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
   };
-  useHomeJobEvents(onboarding?.activeVault?.vaultId, HOME_JOB_CLASSES, refreshVaultState, setRecentJobs, setBackupJobs);
+  useHomeJobEvents(onboarding?.activeVault?.vaultId, HOME_JOB_CLASSES, refreshVaultState, setRecentJobs, setBackupJobs, setActivityJobs);
   const refreshActivityJobs = async (): Promise<boolean> => {
     const activeVaultId = activeVaultIdRef.current;
     const sequence = ++activityJobsRefreshSequence.current;
@@ -944,18 +944,6 @@ export function App(): React.JSX.Element {
     if (!settingsOpen || settingsSection !== "history" || !onboarding?.activeVault?.vaultId) return;
     void refreshActivityJobs();
   }, [settingsOpen, settingsSection, onboarding?.activeVault?.vaultId]);
-
-  useEffect(() => {
-    if (
-      !settingsOpen ||
-      settingsSection !== "history" ||
-      !activityJobs.some((job) => [
-        "queued", "running", "waiting_dependency", "waiting_permission", "awaiting_review", "cancel_requested"
-      ].includes(job.state))
-    ) return;
-    const timer = window.setTimeout(() => void refreshActivityJobs(), 1_200);
-    return () => window.clearTimeout(timer);
-  }, [activityJobs, settingsOpen, settingsSection]);
 
   const runVaultAction = async (action: () => Promise<void>): Promise<void> => {
     setBusy(true);

@@ -7,7 +7,8 @@ export function useHomeJobEvents(
   homeJobClasses: readonly JobClass[],
   refreshVaultState: () => Promise<void>,
   setRecentJobs: Dispatch<SetStateAction<readonly JobSummary[]>>,
-  setBackupJobs: Dispatch<SetStateAction<readonly JobSummary[]>>
+  setBackupJobs: Dispatch<SetStateAction<readonly JobSummary[]>>,
+  setActivityJobs: Dispatch<SetStateAction<readonly JobSummary[]>>
 ): void {
   const refreshRef = useRef(refreshVaultState);
   refreshRef.current = refreshVaultState;
@@ -15,13 +16,20 @@ export function useHomeJobEvents(
     if (!activeVaultId) return;
     return window.pige.jobs.onChanged((event) => {
       if (event.activeVaultId !== activeVaultId) return;
+      setActivityJobs((current) => adoptActivityJobChange(current, event));
       setRecentJobs((current) => adoptHomeJobChange(current, event, homeJobClasses));
       if (event.job.backupKind === "user_backup") {
         setBackupJobs((current) => adoptBackupJobChange(current, event));
       }
       if (isTerminalJobState(event.job.state)) void refreshRef.current();
     });
-  }, [activeVaultId, homeJobClasses, setBackupJobs, setRecentJobs]);
+  }, [activeVaultId, homeJobClasses, setActivityJobs, setBackupJobs, setRecentJobs]);
+}
+
+function adoptActivityJobChange(current: readonly JobSummary[], event: JobChangedEvent): readonly JobSummary[] {
+  return [...current.filter((job) => job.id !== event.job.id), jobSummaryFromChangedEvent(event)]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id))
+    .slice(0, 100);
 }
 
 function adoptHomeJobChange(
