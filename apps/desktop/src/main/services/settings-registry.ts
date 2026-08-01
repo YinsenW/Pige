@@ -94,6 +94,16 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       permissionRequirement: "none"
     },
     {
+      key: "backup.includeConversations",
+      page: "Vault & Note Storage",
+      scope: "vault_portable",
+      owner: "Backup Service",
+      storage: ".pige/config.json",
+      backedUpByDefault: true,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none"
+    },
+    {
       key: "memory.includeMemoryInBackup",
       page: "Agent & Memory",
       scope: "vault_portable",

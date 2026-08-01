@@ -26,9 +26,14 @@ import type {
 import { PigeDomainError } from "@pige/domain";
 import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL,
   BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
+  BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL,
   BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
+  BackupConversationPreferenceSummarySchema,
+  BackupConversationPreferenceUpdateRequestSchema,
+  BackupConversationPreferenceUpdateResultSchema,
   BackupMemoryPreferenceSummarySchema,
   BackupMemoryPreferenceUpdateRequestSchema,
   BackupMemoryPreferenceUpdateResultSchema,
@@ -44,6 +49,7 @@ import {
   type Locale
 } from "@pige/schemas";
 import type { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
+import type { BackupConversationPreferenceService } from "./services/backup-conversation-preference-service";
 import type { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import type { BackupRestoreService } from "./services/backup-service";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
@@ -67,6 +73,7 @@ interface RegisterBackupRestoreIpcOptions {
   readonly getLocale: () => Locale;
   readonly getDocumentsPath: () => string;
   readonly getBackupService: () => BackupRestoreService;
+  readonly getBackupConversationPreferenceService?: () => BackupConversationPreferenceService;
   readonly getBackupMemoryPreferenceService?: () => BackupMemoryPreferenceService;
   readonly getBackupCoordinator: () => BackupCoordinatorService;
   readonly getRestoreCoordinator: () => RestoreCoordinatorService;
@@ -95,6 +102,19 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       options.getActiveVaultPath?.()
     );
   });
+  if (options.getBackupConversationPreferenceService) {
+    options.ipcMain.handle(BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL, () =>
+      BackupConversationPreferenceSummarySchema.parse(options.getBackupConversationPreferenceService!().summary())
+    );
+    options.ipcMain.handle(BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL, (_event, request: unknown) => {
+      const parsed = BackupConversationPreferenceUpdateRequestSchema.parse(request);
+      const result = BackupConversationPreferenceUpdateResultSchema.parse(options.getBackupConversationPreferenceService!().update(parsed));
+      if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId) {
+        throw new Error("Invalid conversation backup preference response identity.");
+      }
+      return result;
+    });
+  }
   if (options.getBackupMemoryPreferenceService) {
     options.ipcMain.handle(BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL, () =>
       BackupMemoryPreferenceSummarySchema.parse(options.getBackupMemoryPreferenceService!().summary())

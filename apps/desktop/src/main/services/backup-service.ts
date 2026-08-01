@@ -48,6 +48,7 @@ import {
   inspectIncludedAgentMemoryBackup,
   type AgentMemoryBackupIntegrity
 } from "./agent-memory-backup";
+import { filterConversationBackupPaths, includesConversationHistoryInBackup } from "./backup-conversation-preference-service";
 import { ManagedCopyRootService } from "./managed-copy-root-service";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
 import {
@@ -484,7 +485,7 @@ export class BackupRestoreService {
   }
 
   status(activeVault: VaultSummary | undefined, vaultPath?: string): BackupRestoreStatus {
-    const includes = { ...DEFAULT_INCLUDES, vaultMemory: includesAgentMemoryInBackup(activeVault ? vaultPath : undefined) };
+    const includes = { ...DEFAULT_INCLUDES, conversations: includesConversationHistoryInBackup(activeVault ? vaultPath : undefined), vaultMemory: includesAgentMemoryInBackup(activeVault ? vaultPath : undefined) };
     return {
       phase: "available",
       createAvailable: Boolean(activeVault),
@@ -1067,6 +1068,7 @@ function createBackupManifest(
   signal?: AbortSignal
 ): PreparedBackupManifest {
   const vaultManifest = readVaultManifest(vaultPath);
+  if (includesConversationHistoryInBackup(vaultPath) !== preflight.includes.conversations) throw new PigeDomainError("backup.source_changed", "The conversation backup preference changed after preflight.");
   if (includesAgentMemoryInBackup(vaultPath) !== preflight.includes.vaultMemory) throw new PigeDomainError("backup.source_changed", "The Agent memory backup preference changed after preflight.");
   const preparedFiles = [...preflight.archiveSources.entries()].sort(([left], [right]) =>
     left.localeCompare(right)
@@ -1120,7 +1122,7 @@ function createBackupManifest(
     totalBytes,
     noteCount: countFiles(path.join(vaultPath, "wiki"), (filePath) => filePath.endsWith(".md")),
     sourceCount: countFiles(path.join(vaultPath, "sources"), (filePath) => filePath.endsWith(".md")),
-    conversationCount: countFiles(path.join(vaultPath, ".pige/conversations")),
+    conversationCount: preflight.includes.conversations ? countFiles(path.join(vaultPath, ".pige/conversations")) : 0,
     memoryCount: memoryIntegrity?.recordCount ?? 0,
     ...(memoryIntegrity ? { memoryIntegrity } : {}),
     includesSecrets: false,
@@ -1163,8 +1165,9 @@ function inspectBackupPreflight(
   userDataPath: string | undefined
 ): BackupPreflightResult {
   const includeVaultMemory = includesAgentMemoryInBackup(vaultPath);
-  const includes = { ...DEFAULT_INCLUDES, vaultMemory: includeVaultMemory };
-  const relativePaths = filterAgentMemoryBackupPaths(vaultPath, collectBackupFiles(vaultPath, options), includeVaultMemory);
+  const includeConversations = includesConversationHistoryInBackup(vaultPath);
+  const includes = { ...DEFAULT_INCLUDES, conversations: includeConversations, vaultMemory: includeVaultMemory };
+  const relativePaths = filterAgentMemoryBackupPaths(vaultPath, filterConversationBackupPaths(collectBackupFiles(vaultPath, options), includeConversations), includeVaultMemory);
   const domainSchemaVersions = deriveBackupDomainSchemaVersions(vaultPath, relativePaths);
   const sourceVaultId = readVaultManifest(vaultPath).vault_id;
   const memoryIntegrity = inspectIncludedAgentMemoryBackup(vaultPath, sourceVaultId, relativePaths, includeVaultMemory);

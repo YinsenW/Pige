@@ -1290,7 +1290,8 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_memory",
     "trash_memory",
     "restore_memory",
-    "update_source_record"
+    "update_source_record",
+    "change_setting"
   ]),
   createdAt: z.string().datetime({ offset: true }),
   targetLabel: z.string().min(1).max(120).optional(),
@@ -5224,6 +5225,33 @@ export const BackupMemoryPreferenceUpdateResultSchema = z.discriminatedUnion("st
     status: z.enum(["stale", "blocked"]),
     summary: BackupMemoryPreferenceSummarySchema
   }).strict()
+]);
+
+export const BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL = "backup.conversationPreferenceStatus" as const;
+export const BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL = "backup.setConversationPreference" as const;
+export const BackupConversationPreferenceRevisionSchema = z.string()
+  .regex(/^backupconversationrev_[a-f0-9]{64}$/u);
+export const BackupConversationPreferenceSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: BackupConversationPreferenceRevisionSchema,
+  includeConversations: z.boolean(),
+  canUpdate: z.boolean()
+}).strict();
+export const BackupConversationPreferenceRequestIdSchema = z.string()
+  .regex(/^backupconversationreq_[a-z0-9]{16,64}$/u);
+export const BackupConversationPreferenceUpdateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: BackupConversationPreferenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  expectedRevision: BackupConversationPreferenceRevisionSchema,
+  includeConversations: z.boolean()
+}).strict();
+export const BackupConversationPreferenceUpdateResultSchema = z.discriminatedUnion("status", [
+  BackupConversationPreferenceUpdateRequestSchema.pick({ apiVersion: true, requestId: true, activeVaultId: true })
+    .extend({ status: z.literal("updated"), summary: BackupConversationPreferenceSummarySchema }).strict(),
+  BackupConversationPreferenceUpdateRequestSchema.pick({ apiVersion: true, requestId: true, activeVaultId: true })
+    .extend({ status: z.enum(["stale", "blocked"]), summary: BackupConversationPreferenceSummarySchema }).strict()
 ]);
 
 export const RESTORE_CANCEL_CHANNEL = "restore.cancel" as const;
@@ -10942,6 +10970,10 @@ export type BackupMemoryPreferenceRevision = z.infer<typeof BackupMemoryPreferen
 export type BackupMemoryPreferenceSummary = z.infer<typeof BackupMemoryPreferenceSummarySchema>;
 export type BackupMemoryPreferenceUpdateRequest = z.infer<typeof BackupMemoryPreferenceUpdateRequestSchema>;
 export type BackupMemoryPreferenceUpdateResult = z.infer<typeof BackupMemoryPreferenceUpdateResultSchema>;
+export type BackupConversationPreferenceRevision = z.infer<typeof BackupConversationPreferenceRevisionSchema>;
+export type BackupConversationPreferenceSummary = z.infer<typeof BackupConversationPreferenceSummarySchema>;
+export type BackupConversationPreferenceUpdateRequest = z.infer<typeof BackupConversationPreferenceUpdateRequestSchema>;
+export type BackupConversationPreferenceUpdateResult = z.infer<typeof BackupConversationPreferenceUpdateResultSchema>;
 export type RestoreCancelRequestId = z.infer<typeof RestoreCancelRequestIdSchema>;
 export type RestoreCancelRequest = z.infer<typeof RestoreCancelRequestSchema>;
 export type RestoreCancelResult = z.infer<typeof RestoreCancelResultSchema>;
