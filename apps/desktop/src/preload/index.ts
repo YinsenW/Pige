@@ -488,6 +488,7 @@ import {
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
@@ -503,6 +504,8 @@ import {
   CollectionAddLookupColumnResultSchema,
   CollectionAddRollupColumnRequestSchema,
   CollectionAddRollupColumnResultSchema,
+  CollectionUpdateRollupColumnRequestSchema,
+  CollectionUpdateRollupColumnResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -876,6 +879,8 @@ import type {
   CollectionAddLookupColumnResult,
   CollectionAddRollupColumnRequest,
   CollectionAddRollupColumnResult,
+  CollectionUpdateRollupColumnRequest,
+  CollectionUpdateRollupColumnResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
   CollectionAddNullableColumnRequest,
@@ -1268,6 +1273,22 @@ async function invokeCollectionAddRollupColumn(
       result.relationColumnId !== parsedRequest.relationColumnId ||
       result.aggregation !== parsedRequest.aggregation || result.targetColumnId !== parsedRequest.targetColumnId) {
     throw new Error("Invalid Managed Collection rollup-column response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionUpdateRollupColumn(
+  request: CollectionUpdateRollupColumnRequest
+): Promise<CollectionUpdateRollupColumnResult> {
+  const parsedRequest = CollectionUpdateRollupColumnRequestSchema.parse(request);
+  const result = CollectionUpdateRollupColumnResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
+      result.columnId !== parsedRequest.columnId || result.relationColumnId !== parsedRequest.relationColumnId ||
+      result.aggregation !== parsedRequest.aggregation || result.targetColumnId !== parsedRequest.targetColumnId) {
+    throw new Error("Invalid Managed Collection rollup-update response identity.");
   }
   return result;
 }
@@ -2054,6 +2075,7 @@ const api: PigeDesktopApi = {
     editRelationCell: invokeCollectionEditRelationCell,
     addLookupColumn: invokeCollectionAddLookupColumn,
     addRollupColumn: invokeCollectionAddRollupColumn,
+    updateRollupColumn: invokeCollectionUpdateRollupColumn,
     renameColumn: invokeCollectionRenameColumn,
     createView: invokeCollectionCreateView,
     updateView: invokeCollectionUpdateView,

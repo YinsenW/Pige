@@ -84,10 +84,11 @@ view definition update/rename/trash/restore uses stable-ID CAS and forward Undo 
 the Dataset revision or rows. Trashing the active view selects All Rows. Evidence, originals, old
 revisions and previews stay immutable.
 
-Formula/relation/lookup descriptors are schema truth, including empty tables. Formula V1 is a
+Formula/relation/lookup/rollup descriptors are schema truth, including empty tables. Formula V1 is a
 <=8-depth/31-node nullable numeric AST; invalid math is null. A relation binds one same-Dataset
 table/scalar label and stores row IDs; its scalar lookup stays derived/read-only. Target edits
-reproject it; null/dangling resolves null. Inbound targets block trash; descriptor changes use
+reproject it; null/dangling resolves null. A single-relation rollup derives count or numeric sum;
+its definition is editable without making derived cells writable. Inbound targets block trash; descriptor changes use
 immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
 
 ```ts

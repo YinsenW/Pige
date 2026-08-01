@@ -67,6 +67,8 @@ import type {
   CollectionAddLookupColumnResult,
   CollectionAddRollupColumnRequest,
   CollectionAddRollupColumnResult,
+  CollectionUpdateRollupColumnRequest,
+  CollectionUpdateRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
   CollectionUpdateFormulaColumnRequest,
@@ -1503,6 +1505,7 @@ export interface KnowledgeActivitySummary {
     | "update_collection_relation_cell"
     | "add_collection_lookup"
     | "add_collection_rollup"
+    | "update_collection_rollup"
     | "rename_collection_column"
     | "create_collection_view"
     | "update_collection_view"
@@ -2356,6 +2359,9 @@ export interface PigeDesktopApi {
     readonly addRollupColumn: (
       request: CollectionAddRollupColumnRequest
     ) => Promise<CollectionAddRollupColumnResult>;
+    readonly updateRollupColumn: (
+      request: CollectionUpdateRollupColumnRequest
+    ) => Promise<CollectionUpdateRollupColumnResult>;
     readonly renameColumn: (
       request: CollectionRenameColumnRequest
     ) => Promise<CollectionRenameColumnResult>;
