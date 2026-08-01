@@ -10,14 +10,11 @@ import {
 } from "@pige/schemas";
 import * as tar from "tar";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
-import {
-  assertPermissionedExternalExecutionAuthority,
-  type PermissionedExternalExecutionAuthority
-} from "./permissioned-external-capability-service";
+import { assertPermissionedExternalExecutionAuthority, type PermissionedExternalExecutionAuthority } from "./permissioned-external-capability-service";
 import { createPinnedLookup, isNonPublicNetworkAddress } from "./source-fetch-service";
 import {
-  PiPackageLifecycleStore, hashPiPackageTree,
-  type PiPackageLifecycleRecord, type PiPackageUninstallReceipt
+  addPackageRuntimeRequestIds, PiPackageLifecycleStore, hashPiPackageTree, isReviewedPiPackageRuntimeRecord,
+  validPackageRuntimeMutations, type PackageRuntimeMutationRecord, type PiPackageLifecycleRecord, type PiPackageUninstallReceipt
 } from "./pi-package-lifecycle-store";
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9][a-z0-9._-]{0,63}\/[a-z0-9][a-z0-9._-]{0,63}|[a-z0-9][a-z0-9._-]{0,127})$/u;
 const EXACT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
@@ -54,9 +51,9 @@ interface ResolvedPackagePlan {
 export interface PiPackageRecord extends Omit<PiPackageInstallSummary, "status" | "revision" | "requiresEnable">, PiPackageLifecycleRecord {
   readonly treeHash: string; readonly archiveHash: string; readonly integrity: string;
   readonly manifestHash: string; readonly relativePath: string; readonly installedAt: string;
-  readonly enabled: false; readonly trust: "community";
+  readonly enabled: boolean; readonly trust: "community";
   readonly pinned?: true;
-  readonly requests: readonly PackageRequestRecord[];
+  readonly requests: readonly PackageRequestRecord[]; readonly runtimeMutations?: readonly PackageRuntimeMutationRecord[];
 }
 interface PackageRequestRecord {
   readonly requestId: string; readonly revision: number;
@@ -307,6 +304,7 @@ export class PiPackageManagerService {
       }
       const record = current.packages.find((candidate) => candidate.packageId === parsed.packageId);
       if (!record) return PiPackageUninstallResultSchema.parse({ ...identity, status: "not_found", registry: projectRegistry(current) });
+      if (record.enabled) return PiPackageUninstallResultSchema.parse({ ...identity, status: "denied", registry: projectRegistry(current) });
       this.#lifecycleStore.assertInstalled(record);
       const receipt = this.#lifecycleStore.prepareUninstall({
         ...uninstallIdentity(parsed), expectedRegistryRevision: parsed.expectedRegistryRevision,
@@ -893,6 +891,7 @@ function validateRegistry(value: unknown): PiPackageRegistryFile {
       if (request.revision > candidate.revision! || requestIds.has(request.requestId)) throw new Error("invalid package request");
       requestIds.add(request.requestId);
     }
+    addPackageRuntimeRequestIds(record.runtimeMutations, candidate.revision!, requestIds);
   }
   return { schemaVersion: 1, revision: candidate.revision!, packages: records };
 }
@@ -907,7 +906,7 @@ function validateRecord(value: unknown): PiPackageRecord {
     typeof record.relativePath !== "string" || record.relativePath !== path.join(
       "installed", record.packageId ?? "", record.version ?? "", String(record.treeHash ?? "").replace(/^sha256:/u, "")
     ) ||
-    typeof record.installedAt !== "string" || Number.isNaN(Date.parse(record.installedAt)) || record.enabled !== false || record.trust !== "community" ||
+    typeof record.installedAt !== "string" || Number.isNaN(Date.parse(record.installedAt)) || typeof record.enabled !== "boolean" || record.trust !== "community" ||
     (record.pinned !== undefined && record.pinned !== true) ||
     !Array.isArray(record.packageTypes) || record.packageTypes.length === 0 || record.packageTypes.some((type) => !["extension", "skill", "prompt", "theme"].includes(type)) ||
     !Number.isSafeInteger(record.dependencyCount) || record.dependencyCount! < 0 || record.dependencyCount! > 256 ||
@@ -915,7 +914,7 @@ function validateRecord(value: unknown): PiPackageRecord {
     record.requests.some((request) => !request || typeof request !== "object" ||
       typeof request.requestId !== "string" || !REQUEST_ID_PATTERN.test(request.requestId) ||
       !Number.isSafeInteger(request.revision) || request.revision < 1 || request.revision > Number.MAX_SAFE_INTEGER) ||
-    new Set(record.requests.map((request) => request.requestId)).size !== record.requests.length
+    new Set(record.requests.map((request) => request.requestId)).size !== record.requests.length || !validPackageRuntimeMutations(record.runtimeMutations)
   ) throw new Error("invalid record");
   return record as PiPackageRecord;
 }
@@ -948,11 +947,12 @@ function projectRegistry(
   return PiPackageRegistrySummarySchema.parse({
     apiVersion: 1, revision: registry.revision,
     packages: registry.packages.map((record) => ({
-      packageId: record.packageId, packageName: record.packageName, version: record.version,
-      state: "installed_disabled", packageTypes: record.packageTypes,
-      dependencyCount: record.dependencyCount, enabled: false, trust: "community", pinned: record.pinned === true,
-      canUpdate: record.pinned !== true, canRollback: record.pinned !== true && rollbackTarget(record) !== undefined,
-      rollbackTarget: record.pinned === true ? null : rollbackTarget(record) ?? null
+      packageId: record.packageId, packageName: record.packageName, version: record.version, packageTypes: record.packageTypes,
+      state: record.enabled ? "installed_enabled" : "installed_disabled",
+      dependencyCount: record.dependencyCount, enabled: record.enabled, canEnable: isReviewedPiPackageRuntimeRecord(record),
+      trust: "community", pinned: record.pinned === true, canUpdate: record.pinned !== true && !record.enabled,
+      canRollback: record.pinned !== true && !record.enabled && rollbackTarget(record) !== undefined,
+      rollbackTarget: record.pinned === true || record.enabled ? null : rollbackTarget(record) ?? null
     }))
   });
 }

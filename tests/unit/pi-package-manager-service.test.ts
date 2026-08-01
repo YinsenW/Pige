@@ -291,6 +291,7 @@ describe("PiPackageManagerService", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
+        canEnable: false,
         trust: "community",
         pinned: false,
         canUpdate: true,

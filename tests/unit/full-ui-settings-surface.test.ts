@@ -70,6 +70,8 @@ import type {
   PiPackageRollbackResult,
   PiPackageSetPinnedRequest,
   PiPackageSetPinnedResult,
+  PiPackageSetEnabledRequest,
+  PiPackageSetEnabledResult,
   PiPackageUninstallRequest,
   PiPackageUninstallResult,
   PiPackageUpdateRequest,
@@ -3910,6 +3912,40 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("enables one reviewed package runtime with exact CAS and restores focus", async () => {
+    const dom = createDom();
+    const t = (key: string): string => enMessages[key as keyof typeof enMessages] ?? key;
+    const installed = piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "@narumitw/pi-btw", {
+      version: "0.34.0", canEnable: true
+    });
+    const setEnabled = vi.fn(async (request: PiPackageSetEnabledRequest): Promise<PiPackageSetEnabledResult> => ({
+      apiVersion: 1, requestId: request.requestId, packageId: request.packageId, enabled: request.enabled,
+      status: "committed", registry: piPackageRegistry(2, [{
+        ...installed, state: "installed_enabled", enabled: true, canUpdate: false
+      }])
+    }));
+    const api: PiPackagesApi = {
+      summary: async () => ({ status: "ready", registry: piPackageRegistry(1, [installed]) }),
+      catalogQuery: emptyPiPackageCatalogQuery, install: vi.fn(), uninstall: vi.fn(), restore: vi.fn(),
+      update: vi.fn(), rollback: vi.fn(), setPinned: vi.fn(), setEnabled
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(PiPackagesSettingsPanel, { api, t })); await settle(dom); });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const enable = requireElement(page.querySelector<HTMLButtonElement>(`[data-package-runtime-id="${installed.packageId}"]`));
+    await act(async () => { enable.click(); enable.click(); await settle(dom); });
+    expect(setEnabled).toHaveBeenCalledTimes(1);
+    expect(setEnabled).toHaveBeenCalledWith(expect.objectContaining({ packageId: installed.packageId,
+      expectedRegistryRevision: 1, enabled: true }));
+    const disable = requireElement(page.querySelector<HTMLButtonElement>(`[data-package-runtime-id="${installed.packageId}"]`));
+    expect(disable.textContent).toBe("Disable");
+    expect(disable.getAttribute("aria-pressed")).toBe("true");
+    expect(page.querySelector<HTMLButtonElement>(`[data-package-remove-id="${installed.packageId}"]`)?.disabled).toBe(true);
+    expect(dom.window.document.activeElement).toBe(disable);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("adopts authoritative pin registries and preserves inventory and focus on identity-only failure", async () => {
     const authoritativeCases = [
       ["stale", [piPackage("pkg_aaaaaaaaaaaaaaaaaaaaaaaa", "authoritative-package")], "The package registry changed"],
@@ -6779,6 +6815,7 @@ function piPackage(
     packageTypes: ["extension"],
     dependencyCount: 0,
     enabled: false,
+    canEnable: false,
     trust: "community",
     pinned: false,
     canUpdate: false,

@@ -262,6 +262,8 @@ import {
   PiPackageRollbackResultSchema,
   PiPackageSetPinnedRequestSchema,
   PiPackageSetPinnedResultSchema,
+  PiPackageSetEnabledRequestSchema,
+  PiPackageSetEnabledResultSchema,
   PiPackageUninstallRequestSchema,
   PiPackageUninstallResultSchema,
   PiPackageUpdateRequestSchema,
@@ -3760,6 +3762,7 @@ describe("schemas", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
+        canEnable: false,
         trust: "community",
         canUpdate: true,
         canRollback: false,
@@ -3919,7 +3922,7 @@ describe("schemas", () => {
       registry: { ...registry, packages: [{
         packageId, packageName: restorable.packageName, version: restorable.version,
         state: "installed_disabled", packageTypes: ["extension"], dependencyCount: 0,
-        enabled: false, trust: "community", pinned: false, canUpdate: true,
+        enabled: false, canEnable: false, trust: "community", pinned: false, canUpdate: true,
         canRollback: false, rollbackTarget: null
       }] }
     })).toThrow();
@@ -3944,6 +3947,7 @@ describe("schemas", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
+        canEnable: false,
         trust: "community",
         pinned: false,
         canUpdate: true,
@@ -4067,6 +4071,7 @@ describe("schemas", () => {
         packageTypes: ["extension"],
         dependencyCount: 0,
         enabled: false,
+        canEnable: false,
         trust: "community",
         pinned: true,
         canUpdate: false,
@@ -4144,6 +4149,27 @@ describe("schemas", () => {
       expect(() => PiPackageSetPinnedRequestSchema.parse({ ...request, ...unsafe })).toThrow();
       expect(() => PiPackageSetPinnedResultSchema.parse({ ...failed, ...unsafe })).toThrow();
     }
+  });
+
+  it("freezes reviewed Pi package runtime enablement as an exact pathless CAS", () => {
+    const request = { apiVersion: 1, requestId: "pi_package_enable_request_abcdefghijklmnop",
+      packageId: "pkg_0123456789abcdef01234567", expectedRegistryRevision: 9, enabled: true } as const;
+    const registry = { apiVersion: 1, revision: 10, packages: [{
+      packageId: request.packageId, packageName: "@narumitw/pi-btw", version: "0.34.0",
+      state: "installed_enabled", packageTypes: ["extension"], dependencyCount: 0,
+      enabled: true, canEnable: true, trust: "community", pinned: false,
+      canUpdate: false, canRollback: false, rollbackTarget: null
+    }] } as const;
+    expect(PiPackageSetEnabledRequestSchema.parse(request)).toEqual(request);
+    const { expectedRegistryRevision: _revision, ...identity } = request;
+    for (const status of ["committed", "stale", "not_found", "ineligible"] as const) {
+      expect(PiPackageSetEnabledResultSchema.parse({ ...identity, status, registry })).toMatchObject({ status, registry });
+    }
+    expect(PiPackageSetEnabledResultSchema.parse({ ...identity, status: "failed" })).toEqual({ ...identity, status: "failed" });
+    expect(() => PiPackageSetEnabledRequestSchema.parse({ ...request, path: "/private/package" })).toThrow();
+    expect(() => PiPackageRegistryQueryResultSchema.parse({ status: "ready", registry: {
+      ...registry, packages: [{ ...registry.packages[0], canEnable: false }]
+    } })).toThrow();
   });
 
   it("keeps the curated Pi package catalog deterministic, bounded, and renderer-safe", () => {

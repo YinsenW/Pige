@@ -14,6 +14,36 @@ const ROLLBACK_REQUEST_PATTERN = /^pi_package_rollback_request_[a-z0-9]{16,64}$/
 const ROLLBACK_ID_PATTERN = /^pi_package_rollback_[a-z0-9]{16,64}$/u;
 const RESTORE_REQUEST_PATTERN = /^pi_package_restore_request_[a-z0-9]{16,64}$/u;
 const RESTORE_CONTEXT_PATTERN = /^pi_package_restore_context_v1_[a-f0-9]{32,64}$/u;
+const RUNTIME_REQUEST_PATTERN = /^pi_package_enable_request_[a-z0-9]{16,64}$/u;
+export const REVIEWED_PI_BTW_RUNTIME = Object.freeze({
+  packageName: "@narumitw/pi-btw", version: "0.34.0",
+  integrity: "sha512-ycjtInVV9csP+mR3L6gXgPJOsMGQej80ltkqbJhK0Gy3Mc8BgYvPrdQ0HXTFSGeDzr+//V51CYVK9KcgWti+VA=="
+});
+export interface PackageRuntimeMutationRecord {
+  readonly requestId: string; readonly expectedRegistryRevision: number;
+  readonly enabled: boolean; readonly committedRegistryRevision: number;
+}
+export function isReviewedPiPackageRuntimeRecord(record: {
+  readonly packageName: string; readonly version: string; readonly integrity: string;
+  readonly packageTypes: readonly string[]; readonly dependencyCount: number;
+}): boolean {
+  return record.packageName === REVIEWED_PI_BTW_RUNTIME.packageName && record.version === REVIEWED_PI_BTW_RUNTIME.version &&
+    record.integrity === REVIEWED_PI_BTW_RUNTIME.integrity && record.packageTypes.length === 1 &&
+    record.packageTypes[0] === "extension" && record.dependencyCount === 0;
+}
+export function validPackageRuntimeMutations(value: readonly PackageRuntimeMutationRecord[] | undefined): boolean {
+  return value === undefined || (Array.isArray(value) && value.length <= 1024 && value.every((mutation) =>
+    !!mutation && typeof mutation === "object" && RUNTIME_REQUEST_PATTERN.test(mutation.requestId) &&
+    Number.isSafeInteger(mutation.expectedRegistryRevision) && mutation.expectedRegistryRevision >= 0 &&
+    typeof mutation.enabled === "boolean" && Number.isSafeInteger(mutation.committedRegistryRevision) &&
+    mutation.committedRegistryRevision >= 1 && mutation.committedRegistryRevision <= Number.MAX_SAFE_INTEGER) &&
+    new Set(value.map((mutation) => mutation.requestId)).size === value.length);
+}
+export function addPackageRuntimeRequestIds(value: readonly PackageRuntimeMutationRecord[] | undefined, revision: number, requestIds: Set<string>): void {
+  for (const mutation of value ?? []) {
+    if (mutation.committedRegistryRevision > revision || requestIds.has(mutation.requestId)) throw new Error("invalid package runtime request");
+    requestIds.add(mutation.requestId); }
+}
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 
 export interface PiPackageLifecycleRecord {

@@ -327,6 +327,7 @@ import { PiPackageCatalogService } from "./services/pi-package-catalog-service";
 import { PiPackageManagerService } from "./services/pi-package-manager-service";
 import { PiPackageRestoreService } from "./services/pi-package-restore-service";
 import { PiPackageUpdateService } from "./services/pi-package-update-service";
+import { PiPackageRuntimeService, createReviewedPiBtwCapabilityAdapter } from "./services/pi-package-runtime-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
 import { NoteTrashService } from "./services/note-trash-service";
@@ -430,6 +431,7 @@ let piPackageCatalogService: PiPackageCatalogService | undefined;
 let piPackageManagerService: PiPackageManagerService | undefined;
 let piPackageRestoreService: PiPackageRestoreService | undefined;
 let piPackageUpdateService: PiPackageUpdateService | undefined;
+let piPackageRuntimeService: PiPackageRuntimeService | undefined;
 let piPackageInstallTaskService: PiPackageInstallTaskService | undefined;
 let windowModeService: WindowModeService | undefined;
 let backupRestoreService: BackupRestoreService | undefined;
@@ -1360,6 +1362,9 @@ const getPermissionedExternalCapabilityRegistry = (): PermissionedExternalCapabi
       registerPermissionedExternalCapabilityAdapter(
         createPiPackageInstallCapabilityAdapter(getPiPackageManagerService())
       );
+      registerPermissionedExternalCapabilityAdapter(
+        createReviewedPiBtwCapabilityAdapter(getPiPackageRuntimeService())
+      );
       firstPartyPiPackageCapabilityRegistered = true;
     }
     if (!firstPartyCommandCapabilityRegistered) {
@@ -1383,6 +1388,12 @@ const getPiPackageManagerService = (): PiPackageManagerService => {
 const getPiPackageUpdateService = (): PiPackageUpdateService => {
   piPackageUpdateService ??= new PiPackageUpdateService({ manager: getPiPackageManagerService() });
   return piPackageUpdateService;
+};
+const getPiPackageRuntimeService = (): PiPackageRuntimeService => {
+  piPackageRuntimeService ??= new PiPackageRuntimeService({
+    manager: getPiPackageManagerService(), providers: getModelProviderRegistry()
+  });
+  return piPackageRuntimeService;
 };
 
 const getPiPackageRestoreService = (): PiPackageRestoreService => {
@@ -3224,7 +3235,8 @@ registerPiPackagesIpc({
     }
   },
   rollback: (request) => piPackageUpdates.rollback(request),
-  setPinned: (request) => piPackageUpdates.setPinned(request)
+  setPinned: (request) => piPackageUpdates.setPinned(request),
+  setEnabled: (request) => getPiPackageRuntimeService().setEnabled(request)
 });
 registerMemoryIpc({
   ipcMain,
