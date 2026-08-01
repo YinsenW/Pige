@@ -143,7 +143,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Trash/archive policy | Vault & Note Storage | `vault_portable` | Vault Runtime Service | `.pige/config.json` | Yes | `explicit_confirmation` | Immediate for future deletes |
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
-| Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect/reconnect; startup rollback |
+| Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect or confirmed compatible/custom profile edit; startup rollback |
 | Provider credential when required | Models | `secret` | Settings and Secrets Service | OS app data `secrets.json` | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement |
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `none` | Journaled Refresh; atomic manual/alias/enabled updates |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
@@ -189,7 +189,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
 | `memory.includeMemoryInBackup` | `none` | Revision-fenced active-Vault config write; active Backup work blocks mutation and the next Backup reads the durable choice |
-| `models.providerProfiles` | `explicit_confirmation` | Disclosed Settings Connect/Save gesture plus probe before create; native confirmation remains for provider deletion |
+| `models.providerProfiles` | `explicit_confirmation` | Disclosed Settings Connect/Save plus probe before create/edit; native confirmation remains for profile edit and deletion |
 | `models.providerApiKeys` | `explicit_warning` | Connect writes only after the disclosed gesture and probe; native confirmation remains for revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |
 | `models.defaultPiAgentModel` | `none` | Validated enabled-model selection |
@@ -389,6 +389,9 @@ Required tests:
   duplicates IDs; Retry/manual ID covers incomplete discovery.
 - Connect probes before writes. Credential replacement is revision/reference-fenced,
   confirmed, probed, and atomic; failure preserves the old key.
+- Compatible/custom profile edits are revision/reference-fenced, confirmed, and probed
+  before atomic metadata replacement; preset/built-in endpoints remain ineligible and a
+  failed probe preserves the prior profile, model inventory, enabled states, and default.
 - Deletion is renderer/native-confirmed and fenced; it removes owned models/credential,
   rebinds or clears default, and restart-recovers orphan-free.
 - A Settings-written synthetic Provider key survives restart, is consumed only by the

@@ -946,6 +946,12 @@ Sequences ignore stale outcomes. After commit, Retry rereads Models only and run
 best-effort—never repeats effects or refreshes Vault/Backup. Errors clear on success or
 navigation and never appear in Vault settings.
 
+Manage also offers Edit connection only for compatible/custom profiles. The bounded form
+edits display name, canonical Base URL, and declared cloud boundary under the current
+registry revision. Save uses one native confirmation and endpoint probe; failure retains
+the exact draft and current connection, while success preserves its models, enabled state,
+and Global Default selection. Reviewed presets and built-in endpoints expose no Edit action.
+
 Above Connect disclose the exact destination once; sensitive asks, restricted never
 sends, unknown/changed reconfirms. Hide marketplaces, matrices, routing, Advanced/Fast,
 local tools, Skills, backup, and memory.

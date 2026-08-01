@@ -853,6 +853,7 @@ Commands:
 - `models.addPresetProvider`
 - `models.addManualProvider`
 - `models.refreshProviderModels`
+- `models.updateProviderProfile`
 - `models.updateProviderCredential`
 - `models.deleteProvider`
 - `models.addManualModel`
@@ -966,6 +967,8 @@ type ProviderConnectNeedsManualModel = { status: "needs_manual_model"; reason: "
 
 type ProviderConnectResult = ModelProviderSettingsSummary | ProviderConnectNeedsManualModel;
 
+type UpdateProviderProfileRequest = { providerProfileId: string; expectedRevision: string; displayName: string; baseUrl: string; cloudBoundary: CloudBoundary };
+
 type UpdateProviderCredentialRequest = { providerProfileId: string; expectedRevision: string; apiKey: string };
 
 type DeleteProviderRequest = { providerProfileId: string; expectedRevision: string };
@@ -999,6 +1002,10 @@ Rules:
   alias/enabled/default on Refresh; replace default before disabling it.
 - Credential update is write-only, native-confirmed, active-reference-guarded, and probes
   before atomic same-ref replacement; failure preserves the old key and neither key returns.
+- Compatible/custom profile update is native-confirmed and revision/reference-guarded;
+  Main canonicalizes the replacement endpoint and boundary, probes with the existing
+  protected credential, and atomically preserves Provider/model/default identities.
+  Preset/built-in profiles are ineligible and failure preserves the prior profile.
 - Provider deletion is renderer/native-confirmed and active-reference-guarded; it removes
   owned models/credential, rebinds or clears default, and journal-recovers orphan-free.
 - Setup never groups cloud/self-hosted/local; main retains boundary/egress enforcement.

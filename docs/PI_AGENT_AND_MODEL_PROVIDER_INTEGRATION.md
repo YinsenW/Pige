@@ -150,6 +150,11 @@ Rules:
   active Agent/egress references. Replacement probes before atomic same-ref commit and
   preserves the old key on failure; deletion removes owned models/secret, rebinds or
   clears default, and journal-recovers without orphan state. Secrets never return.
+- Compatible/custom profile metadata edits are revision-fenced and block active references.
+  Main revalidates the canonical endpoint and declared boundary, probes the replacement
+  endpoint with the existing protected credential, then atomically preserves Provider,
+  model, enabled-state, and Global Default identities. Presets and built-in endpoints are
+  never renderer-editable; failure leaves the complete prior profile active.
 
 `ProviderProfileSchema` in `packages/schemas/src/index.ts` is the executable profile contract. Built-ins use their fixed built-in endpoints, do not persist `baseUrl`; `ProviderBaseUrlSchema` is the single persisted and runtime-call URL contract and rejects both directions of a mismatch. Profiles cannot persist arbitrary `defaultHeaders`. Authentication, network, timeout, invalid payload, and official-provider list failures remain failures and return typed repair.
 
