@@ -425,6 +425,12 @@ Rebuild indexes Markdown pages, facets, relations, citations, aliases and backli
 resolve unique-or-ambiguous; unresolved targets grant no renderer access. Reader navigation
 binds the generation and returns one stable target or body-free failure.
 
+The v4/rev7 relation projection accepts citations only from ordinary Markdown text and only
+when the exact confined Source Record parses. It stores source targets separately from page
+targets, rebuilds `derived_from` from validated `source_ids`, and marks links inside exact
+Related managed blocks as managed-section `related_to` evidence. Missing/tampered Source
+Records and citation-like text in code spans or blocks create no source authority.
+
 Derived/body-free Health treats invalid Markdown as partial. Complete coverage may offer exact
 unlink/retarget, or `connect_orphan_to_parent` after the user selects one current note. Main
 re-proves report/index and both page proofs, writes only deterministic bounded metadata/link

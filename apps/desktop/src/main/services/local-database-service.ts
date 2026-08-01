@@ -25,7 +25,13 @@ import {
   type KnowledgeTreeRelationInput,
   type KnowledgeTreeSnapshot
 } from "./knowledge-tree-aggregate";
-import { indexPageKnowledgeRelations, type KnowledgeTreeEntityInput } from "./knowledge-relation-index";
+import {
+  indexPageDurableBodyRelations,
+  indexPageKnowledgeRelations,
+  KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID,
+  migrateKnowledgeRelationIndex,
+  type KnowledgeTreeEntityInput
+} from "./knowledge-relation-index";
 import {
   assertMarkdownPagePathConfined,
   createMarkdownPageReferenceKeys,
@@ -912,10 +918,11 @@ const INLINE_REFERENCE_MIGRATION_ID = "003_inline_reference_keys";
 const REQUIRED_MIGRATION_IDS = [
   INITIAL_MIGRATION_ID,
   CHUNK_METADATA_MIGRATION_ID,
-  INLINE_REFERENCE_MIGRATION_ID
+  INLINE_REFERENCE_MIGRATION_ID,
+  KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID
 ] as const;
-const CURRENT_APP_SCHEMA_VERSION = 3;
-const CURRENT_INDEX_REVISION = 6;
+const CURRENT_APP_SCHEMA_VERSION = 4;
+const CURRENT_INDEX_REVISION = 7;
 const DEFAULT_LIBRARY_LIMIT = 50;
 const MAX_LIBRARY_LIMIT = 200;
 const DEFAULT_SEARCH_LIMIT = 8;
@@ -1015,6 +1022,7 @@ function migrate(db: DatabaseSync): void {
         edge_id TEXT PRIMARY KEY,
         from_page_id TEXT,
         to_page_id TEXT,
+        to_source_id TEXT,
         relation_type TEXT NOT NULL,
         evidence_json TEXT NOT NULL DEFAULT '[]'
       );
@@ -1137,6 +1145,7 @@ function migrate(db: DatabaseSync): void {
       new Date().toISOString()
     );
   });
+  migrateKnowledgeRelationIndex(db);
 }
 
 function transaction(db: DatabaseSync, work: () => void): void {
@@ -1208,7 +1217,12 @@ function indexPageLinks(
   for (const page of pages) {
     const expectedSignature = expectedSignatures.get(page.summary.pageId);
     if (!expectedSignature) throw new Error("Indexed page signature is missing during link rebuild.");
-    const body = readStableIndexedBody(vaultPath, page, expectedSignature).searchBody;
+    const stableBody = readStableIndexedBody(vaultPath, page, expectedSignature);
+    const body = stableBody.searchBody;
+    indexPageDurableBodyRelations(db, vaultPath, page, stableBody.rawBody, (target) =>
+      resolveAmbiguityAwareLinkedPageId(
+        lookup, page.summary.pagePath, { kind: "wiki_link", target, label: target }
+      ) ?? undefined);
     for (const link of extractPigeMarkdownLinkRefs(body)) {
       const resolvedPageId = resolveAmbiguityAwareLinkedPageId(lookup, page.summary.pagePath, link);
       insertLink.run(page.summary.pageId, resolvedPageId, link.target);

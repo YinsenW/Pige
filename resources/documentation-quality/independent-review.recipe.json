@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T14:36:43Z",
+  "reviewedAt": "2026-08-01T15:07:39Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E3.05 Pi-final pass-through without mandatory Host semantic or terminal-effect shape.",
+    "scope": "E4.04 durable citation, Source Record and managed-section relationship rebuild.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "25eb461e739af73ca5e38ed792e7e5567bb25a2083a68a699d975827624f5dd0"
+    "reviewedSha256": "3eb81d3e99dc313118e50681b65e69bab055cfff04219bcf951a5c06937b766d"
   },
   "reviewers": [
     {
-      "reviewerId": "pi-final-pass-through-review",
-      "task": "Review E3.05 Pi-final authority and exact effect boundaries",
+      "reviewerId": "durable-relation-rebuild-review",
+      "task": "Review E4.04 durable relationship rebuild and source/page endpoint separation",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,75 +70,75 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the Pi-final authority contract; Development supplies separate no-terminal-effect and exact-owner rejection implementation evidence."
+      "independence": "Planning reviews durable relationship and migration contracts; Development supplies separate parser, database deletion/rebuild, tamper and deterministic projection evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "pi-final-pass-through-review",
+      "reviewerId": "durable-relation-rebuild-review",
       "blockerCount": 0,
-      "summary": "A Pi final without a Reader link or create-note effect completes normally while the current selection and durable knowledge remain unchanged."
+      "summary": "Deleting the derived database and rebuilding restores links, backlinks, citations, source edges and exact managed Related relationships without touching durable files."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "pi-final-pass-through-review",
+      "reviewerId": "durable-relation-rebuild-review",
       "blockerCount": 0,
-      "summary": "Prompt, Pi runtime, Playbook and acceptance agree that Host validates transport, tool inputs and durable effects but never semantic prose shape."
+      "summary": "Markdown, knowledge-model, local-database and migration contracts agree on strict citations, validated Source Records and separate page/source endpoints."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "pi-final-pass-through-review",
+      "reviewerId": "durable-relation-rebuild-review",
       "blockerCount": 0,
-      "summary": "E3.05 is verified by direct no-effect pass-through plus executable runtime-boundary and mutation-owner evidence; broader exception matrices remain partial."
+      "summary": "E4.04 is verified by existing page-link evidence plus one direct deletion/rebuild test covering citations, source records, managed sections and tamper rejection."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "pi-final-pass-through-review",
+      "reviewerId": "durable-relation-rebuild-review",
       "blockerCount": 0,
-      "summary": "Existing effect owners retain every validation and commit boundary; the Host orchestrator only stops inventing mandatory terminal calls after Pi final prose."
+      "summary": "A bounded relation-index owner contains citation/source/managed parsing while LocalDatabaseService stays at its frozen architecture ceiling."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "pi-final-pass-through-review",
+      "reviewerId": "durable-relation-rebuild-review",
       "blockerCount": 0,
-      "summary": "Existing Pi, prompt, quality and Playbook owners already define the behavior, so only exact acceptance evidence changes without a new design document."
+      "summary": "Existing knowledge, database, recovery and decision owners record the schema change; no parallel design document or renderer contract was added."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/home-agent-service.test.ts -t 'accepts Pi final prose without requiring|keeps selected evidence optional|keeps ordinary Reader transform final prose'",
+      "command": "npx vitest run tests/unit/markdown-renderer.test.ts tests/unit/local-database-service.test.ts",
       "status": "passed",
-      "evidence": "Pi final prose completes without link/create-note terminal effects or semantic policing, while ordinary Reader prose cannot mutate durable knowledge."
+      "evidence": "Strict citation extraction and complete database deletion/rebuild projection pass 56 focused tests including tampered Source Record rejection."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The pass-through candidate compiles and builds while HomeAgentService remains below its frozen architecture budget."
+      "evidence": "The schema migration and relation owner compile/build while LocalDatabaseService remains at its governed line ceiling."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Pi, prompt, quality, Playbook, acceptance projection and semantic-claim lock remain mutually consistent."
+      "evidence": "Knowledge, database, migration, Operation vocabulary, acceptance projection and durable decision owners remain aligned."
     }
   ],
   "coordination": {
-    "taskId": "pi-final-pass-through-bind-20260801",
-    "taskTitle": "Bind E3.05 Pi-final pass-through",
+    "taskId": "durable-relation-rebuild-bind-20260801",
+    "taskTitle": "Bind E4.04 durable relationship rebuild",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing DTOs, explicit tool calls, typed failures and durable formats remain unchanged; absence of an optional terminal effect no longer rejects Pi final prose.",
-    "acknowledgement": "Planning promotes E3.05 from direct pass-through and owner-boundary evidence while leaving broader exception and Agent-output matrices open."
+    "compatibility": "Existing renderer and Library relationship DTOs remain unchanged; the derived schema gains a nullable source endpoint and deterministic migration.",
+    "acknowledgement": "Planning promotes E4.04 from direct deletion/rebuild, strict citation, Source Record and managed-section evidence while broader knowledge lifecycle exits remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
-    "macOS signing/notarization, signed update and packaged qualification remain open.",
-    "Windows public qualification and broader multilingual acceptance remain later."
+    "macOS signed-package qualification remains open.",
+    "Windows public qualification is deferred by current project policy."
   ]
 }

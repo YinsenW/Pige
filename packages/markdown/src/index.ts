@@ -306,6 +306,23 @@ export function extractPigeMarkdownLinkRefs(markdown: string): readonly PigeMark
   return refs;
 }
 
+export function extractPigeMarkdownCitationRefs(markdown: string): readonly MarkdownCitationRef[] {
+  const markdownBody = removeCodeSpansAndBlocks(stripPigeFrontmatter(markdown));
+  const refs: MarkdownCitationRef[] = [];
+  const marker = "[source:src_";
+  let cursor = 0;
+  while (cursor < markdownBody.length) {
+    const start = markdownBody.indexOf(marker, cursor);
+    if (start < 0) break;
+    const end = markdownBody.indexOf("]", start + marker.length);
+    if (end < 0) break;
+    const parsed = parseSourceCitation(markdownBody.slice(start + 1, end));
+    if (parsed && markdownBody[end + 1] !== "(") refs.push(parsed);
+    cursor = end + 1;
+  }
+  return refs;
+}
+
 function findClosingFrontmatterMarker(value: string, startAt: number): { start: number; end: number } | undefined {
   let cursor = startAt;
   while (cursor < value.length) {
@@ -536,22 +553,28 @@ function findSourceCitationReplacements(markdown: string): MappedReplacement[] {
   return replacements;
 }
 
-function isSourceCitation(value: string): boolean {
+function parseSourceCitation(value: string): MarkdownCitationRef | undefined {
   const prefix = "source:src_";
-  if (!value.startsWith(prefix)) return false;
+  if (!value.startsWith(prefix)) return undefined;
   let cursor = prefix.length;
   for (let index = 0; index < 8; index += 1) {
-    if (!isAsciiDigit(value[cursor + index])) return false;
+    if (!isAsciiDigit(value[cursor + index])) return undefined;
   }
   cursor += 8;
-  if (value[cursor] !== "_") return false;
+  if (value[cursor] !== "_") return undefined;
   cursor += 1;
   const idStart = cursor;
   while (isLowerAsciiAlphanumeric(value[cursor])) cursor += 1;
-  if (cursor - idStart < 8) return false;
-  if (cursor === value.length) return true;
-  if (value[cursor] !== "#" || cursor + 1 >= value.length) return false;
-  return !Array.from(value.slice(cursor + 1)).some(isInlineWhitespace);
+  if (cursor - idStart < 8) return undefined;
+  const sourceId = value.slice("source:".length, cursor);
+  if (cursor === value.length) return { sourceId };
+  if (value[cursor] !== "#" || cursor + 1 >= value.length) return undefined;
+  const locator = value.slice(cursor + 1);
+  return Array.from(locator).some(isInlineWhitespace) ? undefined : { sourceId, locator };
+}
+
+function isSourceCitation(value: string): boolean {
+  return parseSourceCitation(value) !== undefined;
 }
 
 function isAsciiDigit(value: string | undefined): boolean {

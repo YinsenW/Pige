@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { SourceRecordSchema } from "@pige/schemas";
 import {
   LocalDatabaseService,
   NodeSqliteDriver
@@ -51,10 +52,10 @@ describe("local database service", () => {
 
     expect(status.driver).toBe("node_sqlite");
     expect(status.status).toBe("needs_rebuild");
-    expect(status.appSchemaVersion).toBe(3);
-    expect(status.appliedMigrationCount).toBe(3);
+    expect(status.appSchemaVersion).toBe(4);
+    expect(status.appliedMigrationCount).toBe(4);
     expect(state.driver).toBe("node_sqlite");
-    expect(state.appliedMigrations).toHaveLength(3);
+    expect(state.appliedMigrations).toHaveLength(4);
     expect(fs.existsSync(path.join(vaultPath, ".pige/db/vault.sqlite"))).toBe(true);
   });
 
@@ -102,7 +103,7 @@ describe("local database service", () => {
     });
     service.rebuild(vaultPath);
     const revision = service.inlineReferenceRevision(vaultPath);
-    expect(revision).toMatch(/^6:/u);
+    expect(revision).toMatch(/^7:/u);
 
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "shared title",
@@ -122,7 +123,7 @@ describe("local database service", () => {
     })?.map((page) => page.pageId)).toEqual(["page_20260709_first1234"]);
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "collision",
-      expectedRevision: "6:stale"
+      expectedRevision: "7:stale"
     })).toBeUndefined();
 
     writePage(vaultPath, "wiki/third.md", {
@@ -143,7 +144,7 @@ describe("local database service", () => {
 
     new LocalDatabaseService().rebuild(vaultPath);
     const successorRevision = service.inlineReferenceRevision(vaultPath);
-    expect(successorRevision).toMatch(/^6:/u);
+    expect(successorRevision).toMatch(/^7:/u);
     expect(successorRevision).not.toBe(revision);
     expect(service.inlineReferenceCandidates(vaultPath, {
       normalizedKey: "collision",
@@ -186,6 +187,57 @@ describe("local database service", () => {
       kind: "broken_link",
       page: { pageId: "page_20260727_originlink", title: "Origin" },
       unresolvedLinkCount: 2
+    });
+  });
+
+  it("rebuilds citations, source edges, and managed related edges from durable truth after database deletion", () => {
+    const vaultPath = makeVaultRoot();
+    const sourceId = "src_20260727_relation01";
+    writePage(vaultPath, "wiki/target.md", {
+      id: "page_20260727_relationtarget",
+      title: "Managed Target",
+      body: "Target."
+    });
+    writePage(vaultPath, "sources/origin.md", {
+      id: "page_20260727_relationorigin",
+      title: "Relationship Origin",
+      type: "source",
+      sourceIds: [sourceId],
+      body: `Grounded fact. [source:${sourceId}#p3]
+
+\`[source:${sourceId}#ignored-inline]\`
+
+<!-- pige:managed:start agent-link op_20260727_relation01 -->
+## Related
+
+- [[Managed Target]]
+<!-- pige:managed:end -->`
+    });
+    writeSourceRecord(vaultPath, sourceId, "page_20260727_relationorigin");
+
+    new LocalDatabaseService().rebuild(vaultPath);
+    const before = readDurableRelationProjection(vaultPath);
+    expect(before).toEqual({
+      citations: [{ locator: "p3", pageId: "page_20260727_relationorigin", sourceId }],
+      edges: [
+        { fromPageId: "page_20260727_relationorigin", relationType: "cites_source", toPageId: null, toSourceId: sourceId },
+        { fromPageId: "page_20260727_relationorigin", relationType: "derived_from", toPageId: null, toSourceId: sourceId },
+        { fromPageId: "page_20260727_relationorigin", relationType: "links_to", toPageId: "page_20260727_relationtarget", toSourceId: null },
+        { fromPageId: "page_20260727_relationorigin", relationType: "related_to", toPageId: "page_20260727_relationtarget", toSourceId: null }
+      ]
+    });
+
+    fs.rmSync(path.join(vaultPath, ".pige", "db"), { recursive: true, force: true });
+    new LocalDatabaseService().rebuild(vaultPath);
+    expect(readDurableRelationProjection(vaultPath)).toEqual(before);
+
+    const recordPath = path.join(vaultPath, ".pige", "source-records", "2026", "07", `${sourceId}.json`);
+    fs.writeFileSync(recordPath, `${JSON.stringify({ id: sourceId, tampered: true })}\n`, "utf8");
+    fs.rmSync(path.join(vaultPath, ".pige", "db"), { recursive: true, force: true });
+    new LocalDatabaseService().rebuild(vaultPath);
+    expect(readDurableRelationProjection(vaultPath)).toEqual({
+      citations: [],
+      edges: before.edges.filter(({ relationType }) => !["cites_source", "derived_from"].includes(String(relationType)))
     });
   });
 
@@ -356,7 +408,7 @@ Beta conclusion.`
         indexedPageCount: 1,
         chunkCount: rows.length,
         chunkerVersion: "pige-markdown-v1",
-        indexRevision: 6
+        indexRevision: 7
       });
       expect(rows.length).toBeGreaterThan(2);
       expect(columns).not.toContain("body");
@@ -476,12 +528,12 @@ Beta conclusion.`
     const reader = openReadOnlyDatabase(vaultPath);
     try {
       const columns = reader.prepare("PRAGMA table_info(chunks)").all().map((row) => String(row.name));
-      expect(status).toMatchObject({ appSchemaVersion: 3, appliedMigrationCount: 3, status: "needs_rebuild" });
+      expect(status).toMatchObject({ appSchemaVersion: 4, appliedMigrationCount: 4, status: "needs_rebuild" });
       expect(columns).toContain("heading_path_json");
       expect(columns).toContain("character_start");
       expect(columns).not.toContain("body");
       expect(reader.prepare("SELECT COUNT(*) AS count FROM chunks").get()?.count).toBe(0);
-      expect(reader.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get()?.count).toBe(3);
+      expect(reader.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get()?.count).toBe(4);
     } finally {
       reader.close();
     }
@@ -496,13 +548,13 @@ Beta conclusion.`
 
     expect(service.status(vaultPath)).toMatchObject({
       driver: "node_sqlite",
-      appSchemaVersion: 3,
-      appliedMigrationCount: 3,
+      appSchemaVersion: 4,
+      appliedMigrationCount: 4,
       status: "needs_rebuild"
     });
     expect(JSON.parse(fs.readFileSync(statePath, "utf8"))).toMatchObject({
       driver: "node_sqlite",
-      appSchemaVersion: 3
+      appSchemaVersion: 4
     });
     expect(fs.readdirSync(path.dirname(statePath)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
@@ -610,7 +662,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 6
+      revision: 7
     });
 
     fs.rmSync(path.join(vaultPath, ".pige/db/vault.sqlite"), { force: true });
@@ -621,7 +673,7 @@ Beta conclusion.`
         { pageId: "page_20260709_tags1234", tag: "durable knowledge" },
         { pageId: "page_20260709_tags1234", tag: "research" }
       ],
-      revision: 6
+      revision: 7
     });
   });
 
@@ -837,6 +889,51 @@ function readChunkIds(vaultPath: string): readonly string[] {
   } finally {
     reader.close();
   }
+}
+
+function readDurableRelationProjection(vaultPath: string): {
+  readonly citations: readonly Record<string, unknown>[];
+  readonly edges: readonly Record<string, unknown>[];
+} {
+  const reader = openReadOnlyDatabase(vaultPath);
+  try {
+    return {
+      citations: reader.prepare(`
+        SELECT page_id AS pageId, source_id AS sourceId, locator
+        FROM citations ORDER BY page_id, source_id, locator
+      `).all(),
+      edges: reader.prepare(`
+        SELECT from_page_id AS fromPageId, to_page_id AS toPageId,
+          to_source_id AS toSourceId, relation_type AS relationType
+        FROM relation_edges ORDER BY relation_type, edge_id
+      `).all()
+    };
+  } finally {
+    reader.close();
+  }
+}
+
+function writeSourceRecord(vaultPath: string, sourceId: string, knowledgePageId: string): void {
+  const sourceRecord = SourceRecordSchema.parse({
+    id: sourceId,
+    kind: "text",
+    storageStrategy: "copy_to_source_library",
+    semanticOrchestration: "agent_turn",
+    knowledgePageId,
+    knowledgePagePath: "sources/origin.md",
+    managedCopy: {
+      path: `raw/text/2026/07/${sourceId}.txt`,
+      checksum: `sha256:${"a".repeat(64)}`,
+      size: 12
+    },
+    artifacts: [],
+    metadata: {},
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z"
+  });
+  const recordPath = path.join(vaultPath, ".pige", "source-records", "2026", "07", `${sourceId}.json`);
+  fs.mkdirSync(path.dirname(recordPath), { recursive: true });
+  fs.writeFileSync(recordPath, `${JSON.stringify(sourceRecord, null, 2)}\n`, "utf8");
 }
 
 function writePage(vaultPath: string, relativePath: string, input: {
