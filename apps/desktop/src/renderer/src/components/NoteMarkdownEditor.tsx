@@ -103,6 +103,10 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setRenderedDraft(null);
     pendingScrollRatioRef.current = 0;
     focusEditorAfterReviewRef.current = false;
+    window.requestAnimationFrame(() => {
+      restoreScrollRatio(textareaRef.current, 0);
+      restoreScrollRatio(previewPanelRef.current, 0);
+    });
   }, [propIdentityKey]);
 
   useEffect(() => {
