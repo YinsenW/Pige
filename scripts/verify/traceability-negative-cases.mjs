@@ -159,9 +159,9 @@ const cases = [
     check: "TRC-005",
     mutate(model) {
       const diagnostics = model.exitAcceptance.get("E1.19");
-      const restore = model.exitAcceptance.get("E9.02");
-      [diagnostics.evidence, restore.evidence] = [restore.evidence, diagnostics.evidence];
-      [diagnostics.open.description, restore.open.description] = [restore.open.description, diagnostics.open.description];
+      const diagnosticsExport = model.exitAcceptance.get("E1.07");
+      [diagnostics.evidence, diagnosticsExport.evidence] = [diagnosticsExport.evidence, diagnostics.evidence];
+      [diagnostics.open.description, diagnosticsExport.open.description] = [diagnosticsExport.open.description, diagnostics.open.description];
     },
     expected: "Independent exitAcceptance claim drift"
   },
@@ -219,9 +219,9 @@ const cases = [
     name: "rejects a partial Exit without an explicit open gap",
     check: "TRC-005",
     mutate(model) {
-      delete model.exitAcceptance.get("E9.02").open;
+      delete model.exitAcceptance.get("E1.07").open;
     },
-    expected: "E9.02 has no structured machine-readable open acceptance gap"
+    expected: "E1.07 has no structured machine-readable open acceptance gap"
   },
   {
     name: "rejects an open capability without a controlled delivery destination",

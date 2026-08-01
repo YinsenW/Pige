@@ -2643,23 +2643,30 @@ describe("desktop shell build contract", () => {
       path.resolve("apps/desktop/src/main/services/electron-updater-adapter.ts"),
       "utf8"
     );
+    const manualDownloadSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/manual-update-download-service.ts"),
+      "utf8"
+    );
 
     expect(contractsSource).toContain("readonly updates:");
     expect(contractsSource).toContain("readonly summary: () => Promise<UpdateSummary>");
     expect(contractsSource).toContain("readonly check: (request: UpdateCheckRequest) => Promise<UpdateCheckResult>");
     expect(contractsSource).toContain("readonly download: (request: UpdateDownloadRequest) => Promise<UpdateDownloadResult>");
     expect(contractsSource).toContain("readonly apply: (request: UpdateApplyRequest) => Promise<UpdateApplyResult>");
+    expect(contractsSource).toContain("readonly openManualDownload:");
     expect(contractsSource).toContain("readonly onStatusChanged:");
     expect(schemasSource).toContain('export const UpdateCapabilitySchema = z.enum([');
     expect(mainSource).toContain('ipcMain.handle("updates.summary"');
     expect(mainSource).toContain('ipcMain.handle("updates.check"');
     expect(mainSource).toContain('ipcMain.handle("updates.download"');
     expect(mainSource).toContain('ipcMain.handle("updates.apply"');
+    expect(mainSource).toContain('ipcMain.handle("updates.openManualDownload"');
     expect(mainSource).toContain('browserWindow.webContents.send("updates.statusChanged", parsed)');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.summary")');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.check", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.download", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("updates.apply", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("updates.openManualDownload", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.on("updates.statusChanged", handler)');
     expect(serviceSource).toContain("class NoNetworkUpdateCheckAdapter");
     expect(mainSource.match(/new NoNetworkUpdateCheckAdapter\(\)/gu)).toHaveLength(2);
@@ -2667,6 +2674,8 @@ describe("desktop shell build contract", () => {
     expect(serviceSource).not.toContain("electron-updater");
     expect(serviceSource).not.toContain("fetch(");
     expect(serviceSource).not.toContain("https://");
+    expect(manualDownloadSource).toContain('PIGE_MANUAL_DOWNLOAD_URL = "https://github.com/YinsenW/Pige/releases"');
+    expect(manualDownloadSource).not.toContain("request.url");
     expect(adapterSource).toContain('from "electron-updater"');
     expect(adapterSource).not.toContain("feedURL");
     expect(preloadSource).not.toContain("feedUrl");

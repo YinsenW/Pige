@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T21:02:34.000Z",
+  "reviewedAt": "2026-08-02T04:30:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review confirmed compatible Provider metadata editing with exact registry currentness, protected credential reuse, endpoint probing, and identity-preserving atomic commit.",
+    "scope": "Review the fixed canonical manual-update download action, strict renderer/Main boundary, unavailable automatic-update truth, and exact PIGE-REL-001 evidence without implying release readiness.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "aa78f57756d48f20bf0d9f4597c616237d6ec00a5a6a0e67bd97860b16687c8b"
+    "reviewedSha256": "0bd0c697a47c4145ee036804f4cead028a3760ca301f6d4ed07de2f0a17b7a09"
   },
   "reviewers": [
     {
-      "reviewerId": "provider-profile-edit-review",
-      "task": "Review compatible Provider connection metadata edit workflow",
+      "reviewerId": "manual-update-download-review",
+      "task": "Review canonical manual update download workflow",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,51 +70,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the public request, registry transaction, protected-secret boundary, renderer draft retention and exact evidence separately from implementation authorship."
+      "independence": "Project review checks the fixed release origin, strict public contract, renderer single-flight behavior and partial acceptance evidence separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "provider-profile-edit-review",
+      "reviewerId": "manual-update-download-review",
       "blockerCount": 0,
-      "summary": "Failed, stale or ineligible edits preserve the current Provider and exact local draft while successful save restores initiating focus."
+      "summary": "System Settings replaces a dead control with one fixed canonical downloads action; completion and failure restore the initiating focus."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "provider-profile-edit-review",
+      "reviewerId": "manual-update-download-review",
       "blockerCount": 0,
-      "summary": "Schema, IPC, registry and Settings bind one canonical endpoint and boundary under the same visible registry revision."
+      "summary": "Schema, contract, preload, Main service and Settings bind the same URL-free request and opened, busy or failed result."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "provider-profile-edit-review",
+      "reviewerId": "manual-update-download-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-002 and PIGE-PI-004 cite exact registry evidence while their signed packaged model-matrix proof remains open."
+      "summary": "PIGE-REL-001 cites the exact user workflow test while downloaded ZIP, notes and publication report remain explicitly open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "provider-profile-edit-review",
+      "reviewerId": "manual-update-download-review",
       "blockerCount": 0,
-      "summary": "One bounded Provider mutation reuses existing confirmation, credential, probe and registry owners without a parallel provider runtime."
+      "summary": "The new action opens only the repository-controlled Releases page and does not widen check, download or apply authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "provider-profile-edit-review",
+      "reviewerId": "manual-update-download-review",
       "blockerCount": 0,
-      "summary": "Existing Provider, Settings, API, UI and trace owners capture the workflow without a new design document or release gate."
+      "summary": "Existing release, API, UI and acceptance owners capture the behavior without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/model-provider-registry.test.ts tests/unit/provider-profile-edit-ui.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/manual-update-download-service.test.ts tests/unit/manual-update-download-ui.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct registry, UI and shell-contract tests prove atomic identity preservation, failure retention, eligibility and bounded renderer wiring."
+      "evidence": "Direct service, UI and contract tests prove the fixed origin, strict URL-free boundary, single-flight behavior and retryable failure retention."
     },
     {
       "command": "npm run typecheck && npm run verify:architecture-reset",
@@ -124,17 +124,17 @@
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Current owner docs, exact evidence selectors and semantic claims remain structurally and executable-current."
+      "evidence": "Current release owner docs, exact evidence selector and partial semantic claim remain structurally and executable-current."
     }
   ],
   "coordination": {
-    "taskId": "provider-profile-edit-20260802",
-    "taskTitle": "Close compatible Provider connection metadata editing",
+    "taskId": "manual-update-download-20260802",
+    "taskTitle": "Open canonical manual update downloads from Settings",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Provider creation, credential replacement, deletion, models and Global Default behavior remain unchanged; presets and built-in endpoints stay ineligible.",
-    "acknowledgement": "The user-visible compatible Provider edit workflow is bound while signed packaged BYOK and model-matrix proof remains open."
+    "compatibility": "Existing no-network update check, download and apply behavior remains unchanged; the renderer receives no URL or release authority.",
+    "acknowledgement": "The user-visible manual download workflow is bound while final downloaded artifact and publication proof remain open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
