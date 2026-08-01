@@ -19,6 +19,7 @@ import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dat
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { ManagedCollectionService } from "../../apps/desktop/src/main/services/managed-collection-service";
 import { ManagedCollectionTableService } from "../../apps/desktop/src/main/services/managed-collection-table-service";
+import { ManagedCollectionRevisionHistoryService } from "../../apps/desktop/src/main/services/managed-collection-revision-history-service";
 import { ManagedCollectionRedoService } from "../../apps/desktop/src/main/services/managed-collection-redo-service";
 import {
   readBundle,
@@ -2058,6 +2059,68 @@ describe("ManagedCollectionService", () => {
     expect(readPayloadSourceName(restored.payloadPath, table.id)).toBe("records");
     expect(restored.revision.change).toMatchObject({ kind: "collection_table_rename_undo",
       tableId: table.id, name: table.name, undoOfOperationId: recovered.id });
+  }, 30_000);
+
+  it("browses immutable history, restores forward, and undoes the restore after restart", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const collections = new ManagedCollectionService(port);
+    const history = new ManagedCollectionRevisionHistoryService(port);
+    const initial = readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId)!;
+    const table = required(initial.schema.tables[0]);
+    const initialSnapshot = readCollectionSnapshot(initial, table.id)!;
+    const row = required(initialSnapshot.rows[0]); const column = required(initialSnapshot.columns[0]);
+    const edited = await collections.editCell({ apiVersion: 1,
+      requestId: "collection_request_historyedit0001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, rowId: row.rowId,
+      columnId: column.columnId, expectedRevisionId: initial.revision.id, value: "Edited" });
+    if (edited.status !== "committed") throw new Error("History setup edit did not commit");
+    const listRequest = { apiVersion: 1 as const, requestId: "collection_request_historylist0001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId,
+      expectedCurrentRevisionId: edited.snapshot.revisionId, limit: 1 };
+    const firstPage = history.list(listRequest);
+    expect(firstPage).toMatchObject({ status: "ready", revisions: [{ revisionId: edited.snapshot.revisionId,
+      isCurrent: true, category: "data" }], hasMore: true });
+    if (firstPage.status !== "ready" || !firstPage.nextCursor) throw new Error("History did not page");
+    expect(history.list({ ...listRequest, requestId: "collection_request_historylist0002",
+      cursor: firstPage.nextCursor })).toMatchObject({ status: "ready", revisions: [{ revisionId: initial.revision.id,
+        isCurrent: false, category: "import" }], hasMore: false });
+    const preview = history.open({ apiVersion: 1, requestId: "collection_request_historyopen0001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId,
+      expectedCurrentRevisionId: edited.snapshot.revisionId, revisionId: initial.revision.id, tableId: table.id });
+    expect(preview).toMatchObject({ status: "ready", readOnly: true, snapshot: {
+      revisionId: initial.revision.id, canAppendDefaultRow: false,
+      columns: [expect.objectContaining({ canRename: false, canTrash: false })],
+      rows: [expect.objectContaining({ canTrash: false, cells: [expect.objectContaining({ editable: false })] })]
+    } });
+    const restored = await history.restore({ apiVersion: 1, requestId: "collection_request_historyrestore01",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId,
+      expectedCurrentRevisionId: edited.snapshot.revisionId, revisionId: initial.revision.id,
+      tableId: table.id, confirmation: "restore_as_new_revision" });
+    expect(restored).toMatchObject({ status: "committed", snapshot: { revisionId: expect.any(String) } });
+    if (restored.status !== "committed") throw new Error("History restore did not commit");
+    expect(restored.newRevisionId).not.toBe(initial.revision.id);
+    const active = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(active.revision).toMatchObject({ id: restored.newRevisionId,
+      parentRevisionId: edited.snapshot.revisionId,
+      change: { kind: "collection_revision_restore", tableId: table.id, restoredRevisionId: initial.revision.id } });
+    expect(readImmutableCollectionRevision(active, edited.snapshot.revisionId).revision.id).toBe(edited.snapshot.revisionId);
+    const operationPath = operationPathFor(fixture.vaultPath, restored.operationId);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(history.activitySummary(operation)).toMatchObject({ kind: "restore_collection_revision",
+      status: "applied", canUndo: true });
+    fs.rmSync(operationPath);
+    const restarted = new ManagedCollectionRevisionHistoryService(port);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const recovered = OperationRecordSchema.parse(readJson(operationPath));
+    const undone = await restarted.undo(recovered, restored.newRevisionId);
+    expect(undone.status).toBe("undone");
+    const afterUndo = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(afterUndo.revision.change).toMatchObject({ kind: "collection_revision_restore_undo",
+      tableId: table.id, restoredRevisionId: edited.snapshot.revisionId,
+      undoOfOperationId: restored.operationId });
+    expect(readCollectionSnapshot(afterUndo, table.id)?.rows[0]?.cells[0]?.value).toBe("Edited");
   }, 30_000);
 });
 

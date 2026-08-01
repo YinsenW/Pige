@@ -31,7 +31,7 @@ import {
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog"; import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
-import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction";
+import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction"; import { ManagedCollectionRevisionHistory } from "./ManagedCollectionRevisionHistory";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -135,8 +135,7 @@ export function ManagedCollectionPanel(props: {
   const [notice, setNotice] = useState<EditNotice | null>(null);
   const [busy, setBusy] = useState(false);
   const [columnActionsBusy, setColumnActionsBusy] = useState(false);
-  const [viewControlsBusy, setViewControlsBusy] = useState(false);
-  const [formulaActive, setFormulaActive] = useState(false);
+  const [viewControlsBusy, setViewControlsBusy] = useState(false); const [formulaActive, setFormulaActive] = useState(false);
   const [relationActive, setRelationActive] = useState(false); const [lookupActive, setLookupActive] = useState(false); const [rollupActive, setRollupActive] = useState(false);
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
   const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
@@ -655,6 +654,7 @@ export function ManagedCollectionPanel(props: {
           ) : null}
         </div>
       </header>
+      <ManagedCollectionRevisionHistory activeVaultId={props.activeVaultId} snapshot={props.snapshot} blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null} onAdoptSnapshot={props.onAdoptSnapshot} t={props.t} />
       <ManagedCollectionViewControls activeVaultId={props.activeVaultId} snapshot={props.snapshot}
         blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
         onOpenView={props.onOpenView} onCreateView={props.onCreateView} onUpdateView={props.onUpdateView}

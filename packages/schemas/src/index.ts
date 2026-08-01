@@ -1372,6 +1372,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "restore_collection_view",
     "trash_collection_column",
     "trash_collection_row",
+    "restore_collection_revision",
     "trash_dataset",
     "restore_dataset",
     "purge_dataset",
@@ -7556,6 +7557,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_revision_restore"),
+      tableId: TableIdSchema,
+      restoredRevisionId: DatasetRevisionIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_revision_restore_undo"),
+      tableId: TableIdSchema,
+      restoredRevisionId: DatasetRevisionIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("dataset_title_rename"),
       previousTitle: z.string().trim().min(1).max(240),
       title: z.string().trim().min(1).max(240)
@@ -7995,7 +8007,11 @@ export const LibraryRenameTopicResultSchema = z.discriminatedUnion("status", [
 export const CollectionRequestIdSchema = z.string().regex(/^collection_request_[a-z0-9]{16,64}$/);
 export const CollectionCatalogCursorSchema = z.string().regex(/^collection_catalog_[a-f0-9]{64}$/);
 export const CollectionRowCursorSchema = z.string().regex(/^collection_rows_[a-f0-9]{64}$/);
+export const CollectionRevisionHistoryCursorSchema = z.string().regex(/^collection_history_[a-f0-9]{64}$/);
 export const COLLECTION_LIST_CHANNEL = "collections.list" as const;
+export const COLLECTION_LIST_REVISION_HISTORY_CHANNEL = "collections.listRevisionHistory" as const;
+export const COLLECTION_OPEN_REVISION_HISTORY_CHANNEL = "collections.openRevisionHistory" as const;
+export const COLLECTION_RESTORE_REVISION_HISTORY_CHANNEL = "collections.restoreRevisionHistory" as const;
 export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
@@ -8772,6 +8788,88 @@ export const CollectionOpenResultSchema = z.discriminatedUnion("status", [
     });
   }
 });
+
+export const CollectionRevisionHistoryCategorySchema = z.enum(["import", "data", "schema", "restore", "undo"]);
+export const CollectionRevisionHistorySummarySchema = z.object({
+  revisionId: DatasetQueryRevisionIdSchema,
+  parentRevisionId: DatasetQueryRevisionIdSchema.nullable(),
+  operationId: OperationIdSchema,
+  createdAt: z.string().datetime({ offset: true }),
+  category: CollectionRevisionHistoryCategorySchema,
+  rowCount: DatasetQueryCountSchema,
+  columnCount: DatasetQueryCountSchema,
+  isCurrent: z.boolean()
+}).strict();
+
+const CollectionRevisionHistoryBaseSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedCurrentRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
+export const CollectionListRevisionHistoryRequestSchema = CollectionRevisionHistoryBaseSchema.extend({
+  limit: z.number().int().min(1).max(50).default(25),
+  cursor: CollectionRevisionHistoryCursorSchema.optional()
+}).strict();
+const CollectionRevisionHistoryResultIdentitySchema = CollectionRevisionHistoryBaseSchema;
+export const CollectionListRevisionHistoryResultSchema = z.discriminatedUnion("status", [
+  CollectionRevisionHistoryResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    currentRevisionId: DatasetQueryRevisionIdSchema,
+    revisions: z.array(CollectionRevisionHistorySummarySchema).max(50),
+    hasMore: z.boolean(),
+    nextCursor: CollectionRevisionHistoryCursorSchema.optional()
+  }).strict(),
+  CollectionRevisionHistoryResultIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentRevisionId: DatasetQueryRevisionIdSchema
+  }).strict(),
+  CollectionRevisionHistoryResultIdentitySchema.extend({ status: z.enum(["not_found", "failed"]) }).strict()
+]).superRefine((result, context) => {
+  if (result.status === "ready" && result.hasMore !== (result.nextCursor !== undefined)) {
+    context.addIssue({ code: "custom", path: ["nextCursor"], message: "Collection history continuation must agree with hasMore." });
+  }
+});
+
+export const CollectionOpenRevisionHistoryRequestSchema = CollectionRevisionHistoryBaseSchema.extend({
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema
+}).strict();
+const CollectionOpenRevisionHistoryIdentitySchema = CollectionOpenRevisionHistoryRequestSchema;
+export const CollectionOpenRevisionHistoryResultSchema = z.discriminatedUnion("status", [
+  CollectionOpenRevisionHistoryIdentitySchema.extend({
+    status: z.literal("ready"),
+    currentRevisionId: DatasetQueryRevisionIdSchema,
+    snapshot: CollectionSnapshotSchema,
+    readOnly: z.literal(true)
+  }).strict(),
+  CollectionOpenRevisionHistoryIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentRevisionId: DatasetQueryRevisionIdSchema
+  }).strict(),
+  CollectionOpenRevisionHistoryIdentitySchema.extend({ status: z.enum(["not_found", "failed"]) }).strict()
+]);
+
+export const CollectionRestoreRevisionHistoryRequestSchema = CollectionOpenRevisionHistoryRequestSchema.extend({
+  confirmation: z.literal("restore_as_new_revision")
+}).strict();
+const CollectionRestoreRevisionHistoryIdentitySchema = CollectionRestoreRevisionHistoryRequestSchema;
+export const CollectionRestoreRevisionHistoryResultSchema = z.discriminatedUnion("status", [
+  CollectionRestoreRevisionHistoryIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    newRevisionId: DatasetQueryRevisionIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRestoreRevisionHistoryIdentitySchema.extend({
+    status: z.literal("stale"),
+    currentRevisionId: DatasetQueryRevisionIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionRestoreRevisionHistoryIdentitySchema.extend({ status: z.enum(["not_found", "ineligible", "failed"]) }).strict()
+]);
 
 export const CollectionCellEditRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -12419,6 +12517,7 @@ export const OperationRecordSchema = z.object({
     "restore_collection_view",
     "trash_collection_column",
     "trash_collection_row",
+    "restore_collection_revision",
     "trash_dataset",
     "restore_dataset",
     "purge_dataset",
@@ -12998,6 +13097,13 @@ export type CollectionDatasetSummary = z.infer<typeof CollectionDatasetSummarySc
 export type CollectionDatasetTableSummary = z.infer<typeof CollectionDatasetTableSummarySchema>;
 export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
+export type CollectionRevisionHistorySummary = z.infer<typeof CollectionRevisionHistorySummarySchema>;
+export type CollectionListRevisionHistoryRequest = z.input<typeof CollectionListRevisionHistoryRequestSchema>;
+export type CollectionListRevisionHistoryResult = z.output<typeof CollectionListRevisionHistoryResultSchema>;
+export type CollectionOpenRevisionHistoryRequest = z.infer<typeof CollectionOpenRevisionHistoryRequestSchema>;
+export type CollectionOpenRevisionHistoryResult = z.infer<typeof CollectionOpenRevisionHistoryResultSchema>;
+export type CollectionRestoreRevisionHistoryRequest = z.infer<typeof CollectionRestoreRevisionHistoryRequestSchema>;
+export type CollectionRestoreRevisionHistoryResult = z.infer<typeof CollectionRestoreRevisionHistoryResultSchema>;
 export type CollectionTrashDatasetRequest = z.infer<typeof CollectionTrashDatasetRequestSchema>;
 export type CollectionTrashDatasetResult = z.infer<typeof CollectionTrashDatasetResultSchema>;
 export type CollectionDatasetTrashSummary = z.infer<typeof CollectionDatasetTrashSummarySchema>;

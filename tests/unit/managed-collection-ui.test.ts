@@ -48,13 +48,17 @@ import type {
   CollectionTrashColumnRequest,
   CollectionTrashColumnResult,
   CollectionTrashRowRequest,
-  CollectionTrashRowResult
+  CollectionTrashRowResult,
+  CollectionListRevisionHistoryRequest,
+  CollectionOpenRevisionHistoryRequest,
+  CollectionRestoreRevisionHistoryRequest
 } from "@pige/schemas";
 import type { AgentTurnAnswer } from "@pige/contracts";
 import {
   ManagedCollectionCitationPanel,
   ManagedCollectionPanel
 } from "../../apps/desktop/src/renderer/src/components/ManagedCollectionPanel";
+import { ManagedCollectionRevisionHistory } from "../../apps/desktop/src/renderer/src/components/ManagedCollectionRevisionHistory";
 import { DatasetAnswerResult } from "../../apps/desktop/src/renderer/src/App";
 import { ActivityHistorySettingsPanel } from "../../apps/desktop/src/renderer/src/components/ActivityHistorySettingsPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -86,6 +90,49 @@ afterEach(() => {
 });
 
 describe("ManagedCollectionPanel", () => {
+  it("previews immutable Collection history and explicitly restores a forward revision", async () => {
+    const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
+    const current = collectionSnapshot("dataset_rev_20260727_currenthistory", "Alpha", false, false, false, false, false, true);
+    const historical = { ...current, revisionId: "dataset_rev_20260727_priorhistory01",
+      rows: current.rows.map((row) => ({ ...row, canTrash: false,
+        cells: row.cells.map((cell) => ({ ...cell, editable: false })) })),
+      columns: current.columns.map((column) => ({ ...column, canRename: false, canTrash: false })),
+      canAppendDefaultRow: false, canAddColumn: false, canAddFormulaColumn: false };
+    const adopted: CollectionSnapshot[] = [];
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { collections: {
+      listRevisionHistory: async (request: CollectionListRevisionHistoryRequest) => ({ ...request, status: "ready" as const,
+        currentRevisionId: current.revisionId, hasMore: false, revisions: [
+          { revisionId: current.revisionId, parentRevisionId: historical.revisionId,
+            operationId: "op_20260727_currenthistory", createdAt: "2026-07-27T02:00:00.000Z",
+            category: "data" as const, rowCount: 1, columnCount: 2, isCurrent: true },
+          { revisionId: historical.revisionId, parentRevisionId: null,
+            operationId: "op_20260727_priorhistory01", createdAt: "2026-07-27T01:00:00.000Z",
+            category: "import" as const, rowCount: 1, columnCount: 2, isCurrent: false }
+        ] }),
+      openRevisionHistory: async (request: CollectionOpenRevisionHistoryRequest) => ({ ...request,
+        status: "ready" as const, currentRevisionId: current.revisionId, snapshot: historical, readOnly: true as const }),
+      restoreRevisionHistory: async (request: CollectionRestoreRevisionHistoryRequest) => ({ ...request,
+        status: "committed" as const, operationId: "op_20260727_restorehistory1",
+        newRevisionId: "dataset_rev_20260727_restorehistory1",
+        snapshot: { ...historical, revisionId: "dataset_rev_20260727_restorehistory1" } })
+    } } });
+    await act(async () => { root.render(createElement(ManagedCollectionRevisionHistory, {
+      activeVaultId: "vault_20260727_collection", snapshot: current, blocked: false,
+      onAdoptSnapshot: (snapshot: CollectionSnapshot) => { adopted.push(snapshot); return true; }, t })); await settle(dom); });
+    await click(dom, buttonNamed(dom.window.document, "Revision history"));
+    expect(dom.window.document.body.textContent).toContain("Imported revision");
+    const previews = Array.from(dom.window.document.querySelectorAll<HTMLButtonElement>("button"))
+      .filter((button) => button.textContent?.trim() === "Preview");
+    await click(dom, requireElement(previews[1]));
+    expect(dom.window.document.body.textContent).toContain("Read-only historical preview");
+    await click(dom, buttonNamed(dom.window.document, "Restore this revision"));
+    expect(dom.window.document.body.textContent).toContain("current revision remains in history");
+    await click(dom, buttonNamed(dom.window.document, "Restore as new revision"));
+    expect(adopted).toHaveLength(1);
+    expect(adopted[0]?.revisionId).toBe("dataset_rev_20260727_restorehistory1");
+    await act(async () => root.unmount());
+  });
+
   it("renders exact cited rows and columns in a focused read-only surface", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);

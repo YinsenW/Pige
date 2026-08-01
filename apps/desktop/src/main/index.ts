@@ -184,6 +184,7 @@ import { registerProposalIpc } from "./register-proposal-ipc";
 import { registerSourceReconnectIpc } from "./register-source-reconnect-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
+import { registerManagedCollectionHistoryIpc } from "./register-managed-collection-history-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
 import { registerLocalRerankerIpc } from "./register-local-reranker-ipc";
 import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
@@ -293,6 +294,7 @@ import { ManagedCollectionRevealService } from "./services/managed-collection-re
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionViewRedoService } from "./services/managed-collection-view-redo-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
+import { ManagedCollectionRevisionHistoryService } from "./services/managed-collection-revision-history-service";
 import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifecycle-service";
 import { ManagedDatasetPurgeService } from "./services/managed-dataset-purge-service";
 import { ManagedDatasetTitleService } from "./services/managed-dataset-title-service";
@@ -519,6 +521,7 @@ let managedCollectionRedoService: ManagedCollectionRedoService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionViewRedoService: ManagedCollectionViewRedoService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
+let managedCollectionRevisionHistoryService: ManagedCollectionRevisionHistoryService | undefined;
 let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
 let managedDatasetPurgeService: ManagedDatasetPurgeService | undefined;
 let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
@@ -2407,15 +2410,20 @@ const getManagedCollectionCitationService = (): ManagedCollectionCitationService
   return managedCollectionCitationService;
 };
 
+const getManagedCollectionRevisionHistoryService = (): ManagedCollectionRevisionHistoryService =>
+  managedCollectionRevisionHistoryService ??= new ManagedCollectionRevisionHistoryService(getVaultService());
+
 const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort => {
   const collections = getManagedCollectionService();
   const views = getManagedCollectionViewService();
   const datasets = getManagedDatasetLifecycleService();
   const titles = getManagedDatasetTitleService();
   const tables = getManagedCollectionTableService();
+  const history = getManagedCollectionRevisionHistoryService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
     operation.kind === "rename_dataset" ? titles :
       operation.kind === "rename_collection_table" ? tables :
+      operation.kind === "restore_collection_revision" ? history :
       operation.kind === "purge_dataset" ? getManagedDatasetPurgeService() :
       ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
       ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
@@ -2438,13 +2446,14 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const datasetPurgeResult = getManagedDatasetPurgeService().recoverIncompletePurges();
       const titleResult = titles.recoverIncompleteOperations();
       const tableResult = tables.recoverIncompleteOperations();
+      const historyResult = history.recoverIncompleteOperations();
       return {
         recovered: collectionRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
           viewResult.recovered + datasetResult.recovered + datasetPurgeResult.recovered +
-          titleResult.recovered + tableResult.recovered,
+          titleResult.recovered + tableResult.recovered + historyResult.recovered,
         failed: collectionRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
           viewResult.failed + datasetResult.failed + datasetPurgeResult.failed +
-          titleResult.failed + tableResult.failed
+          titleResult.failed + tableResult.failed + historyResult.failed
       };
     }
   };
@@ -3413,6 +3422,17 @@ registerManagedCollectionIpc({
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),
   trashCollectionRow: (request) => getManagedCollectionService().trashRow(request)
 });
+registerManagedCollectionHistoryIpc({
+  ipcMain,
+  isTrustedSender: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return !!window && mainWindows.has(window);
+  },
+  getActiveVaultId: () => getVaultService().current()?.vaultId,
+  list: (request) => getManagedCollectionRevisionHistoryService().list(request),
+  open: (request) => getManagedCollectionRevisionHistoryService().open(request),
+  restore: (request) => getManagedCollectionRevisionHistoryService().restore(request)
+});
 registerKnowledgeHealthIpc({
   ipcMain,
   getActiveVaultBinding: () => {
@@ -4237,6 +4257,7 @@ app.whenReady().then(async () => {
     getVaultService(),
     collectionCitationConversationHistory
   );
+  managedCollectionRevisionHistoryService = new ManagedCollectionRevisionHistoryService(getVaultService());
   noteMarkdownEditorActivityAdapter = new NoteMarkdownEditorActivityAdapter(getVaultService());
   noteMarkdownEditorRedoService = new NoteMarkdownEditorRedoService(getVaultService());
   noteMarkdownEditorService = new NoteMarkdownEditorService(
