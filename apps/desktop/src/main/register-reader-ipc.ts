@@ -30,6 +30,8 @@ import type {
   NoteRestoreArchivedResult,
   NoteSetQuestionStateRequest,
   NoteSetQuestionStateResult,
+  NoteSetClaimConfidenceRequest,
+  NoteSetClaimConfidenceResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -109,6 +111,9 @@ import {
   NOTE_SET_QUESTION_STATE_CHANNEL,
   NoteSetQuestionStateRequestSchema,
   NoteSetQuestionStateResultSchema,
+  NOTE_SET_CLAIM_CONFIDENCE_CHANNEL,
+  NoteSetClaimConfidenceRequestSchema,
+  NoteSetClaimConfidenceResultSchema,
   NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
   NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
   NoteSearchQuestionAnswersRequestSchema,
@@ -196,6 +201,7 @@ import type { NoteMarkdownImportService } from "./services/note-markdown-import-
 import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import type { QuestionStateService } from "./services/question-state-service";
+import type { ClaimConfidenceService } from "./services/claim-confidence-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
 import type { ClaimContradictionService } from "./services/claim-contradiction-service";
 import type { ConceptParentService } from "./services/concept-parent-service";
@@ -218,6 +224,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getQuestionStateService: () => QuestionStateService;
+  readonly getClaimConfidenceService: () => ClaimConfidenceService;
   readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getClaimContradictionService: () => ClaimContradictionService;
   readonly getConceptParentService: () => ConceptParentService;
@@ -511,6 +518,25 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     if (result.status === "committed") options.onNoteRelated();
     if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
       return NoteSetQuestionStateResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    return result;
+  });
+  options.ipcMain.handle(NOTE_SET_CLAIM_CONFIDENCE_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSetClaimConfidenceRequestSchema.parse(request) as NoteSetClaimConfidenceRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteSetClaimConfidenceResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    let rawResult: NoteSetClaimConfidenceResult;
+    try {
+      rawResult = await options.getClaimConfidenceService().setConfidence(ownerId, parsed);
+    } catch {
+      rawResult = { ...parsed, status: "failed" };
+    }
+    const result = NoteSetClaimConfidenceResultSchema.parse(rawResult);
+    if (result.status === "committed") options.onNoteRelated();
+    if (notesTrackedSenders.get(event.sender.id) !== ownerId || event.sender.isDestroyed()) {
+      return NoteSetClaimConfidenceResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
   });

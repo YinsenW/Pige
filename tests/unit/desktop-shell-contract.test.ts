@@ -335,10 +335,17 @@ describe("desktop shell build contract", () => {
     expect(questionSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
     expect(questionSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
     expect(schemasSource).toContain('NoteQuestionStateSchema = z.enum(["open", "partially_answered", "answered", "stale"])');
+    expect(schemasSource).toContain('NOTE_SET_CLAIM_CONFIDENCE_CHANNEL = "notes.setClaimConfidence"');
+    expect(schemasSource).toContain('NoteClaimConfidenceSchema = z.enum(["low", "medium", "high"])');
     expect(contractsSource).toContain("readonly setQuestionState: (");
+    expect(contractsSource).toContain("readonly setClaimConfidence: (");
     expect(preloadSource).toContain("NoteSetQuestionStateRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteSetQuestionStateResultSchema.parse(");
+    expect(preloadSource).toContain("NoteSetClaimConfidenceRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteSetClaimConfidenceResultSchema.parse(");
     expect(appSource.match(/onSetQuestionState=\{\(request\) => window\.pige\.notes\.setQuestionState\(request\)\}/gu))
+      .toHaveLength(2);
+    expect(appSource.match(/onSetClaimConfidence=\{\(request\) => window\.pige\.notes\.setClaimConfidence\(request\)\}/gu))
       .toHaveLength(2);
     for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
       expect(questionSchemas).not.toContain(privateField);

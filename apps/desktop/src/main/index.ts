@@ -338,6 +338,7 @@ import { NoteTrashService } from "./services/note-trash-service";
 import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
+import { ClaimConfidenceService } from "./services/claim-confidence-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { ConceptParentService } from "./services/concept-parent-service";
@@ -489,6 +490,7 @@ let conversationTrashService: ConversationTrashService | undefined;
 let assistantAnswerNoteService: AssistantAnswerNoteService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
+let claimConfidenceService: ClaimConfidenceService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
 let conceptParentService: ConceptParentService | undefined;
@@ -1900,6 +1902,13 @@ const getQuestionStateService = (): QuestionStateService => {
     })
   );
   return questionStateService;
+};
+const getClaimConfidenceService = (): ClaimConfidenceService => {
+  claimConfidenceService ??= new ClaimConfidenceService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true })
+  );
+  return claimConfidenceService;
 };
 const getQuestionAnswerService = (): QuestionAnswerService => {
   questionAnswerService ??= new QuestionAnswerService(getNotesService(),
@@ -3437,6 +3446,7 @@ registerReaderIpc({
   getNoteTrashService,
   getNoteArchiveService,
   getQuestionStateService,
+  getClaimConfidenceService,
   getQuestionAnswerService,
   getClaimContradictionService,
   getConceptParentService,
@@ -3944,6 +3954,10 @@ app.whenReady().then(async () => {
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
       allowQuestion: true
     })
+  );
+  claimConfidenceService = new ClaimConfidenceService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true })
   );
   questionAnswerService = new QuestionAnswerService(getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowQuestion: true }),

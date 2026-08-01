@@ -1772,6 +1772,7 @@ export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistor
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
+export const NoteClaimConfidenceRequestIdSchema = z.string().regex(/^noteclaimconfreq_[a-z0-9]{16,64}$/);
 export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
 export const NoteClaimContradictionRequestIdSchema = z.string().regex(/^claimcontradictionreq_[a-z0-9]{16,64}$/);
 export const NoteConceptParentRequestIdSchema = z.string().regex(/^conceptparentreq_[a-z0-9]{16,64}$/);
@@ -1883,6 +1884,7 @@ export const NoteSourceMetadataSummarySchema = z.object({
   remainingCount: z.number().int().nonnegative().max(995)
 }).strict();
 export const NoteQuestionStateSchema = z.enum(["open", "partially_answered", "answered", "stale"]);
+export const NoteClaimConfidenceSchema = z.enum(["low", "medium", "high"]);
 export const NoteQuestionAnswerItemSchema = z.object({
   pageId: PageIdSchema,
   title: z.string().min(1).max(240),
@@ -1896,6 +1898,11 @@ export const NoteQuestionAnswersSummarySchema = z.object({
 }).strict();
 export const NoteQuestionStateSummarySchema = z.object({
   state: NoteQuestionStateSchema,
+  canChange: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
+export const NoteClaimConfidenceSummarySchema = z.object({
+  confidence: NoteClaimConfidenceSchema,
   canChange: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
@@ -1939,6 +1946,7 @@ export const NoteRenderResultSchema = z.object({
   topicRenameEligibility: TopicRenameEligibilitySchema.optional(),
   sourceMetadata: NoteSourceMetadataSummarySchema.optional(),
   questionState: NoteQuestionStateSummarySchema.optional(),
+  claimConfidence: NoteClaimConfidenceSummarySchema.optional(),
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
   conceptParents: NoteConceptParentsSummarySchema.optional(),
@@ -2043,6 +2051,7 @@ export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
+export const NOTE_SET_CLAIM_CONFIDENCE_CHANNEL = "notes.setClaimConfidence" as const;
 export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers" as const;
 export const NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer" as const;
 export const NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContradictions" as const;
@@ -2129,6 +2138,26 @@ export const NoteSetQuestionStateResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteSetQuestionStateResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteSetClaimConfidenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteClaimConfidenceRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  confidence: NoteClaimConfidenceSchema
+}).strict();
+const NoteSetClaimConfidenceResultIdentitySchema = NoteSetClaimConfidenceRequestSchema;
+export const NoteSetClaimConfidenceResultSchema = z.discriminatedUnion("status", [
+  NoteSetClaimConfidenceResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSetClaimConfidenceResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 const NoteQuestionAnswerOwnerSchema = z.object({
@@ -12261,6 +12290,8 @@ export type NoteSourceMetadataItem = z.infer<typeof NoteSourceMetadataItemSchema
 export type NoteSourceMetadataSummary = z.infer<typeof NoteSourceMetadataSummarySchema>;
 export type NoteQuestionState = z.infer<typeof NoteQuestionStateSchema>;
 export type NoteQuestionStateSummary = z.infer<typeof NoteQuestionStateSummarySchema>;
+export type NoteClaimConfidence = z.infer<typeof NoteClaimConfidenceSchema>;
+export type NoteClaimConfidenceSummary = z.infer<typeof NoteClaimConfidenceSummarySchema>;
 export type NoteQuestionAnswerItem = z.infer<typeof NoteQuestionAnswerItemSchema>;
 export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSummarySchema>;
 export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
@@ -12296,6 +12327,9 @@ export type NoteRestoreArchivedResult = z.infer<typeof NoteRestoreArchivedResult
 export type NoteQuestionStateRequestId = z.infer<typeof NoteQuestionStateRequestIdSchema>;
 export type NoteSetQuestionStateRequest = z.infer<typeof NoteSetQuestionStateRequestSchema>;
 export type NoteSetQuestionStateResult = z.infer<typeof NoteSetQuestionStateResultSchema>;
+export type NoteClaimConfidenceRequestId = z.infer<typeof NoteClaimConfidenceRequestIdSchema>;
+export type NoteSetClaimConfidenceRequest = z.infer<typeof NoteSetClaimConfidenceRequestSchema>;
+export type NoteSetClaimConfidenceResult = z.infer<typeof NoteSetClaimConfidenceResultSchema>;
 export type NoteSearchQuestionAnswersRequest = z.infer<typeof NoteSearchQuestionAnswersRequestSchema>;
 export type NoteSearchQuestionAnswersResult = z.infer<typeof NoteSearchQuestionAnswersResultSchema>;
 export type NoteChangeQuestionAnswerRequest = z.infer<typeof NoteChangeQuestionAnswerRequestSchema>;

@@ -190,6 +190,8 @@ import type {
   NoteRestoreArchivedResult,
   NoteSetQuestionStateRequest,
   NoteSetQuestionStateResult,
+  NoteSetClaimConfidenceRequest,
+  NoteSetClaimConfidenceResult,
   NoteSearchQuestionAnswersRequest,
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
@@ -739,6 +741,9 @@ import {
   NOTE_SET_QUESTION_STATE_CHANNEL,
   NoteSetQuestionStateRequestSchema,
   NoteSetQuestionStateResultSchema,
+  NOTE_SET_CLAIM_CONFIDENCE_CHANNEL,
+  NoteSetClaimConfidenceRequestSchema,
+  NoteSetClaimConfidenceResultSchema,
   NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
   NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
   NoteSearchQuestionAnswersRequestSchema,
@@ -2333,6 +2338,13 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           NOTE_SET_QUESTION_STATE_CHANNEL,
           NoteSetQuestionStateRequestSchema.parse(request)
+        )
+      ),
+    setClaimConfidence: async (request: NoteSetClaimConfidenceRequest): Promise<NoteSetClaimConfidenceResult> =>
+      NoteSetClaimConfidenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_SET_CLAIM_CONFIDENCE_CHANNEL,
+          NoteSetClaimConfidenceRequestSchema.parse(request)
         )
       ),
     searchQuestionAnswers: async (request: NoteSearchQuestionAnswersRequest): Promise<NoteSearchQuestionAnswersResult> =>
