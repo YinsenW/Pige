@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "Cette source est à jour.",
   "note.refreshSource.refreshed": "Source actualisée.",
   "note.refreshSource.refreshedConflict": "Source actualisée. Votre page source modifiée a été conservée telle quelle.",
+  "note.refreshSource.conflictTitle": "Examiner le conflit de page source",
+  "note.refreshSource.conflictDescription": "La source a été actualisée après votre modification. Choisissez la version à conserver.",
   "note.refreshSource.stale": "La source ou la page a changé. Vérifiez à nouveau.",
   "note.refreshSource.ineligible": "Ce format de source ne peut pas être actualisé ici.",
   "note.refreshSource.unavailable": "Le fichier lié est indisponible ou a changé pendant la vérification.",

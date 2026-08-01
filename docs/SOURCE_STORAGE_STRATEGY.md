@@ -197,6 +197,10 @@ Rules:
 - Source pages use exclusive local temp files, flush/recheck revision before rename, and retain a recovery checksum. Generated notes likewise publish create-only; preserve concurrent targets or recover the same source. These pathname fences are not cross-process CAS; parent swaps/cross-file transactions remain open.
 - `SourcePageService` accepts a Source Record path only below the active vault's `.pige/source-records/` root and writes only its normalized vault-relative form into Markdown. Text previews are limited to the first 16 KiB of a current-vault regular file, use no-follow opens where supported, and recheck path/descriptor identity; an escaping or symlinked target is rejected without exposing its body.
 - If sidecar and Markdown disagree, operational services use the sidecar, preserve user-authored Markdown, mark the projection stale/conflicted, and create a repair operation/proposal. They never copy a Markdown path back into the sidecar silently.
+- A confirmed refresh conflict is reviewable after restart without exposing the Source body or path.
+  Keep current records no write; Apply refreshed uses exact page/source revision CAS and reversible
+  `update_page`; Save refreshed as new note creates a separate reversible page. Manual edit retains
+  the pending review until the user chooses a durable outcome.
 - Deleting the sidecar is data loss, not an index reset. Markdown can help identify the source ID, but cannot reconstruct missing root bindings, checksums, original locators, or artifact provenance without an explicit repair flow.
 
 Current format support and executable evidence live in the Playbook and acceptance

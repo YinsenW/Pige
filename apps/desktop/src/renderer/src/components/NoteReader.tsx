@@ -140,7 +140,7 @@ export function NoteReader(props: {
   readonly onReconnectOriginalSource?: (
     request: NoteReconnectOriginalSourceRequest
   ) => Promise<NoteReconnectOriginalSourceResult>;
-  readonly onSourceReconnected?: (render: NoteRenderResult) => void;
+  readonly onSourceReconnected?: (render: NoteRenderResult) => void; readonly onEditSourceConflict?: () => void;
   readonly onActivateInlineReference?: (href: string) => Promise<ReaderInlineReferenceActivation>;
   readonly onDevelopment: (capability: "selection_actions" | "reader_link") => void;
   readonly t: (key: string) => string;
@@ -982,6 +982,7 @@ export function NoteReader(props: {
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
           {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}
+          onOpenPage={props.onOpenRelated} {...(props.onEditSourceConflict ? { onEditManually: props.onEditSourceConflict } : {})}
         />
       ) : null}
       <ReaderNoteRelatedPanel

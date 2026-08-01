@@ -203,6 +203,8 @@ export const NoteRevealSourceResultSchema = z.discriminatedUnion("status", [
 ]);
 export const SOURCE_REFRESH_PREVIEW_CHANNEL = "source.refresh.preview" as const;
 export const SOURCE_REFRESH_CONFIRM_CHANNEL = "source.refresh.confirm" as const;
+export const SOURCE_REFRESH_CONFLICT_READ_CHANNEL = "source.refresh.conflict.read" as const;
+export const SOURCE_REFRESH_CONFLICT_RESOLVE_CHANNEL = "source.refresh.conflict.resolve" as const;
 export const SourceRefreshRequestIdSchema = z.string().regex(/^sourcerefreshreq_[a-z0-9]{16,64}$/);
 export const SourceRefreshPreviewIdSchema = z.string().regex(/^sourcerefreshpreview_[a-f0-9]{32}$/);
 export const SourceRefreshRevisionSchema = z.string().regex(/^sourcerefreshrev_[a-f0-9]{64}$/);
@@ -250,6 +252,50 @@ export const SourceRefreshConfirmResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "unavailable", "failed"] as const).map((status) =>
     SourceRefreshConfirmResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const SourceRefreshConflictIdSchema = z.string().regex(/^sourcerefreshconflict_[a-f0-9]{32}$/);
+export const SourceRefreshConflictPageRevisionSchema = z.string().regex(/^noteeditrev_[a-f0-9]{64}$/);
+export const SourceRefreshConflictLineSchema = z.object({
+  kind: z.enum(["context", "removed", "added"]),
+  text: z.string().min(1).max(160).refine((value) => !/[\u0000-\u001f\u007f]/u.test(value))
+}).strict();
+export const SourceRefreshConflictReadRequestSchema = SourceRefreshIdentitySchema;
+const SourceRefreshConflictReadIdentitySchema = SourceRefreshIdentitySchema;
+export const SourceRefreshConflictReadResultSchema = z.discriminatedUnion("status", [
+  SourceRefreshConflictReadIdentitySchema.extend({
+    status: z.literal("ready"),
+    review: z.object({
+      conflictId: SourceRefreshConflictIdSchema,
+      expectedSourceRevision: SourceRefreshRevisionSchema,
+      expectedPageRevision: SourceRefreshConflictPageRevisionSchema,
+      lines: z.array(SourceRefreshConflictLineSchema).max(8)
+    }).strict()
+  }).strict(),
+  ...(["none", "resolved", "stale", "not_found", "failed"] as const).map((status) =>
+    SourceRefreshConflictReadIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const SourceRefreshConflictDecisionSchema = z.enum([
+  "keep_current", "apply_proposed", "save_proposed_as_new_page"
+]);
+export const SourceRefreshConflictResolveRequestSchema = SourceRefreshIdentitySchema.extend({
+  conflictId: SourceRefreshConflictIdSchema,
+  expectedSourceRevision: SourceRefreshRevisionSchema,
+  expectedPageRevision: SourceRefreshConflictPageRevisionSchema,
+  decision: SourceRefreshConflictDecisionSchema
+}).strict();
+const SourceRefreshConflictResolveIdentitySchema = SourceRefreshConflictResolveRequestSchema;
+export const SourceRefreshConflictResolveResultSchema = z.discriminatedUnion("status", [
+  SourceRefreshConflictResolveIdentitySchema.extend({ status: z.literal("kept") }).strict(),
+  SourceRefreshConflictResolveIdentitySchema.extend({
+    status: z.literal("applied"), operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/)
+  }).strict(),
+  SourceRefreshConflictResolveIdentitySchema.extend({
+    status: z.literal("saved"), operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/), createdPageId: PageIdSchema
+  }).strict(),
+  ...(["stale", "not_found", "failed"] as const).map((status) =>
+    SourceRefreshConflictResolveIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const ReaderSelectionRequestIdSchema = z.string().regex(/^readerselreq_[a-z0-9]{8,64}$/);
@@ -11421,6 +11467,13 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
       message: "Only an applied create-page proposal may return a created page identity."
     });
   }
+  if (!expectsCreatedPage && result.createdPageId !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["createdPageId"],
+      message: "Only an applied create-page proposal may return a created page identity."
+    });
+  }
 });
 
 export const VaultRevealResultSchema = z.discriminatedUnion("status", [
@@ -13103,6 +13156,10 @@ export type SourceRefreshPreviewRequest = z.infer<typeof SourceRefreshPreviewReq
 export type SourceRefreshPreviewResult = z.infer<typeof SourceRefreshPreviewResultSchema>;
 export type SourceRefreshConfirmRequest = z.infer<typeof SourceRefreshConfirmRequestSchema>;
 export type SourceRefreshConfirmResult = z.infer<typeof SourceRefreshConfirmResultSchema>;
+export type SourceRefreshConflictReadRequest = z.infer<typeof SourceRefreshConflictReadRequestSchema>;
+export type SourceRefreshConflictReadResult = z.infer<typeof SourceRefreshConflictReadResultSchema>;
+export type SourceRefreshConflictResolveRequest = z.infer<typeof SourceRefreshConflictResolveRequestSchema>;
+export type SourceRefreshConflictResolveResult = z.infer<typeof SourceRefreshConflictResolveResultSchema>;
 export type SourceRelinkPreviewId = z.infer<typeof SourceRelinkPreviewIdSchema>;
 export type ReferencedOriginalChangedPreview = z.infer<typeof ReferencedOriginalChangedPreviewSchema>;
 export type SourceReconnectListRequest = z.infer<typeof SourceReconnectListRequestSchema>;

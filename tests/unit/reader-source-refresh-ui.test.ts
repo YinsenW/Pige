@@ -172,6 +172,42 @@ describe("Reader source refresh action", () => {
     await harness.unmount();
   });
 
+  it("restores a durable Source Page conflict with four explicit exits and applies exact authority", async () => {
+    const review = { conflictId: `sourcerefreshconflict_${"7".repeat(32)}`,
+      expectedSourceRevision: `sourcerefreshrev_${"8".repeat(64)}`,
+      expectedPageRevision: `noteeditrev_${"9".repeat(64)}`,
+      lines: [{ kind: "removed" as const, text: "My edited paragraph" },
+        { kind: "added" as const, text: "New extracted paragraph" }] };
+    const onReadConflict = vi.fn(async (request: any) => ({ ...request, status: "ready" as const, review }));
+    const onResolveConflict = vi.fn(async (request: any) => ({ ...request, status: "applied" as const,
+      operationId: "op_20260802_sourceconflict1" }));
+    const onRefreshed = vi.fn();
+    const render = { summary: { pageId: "page_20260731_reader1234", title: "Source", pageType: "source",
+      status: "active", pagePath: "sources/source.md", sourceIds: ["src_20260731_source1234"],
+      createdAt: "2026-07-31T00:00:00.000Z", updatedAt: "2026-08-02T01:00:00.000Z" },
+      html: "<p>New extracted paragraph</p>", byteSize: 26,
+      renderContextId: `notectx_${"e".repeat(32)}` } as const;
+    const harness = await mount({ onReadConflict, onResolveConflict,
+      onRender: vi.fn(async () => render), onRefreshed });
+    await act(async () => { await settle(harness.dom); await settle(harness.dom); });
+
+    const dialog = harness.container.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("My edited paragraph");
+    expect(dialog.textContent).toContain("New extracted paragraph");
+    expect(dialog.textContent).not.toContain(review.expectedPageRevision);
+    const labels = [...dialog.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).toEqual(["Keep current", "Edit manually", "Save refreshed as new note", "Apply refreshed"]);
+    await act(async () => { dialog.querySelectorAll<HTMLButtonElement>("button").item(3).click();
+      await settle(harness.dom); await settle(harness.dom); });
+    expect(onResolveConflict).toHaveBeenCalledWith(expect.objectContaining({
+      conflictId: review.conflictId, expectedSourceRevision: review.expectedSourceRevision,
+      expectedPageRevision: review.expectedPageRevision, decision: "apply_proposed"
+    }));
+    expect(onRefreshed).toHaveBeenCalledWith(render);
+    expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
+    await harness.unmount();
+  });
+
   it("keeps the image source action and focus after a confirmed refresh fails", async () => {
     const onPreview = vi.fn(async (request: any) => ({
       ...request,
@@ -227,6 +263,12 @@ function element(overrides: Record<string, unknown> = {}) {
       "note.refreshSource.confirm": "Refresh source",
       "note.refreshSource.refreshed": "Source refreshed.",
       "note.refreshSource.refreshedConflict": "Source refreshed; edited page kept.",
+      "note.refreshSource.conflictTitle": "Choose which Source Page to keep",
+      "note.refreshSource.conflictDescription": "Review the current edit and refreshed page.",
+      "note.proposal.keep_current": "Keep current",
+      "note.proposal.manual_edit": "Edit manually",
+      "note.proposal.save_proposed_as_new_page": "Save refreshed as new note",
+      "note.proposal.apply_proposed": "Apply refreshed",
       "note.refreshSource.failed": "Refresh failed."
     } as Record<string, string>)[key] ?? key,
     onPreview: vi.fn(),

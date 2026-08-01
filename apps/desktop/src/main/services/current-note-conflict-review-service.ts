@@ -12,7 +12,7 @@ const PROPOSAL_ID = /^proposal_[a-z0-9_]{8,128}$/u;
 const INTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
 const NOTE_REVISION = /^noteeditrev_[a-f0-9]{64}$/u;
 
-export type CurrentNoteConflictMutationKind = "append" | "replace" | "selection_transform";
+export type CurrentNoteConflictMutationKind = "append" | "replace" | "selection_transform" | "source_refresh";
 export type CurrentNoteConflictLine = {
   readonly kind: "context" | "removed" | "added";
   readonly text: string;
@@ -126,6 +126,9 @@ function resolutionPath(vaultPath: string, mutationKind: CurrentNoteConflictMuta
   if (mutationKind === "selection_transform") {
     return path.join(vaultPath, ".pige", "reader-selection-proposals", `${proposalId}.conflict-resolution.json`);
   }
+  if (mutationKind === "source_refresh") {
+    return path.join(vaultPath, ".pige", "source-refresh-conflicts", `${proposalId}.resolution.json`);
+  }
   return path.join(vaultPath, ".pige", "agent", `current-note-${mutationKind}-proposals`, `${proposalId}.conflict-resolution.json`);
 }
 
@@ -137,7 +140,7 @@ function isResolution(value: unknown): value is ResolutionRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Partial<ResolutionRecord>;
   return record.schemaVersion === 1 && record.kind === "current_note_conflict_resolution" &&
-    (record.mutationKind === "append" || record.mutationKind === "replace" || record.mutationKind === "selection_transform") &&
+    (record.mutationKind === "append" || record.mutationKind === "replace" || record.mutationKind === "selection_transform" || record.mutationKind === "source_refresh") &&
     (record.decision === "keep_current" || record.decision === "apply_proposed" || record.decision === "save_proposed_as_new_page") &&
     (record.decision !== "keep_current") === (record.operationId !== undefined) &&
     (record.decision === "save_proposed_as_new_page") === (record.pageId !== undefined) &&

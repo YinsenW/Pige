@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "Diese Quelle ist aktuell.",
   "note.refreshSource.refreshed": "Quelle aktualisiert.",
   "note.refreshSource.refreshedConflict": "Quelle aktualisiert. Ihre bearbeitete Quellseite blieb unverändert.",
+  "note.refreshSource.conflictTitle": "Konflikt der Quellseite prüfen",
+  "note.refreshSource.conflictDescription": "Die Quelle wurde nach Ihrer Bearbeitung aktualisiert. Wählen Sie die beizubehaltende Version.",
   "note.refreshSource.stale": "Die Quelle oder Seite wurde geändert. Bitte erneut prüfen.",
   "note.refreshSource.ineligible": "Dieses Quellenformat kann hier nicht aktualisiert werden.",
   "note.refreshSource.unavailable": "Die verknüpfte Datei ist nicht verfügbar oder wurde während der Prüfung geändert.",

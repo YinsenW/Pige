@@ -327,6 +327,8 @@ import {
   SkillSummarySchema,
   SkillUninstallRequestSchema,
   SourceRefreshConfirmResultSchema,
+  SourceRefreshConflictReadResultSchema,
+  SourceRefreshConflictResolveResultSchema,
   SourceRefreshPreviewResultSchema,
   SourceRecordSchema,
   TaskExecutionPlanSchema,
@@ -491,6 +493,35 @@ describe("schemas", () => {
       expectedSourceRevision: preview.preview.expectedSourceRevision,
       status: "stale"
     })).toMatchObject({ status: "stale", expectedSourceRevision: preview.preview.expectedSourceRevision });
+  });
+
+  it("keeps Source Page refresh conflict review bounded, body-free, and revision-bound", () => {
+    const identity = {
+      apiVersion: 1 as const, requestId: "sourcerefreshreq_conflictreview01",
+      activeVaultId: "vault_20260802_conflict", currentPageId: "page_20260802_conflict1",
+      renderContextId: `notectx_${"a".repeat(32)}`, sourceId: "src_20260802_conflict1"
+    };
+    const ready = {
+      ...identity, status: "ready" as const,
+      review: {
+        conflictId: `sourcerefreshconflict_${"b".repeat(32)}`,
+        expectedSourceRevision: `sourcerefreshrev_${"c".repeat(64)}`,
+        expectedPageRevision: `noteeditrev_${"d".repeat(64)}`,
+        lines: [{ kind: "removed" as const, text: "Current edited line" },
+          { kind: "added" as const, text: "Refreshed line" }]
+      }
+    };
+    expect(SourceRefreshConflictReadResultSchema.parse(ready)).toEqual(ready);
+    expect(() => SourceRefreshConflictReadResultSchema.parse({ ...ready, markdown: "private body" })).toThrow();
+    expect(() => SourceRefreshConflictReadResultSchema.parse({
+      ...ready, review: { ...ready.review, sourcePath: "/private/source.txt" }
+    })).toThrow();
+    expect(SourceRefreshConflictResolveResultSchema.parse({
+      ...identity, requestId: "sourcerefreshreq_conflictresolve01",
+      conflictId: ready.review.conflictId, expectedSourceRevision: ready.review.expectedSourceRevision,
+      expectedPageRevision: ready.review.expectedPageRevision, decision: "apply_proposed",
+      status: "applied", operationId: "op_20260802_sourceconflict1"
+    })).toMatchObject({ status: "applied", expectedPageRevision: ready.review.expectedPageRevision });
   });
 
   it("keeps machine-local diagnostics clear pathless, bounded, and all-or-current", () => {

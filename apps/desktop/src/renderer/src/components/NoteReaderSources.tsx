@@ -24,6 +24,8 @@ export function NoteReaderSources(props: {
     request: NoteReconnectOriginalSourceRequest
   ) => Promise<NoteReconnectOriginalSourceResult>;
   readonly onSourceReconnected?: (render: NoteRenderResult) => void;
+  readonly onOpenPage?: (pageId: string) => Promise<void>;
+  readonly onEditManually?: () => void;
   readonly getFocusRoot: () => HTMLElement | null;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -70,6 +72,8 @@ export function NoteReaderSources(props: {
           {...(props.note.renderContextId ? { renderContextId: props.note.renderContextId } : {})}
           {...(props.note.reconnectOriginalSourceIds ? { reconnectOriginalSourceIds: props.note.reconnectOriginalSourceIds } : {})}
           {...(props.note.reconnectOriginalSources ? { reconnectOriginalSources: props.note.reconnectOriginalSources } : {})}
+          {...(props.onOpenPage ? { onOpenPage: props.onOpenPage } : {})}
+          {...(props.onEditManually ? { onEditManually: props.onEditManually } : {})}
           {...(props.onRevealSource ? { onRevealSource: props.onRevealSource } : {})}
           {...(props.onReconnectOriginalSource ? { onReconnectOriginalSource: props.onReconnectOriginalSource } : {})}
           {...(props.onSourceReconnected ? { onSourceReconnected: props.onSourceReconnected } : {})}

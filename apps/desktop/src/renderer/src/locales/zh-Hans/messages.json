@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "此来源已是最新版本。",
   "note.refreshSource.refreshed": "来源已刷新。",
   "note.refreshSource.refreshedConflict": "来源已刷新；你编辑过的来源页面保持不变。",
+  "note.refreshSource.conflictTitle": "处理来源页面冲突",
+  "note.refreshSource.conflictDescription": "你编辑来源页面后，来源又被刷新了。请选择要保留的版本。",
   "note.refreshSource.stale": "来源或页面已发生变化，请重新检查。",
   "note.refreshSource.ineligible": "此来源格式无法在这里刷新。",
   "note.refreshSource.unavailable": "关联文件不可用，或在检查期间发生了变化。",

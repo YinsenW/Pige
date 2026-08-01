@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 312,
-  "baselineLines": 131337,
+  "baselineFileCount": 313,
+  "baselineLines": 131735,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -163,6 +163,7 @@
       ["source-original-reconnect-service.ts", 531, "jrd"],
       ["source-relink-operation.ts", 34, "rd"],
       ["source-refresh-identity.ts", 26, ""],
+      ["source-refresh-conflict-service.ts", 398, "ard"],
       ["source-refresh-service.ts", 805, "jrd"],
       ["web-source-refresh-service.ts", 760, "jprd"],
       ["speech-service.ts", 541, "pr"],
@@ -345,7 +346,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 312,
+    "serviceOwnerCount": 313,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "このソースは最新です。",
   "note.refreshSource.refreshed": "ソースを更新しました。",
   "note.refreshSource.refreshedConflict": "ソースを更新しました。編集済みのソースページは変更せず保持しました。",
+  "note.refreshSource.conflictTitle": "ソースページの競合を確認",
+  "note.refreshSource.conflictDescription": "編集後にソースが更新されました。保持する版を選択してください。",
   "note.refreshSource.stale": "ソースまたはページが変更されました。もう一度確認してください。",
   "note.refreshSource.ineligible": "この形式のソースはここでは更新できません。",
   "note.refreshSource.unavailable": "リンク先のファイルを利用できないか、確認中に変更されました。",

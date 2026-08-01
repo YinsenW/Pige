@@ -5585,6 +5585,39 @@ References:
 - `docs/PARSER_INGEST_SPEC.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Source-Refresh-Conflict-Review
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+When source evidence refreshes but the user-edited Source Page cannot be replaced safely, Pige
+persists one body/path-free review bound to the exact Source revision and current page revision.
+Reader offers four explicit exits: keep the current page, edit it manually, save the refreshed
+projection as a new note, or apply the refreshed projection. Apply and Save publish existing
+reversible Operation kinds; restart adopts only exact matching receipts.
+
+Rationale:
+
+Silently preserving the page avoids data loss but leaves the user unable to reconcile updated
+evidence. Re-running refresh or inferring a choice after restart would either duplicate work or
+overwrite user-authored Markdown without current authority.
+
+Consequences:
+
+- Renderer receives only opaque identities and bounded safe comparison lines.
+- Exact Source/page revision drift fails closed and preserves both current Markdown and review.
+- Manual editing does not implicitly resolve the conflict.
+- This closes one B5.09 conflict workflow without promoting P5 or PIGE-INGEST-003.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/SOURCE_STORAGE_STRATEGY.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

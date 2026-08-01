@@ -368,6 +368,8 @@ export function NoteReaderSourceActions(props: {
   readonly onRevealSource?: (request: NoteRevealSourceRequest) => Promise<NoteRevealSourceResult>;
   readonly onReconnectOriginalSource?: (request: NoteReconnectOriginalSourceRequest) => Promise<NoteReconnectOriginalSourceResult>;
   readonly onSourceReconnected?: (render: NoteRenderResult) => void;
+  readonly onOpenPage?: (pageId: string) => Promise<void>;
+  readonly onEditManually?: () => void;
 }): React.JSX.Element | null {
   const visibleSourceIds = props.visibleSourceIds ?? props.sourceIds.slice(0, 5);
   const refreshableSourceIds = new Set(props.refreshableSourceIds ?? []);
@@ -403,7 +405,11 @@ export function NoteReaderSourceActions(props: {
       {...(props.renderContextId ? { renderContextId: props.renderContextId } : {})}
       onPreview={(request) => window.pige.sourceRefresh.preview(request)}
       onConfirm={(request) => window.pige.sourceRefresh.confirm(request)}
+      onReadConflict={(request) => window.pige.sourceRefresh.readConflict(request)}
+      onResolveConflict={(request) => window.pige.sourceRefresh.resolveConflict(request)}
       onRender={(pageId) => window.pige.notes.render({ pageId })}
+      {...(props.onOpenPage ? { onOpenPage: props.onOpenPage } : {})}
+      {...(props.onEditManually ? { onEditManually: props.onEditManually } : {})}
       {...(props.onSourceReconnected ? { onRefreshed: props.onSourceReconnected } : {})}
     />
   </>;

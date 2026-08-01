@@ -628,7 +628,9 @@ Reader foundation:
 - Eligible referenced or managed Markdown/TXT/PDF/DOCX/PPTX sources offer Check for updates,
   then a bounded preview and explicit Refresh. The dialog exposes no path, keeps Reader and focus
   on closed outcomes, adopts only an authoritative commit, and explains when an edited Source Page
-  was preserved while source evidence changed.
+  was preserved while source evidence changed. That conflict remains restart-visible and offers
+  exactly Keep current, Edit manually, Save refreshed as new note, and Apply refreshed. Apply and
+  save are Activity/Undo recoverable; stale identity preserves the current page and review.
 - An unavailable referenced original offers Reconnect only from exact Main-projected eligibility. One Main picker checks identical content and format; closed outcomes keep Reader/action, while success adopts only the authoritative refreshed render.
 
 ### 8.2 Note Agent Panel

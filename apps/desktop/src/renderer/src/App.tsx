@@ -3891,7 +3891,7 @@ export function LibraryPanel(props: {
           {...(props.onCurrentNoteSourceReconnected ? {
             onSourceReconnected: props.onCurrentNoteSourceReconnected
           } : {})}
-          onOpenSourcePage={props.onOpenNote}
+          onEditSourceConflict={() => void openEditor()} onOpenSourcePage={props.onOpenNote}
           onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)} onSetClaimConfidence={(request) => window.pige.notes.setClaimConfidence(request)} onSetEntityType={(request) => window.pige.notes.setEntityType(request)} onSearchEntityMentions={(request) => window.pige.notes.searchEntityMentions(request)} onChangeEntityMention={(request) => window.pige.notes.changeEntityMention(request)} onSearchQuestionAnswers={(request) => window.pige.notes.searchQuestionAnswers(request)} onChangeQuestionAnswer={(request) => window.pige.notes.changeQuestionAnswer(request)} onSearchClaimContradictions={(request) => window.pige.notes.searchClaimContradictions(request)} onChangeClaimContradiction={(request) => window.pige.notes.changeClaimContradiction(request)} onSearchClaimEvidence={(request) => window.pige.notes.searchClaimEvidence(request)} onChangeClaimEvidence={(request) => window.pige.notes.changeClaimEvidence(request)} onSearchConceptParents={(request) => window.pige.notes.searchConceptParents(request)} onChangeConceptParent={(request) => window.pige.notes.changeConceptParent(request)} onSearchTopicParents={(request) => window.pige.notes.searchTopicParents(request)} onChangeTopicParent={(request) => window.pige.notes.changeTopicParent(request)}
           onQuestionStateChanged={props.onCurrentNoteMerged}
           onClaimConfidenceChanged={props.onCurrentNoteMerged} onEntityTypeChanged={props.onCurrentNoteMerged}
@@ -6864,7 +6864,7 @@ function HomeComposer(props: {
                   onOpenSourceReference: (request) => window.pige.notes.openSourceReference(request),
                   onRevealSource: (request) => window.pige.notes.revealSource(request),
                   onReconnectOriginalSource: (request) => window.pige.notes.reconnectOriginalSource(request),
-                  onSourceReconnected: adoptReconnectedHomeSource,
+                  onSourceReconnected: adoptReconnectedHomeSource, onEditSourceConflict: () => void openEditor(),
                   onOpenSourcePage: openResult
                 } : {})}
                 locale={props.locale}

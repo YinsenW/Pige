@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "This source is current.",
   "note.refreshSource.refreshed": "Source refreshed.",
   "note.refreshSource.refreshedConflict": "Source refreshed. Your edited Source Page was kept unchanged.",
+  "note.refreshSource.conflictTitle": "Review Source Page conflict",
+  "note.refreshSource.conflictDescription": "The source was refreshed after you edited its Source Page. Choose which version to keep.",
   "note.refreshSource.stale": "The source or page changed. Check again.",
   "note.refreshSource.ineligible": "This source format cannot be refreshed here.",
   "note.refreshSource.unavailable": "The linked file is unavailable or changed while it was checked.",
