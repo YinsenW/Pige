@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T13:07:00Z",
+  "reviewedAt": "2026-08-01T13:32:55Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Atomic validated first-run Vault creation, failure retention and restart-safe activation.",
+    "scope": "Required human-readable Vault root-document validation during creation, explicit open and startup restoration.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "1b3f9ad7dd1c1dd640c1342415510c4067b7e385455d88b675b9296f9c728797"
+    "reviewedSha256": "914e2745e6dcdc65b6204fc32b83571045235424ec029b4f4aeaf78ba68d0179"
   },
   "reviewers": [{
-    "reviewerId": "atomic-vault-creation-review",
-      "task": "Review atomic validated first-run Vault publication",
+    "reviewerId": "vault-root-markdown-review",
+      "task": "Review required human-readable Vault root-document activation gates",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews onboarding, API, storage and one durable Decision; Development supplies separate staging, retry, binding-retention and restart evidence."
+      "independence": "Planning reviews onboarding, Markdown and API ownership plus one durable Decision; Development supplies separate no-follow validation, current-binding retention and startup recovery evidence."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"First-run keeps one trusted picker and name field while failed creation remains retryable without exposing partial storage."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Onboarding, API and D-20260801-Atomic-Vault-Creation-Publication agree on private staging, validation and one final rename."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Direct layout and service tests prove atomic publication, retry, current-binding retention and restart without overclaiming broader Vault acceptance."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"The existing Vault layout and service owners absorb publication safety without a second public channel, renderer path authority or durable format."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"atomic-vault-creation-review","blockerCount":0,"summary":"Two existing owner sections plus one durable Decision record the behavior without creating another design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"The existing create/open flow stays unchanged while malformed required root Markdown fails before active Vault replacement or startup lease acquisition."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Onboarding, Markdown schema, API and D-20260801-Vault-Root-Markdown-Activation-Gate agree on required files, validation and failure retention."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Direct layout and service tests cover valid creation, malformed policy/index/log, machine-path absence, current-binding retention and restart rejection."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"The existing Vault layout/open/startup owners reuse one validator without a second IPC channel, renderer path authority or durable format."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Three existing owner sections plus one durable Decision bind the compatibility rule without creating another design document."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"First-run Vault creation truth and ownership remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/vault-layout.test.ts tests/unit/vault-service-writer-lease.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Private staging publishes once, failed publication retries cleanly, and current Vault binding survives failure and restart."},
-    {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Vault storage responsibility and renderer authority boundaries remain enforced without a new owner or budget raise."}
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Root-document compatibility truth and ownership remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/vault-layout.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/pige-policy-service.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Creation emits valid readable roots, open retains a healthy current Vault on invalid input, and startup clears an invalid binding before lease acquisition."},
+    {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Vault validation stays in the existing storage owner with no public channel, renderer authority or service-owner expansion."}
   ],
   "coordination": {
-    "taskId": "atomic-vault-creation-bind-20260801",
-    "taskTitle": "Bind atomic validated first-run Vault creation",
+    "taskId": "vault-root-markdown-bind-20260801",
+    "taskTitle": "Bind required human-readable Vault root-document validation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns the selected parent path, private staging tree, validation and writer-lease activation; renderer retains only name and safe result state.",
-    "acknowledgement": "Planning binds atomic creation while broader Vault storage classification and Settings breadth remain separately owned."
+    "compatibility": "Main owns bounded no-follow validation and activation; renderer receives no root path, document body or new authority.",
+    "acknowledgement": "Planning binds required root-document activation while broader Vault repair and import remain separately owned."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

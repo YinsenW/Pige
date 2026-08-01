@@ -28,6 +28,7 @@ import type {
   VaultRevealTarget,
   VaultSummary
 } from "@pige/contracts";
+import { validatePolicy } from "./pige-policy-service";
 
 export const PIGE_DURABLE_ROOTS = [
   "raw",
@@ -230,6 +231,7 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
   const vaultPath = path.resolve(vaultPathInput);
   const manifest = readVaultManifest(vaultPath);
   const config = readVaultConfig(vaultPath);
+  validateVaultRootDocuments(vaultPath);
   const sourceAssetRoot = config.sourceStorage.sourceAssetRootKind === "inside_vault"
     ? path.join(vaultPath, config.sourceStorage.inVaultSourceAssetRoot)
     : "External folder";
@@ -257,6 +259,17 @@ export function loadVaultSummary(vaultPathInput: string): VaultSummary {
     schemaVersion: manifest.vault_schema_version,
     counts: countVaultItems(vaultPath)
   };
+}
+
+export function validateVaultRootDocuments(vaultPathInput: string): void {
+  const vaultPath = path.resolve(vaultPathInput);
+  const policy = readRootDocumentNoFollow(path.join(vaultPath, "PIGE.md"), 65_536);
+  const index = readRootDocumentNoFollow(path.join(vaultPath, "index.md"), 256 * 1024);
+  const logPrefix = readRootDocumentNoFollow(path.join(vaultPath, "log.md"), 4 * 1024, true);
+
+  if (validatePolicy(policy).length > 0 || !isValidDefaultIndex(index) || !isValidLogPrefix(logPrefix)) {
+    throw new PigeDomainError("vault.root_documents_invalid", "The Vault root Markdown documents are invalid.");
+  }
 }
 
 export function createVaultMetadataRevision(manifest: VaultManifest): `vaultmeta_${string}` {
@@ -579,6 +592,76 @@ function readBoundedRegularFileNoFollow(filePath: string, maxBytes: number): str
   } finally {
     if (descriptor !== undefined) fs.closeSync(descriptor);
   }
+}
+
+function readRootDocumentNoFollow(filePath: string, maxBytes: number, prefixOnly = false): string {
+  let descriptor: number | undefined;
+  try {
+    const before = fs.lstatSync(filePath);
+    if (before.isSymbolicLink() || !before.isFile() || before.nlink !== 1 || (!prefixOnly && before.size > maxBytes)) {
+      throw new PigeDomainError("vault.root_documents_invalid", "A Vault root document is not a safe regular file.");
+    }
+    descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    const opened = fs.fstatSync(descriptor);
+    const named = fs.lstatSync(filePath);
+    if (
+      !opened.isFile() || named.isSymbolicLink() || !named.isFile() ||
+      opened.nlink !== 1 || named.nlink !== 1 || (!prefixOnly && opened.size > maxBytes) ||
+      opened.dev !== named.dev || opened.ino !== named.ino
+    ) {
+      throw new PigeDomainError("vault.root_documents_invalid", "A Vault root document changed while opening.");
+    }
+    const bytes = Buffer.alloc(prefixOnly ? Math.min(opened.size, maxBytes) : opened.size);
+    fs.readSync(descriptor, bytes, 0, bytes.length, 0);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (caught) {
+    if (caught instanceof PigeDomainError) throw caught;
+    throw new PigeDomainError("vault.root_documents_invalid", "A Vault root document is missing, unsafe, or not valid UTF-8.");
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+}
+
+function isValidDefaultIndex(markdown: string): boolean {
+  if (markdown.includes("\0") || (!markdown.startsWith("---\n") && !markdown.startsWith("---\r\n"))) return false;
+  const normalized = markdown.replaceAll("\r\n", "\n");
+  const closing = normalized.indexOf("\n---\n", 4);
+  if (closing < 0) return false;
+  const fields = new Map<string, string>();
+  for (const line of normalized.slice(4, closing).split("\n")) {
+    const match = /^([a-z_]+):\s*(.+)$/u.exec(line);
+    if (!match?.[1] || match[2] === undefined || fields.has(match[1])) return false;
+    fields.set(match[1], match[2]);
+  }
+  const title = fields.get("title");
+  const createdAt = decodeQuotedString(fields.get("created_at"));
+  const updatedAt = decodeQuotedString(fields.get("updated_at"));
+  return Boolean(
+    decodeQuotedString(title) && fields.get("page_type") === '"index"' &&
+    createdAt && updatedAt && isIsoTimestamp(createdAt) && isIsoTimestamp(updatedAt) &&
+    /^\n---\n\n#\s+\S/mu.test(normalized.slice(closing))
+  );
+}
+
+function isValidLogPrefix(markdown: string): boolean {
+  if (markdown.includes("\0")) return false;
+  const normalized = markdown.replaceAll("\r\n", "\n");
+  const createdAt = /^# Log\n\n- (.+) Created vault\.\n/u.exec(normalized)?.[1];
+  return Boolean(createdAt && isIsoTimestamp(createdAt));
+}
+
+function decodeQuotedString(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const decoded: unknown = JSON.parse(value);
+    return typeof decoded === "string" && decoded.length > 0 ? decoded : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isIsoTimestamp(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value) && Number.isFinite(Date.parse(value));
 }
 
 function bindRevealableDirectory(vaultPath: string, candidatePath: string): VaultStorageRevealBinding {

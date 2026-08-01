@@ -41,6 +41,13 @@ Use this document when implementing:
 | `wiki/**/*.md` | Notes, concepts, entities, topics, claims, and questions. | Yes | Yes |
 | `.pige/**/*.jsonl` | Conversations, operations, proposals, memory events. | Yes, but not Markdown knowledge. | No direct editing in v0.1. |
 
+The three root Markdown documents are part of Vault compatibility, not optional examples. Creation,
+explicit open, and startup restoration validate them through bounded no-follow regular-file reads:
+`PIGE.md` must satisfy the required policy sections below; `index.md` must retain its special
+`title`, `page_type: "index"`, ISO creation/update timestamps and visible heading; and `log.md` must
+start with its human-readable creation entry. Invalid UTF-8, links, hard links, missing files or
+malformed required structure fail closed before the Vault becomes active.
+
 ## 4. Common Frontmatter
 
 All Pige-managed Markdown pages except `PIGE.md`, `index.md`, and `log.md` should use this base shape.
