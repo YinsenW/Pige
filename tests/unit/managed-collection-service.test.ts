@@ -1554,9 +1554,37 @@ describe("ManagedCollectionService", () => {
       label: "Related sum", aggregation: "sum", targetColumnId: numberColumn.id
     });
     if (recreated.status !== "committed") throw new Error("Rollup was not recreated");
+    const updateRequest = { apiVersion: 1 as const, requestId: "collection_request_rollupupdatecount", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      columnId: recreated.columnId, relationColumnId: relation.columnId, aggregation: "count" as const };
+    const updated = await service.updateRollupColumn(updateRequest);
+    if (updated.status !== "committed") throw new Error("Rollup was not updated");
+    expect(updated.snapshot.columns.find((column) => column.columnId === recreated.columnId)).toMatchObject({ canEditRollup: true,
+      rollup: { aggregation: "count", relationColumnId: relation.columnId } });
+    expect(updated.snapshot.rows.find((row) => row.rowId === sourceRowId)?.cells
+      .find((cell) => cell.columnId === recreated.columnId)).toMatchObject({ value: 1, readOnlyReason: "rollup" });
+    await expect(service.updateRollupColumn({ ...updateRequest, requestId: "collection_request_rollupupdatestale",
+      aggregation: "sum", targetColumnId: numberColumn.id })).resolves.toMatchObject({
+      status: "stale", snapshot: { revisionId: updated.snapshot.revisionId }
+    });
+    await expect(service.updateRollupColumn({ ...updateRequest, requestId: "collection_request_rollupupdatenoop",
+      expectedRevisionId: updated.snapshot.revisionId })).resolves.toMatchObject({ status: "ineligible" });
+    await expect(new ManagedCollectionService(port).updateRollupColumn(updateRequest)).resolves.toEqual(updated);
+    const updateActivity = new KnowledgeActivityService(port, service);
+    expect(updateActivity.list({ limit: 20 }).activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationId: updated.operationId, kind: "update_collection_rollup", canUndo: true })
+    ]));
+    const updateUndo = await updateActivity.undo({ operationId: updated.operationId, expectedRevisionId: updated.snapshot.revisionId });
+    expect(updateUndo).toMatchObject({ status: "undone", revisionId: expect.any(String) });
+    if (updateUndo.status !== "undone" || !updateUndo.revisionId) throw new Error("Rollup update was not undone");
+    const restoredRollup = await service.open({ apiVersion: 1, requestId: "collection_request_rolluprestoredsum", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id });
+    if (restoredRollup.status !== "ready") throw new Error("Restored rollup did not reopen");
+    expect(restoredRollup.snapshot.columns.find((column) => column.columnId === recreated.columnId)?.rollup)
+      .toMatchObject({ aggregation: "sum", targetColumnId: numberColumn.id });
     const edited = await service.editCell({
       apiVersion: 1, requestId: "collection_request_rolluptargetedit", activeVaultId: vault.vaultId,
-      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: updateUndo.revisionId,
       rowId: targetRowId, columnId: numberColumn.id, value: 9
     });
     if (edited.status !== "committed") throw new Error("Rollup target was not edited");

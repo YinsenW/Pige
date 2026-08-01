@@ -1279,6 +1279,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_relation_cell",
     "add_collection_lookup",
     "add_collection_rollup",
+    "update_collection_rollup",
     "rename_collection_column",
     "create_collection_view",
     "update_collection_view",
@@ -6377,6 +6378,23 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_rollup_update"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      aggregation: z.enum(["count", "sum"]),
+      targetColumnId: ColumnIdSchema.optional()
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_rollup_update_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      aggregation: z.enum(["count", "sum"]),
+      targetColumnId: ColumnIdSchema.optional(),
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_column_rename"),
       tableId: TableIdSchema,
       columnId: ColumnIdSchema
@@ -6845,6 +6863,7 @@ export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCe
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
 export const COLLECTION_UPDATE_VIEW_CHANNEL = "collections.updateView" as const;
 export const COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL = "collections.addRollupColumn" as const;
+export const COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL = "collections.updateRollupColumn" as const;
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
@@ -6931,6 +6950,7 @@ export const CollectionColumnSummarySchema = z.object({
   canEditRelation: z.boolean().default(false),
   canUseAsLookupTarget: z.boolean().default(false),
   canUseAsRollupTarget: z.boolean().default(false),
+  canEditRollup: z.boolean().default(false),
   hasInboundRelationDescriptors: z.boolean().default(false),
   calculation: CollectionColumnCalculationSummarySchema.optional(),
   relation: CollectionColumnRelationSummarySchema.optional(),
@@ -6974,6 +6994,13 @@ export const CollectionColumnSummarySchema = z.object({
       code: "custom",
       path: ["canEditRelation"],
       message: "Only current Pige relation columns may expose relation-cell edit authority."
+    });
+  }
+  if (column.canEditRollup !== (column.rollup?.kind === "pige_single_rollup")) {
+    context.addIssue({
+      code: "custom",
+      path: ["canEditRollup"],
+      message: "Only a current Pige rollup may be editable."
     });
   }
   if (column.relation !== undefined &&
@@ -7576,6 +7603,24 @@ export const CollectionAddRollupColumnRequestSchema = z.object({
   }
 });
 
+/** Replaces the descriptor of one current Pige-owned rollup column. */
+export const CollectionUpdateRollupColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  aggregation: z.enum(["count", "sum"]),
+  targetColumnId: DatasetQueryColumnIdSchema.optional()
+}).strict().superRefine((request, context) => {
+  if ((request.aggregation === "sum") !== (request.targetColumnId !== undefined)) {
+    context.addIssue({ code: "custom", path: ["targetColumnId"], message: "A sum rollup requires one numeric target while count accepts none." });
+  }
+});
+
 export const CollectionRenameColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -7956,6 +8001,36 @@ export const CollectionAddRollupColumnResultSchema = z.discriminatedUnion("statu
   if (descriptor?.relationColumnId !== result.relationColumnId || descriptor.aggregation !== result.aggregation ||
       descriptor.targetColumnId !== result.targetColumnId) {
     context.addIssue({ code: "custom", path: ["columnId"], message: "Committed rollup columns must project the exact descriptor." });
+  }
+});
+
+const CollectionUpdateRollupColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  aggregation: z.enum(["count", "sum"]),
+  targetColumnId: DatasetQueryColumnIdSchema.optional()
+}).strict();
+
+export const CollectionUpdateRollupColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionUpdateRollupColumnResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateRollupColumnResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateRollupColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionUpdateRollupColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionUpdateRollupColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection rollup-update snapshots must match the request identity." });
+  }
+  if (result.status !== "committed") return;
+  const descriptor = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId)?.rollup;
+  if (descriptor?.relationColumnId !== result.relationColumnId || descriptor.aggregation !== result.aggregation ||
+      descriptor.targetColumnId !== result.targetColumnId) {
+    context.addIssue({ code: "custom", path: ["columnId"], message: "Committed rollup updates must project the exact descriptor." });
   }
 });
 
@@ -10708,6 +10783,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_relation_cell",
     "add_collection_lookup",
     "add_collection_rollup",
+    "update_collection_rollup",
     "rename_collection_column",
     "create_collection_view",
     "update_collection_view",
@@ -11310,6 +11386,8 @@ export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLooku
 export type CollectionAddLookupColumnResult = z.infer<typeof CollectionAddLookupColumnResultSchema>;
 export type CollectionAddRollupColumnRequest = z.infer<typeof CollectionAddRollupColumnRequestSchema>;
 export type CollectionAddRollupColumnResult = z.infer<typeof CollectionAddRollupColumnResultSchema>;
+export type CollectionUpdateRollupColumnRequest = z.infer<typeof CollectionUpdateRollupColumnRequestSchema>;
+export type CollectionUpdateRollupColumnResult = z.infer<typeof CollectionUpdateRollupColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;

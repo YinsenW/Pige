@@ -37,6 +37,7 @@ import {
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
@@ -51,6 +52,7 @@ import {
   CollectionAddRelationColumnResultSchema,
   CollectionAddLookupColumnRequestSchema,
   CollectionAddRollupColumnRequestSchema,
+  CollectionUpdateRollupColumnRequestSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
   CollectionRelationCellValueSchema,
@@ -2744,6 +2746,7 @@ describe("schemas", () => {
     const count = { kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: "column_rolluprelation01", aggregation: "count" } as const;
     const sum = { ...count, aggregation: "sum", targetColumnId: "column_rolluptarget001" } as const;
     expect(COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL).toBe("collections.addRollupColumn");
+    expect(COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL).toBe("collections.updateRollupColumn");
     expect(DatasetPigeRollupSchema.parse(count)).toEqual(count);
     expect(DatasetPigeRollupSchema.parse(sum)).toEqual(sum);
     expect(() => DatasetPigeRollupSchema.parse({ ...count, targetColumnId: sum.targetColumnId })).toThrow();
@@ -2755,12 +2758,19 @@ describe("schemas", () => {
       relationColumnId: count.relationColumnId, aggregation: "sum", targetColumnId: sum.targetColumnId
     } as const;
     expect(CollectionAddRollupColumnRequestSchema.parse(request).label).toBe("Total");
+    const { label: _label, ...updateBase } = request;
+    expect(CollectionUpdateRollupColumnRequestSchema.parse({ ...updateBase, columnId: "column_rollupresult01" }))
+      .toMatchObject({ columnId: "column_rollupresult01", aggregation: "sum", targetColumnId: sum.targetColumnId });
     for (const unsafe of [{ rawSql: "sum(value)" }, { targetDatasetId: "dataset_other" }, { expression: "value * 2" },
       { aggregation: "average" }]) expect(() => CollectionAddRollupColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
     expect(KnowledgeActivitySummarySchema.parse({ operationId: "op_20260729_rollupadd01", kind: "add_collection_rollup",
       createdAt: "2026-07-29T00:00:00.000Z", target: { kind: "collection", datasetId: request.datasetId,
         tableId: request.tableId, revisionId: request.expectedRevisionId }, status: "applied", canUndo: true }).kind
     ).toBe("add_collection_rollup");
+    expect(KnowledgeActivitySummarySchema.parse({ operationId: "op_20260729_rollupedit1", kind: "update_collection_rollup",
+      createdAt: "2026-07-29T00:00:00.000Z", target: { kind: "collection", datasetId: request.datasetId,
+        tableId: request.tableId, revisionId: request.expectedRevisionId }, status: "applied", canUndo: true }).kind
+    ).toBe("update_collection_rollup");
   });
 
   it("keeps Collection column rename stable, reversible, CAS-bound, and body-free", () => {

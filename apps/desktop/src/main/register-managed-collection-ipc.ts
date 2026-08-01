@@ -5,6 +5,7 @@ import {
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
@@ -20,6 +21,8 @@ import {
   CollectionAddLookupColumnResultSchema,
   CollectionAddRollupColumnRequestSchema,
   CollectionAddRollupColumnResultSchema,
+  CollectionUpdateRollupColumnRequestSchema,
+  CollectionUpdateRollupColumnResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -62,6 +65,8 @@ import {
   type CollectionAddLookupColumnResult,
   type CollectionAddRollupColumnRequest,
   type CollectionAddRollupColumnResult,
+  type CollectionUpdateRollupColumnRequest,
+  type CollectionUpdateRollupColumnResult,
   type CollectionUpdateFormulaColumnRequest,
   type CollectionUpdateFormulaColumnResult,
   type CollectionCellEditRequest,
@@ -135,6 +140,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addRollupCollectionColumn?: (
     request: CollectionAddRollupColumnRequest
   ) => CollectionAddRollupColumnResult | Promise<CollectionAddRollupColumnResult>;
+  readonly updateRollupCollectionColumn?: (
+    request: CollectionUpdateRollupColumnRequest
+  ) => CollectionUpdateRollupColumnResult | Promise<CollectionUpdateRollupColumnResult>;
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
@@ -296,6 +304,15 @@ function failedAddRollupColumn(request: CollectionAddRollupColumnRequest): Colle
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, relationColumnId: request.relationColumnId,
     aggregation: request.aggregation, ...(request.targetColumnId ? { targetColumnId: request.targetColumnId } : {}), status: "failed"
+  });
+}
+
+function failedUpdateRollupColumn(request: CollectionUpdateRollupColumnRequest): CollectionUpdateRollupColumnResult {
+  return CollectionUpdateRollupColumnResultSchema.parse({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+    relationColumnId: request.relationColumnId, aggregation: request.aggregation,
+    ...(request.targetColumnId ? { targetColumnId: request.targetColumnId } : {}), status: "failed"
   });
 }
 
@@ -647,6 +664,22 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedAddRollupColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionUpdateRollupColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.updateRollupCollectionColumn) return failedUpdateRollupColumn(parsed);
+    let rawResult: CollectionUpdateRollupColumnResult;
+    try { rawResult = await options.updateRollupCollectionColumn(parsed); }
+    catch { return failedUpdateRollupColumn(parsed); }
+    const result = CollectionUpdateRollupColumnResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId || result.columnId !== parsed.columnId ||
+        result.relationColumnId !== parsed.relationColumnId || result.aggregation !== parsed.aggregation ||
+        result.targetColumnId !== parsed.targetColumnId) throw new Error("Managed Collection rollup-update response identity did not match the request.");
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedUpdateRollupColumn(parsed);
   });
 
   options.ipcMain.handle("collections.renameColumn", async (event, request: unknown) => {

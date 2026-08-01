@@ -14,6 +14,8 @@ import type {
   CollectionAddLookupColumnResult,
   CollectionAddRollupColumnRequest,
   CollectionAddRollupColumnResult,
+  CollectionUpdateRollupColumnRequest,
+  CollectionUpdateRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
   CollectionListResult,
@@ -596,15 +598,22 @@ describe("ManagedCollectionPanel", () => {
 
   it("adds one relation-backed count rollup and renders the derived value read-only", async () => {
     const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
-    const requests: CollectionAddRollupColumnRequest[] = [];
+    const requests: CollectionAddRollupColumnRequest[] = []; const updates: CollectionUpdateRollupColumnRequest[] = [];
     const base = relationSourceSnapshot("dataset_rev_20260729_rollup00001", false);
     const relationRequest = relationAddRequest(base);
     const initial: CollectionSnapshot = {
       ...withRelationColumn(base, relationRequest, "row_relationtarget01", "Acme", base.revisionId), canAddRollupColumn: true
     };
-    const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    const targetBase = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    const target: CollectionSnapshot = { ...targetBase, columns: [...targetBase.columns, { columnId: "column_relationamount01",
+      label: "Amount", logicalType: "number", canRename: true, canTrash: true, canUseAsFormulaOperand: true,
+      canEditFormula: false, canUseAsRelationDisplay: true, canEditRelation: false, canUseAsLookupTarget: true,
+      canUseAsRollupTarget: true, canEditRollup: false, hasInboundRelationDescriptors: false }],
+      rows: targetBase.rows.map((row) => ({ ...row, cells: [...row.cells,
+        { columnId: "column_relationamount01", value: 3, editable: true }] })) };
     Object.defineProperty(dom.window, "pige", { configurable: true, value: { collections: {
-      open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({ ...openIdentity(request), status: "ready", snapshot: target }),
+      open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({ ...openIdentity(request), status: "ready",
+        snapshot: { ...target, revisionId: requests.length ? "dataset_rev_20260729_rollup00002" : target.revisionId } }),
       addRollupColumn: async (request: CollectionAddRollupColumnRequest): Promise<CollectionAddRollupColumnResult> => {
         requests.push(request); return { apiVersion: request.apiVersion, requestId: request.requestId,
           activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
@@ -614,12 +623,25 @@ describe("ManagedCollectionPanel", () => {
             columns: [...initial.columns, { columnId: "column_rollupcount001", label: request.label, logicalType: "number",
               canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false,
               canUseAsRelationDisplay: false, canEditRelation: false, canUseAsLookupTarget: false,
-              canUseAsRollupTarget: false, hasInboundRelationDescriptors: false,
+              canUseAsRollupTarget: false, canEditRollup: true, hasInboundRelationDescriptors: false,
               rollup: { kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: request.relationColumnId,
                 aggregation: "count" } }],
             rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells, { columnId: "column_rollupcount001",
               value: 1, editable: false, readOnlyReason: "rollup" as const }] }))
           } };
+      },
+      updateRollupColumn: async (request: CollectionUpdateRollupColumnRequest): Promise<CollectionUpdateRollupColumnResult> => {
+        updates.push(request); return { ...request, status: "committed", operationId: "op_20260729_rollupupdate1", snapshot: {
+          ...initial, revisionId: "dataset_rev_20260729_rollup00003", canAddRollupColumn: false,
+          columns: [...initial.columns, { columnId: request.columnId, label: "Related count", logicalType: "number",
+            canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false,
+            canUseAsRelationDisplay: false, canEditRelation: false, canUseAsLookupTarget: false,
+            canUseAsRollupTarget: false, canEditRollup: true, hasInboundRelationDescriptors: false,
+            rollup: { kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: request.relationColumnId,
+              aggregation: request.aggregation, ...(request.targetColumnId ? { targetColumnId: request.targetColumnId } : {}) } }],
+          rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells, { columnId: request.columnId,
+            value: 3, editable: false, readOnlyReason: "rollup" as const }] }))
+        } };
       }
     } } });
     await act(async () => { root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial })); await settle(dom); });
@@ -635,6 +657,13 @@ describe("ManagedCollectionPanel", () => {
     expect(dom.window.document.activeElement).toBe(container.querySelector('[data-collection-column-id="column_rollupcount001"]'));
     expect(Array.from(container.querySelectorAll("button")).some((button) =>
       button.getAttribute("aria-label") === "Edit cell: Related count, row 1")).toBe(false);
+    await click(dom, buttonNamed(container, "Edit rollup field: Related count")); await settle(dom);
+    const aggregation = requireElement(container.querySelector<HTMLSelectElement>("#collection-rollup-aggregation"));
+    await act(async () => { aggregation.value = "sum"; aggregation.dispatchEvent(new dom.window.Event("change", { bubbles: true })); });
+    await settle(dom); await click(dom, buttonNamed(container, "Save"));
+    expect(updates).toHaveLength(1); expect(updates[0]).toMatchObject({ columnId: "column_rollupcount001",
+      aggregation: "sum", targetColumnId: "column_relationamount01" });
+    expect(container.textContent).toContain("Rollup field updated as a new revision.");
     await act(async () => root.unmount()); dom.window.close();
   });
 

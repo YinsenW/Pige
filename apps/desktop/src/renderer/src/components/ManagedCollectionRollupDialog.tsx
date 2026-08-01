@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CollectionAddRollupColumnRequest, CollectionSnapshot } from "@pige/schemas";
+import type { CollectionAddRollupColumnRequest, CollectionSnapshot, CollectionUpdateRollupColumnRequest } from "@pige/schemas";
 
-type Notice = "added" | "stale" | "not_found" | "ineligible" | "failed";
-type Draft = { readonly expectedRevisionId: string; readonly label: string; readonly relationColumnId: string;
-  readonly aggregation: "count" | "sum"; readonly targetColumnId: string };
+type Notice = "added" | "updated" | "stale" | "not_found" | "ineligible" | "failed";
+type Draft = { readonly columnId?: string; readonly expectedRevisionId: string; readonly label: string; readonly relationColumnId: string;
+  readonly aggregation: "count" | "sum"; readonly targetColumnId: string; readonly originalRelationColumnId?: string;
+  readonly originalAggregation?: "count" | "sum"; readonly originalTargetColumnId?: string };
 
 export function ManagedCollectionRollupDialog(props: {
   readonly activeVaultId: string; readonly snapshot: CollectionSnapshot; readonly blocked: boolean;
@@ -17,17 +18,28 @@ export function ManagedCollectionRollupDialog(props: {
   const [busy, setBusy] = useState(false); const [loading, setLoading] = useState(false);
   const sequence = useRef(0); const triggerRef = useRef<HTMLButtonElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const relationRef = useRef<HTMLSelectElement | null>(null);
   const ownerKey = `${props.activeVaultId}:${props.snapshot.datasetId}:${props.snapshot.tableId}`;
   const ownerRef = useRef(ownerKey); ownerRef.current = ownerKey;
   const relations = props.snapshot.columns.filter((column) => column.relation?.kind === "pige_single_relation");
 
   useEffect(() => { sequence.current += 1; setDraft(null); setTarget(null); setNotice(null); setBusy(false); setLoading(false); props.onActiveChange(false); }, [ownerKey]);
-  useLayoutEffect(() => { if (draft && !busy && !loading) nameRef.current?.focus(); }, [draft?.relationColumnId, busy, loading]);
+  useLayoutEffect(() => { if (draft && !busy && !loading) (draft.columnId ? relationRef.current : nameRef.current)?.focus(); },
+    [draft?.columnId, draft?.relationColumnId, busy, loading]);
 
   const begin = (): void => {
     if (props.blocked || !props.snapshot.canAddRollupColumn || !relations[0]) return;
     const next = { expectedRevisionId: props.snapshot.revisionId, label: "", relationColumnId: relations[0].columnId,
       aggregation: "count" as const, targetColumnId: "" };
+    setDraft(next); setNotice(null); props.onActiveChange(true); void loadTarget(next.relationColumnId, next.expectedRevisionId);
+  };
+  const beginEdit = (columnId: string): void => {
+    const column = props.snapshot.columns.find((candidate) => candidate.columnId === columnId);
+    if (props.blocked || !column?.canEditRollup || !column.rollup) return;
+    const next: Draft = { columnId, expectedRevisionId: props.snapshot.revisionId, label: column.label,
+      relationColumnId: column.rollup.relationColumnId, aggregation: column.rollup.aggregation,
+      targetColumnId: column.rollup.targetColumnId ?? "", originalRelationColumnId: column.rollup.relationColumnId,
+      originalAggregation: column.rollup.aggregation, originalTargetColumnId: column.rollup.targetColumnId ?? "" };
     setDraft(next); setNotice(null); props.onActiveChange(true); void loadTarget(next.relationColumnId, next.expectedRevisionId);
   };
   const chooseRelation = (relationColumnId: string): void => {
@@ -41,23 +53,29 @@ export function ManagedCollectionRollupDialog(props: {
   };
   const submit = async (): Promise<void> => {
     if (!draft || props.blocked || busy || loading || !valid(draft, target)) return;
-    const request: CollectionAddRollupColumnRequest = {
-      apiVersion: 1, requestId: collectionRequestId(), activeVaultId: props.activeVaultId,
+    const base = {
+      apiVersion: 1 as const, requestId: collectionRequestId(), activeVaultId: props.activeVaultId,
       datasetId: props.snapshot.datasetId, tableId: props.snapshot.tableId,
-      expectedRevisionId: draft.expectedRevisionId, label: draft.label.trim(),
+      expectedRevisionId: draft.expectedRevisionId,
       relationColumnId: draft.relationColumnId, aggregation: draft.aggregation,
       ...(draft.aggregation === "sum" ? { targetColumnId: draft.targetColumnId } : {})
     };
+    const request: CollectionAddRollupColumnRequest | CollectionUpdateRollupColumnRequest = draft.columnId
+      ? { ...base, columnId: draft.columnId }
+      : { ...base, label: draft.label.trim() };
     const run = sequence.current + 1; sequence.current = run; const owner = ownerKey; setBusy(true); setNotice(null);
     try {
-      const result = await window.pige.collections.addRollupColumn(request);
+      const result = "columnId" in request
+        ? await window.pige.collections.updateRollupColumn(request)
+        : await window.pige.collections.addRollupColumn(request);
       if (sequence.current !== run || ownerRef.current !== owner || result.requestId !== request.requestId ||
           result.activeVaultId !== request.activeVaultId || result.datasetId !== request.datasetId ||
           result.tableId !== request.tableId || result.relationColumnId !== request.relationColumnId ||
           result.aggregation !== request.aggregation || result.targetColumnId !== request.targetColumnId) return;
       if ((result.status === "committed" || result.status === "stale") && !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
       if (result.status === "committed") {
-        setDraft(null); setTarget(null); setNotice("added"); props.onActiveChange(false); props.onFocusColumn(result.columnId);
+        setDraft(null); setTarget(null); setNotice("columnId" in request ? "updated" : "added");
+        props.onActiveChange(false); props.onFocusColumn(result.columnId);
       } else {
         if (result.status === "stale") setDraft((current) => current ? { ...current, expectedRevisionId: result.snapshot.revisionId } : current);
         setNotice(result.status);
@@ -66,17 +84,20 @@ export function ManagedCollectionRollupDialog(props: {
     finally { if (sequence.current === run && ownerRef.current === owner) setBusy(false); }
   };
 
-  if (!draft && !props.snapshot.canAddRollupColumn && !notice) return null;
+  const editable = props.snapshot.columns.filter((column) => column.canEditRollup);
+  if (!draft && !props.snapshot.canAddRollupColumn && editable.length === 0 && !notice) return null;
   return <section className="settings-card settings-row tall" aria-label={props.t("collection.rollupBuilder")}>
-    {!draft ? props.snapshot.canAddRollupColumn ? <div className="settings-row-control"><button ref={triggerRef} type="button"
-      className="settings-button" disabled={props.blocked || busy} onClick={begin}>{props.t("collection.addRollupField")}</button></div> : null
+    {!draft ? <div className="settings-row-control">{props.snapshot.canAddRollupColumn ? <button ref={triggerRef} type="button"
+      className="settings-button" disabled={props.blocked || busy} onClick={begin}>{props.t("collection.addRollupField")}</button> : null}
+      {editable.map((column) => <button key={column.columnId} type="button" className="settings-button"
+        disabled={props.blocked || busy} onClick={() => beginEdit(column.columnId)}>{props.t("collection.editRollupField")}: {column.label}</button>)}</div>
       : <form aria-label={props.t("collection.rollupBuilder")} onSubmit={(event) => { event.preventDefault(); void submit(); }}
         onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-        <div className="settings-row-copy"><label htmlFor="collection-rollup-name"><strong>{props.t("collection.fieldName")}</strong></label>
+        {!draft.columnId ? <div className="settings-row-copy"><label htmlFor="collection-rollup-name"><strong>{props.t("collection.fieldName")}</strong></label>
           <input ref={nameRef} id="collection-rollup-name" className="settings-input" value={draft.label} maxLength={120}
-            disabled={busy} onChange={(event) => { setDraft({ ...draft, label: event.target.value }); setNotice(null); }} /></div>
+            disabled={busy} onChange={(event) => { setDraft({ ...draft, label: event.target.value }); setNotice(null); }} /></div> : null}
         <div className="settings-row-copy"><label htmlFor="collection-rollup-relation"><strong>{props.t("collection.rollupRelationField")}</strong></label>
-          <select id="collection-rollup-relation" className="settings-input" value={draft.relationColumnId} disabled={busy || loading}
+          <select ref={relationRef} id="collection-rollup-relation" className="settings-input" value={draft.relationColumnId} disabled={busy || loading}
             onChange={(event) => chooseRelation(event.target.value)}>{relations.map((column) =>
               <option key={column.columnId} value={column.columnId}>{column.label}</option>)}</select></div>
         <div className="settings-row-copy"><label htmlFor="collection-rollup-aggregation"><strong>{props.t("collection.rollupAggregation")}</strong></label>
@@ -96,7 +117,7 @@ export function ManagedCollectionRollupDialog(props: {
           disabled={busy || loading || props.blocked || !valid(draft, target)}>{props.t(busy ? "collection.saving" : "collection.save")}</button>
           <button type="button" className="settings-button" disabled={busy} onClick={cancel}>{props.t("collection.cancel")}</button></div>
       </form>}
-    {notice ? <p className={`settings-inline-status ${notice === "added" ? "success" : "error"}`} role="status">
+    {notice ? <p className={`settings-inline-status ${notice === "added" || notice === "updated" ? "success" : "error"}`} role="status">
       {props.t(`collection.rollup_${notice}`)}</p> : null}
   </section>;
 
@@ -123,8 +144,13 @@ export function ManagedCollectionRollupDialog(props: {
 }
 
 function valid(draft: Draft, target: CollectionSnapshot | null): boolean {
-  return draft.label.trim().length > 0 && (draft.aggregation === "count" ||
-    !!target?.columns.some((column) => column.columnId === draft.targetColumnId && column.canUseAsRollupTarget));
+  const validTarget = draft.aggregation === "count" ||
+    !!target?.columns.some((column) => column.columnId === draft.targetColumnId && column.canUseAsRollupTarget);
+  const changed = !draft.columnId || draft.relationColumnId !== draft.originalRelationColumnId ||
+    draft.aggregation !== draft.originalAggregation ||
+    (draft.aggregation === "sum" ? draft.targetColumnId : "") !==
+      (draft.originalAggregation === "sum" ? draft.originalTargetColumnId : "");
+  return (draft.columnId !== undefined || draft.label.trim().length > 0) && validTarget && changed;
 }
 function collectionRequestId(): `collection_request_${string}` {
   return `collection_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;

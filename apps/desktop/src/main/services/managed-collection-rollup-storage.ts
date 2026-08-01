@@ -56,6 +56,7 @@ export function projectRollupColumns(
       canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.rollup,
       canUseAsLookupTarget: summary.canUseAsLookupTarget && !column.rollup,
       canUseAsRollupTarget: numeric,
+      canEditRollup: column.rollup?.kind === "pige_single_rollup",
       ...(column.rollup ? { rollup: column.rollup } : {})
     };
   });
