@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T03:04:00.000Z",
+  "reviewedAt": "2026-08-01T19:15:03.263Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Typed Agent Runtime Policy now binds validated PIGE.md, model locality, language, memory, retrieval, OCR, permission and source-storage owners with model-turn currentness enforcement.",
+    "scope": "Knowledge Tree dense-layout and assistive tree semantics close PIGE-UI-004/E6.09 with deterministic source-backed product evidence; release-wide unsigned package smoke remains owned by release acceptance.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "499084ae75772409ec2e3a54e3bf249ae2f83d91dbd00dcffbdf18eac8d5128e"
+    "reviewedSha256": "ff925f1c02da05f0a0e14981a8f17010ec9a1ad3710dcb5e144703b0e7306bf5"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-policy-enforcement-review",
-      "task": "Review typed Agent policy compilation and effect-owner enforcement",
+      "reviewerId": "knowledge-tree-a11y-review",
+      "task": "Review dense Knowledge Tree layout, keyboard and assistive semantics",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews policy contracts and acceptance while separate schema, Home, ingest, Vault, OCR, permission, source-storage and backup tests execute the owner boundaries."
+      "independence": "Planning reviews the exact acceptance projection while renderer implementation and direct dense-tree tests provide separate executable evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-policy-enforcement-review",
+      "reviewerId": "knowledge-tree-a11y-review",
       "blockerCount": 0,
-      "summary": "The existing PIGE.md editor remains pathless while Agent owners consume only validated bytes and a typed revision."
+      "summary": "Dense Knowledge Tree leaves remain individually navigable after automatic fit, search focus and deterministic zoom into one selected node."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-policy-enforcement-review",
+      "reviewerId": "knowledge-tree-a11y-review",
       "blockerCount": 0,
-      "summary": "Runtime schema, PIGE.md ownership, policy hash, prompt boundary and Home/ingest currentness use one consistent authority order."
+      "summary": "The existing body-free aggregate, visual density bands, exact counts and new assistive sibling positions agree without changing Main or durable data."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-policy-enforcement-review",
+      "reviewerId": "knowledge-tree-a11y-review",
       "blockerCount": 0,
-      "summary": "PIGE-PROMPT-002 and E1.06 cite direct owner tests for every canonical policy domain and have no remaining acceptance gap."
+      "summary": "PIGE-UI-004 and E6.09 now cite direct sparse, dense, keyboard, review-outline and assistive-tree evidence with no functional gap."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-policy-enforcement-review",
+      "reviewerId": "knowledge-tree-a11y-review",
       "blockerCount": 0,
-      "summary": "Policy resolution stays in the bounded policy owner; Home, ingest, OCR, memory, retrieval, permission, source and backup retain effect ownership."
+      "summary": "The existing KnowledgeTreeMap owner keeps layout and camera state renderer-local while preserving Reader navigation and source-backed authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-policy-enforcement-review",
+      "reviewerId": "knowledge-tree-a11y-review",
       "blockerCount": 0,
-      "summary": "Four existing owner documents and one durable decision record the semantic delta without creating another design document."
+      "summary": "Existing owner documents already define deterministic density and accessibility; only acceptance locks change alongside the implementing renderer test."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-policy-context.test.ts tests/unit/pige-policy-service.test.ts tests/unit/home-agent-service.test.ts tests/unit/agent-ingest-service.test.ts tests/unit/ocr-summary-evidence-policy.test.ts tests/unit/capture-service.test.ts tests/unit/permission-policy-store.test.ts tests/unit/permission-broker-service.test.ts tests/unit/backup-memory-preference-service.test.ts",
+      "command": "npx vitest run tests/unit/knowledge-tree-ui.test.ts",
       "status": "passed",
-      "evidence": "Focused policy, Vault, Home, ingest, OCR, capture, permission and backup-owner tests cover compilation, currentness and concrete enforcement."
+      "evidence": "Direct renderer tests cover density bands, review outlines, non-colliding dense leaves, complete tree positions, camera, search, keyboard and Reader navigation."
     },
     {
-      "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
+      "command": "npm run typecheck && npm run verify:architecture-reset && npm run verify:change",
       "status": "passed",
-      "evidence": "The policy implementation compiles, builds and keeps the frozen Home and ingest owners within architecture budgets."
+      "evidence": "The renderer-only change compiles and remains within the existing Knowledge Tree ownership and change boundary."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Independent snapshot, decision and semantic claims agree with the executable policy acceptance; remote Verify owns final trace execution."
+      "evidence": "Independent snapshot and semantic claims bind the exact PIGE-UI-004 and E6.09 acceptance promotion; remote Verify owns final execution."
     }
   ],
   "coordination": {
-    "taskId": "agent-policy-enforcement-20260802",
-    "taskTitle": "Bind typed Agent policy and effect-owner enforcement",
+    "taskId": "knowledge-tree-dense-a11y-20260802",
+    "taskTitle": "Close dense Knowledge Tree visual and assistive semantics",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The public Agent policy schema adds only a PIGE.md revision; no renderer API, secret, path, raw settings or durable policy body is exposed.",
-    "acknowledgement": "Planning records the exact owner matrix and promotes only PIGE-PROMPT-002 and E1.06 after executable policy currentness and enforcement pass."
+    "compatibility": "No Main, IPC, durable tree, source authority or Reader contract changes; only renderer layout and assistive semantics are completed.",
+    "acknowledgement": "Planning promotes only PIGE-UI-004 and E6.09 from the direct sparse and dense renderer evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

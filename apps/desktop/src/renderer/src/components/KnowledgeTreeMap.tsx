@@ -26,6 +26,9 @@ type VisualNode = {
   readonly sourceCount: number;
   readonly leafCount: number;
   readonly status: KnowledgeTreeNode["status"] | KnowledgeTreePageRef["status"] | "active";
+  readonly siblingIndex: number;
+  readonly siblingCount: number;
+  readonly childCount: number;
   readonly pageId?: string;
   readonly focusKey?: string;
 };
@@ -35,6 +38,13 @@ type VisualTree = {
   readonly byId: ReadonlyMap<string, VisualNode>;
   readonly maxWeight: number;
   readonly maxDensity: number;
+  readonly layoutWidth: number;
+  readonly fitZoom: number;
+  readonly fitPan: { readonly x: number; readonly y: number };
+};
+
+type LayoutNode = Omit<VisualNode, "x" | "y" | "childCount"> & {
+  readonly children: readonly LayoutNode[];
 };
 
 type ViewportAnnouncement =
@@ -65,8 +75,8 @@ export function KnowledgeTreeMap(props: {
   const [query, setQuery] = useState("");
   const [reviewOnly, setReviewOnly] = useState(false);
   const [activeId, setActiveId] = useState(() => visual.nodes[1]?.id ?? visual.nodes[0]?.id ?? "pige-root");
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(() => visual.fitZoom);
+  const [pan, setPan] = useState(() => visual.fitPan);
   const [dragging, setDragging] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [viewportAnnouncement, setViewportAnnouncement] = useState<ViewportAnnouncement | null>(null);
@@ -127,6 +137,15 @@ export function KnowledgeTreeMap(props: {
     ? visual.nodes.filter((node) => node.parentId === active.id && nodeInteractive(node))
     : [];
 
+  const cameraForNode = (node: VisualNode): { readonly zoom: number; readonly pan: { readonly x: number; readonly y: number } } => {
+    if (node.kind === "root") return { zoom: visual.fitZoom, pan: visual.fitPan };
+    const nextZoom = node.level <= 1 ? 1.24 : 1.5;
+    return {
+      zoom: nextZoom,
+      pan: { x: 450 - node.x * nextZoom, y: 310 - node.y * nextZoom }
+    };
+  };
+
   useEffect(() => {
     if (!moreOpen) return;
     const move = (): void => moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
@@ -146,11 +165,9 @@ export function KnowledgeTreeMap(props: {
     if (!replacement || !nodeInteractive(replacement)) replacement = visual.nodes.find(nodeInteractive);
     if (!replacement || replacement.id === activeId) return;
     setActiveId(replacement.id);
-    const nextZoom = replacement.kind === "root" ? 1 : replacement.level <= 1 ? 1.24 : 1.5;
-    setZoom(nextZoom);
-    setPan(replacement.kind === "root"
-      ? { x: 0, y: 0 }
-      : { x: 450 - replacement.x * nextZoom, y: 310 - replacement.y * nextZoom });
+    const nextCamera = cameraForNode(replacement);
+    setZoom(nextCamera.zoom);
+    setPan(nextCamera.pan);
     if (shouldRestoreTreeFocus) {
       const move = (): void => nodeRefs.current.get(replacement!.id)?.focus();
       if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
@@ -163,8 +180,8 @@ export function KnowledgeTreeMap(props: {
     setAnnouncedMode(nextMode);
     setViewportAnnouncement(null);
     if (nextMode === "tree") {
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
+      setZoom(visual.fitZoom);
+      setPan(visual.fitPan);
     }
     if (nextMode !== "list" || !active || active.level < 3) return;
     let visibleAncestor = active;
@@ -172,20 +189,16 @@ export function KnowledgeTreeMap(props: {
       visibleAncestor = visual.byId.get(visibleAncestor.parentId) ?? visual.nodes[0]!;
     }
     setActiveId(visibleAncestor.id);
-    const nextZoom = visibleAncestor.kind === "root" ? 1 : 1.24;
-    setZoom(nextZoom);
-    setPan(visibleAncestor.kind === "root"
-      ? { x: 0, y: 0 }
-      : { x: 450 - visibleAncestor.x * nextZoom, y: 310 - visibleAncestor.y * nextZoom });
+    const nextCamera = cameraForNode(visibleAncestor);
+    setZoom(nextCamera.zoom);
+    setPan(nextCamera.pan);
   };
 
   const focusNode = (node: VisualNode, moveFocus = false, announce = true): void => {
     setActiveId(node.id);
-    const nextZoom = node.kind === "root" ? 1 : node.level <= 1 ? 1.24 : 1.5;
-    setZoom(nextZoom);
-    setPan(node.kind === "root"
-      ? { x: 0, y: 0 }
-      : { x: 450 - node.x * nextZoom, y: 310 - node.y * nextZoom });
+    const nextCamera = cameraForNode(node);
+    setZoom(nextCamera.zoom);
+    setPan(nextCamera.pan);
     setAnnouncedMode(null);
     if (announce) setViewportAnnouncement({ kind: "focused", title: node.title });
     if (moveFocus) {
@@ -209,10 +222,10 @@ export function KnowledgeTreeMap(props: {
   };
 
   const fitTree = (): void => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    setZoom(visual.fitZoom);
+    setPan(visual.fitPan);
     setAnnouncedMode(null);
-    setViewportAnnouncement({ kind: "zoom", percent: 100 });
+    setViewportAnnouncement({ kind: "zoom", percent: Math.round(visual.fitZoom * 100) });
   };
 
   const updateQuery = (nextQuery: string): void => {
@@ -371,6 +384,9 @@ export function KnowledgeTreeMap(props: {
 
   return (
     <div className={`tree-card mode-${mode}`}>
+      <p id="knowledge-tree-map-description" className="visually-hidden">
+        {`${props.t("knowledgeTree.showing").replace("{count}", String(visual.nodes.length - 1))}. ${props.t("knowledgeTree.canvas")}`}
+      </p>
       <div className="knowledge-map-modes" role="group" aria-label={props.t("knowledgeTree.viewModes")}>
         {(["tree", "network", "list"] as const).map((nextMode) => (
           <button
@@ -398,7 +414,14 @@ export function KnowledgeTreeMap(props: {
         onPointerCancel={endPointerDrag}
         onWheel={handleWheel}
       >
-        <svg className="tree-svg" viewBox="0 0 900 620" role="tree" aria-label={props.t("knowledgeTree.title")}>
+        <svg
+          className="tree-svg"
+          viewBox="0 0 900 620"
+          role="tree"
+          aria-label={props.t("knowledgeTree.title")}
+          aria-describedby="knowledge-tree-map-description"
+          aria-orientation="vertical"
+        >
           <g className="knowledge-map-stage" transform={transform}>
             <g aria-hidden="true">
               {visual.nodes.filter((node) => node.parentId).map((node) => {
@@ -437,6 +460,9 @@ export function KnowledgeTreeMap(props: {
                     className={`knowledge-map-node level-${Math.min(node.level, 4)} density-${densityBand}${node.status === "needs_review" ? " needs-review" : ""}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
                     role="treeitem"
                     aria-level={node.level + 1}
+                    aria-posinset={node.siblingIndex + 1}
+                    aria-setsize={node.siblingCount}
+                    aria-expanded={node.childCount > 0 ? true : undefined}
                     aria-label={node.title}
                     aria-description={formatNodeSummary(props.t, node)}
                     aria-hidden={!interactive}
@@ -530,7 +556,7 @@ export function KnowledgeTreeMap(props: {
       ) : null}
 
       <div className="knowledge-minimap" aria-hidden="true">
-        <svg viewBox="0 0 900 620" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox={`0 0 ${visual.layoutWidth} 620`} preserveAspectRatio="xMidYMid meet">
           {visual.nodes.filter((node) => node.parentId).map((node) => {
             const parent = visual.byId.get(node.parentId!);
             if (!parent) return null;
@@ -778,51 +804,99 @@ function KnowledgeTreeRelatedGroup(props: {
 }
 
 function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) => string): VisualTree {
-  const nodes: VisualNode[] = [{
+  const layoutRoots = roots.map((node, index) => buildKnowledgeLayoutNode(
+    node,
+    "pige-root",
+    1,
+    `root-${index}`,
+    index,
+    roots.length,
+    t
+  ));
+  const terminalCount = Math.max(1, layoutRoots.reduce((total, node) => total + layoutTerminalCount(node), 0));
+  const layoutWidth = Math.max(900, 76 + Math.max(0, terminalCount - 1) * 28);
+  const maxDepth = Math.max(1, ...layoutRoots.map(layoutDepth));
+  let nextTerminalX = (layoutWidth - Math.max(0, terminalCount - 1) * 28) / 2;
+  const nodes: VisualNode[] = [];
+  const appendPositioned = (node: LayoutNode): number => {
+    const childXs = node.children.map(appendPositioned);
+    const x = childXs.length > 0
+      ? (childXs[0]! + childXs[childXs.length - 1]!) / 2
+      : nextTerminalX;
+    if (childXs.length === 0) nextTerminalX += 28;
+    const { children: _children, ...visualNode } = node;
+    nodes.push({
+      ...visualNode,
+      x,
+      y: 580 - node.level / maxDepth * 520,
+      childCount: node.children.length
+    });
+    return x;
+  };
+  layoutRoots.forEach(appendPositioned);
+  nodes.push({
     id: "pige-root",
     parentId: null,
     title: t("knowledgeTree.root"),
     kind: "root",
     level: 0,
-    x: 450,
+    x: layoutWidth / 2,
     y: 590,
     weight: roots.reduce((sum, node) => sum + node.metrics.weight, 0),
     fragmentCount: roots.reduce((sum, node) => sum + node.metrics.fragmentPageCount, 0),
     sourceCount: roots.reduce((sum, node) => sum + node.metrics.sourceCount, 0),
     leafCount: roots.reduce((sum, node) => sum + node.metrics.leafCount, 0),
-    status: "active"
-  }];
-  const rootSpan = Math.PI * .82;
-
-  roots.forEach((node, index) => {
-    const ratio = roots.length <= 1 ? .5 : index / (roots.length - 1);
-    const angle = -Math.PI + (Math.PI - rootSpan) / 2 + rootSpan * ratio;
-    appendKnowledgeNode(nodes, node, "pige-root", { x: 450, y: 590 }, angle, 1, `root-${index}`, t);
+    status: "active",
+    siblingIndex: 0,
+    siblingCount: 1,
+    childCount: roots.length
   });
+  nodes.sort((left, right) => left.level - right.level || left.x - right.x || left.id.localeCompare(right.id));
+  const fitZoom = layoutWidth <= 900 ? 1 : 820 / layoutWidth;
+  const fitPan = layoutWidth <= 900 ? { x: 0, y: 0 } : { x: (900 - layoutWidth * fitZoom) / 2, y: 0 };
 
   return {
     nodes,
     byId: new Map(nodes.map((node) => [node.id, node])),
     maxWeight: Math.max(1, ...nodes.map((node) => node.weight)),
-    maxDensity: Math.max(1, ...nodes.map(evidenceDensity))
+    maxDensity: Math.max(1, ...nodes.map(evidenceDensity)),
+    layoutWidth,
+    fitZoom,
+    fitPan
   };
 }
 
-function appendKnowledgeNode(
-  target: VisualNode[],
+function buildKnowledgeLayoutNode(
   node: KnowledgeTreeNode,
   parentId: string,
-  parent: { readonly x: number; readonly y: number },
-  angle: number,
   level: number,
   pathKey: string,
+  siblingIndex: number,
+  siblingCount: number,
   t: (key: string) => string
-): void {
-  const distance = level === 1 ? 275 : level === 2 ? 118 : Math.max(46, 82 - level * 7);
-  const x = clamp(parent.x + Math.cos(angle) * distance, 38, 862);
-  const y = clamp(parent.y + Math.sin(angle) * distance, 34, 580);
+): LayoutNode {
   const id = `node-${pathKey}-${node.id}`;
-  target.push({
+  const childCount = node.children.length + node.pageRefs.length;
+  const children: LayoutNode[] = [
+    ...node.children.map((child, index) => buildKnowledgeLayoutNode(
+      child,
+      id,
+      level + 1,
+      `${pathKey}-child-${index}`,
+      index,
+      childCount,
+      t
+    )),
+    ...node.pageRefs.map((page, index) => buildPageLayoutNode(
+      page,
+      id,
+      level + 1,
+      `${pathKey}-page-${index}`,
+      node.children.length + index,
+      childCount
+    ))
+  ];
+  return {
     id,
     parentId,
     title: node.kind === "source" && !node.navigation
@@ -832,57 +906,53 @@ function appendKnowledgeNode(
         : node.title,
     kind: node.kind,
     level,
-    x,
-    y,
     weight: node.metrics.weight,
     fragmentCount: node.metrics.fragmentPageCount,
     sourceCount: node.metrics.sourceCount,
     leafCount: node.metrics.leafCount,
     status: node.status,
+    siblingIndex,
+    siblingCount,
+    children,
     ...(node.navigation ? { pageId: node.navigation.pageId, focusKey: `${pathKey}-node` } : {})
-  });
-
-  const children = [
-    ...node.children.map((child, index) => ({ type: "node" as const, child, index })),
-    ...node.pageRefs.map((page, index) => ({ type: "page" as const, page, index }))
-  ];
-  const spread = Math.min(.9, .23 + children.length * .055) / Math.max(1, level * .72);
-  children.forEach((child, index) => {
-    const offset = children.length <= 1 ? 0 : (index / (children.length - 1) - .5) * spread;
-    if (child.type === "node") {
-      appendKnowledgeNode(target, child.child, id, { x, y }, angle + offset, level + 1, `${pathKey}-child-${child.index}`, t);
-      return;
-    }
-    appendPageNode(target, child.page, id, { x, y }, angle + offset, level + 1, `${pathKey}-page-${child.index}`);
-  });
+  };
 }
 
-function appendPageNode(
-  target: VisualNode[],
+function buildPageLayoutNode(
   page: KnowledgeTreePageRef,
   parentId: string,
-  parent: { readonly x: number; readonly y: number },
-  angle: number,
   level: number,
-  focusKey: string
-): void {
-  const distance = Math.max(40, 70 - level * 6);
-  target.push({
+  focusKey: string,
+  siblingIndex: number,
+  siblingCount: number
+): LayoutNode {
+  return {
     id: `page-${focusKey}-${page.pageId}`,
     parentId,
     title: page.title,
     kind: "page",
     level,
-    x: clamp(parent.x + Math.cos(angle) * distance, 30, 870),
-    y: clamp(parent.y + Math.sin(angle) * distance, 26, 584),
     weight: Math.max(1, page.sourceIds.length),
     fragmentCount: 1,
     sourceCount: page.sourceIds.length,
     leafCount: 1,
     status: page.status,
+    siblingIndex,
+    siblingCount,
+    children: [],
     pageId: page.pageId,
     focusKey
-  });
+  };
+}
+
+function layoutTerminalCount(node: LayoutNode): number {
+  return node.children.length === 0
+    ? 1
+    : node.children.reduce((total, child) => total + layoutTerminalCount(child), 0);
+}
+
+function layoutDepth(node: LayoutNode): number {
+  return node.children.length === 0 ? node.level : Math.max(...node.children.map(layoutDepth));
 }
 
 function branchPath(parent: VisualNode, node: VisualNode): string {
@@ -923,8 +993,4 @@ function formatNodeSummary(t: (key: string) => string, node: VisualNode): string
     .replace("{leaves}", String(node.leafCount))
     .replace("{density}", String(evidenceDensity(node)));
   return node.status === "needs_review" ? `${summary} ${t("knowledgeTree.needsReview")}.` : summary;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
