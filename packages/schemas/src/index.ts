@@ -1278,6 +1278,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
+    "update_collection_lookup",
     "add_collection_rollup",
     "update_collection_rollup",
     "rename_collection_column",
@@ -6411,6 +6412,21 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_lookup_update"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      targetColumnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_lookup_update_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      targetColumnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_rollup_add"),
       tableId: TableIdSchema,
       columnId: ColumnIdSchema,
@@ -6911,6 +6927,7 @@ export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormu
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
+export const COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL = "collections.updateLookupColumn" as const;
 export const COLLECTION_UPDATE_VIEW_CHANNEL = "collections.updateView" as const;
 export const COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL = "collections.addRollupColumn" as const;
 export const COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL = "collections.updateRollupColumn" as const;
@@ -6999,6 +7016,7 @@ export const CollectionColumnSummarySchema = z.object({
   canUseAsRelationDisplay: z.boolean().default(false),
   canEditRelation: z.boolean().default(false),
   canUseAsLookupTarget: z.boolean().default(false),
+  canEditLookup: z.boolean().default(false),
   canUseAsRollupTarget: z.boolean().default(false),
   canEditRollup: z.boolean().default(false),
   hasInboundRelationDescriptors: z.boolean().default(false),
@@ -7051,6 +7069,13 @@ export const CollectionColumnSummarySchema = z.object({
       code: "custom",
       path: ["canEditRollup"],
       message: "Only a current Pige rollup may be editable."
+    });
+  }
+  if (column.canEditLookup !== (column.lookup?.kind === "pige_single_lookup")) {
+    context.addIssue({
+      code: "custom",
+      path: ["canEditLookup"],
+      message: "Only a current Pige lookup may be editable."
     });
   }
   if (column.relation !== undefined &&
@@ -7635,6 +7660,19 @@ export const CollectionAddLookupColumnRequestSchema = z.object({
   targetColumnId: DatasetQueryColumnIdSchema
 }).strict();
 
+/** Replaces the descriptor of one current Pige-owned lookup column. */
+export const CollectionUpdateLookupColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  targetColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
 /** Creates one read-only count or sum rollup over an existing source-table relation. */
 export const CollectionAddRollupColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -8021,6 +8059,34 @@ export const CollectionAddLookupColumnResultSchema = z.discriminatedUnion("statu
   if (column?.lookup?.relationColumnId !== result.relationColumnId ||
       column.lookup.targetColumnId !== result.targetColumnId) {
     context.addIssue({ code: "custom", path: ["columnId"], message: "Committed lookup columns must project the exact descriptor." });
+  }
+});
+
+const CollectionUpdateLookupColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  targetColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionUpdateLookupColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionUpdateLookupColumnResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateLookupColumnResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateLookupColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionUpdateLookupColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionUpdateLookupColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection lookup-update snapshots must match the request identity." });
+  }
+  if (result.status !== "committed") return;
+  const descriptor = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId)?.lookup;
+  if (descriptor?.relationColumnId !== result.relationColumnId || descriptor.targetColumnId !== result.targetColumnId) {
+    context.addIssue({ code: "custom", path: ["columnId"], message: "Committed lookup updates must project the exact descriptor." });
   }
 });
 
@@ -10832,6 +10898,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
+    "update_collection_lookup",
     "add_collection_rollup",
     "update_collection_rollup",
     "rename_collection_column",
@@ -11434,6 +11501,8 @@ export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRel
 export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
 export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLookupColumnRequestSchema>;
 export type CollectionAddLookupColumnResult = z.infer<typeof CollectionAddLookupColumnResultSchema>;
+export type CollectionUpdateLookupColumnRequest = z.infer<typeof CollectionUpdateLookupColumnRequestSchema>;
+export type CollectionUpdateLookupColumnResult = z.infer<typeof CollectionUpdateLookupColumnResultSchema>;
 export type CollectionAddRollupColumnRequest = z.infer<typeof CollectionAddRollupColumnRequestSchema>;
 export type CollectionAddRollupColumnResult = z.infer<typeof CollectionAddRollupColumnResultSchema>;
 export type CollectionUpdateRollupColumnRequest = z.infer<typeof CollectionUpdateRollupColumnRequestSchema>;

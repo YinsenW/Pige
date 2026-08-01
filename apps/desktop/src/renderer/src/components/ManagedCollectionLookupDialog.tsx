@@ -1,12 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CollectionAddLookupColumnRequest, CollectionSnapshot } from "@pige/schemas";
+import type { CollectionAddLookupColumnRequest, CollectionSnapshot, CollectionUpdateLookupColumnRequest } from "@pige/schemas";
 
-type LookupNotice = "added" | "stale" | "not_found" | "ineligible" | "failed";
+type LookupNotice = "added" | "updated" | "stale" | "not_found" | "ineligible" | "failed";
 type LookupDraft = {
+  readonly columnId?: string;
   readonly expectedRevisionId: string;
   readonly label: string;
   readonly relationColumnId: string;
   readonly targetColumnId: string;
+  readonly originalRelationColumnId?: string;
+  readonly originalTargetColumnId?: string;
 };
 
 export function ManagedCollectionLookupDialog(props: {
@@ -26,6 +29,7 @@ export function ManagedCollectionLookupDialog(props: {
   const sequence = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const nameRef = useRef<HTMLInputElement | null>(null);
+  const relationRef = useRef<HTMLSelectElement | null>(null);
   const ownerKey = `${props.activeVaultId}:${props.snapshot.datasetId}:${props.snapshot.tableId}`;
   const ownerRef = useRef(ownerKey);
   ownerRef.current = ownerKey;
@@ -41,8 +45,8 @@ export function ManagedCollectionLookupDialog(props: {
   }, [ownerKey]);
 
   useLayoutEffect(() => {
-    if (draft && !busy && !loading) nameRef.current?.focus();
-  }, [draft?.relationColumnId, busy, loading]);
+    if (draft && !busy && !loading) (draft.columnId ? relationRef.current : nameRef.current)?.focus();
+  }, [draft?.columnId, draft?.relationColumnId, busy, loading]);
 
   const relations = props.snapshot.columns.filter((column) => column.relation?.kind === "pige_single_relation");
   const begin = (): void => {
@@ -58,6 +62,24 @@ export function ManagedCollectionLookupDialog(props: {
     setNotice(null);
     props.onActiveChange(true);
     void loadTarget(relation.columnId, next.expectedRevisionId);
+  };
+
+  const beginEdit = (columnId: string): void => {
+    const column = props.snapshot.columns.find((candidate) => candidate.columnId === columnId);
+    if (props.blocked || !column?.canEditLookup || !column.lookup) return;
+    const next: LookupDraft = {
+      columnId,
+      expectedRevisionId: props.snapshot.revisionId,
+      label: column.label,
+      relationColumnId: column.lookup.relationColumnId,
+      targetColumnId: column.lookup.targetColumnId,
+      originalRelationColumnId: column.lookup.relationColumnId,
+      originalTargetColumnId: column.lookup.targetColumnId
+    };
+    setDraft(next);
+    setNotice(null);
+    props.onActiveChange(true);
+    void loadTarget(next.relationColumnId, next.expectedRevisionId);
   };
 
   const chooseRelation = (relationColumnId: string): void => {
@@ -81,24 +103,28 @@ export function ManagedCollectionLookupDialog(props: {
 
   const submit = async (): Promise<void> => {
     if (!draft || props.blocked || busy || loading || !isValid(draft, targetSnapshot)) return;
-    const request: CollectionAddLookupColumnRequest = {
-      apiVersion: 1,
+    const base = {
+      apiVersion: 1 as const,
       requestId: createCollectionRequestId(),
       activeVaultId: props.activeVaultId,
       datasetId: props.snapshot.datasetId,
       tableId: props.snapshot.tableId,
       expectedRevisionId: draft.expectedRevisionId,
-      label: draft.label.trim(),
       relationColumnId: draft.relationColumnId,
       targetColumnId: draft.targetColumnId
     };
+    const request: CollectionAddLookupColumnRequest | CollectionUpdateLookupColumnRequest = draft.columnId
+      ? { ...base, columnId: draft.columnId }
+      : { ...base, label: draft.label.trim() };
     const requestSequence = sequence.current + 1;
     sequence.current = requestSequence;
     const expectedOwner = ownerKey;
     setBusy(true);
     setNotice(null);
     try {
-      const result = await window.pige.collections.addLookupColumn(request);
+      const result = "columnId" in request
+        ? await window.pige.collections.updateLookupColumn(request)
+        : await window.pige.collections.addLookupColumn(request);
       if (sequence.current !== requestSequence || ownerRef.current !== expectedOwner ||
           result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId ||
           result.datasetId !== request.datasetId || result.tableId !== request.tableId ||
@@ -108,7 +134,7 @@ export function ManagedCollectionLookupDialog(props: {
       if (result.status === "committed") {
         setDraft(null);
         setTargetSnapshot(null);
-        setNotice("added");
+        setNotice("columnId" in request ? "updated" : "added");
         props.onActiveChange(false);
         props.onFocusColumn(result.columnId);
       } else {
@@ -124,22 +150,25 @@ export function ManagedCollectionLookupDialog(props: {
     }
   };
 
-  if (!draft && !props.snapshot.canAddLookupColumn && !notice) return null;
+  const editable = props.snapshot.columns.filter((column) => column.canEditLookup);
+  if (!draft && !props.snapshot.canAddLookupColumn && editable.length === 0 && !notice) return null;
   return <section className="settings-card settings-row tall" aria-label={props.t("collection.lookupBuilder")}>
-    {!draft ? props.snapshot.canAddLookupColumn ? <div className="settings-row-control">
-      <button ref={triggerRef} type="button" className="settings-button" disabled={props.blocked || busy} onClick={begin}>
+    {!draft ? <div className="settings-row-control">
+      {props.snapshot.canAddLookupColumn ? <button ref={triggerRef} type="button" className="settings-button" disabled={props.blocked || busy} onClick={begin}>
         {props.t("collection.addLookupField")}
-      </button>
-    </div> : null : <form aria-label={props.t("collection.lookupBuilder")} onSubmit={(event) => { event.preventDefault(); void submit(); }}
+      </button> : null}
+      {editable.map((column) => <button key={column.columnId} type="button" className="settings-button"
+        disabled={props.blocked || busy} onClick={() => beginEdit(column.columnId)}>{props.t("collection.editLookupField")}: {column.label}</button>)}
+    </div> : <form aria-label={props.t("collection.lookupBuilder")} onSubmit={(event) => { event.preventDefault(); void submit(); }}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancel(); } }}>
-      <div className="settings-row-copy">
+      {!draft.columnId ? <div className="settings-row-copy">
         <label htmlFor="collection-lookup-name"><strong>{props.t("collection.fieldName")}</strong></label>
         <input ref={nameRef} id="collection-lookup-name" className="settings-input" value={draft.label}
           maxLength={120} disabled={busy} onChange={(event) => { setDraft({ ...draft, label: event.target.value }); setNotice(null); }} />
-      </div>
+      </div> : null}
       <div className="settings-row-copy">
         <label htmlFor="collection-lookup-relation"><strong>{props.t("collection.lookupRelationField")}</strong></label>
-        <select id="collection-lookup-relation" className="settings-input" value={draft.relationColumnId}
+        <select ref={relationRef} id="collection-lookup-relation" className="settings-input" value={draft.relationColumnId}
           disabled={busy || loading} onChange={(event) => chooseRelation(event.target.value)}>
           {relations.map((column) => <option key={column.columnId} value={column.columnId}>{column.label}</option>)}
         </select>
@@ -164,7 +193,7 @@ export function ManagedCollectionLookupDialog(props: {
         <button type="button" className="settings-button" disabled={busy} onClick={cancel}>{props.t("collection.cancel")}</button>
       </div>
     </form>}
-    {notice ? <p className={`settings-inline-status ${notice === "added" ? "success" : "error"}`} role="status">
+    {notice ? <p className={`settings-inline-status ${notice === "added" || notice === "updated" ? "success" : "error"}`} role="status">
       {props.t(`collection.lookup_${notice}`)}
     </p> : null}
   </section>;
@@ -204,7 +233,9 @@ export function ManagedCollectionLookupDialog(props: {
 }
 
 function isValid(draft: LookupDraft, target: CollectionSnapshot | null): boolean {
-  return draft.label.trim().length > 0 && !!target?.columns.some((column) =>
+  const changed = !draft.columnId || draft.relationColumnId !== draft.originalRelationColumnId ||
+    draft.targetColumnId !== draft.originalTargetColumnId;
+  return (draft.columnId !== undefined || draft.label.trim().length > 0) && changed && !!target?.columns.some((column) =>
     column.columnId === draft.targetColumnId && column.canUseAsLookupTarget);
 }
 

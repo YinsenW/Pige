@@ -73,6 +73,14 @@ const addLookupRequest = {
   relationColumnId: "column_relationabcdef",
   targetColumnId: "column_targettierabc"
 } as const;
+const updateLookupRequest = {
+  ...openRequest,
+  requestId: "collection_request_lookupupdateipc01",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  columnId: "column_lookupabcdef",
+  relationColumnId: "column_relationabcdef",
+  targetColumnId: "column_targettierabc"
+} as const;
 const addRollupRequest = {
   ...openRequest, requestId: "collection_request_rollupaddipc0001",
   expectedRevisionId: "dataset_rev_20260727_abcdefghijkl", label: "Company total",
@@ -155,6 +163,7 @@ function makeHarness(options: {
   readonly updateFormulaCollectionColumn?: (request: typeof updateFormulaRequest) => unknown;
   readonly addRelationCollectionColumn?: (request: typeof addRelationRequest) => unknown;
   readonly addLookupCollectionColumn?: (request: typeof addLookupRequest) => unknown;
+  readonly updateLookupCollectionColumn?: (request: typeof updateLookupRequest) => unknown;
   readonly addRollupCollectionColumn?: (request: typeof addRollupRequest) => unknown;
   readonly updateRollupCollectionColumn?: (request: typeof updateRollupRequest) => unknown;
   readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
@@ -249,6 +258,11 @@ function makeHarness(options: {
     datasetId: request.datasetId, tableId: request.tableId, relationColumnId: request.relationColumnId,
     targetColumnId: request.targetColumnId, status: "not_found"
   })));
+  const updateLookupCollectionColumn = vi.fn(options.updateLookupCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+    relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId, status: "not_found"
+  })));
   const addRollupCollectionColumn = vi.fn(options.addRollupCollectionColumn ?? ((request) => ({
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, relationColumnId: request.relationColumnId,
@@ -328,6 +342,7 @@ function makeHarness(options: {
     updateFormulaCollectionColumn,
     addRelationCollectionColumn,
     addLookupCollectionColumn,
+    updateLookupCollectionColumn,
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
@@ -351,6 +366,7 @@ function makeHarness(options: {
     updateFormulaCollectionColumn,
     addRelationCollectionColumn,
     addLookupCollectionColumn,
+    updateLookupCollectionColumn,
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
@@ -380,6 +396,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.editRelationCell",
       "collections.addLookupColumn",
       "collections.addRollupColumn",
+      "collections.updateLookupColumn",
       "collections.updateRollupColumn",
       "collections.renameColumn",
       "collections.createView",
@@ -509,6 +526,24 @@ describe("registerManagedCollectionIpc", () => {
     }) });
     await expect(mismatched.handlers.get("collections.addRollupColumn")!(
       { sender: {} } as IpcMainInvokeEvent, addRollupRequest
+    )).rejects.toThrow("response identity did not match");
+  });
+
+  it("strictly binds lookup updates to the exact current descriptor identity", async () => {
+    const accepted = makeHarness();
+    await expect(accepted.handlers.get("collections.updateLookupColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateLookupRequest
+    )).resolves.toMatchObject({ status: "not_found", columnId: updateLookupRequest.columnId });
+    expect(accepted.updateLookupCollectionColumn).toHaveBeenCalledWith(updateLookupRequest);
+    await expect(accepted.handlers.get("collections.updateLookupColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, { ...updateLookupRequest, rawSql: "select value" }
+    )).rejects.toThrow();
+    const mismatched = makeHarness({ updateLookupCollectionColumn: (request) => ({ apiVersion: request.apiVersion,
+      requestId: request.requestId, activeVaultId: request.activeVaultId, datasetId: request.datasetId,
+      tableId: request.tableId, columnId: request.columnId, relationColumnId: request.relationColumnId,
+      targetColumnId: "column_otherlookupabc", status: "not_found" }) });
+    await expect(mismatched.handlers.get("collections.updateLookupColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateLookupRequest
     )).rejects.toThrow("response identity did not match");
   });
 

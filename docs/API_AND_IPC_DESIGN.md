@@ -567,8 +567,8 @@ Dataset boundary:
 - Checksum-bound previews use <=50 rows/64 KiB; cursors bind vault/catalog/revision/view/boundary.
   Drift is stale; citation keys yield only Main-derived read-only highlights.
 - Formula/relation/lookup/rollup writes bind revision, IDs and eligibility; relations store same-Dataset row
-  IDs/labels, while lookups and rollups stay derived. Rollup definition updates accept only one
-  current relation plus count or numeric-sum target. CAS/Undo exposes no path/query.
+  IDs/labels, while lookups and rollups stay derived. Lookup definition updates accept one current
+  relation and scalar target; rollup updates accept count or numeric-sum. CAS/Undo exposes no path/query.
 - `collections.updateView`/`collections.renameView`/`collections.trashView` bind Dataset, stable
   view and view revision; definition updates accept only the bounded typed filter/sort shape.
   Committed/stale returns the safe authoritative snapshot and update conflicts retain the renderer draft.

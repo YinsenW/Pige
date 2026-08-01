@@ -3056,6 +3056,7 @@ registerManagedCollectionIpc({
   addRelationCollectionColumn: (request) => getManagedCollectionService().addRelationColumn(request),
   editRelationCollectionCell: (request) => getManagedCollectionService().editRelationCell(request),
   addLookupCollectionColumn: (request) => getManagedCollectionService().addLookupColumn(request),
+  updateLookupCollectionColumn: (request) => getManagedCollectionService().updateLookupColumn(request),
   addRollupCollectionColumn: (request) => getManagedCollectionService().addRollupColumn(request),
   updateRollupCollectionColumn: (request) => getManagedCollectionService().updateRollupColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),

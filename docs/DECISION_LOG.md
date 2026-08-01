@@ -3972,7 +3972,8 @@ Consequences:
 
 - Formulas use numeric inputs; single relations store same-Dataset row IDs. Lookups follow one
   relation to a scalar target, and rollups derive count or numeric sum from one relation. Lookup and
-  rollup cells remain derived/read-only. Guards and Activity own atomic Undo.
+  rollup definitions are revision-editable while their cells remain derived/read-only. Guards and
+  Activity own atomic Undo.
 
 References:
 

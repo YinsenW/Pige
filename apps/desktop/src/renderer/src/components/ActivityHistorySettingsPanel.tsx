@@ -123,6 +123,7 @@ export function ActivityHistorySettingsPanel(props: {
                 : activity.kind === "trash_collection_column"
                   ? "activity.trashedCollectionColumn"
                 : activity.kind === "add_collection_lookup" ? "activity.addedCollectionLookup"
+                : activity.kind === "update_collection_lookup" ? "activity.updatedCollectionLookup"
                 : activity.kind === "add_collection_rollup" ? "activity.addedCollectionRollup"
                 : activity.kind === "update_collection_rollup" ? "activity.updatedCollectionRollup"
                 : activity.kind === "archive_page" ? "activity.archivedPage" : activity.kind === "restore_page" ? "activity.restoredPage"

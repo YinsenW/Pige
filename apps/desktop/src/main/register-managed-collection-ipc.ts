@@ -4,6 +4,7 @@ import {
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
+  COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
@@ -19,6 +20,8 @@ import {
   CollectionEditRelationCellResultSchema,
   CollectionAddLookupColumnRequestSchema,
   CollectionAddLookupColumnResultSchema,
+  CollectionUpdateLookupColumnRequestSchema,
+  CollectionUpdateLookupColumnResultSchema,
   CollectionAddRollupColumnRequestSchema,
   CollectionAddRollupColumnResultSchema,
   CollectionUpdateRollupColumnRequestSchema,
@@ -63,6 +66,8 @@ import {
   type CollectionEditRelationCellResult,
   type CollectionAddLookupColumnRequest,
   type CollectionAddLookupColumnResult,
+  type CollectionUpdateLookupColumnRequest,
+  type CollectionUpdateLookupColumnResult,
   type CollectionAddRollupColumnRequest,
   type CollectionAddRollupColumnResult,
   type CollectionUpdateRollupColumnRequest,
@@ -137,6 +142,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addLookupCollectionColumn?: (
     request: CollectionAddLookupColumnRequest
   ) => CollectionAddLookupColumnResult | Promise<CollectionAddLookupColumnResult>;
+  readonly updateLookupCollectionColumn?: (
+    request: CollectionUpdateLookupColumnRequest
+  ) => CollectionUpdateLookupColumnResult | Promise<CollectionUpdateLookupColumnResult>;
   readonly addRollupCollectionColumn?: (
     request: CollectionAddRollupColumnRequest
   ) => CollectionAddRollupColumnResult | Promise<CollectionAddRollupColumnResult>;
@@ -295,6 +303,14 @@ function failedAddLookupColumn(request: CollectionAddLookupColumnRequest): Colle
   return CollectionAddLookupColumnResultSchema.parse({
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId,
+    relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId, status: "failed"
+  });
+}
+
+function failedUpdateLookupColumn(request: CollectionUpdateLookupColumnRequest): CollectionUpdateLookupColumnResult {
+  return CollectionUpdateLookupColumnResultSchema.parse({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
     relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId, status: "failed"
   });
 }
@@ -664,6 +680,23 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedAddRollupColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionUpdateLookupColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.updateLookupCollectionColumn) return failedUpdateLookupColumn(parsed);
+    let rawResult: CollectionUpdateLookupColumnResult;
+    try { rawResult = await options.updateLookupCollectionColumn(parsed); }
+    catch { return failedUpdateLookupColumn(parsed); }
+    const result = CollectionUpdateLookupColumnResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId || result.columnId !== parsed.columnId ||
+        result.relationColumnId !== parsed.relationColumnId || result.targetColumnId !== parsed.targetColumnId) {
+      throw new Error("Managed Collection lookup-update response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedUpdateLookupColumn(parsed);
   });
 
   options.ipcMain.handle(COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL, async (event, request: unknown) => {
