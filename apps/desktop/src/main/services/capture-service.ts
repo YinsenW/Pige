@@ -330,11 +330,10 @@ export class CaptureService {
       return createRejectedFileResult([{ displayName: "Unknown file", reason: "empty_path" }]);
     }
 
-    const now = new Date();
-    const timestamp = now.toISOString();
-    const dateKey = timestamp.slice(0, 10).replaceAll("-", "");
-    const monthKey = timestamp.slice(0, 7).replace("-", "/");
-    const captureId = createDatedId("cap", dateKey);
+    const timestamp = new Date().toISOString();
+    const dateKey = agentTurnBinding.sourceId.slice(4, 12);
+    const monthKey = `${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}`;
+    const captureId = `cap_${dateKey}_${agentTurnBinding.sourceId.slice(13)}`;
     const sourceIds: string[] = [];
     const rejectedFiles: CaptureFileRejection[] = [];
 

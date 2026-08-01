@@ -87,6 +87,35 @@ describe("Agent turn conversation store", () => {
     expect(events).toEqual([preserved.event]);
   });
 
+  it("persists body-free capture references once and projects them after restart", () => {
+    const vaultPath = makeVault();
+    const writer = new AgentTurnConversationStore();
+    const turn = writer.appendUserTurn(vaultPath, "Use the captured evidence.", {
+      inputKind: "file_picker",
+      locale: "en",
+      authoredTaskIntent: "explicit_user_task"
+    }, { clientTurnId: "turn_20260801_captureref01" });
+    const reference = {
+      sourceId: "src_20260801_captureref01",
+      captureId: "cap_20260801_captureref01",
+      jobId: "job_20260801_captureref01",
+      displayName: "Evidence.md",
+      sourceKind: "markdown_file" as const,
+      pageId: "page_20260801_captureref01"
+    };
+
+    const first = writer.appendCaptureReference(vaultPath, turn, reference);
+    const retry = new AgentTurnConversationStore().appendCaptureReference(vaultPath, turn, reference);
+    const timeline = new AgentTurnConversationStore().readConversationTimeline(vaultPath, turn.event.conversationId);
+    const stored = readConversationFile(vaultPath, turn.locator);
+
+    expect(retry.id).toBe(first.id);
+    expect(stored.match(/"type":"capture_reference"/gu)).toHaveLength(1);
+    expect(timeline?.messages[0]?.captureReferences).toEqual([{ eventId: first.id, ...reference }]);
+    expect(stored).not.toContain("source body");
+    expect(stored).not.toContain("/private/");
+  });
+
   it("appends a bounded assistant event without duplicating the user or source-like body", () => {
     const vaultPath = makeVault();
     const service = new AgentTurnConversationStore();

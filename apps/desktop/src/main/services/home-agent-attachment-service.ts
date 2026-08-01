@@ -81,6 +81,12 @@ export interface PreservedHomeAgentAttachments {
   readonly status: "preserved" | "failed";
   readonly attachmentSetHash: string;
   readonly sourceIds: readonly string[];
+  readonly captureReferences: readonly {
+    readonly sourceId: string;
+    readonly captureId: string;
+    readonly displayName: string;
+    readonly sourceKind: NonNullable<ReturnType<typeof supportedFileSourceKind>> | "text";
+  }[];
   readonly rejectedFiles: readonly CaptureFileRejection[];
   readonly rejectedItems?: PreparedHomeAgentAttachments["rejectedItems"];
 }
@@ -248,6 +254,7 @@ export class HomeAgentAttachmentService {
 
   async #preserve(request: PreserveHomeAgentAttachmentsRequest): Promise<PreservedHomeAgentAttachments> {
     const sourceIds: string[] = [];
+    const captureReferences: Array<PreservedHomeAgentAttachments["captureReferences"][number]> = [];
     for (const [acceptedIndex, entry] of request.prepared.entries.entries()) {
       const sourceId = acceptedIndex === 0
         ? request.firstSourceId
@@ -268,12 +275,14 @@ export class HomeAgentAttachmentService {
             throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The pasted-text source binding changed.");
           }
           sourceIds.push(sourceId);
+          captureReferences.push({ sourceId, captureId: preserved.captureId, displayName: entry.displayName, sourceKind: "text" });
           continue;
         } catch {
           return {
             status: "failed",
             attachmentSetHash: request.prepared.attachmentSetHash,
             sourceIds,
+            captureReferences,
             rejectedFiles: [],
             ...(request.prepared.usesStagedItems ? { rejectedItems: [] } : {})
           };
@@ -300,6 +309,7 @@ export class HomeAgentAttachmentService {
           status: "failed",
           attachmentSetHash: request.prepared.attachmentSetHash,
           sourceIds,
+          captureReferences,
           rejectedFiles: [rejection],
           ...(request.prepared.usesStagedItems
             ? { rejectedItems: [{ ordinal: entry.ordinal, kind: "file" as const, ...rejection }] }
@@ -320,6 +330,7 @@ export class HomeAgentAttachmentService {
           status: "failed",
           attachmentSetHash: request.prepared.attachmentSetHash,
           sourceIds,
+          captureReferences,
           rejectedFiles: [rejection],
           ...(request.prepared.usesStagedItems
             ? { rejectedItems: [{ ordinal: entry.ordinal, kind: "file" as const, ...rejection }] }
@@ -327,11 +338,14 @@ export class HomeAgentAttachmentService {
         };
       }
       sourceIds.push(sourceId);
+      captureReferences.push({ sourceId, captureId: preserved.captureId, displayName: entry.displayName,
+        sourceKind: supportedFileSourceKind(entry.filePath)! });
     }
     return {
       status: "preserved",
       attachmentSetHash: request.prepared.attachmentSetHash,
       sourceIds,
+      captureReferences,
       rejectedFiles: [],
       ...(request.prepared.usesStagedItems ? { rejectedItems: [] } : {})
     };

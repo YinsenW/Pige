@@ -7,6 +7,7 @@ import {
   AgentConversationInputPresentationSchema,
   type ConversationEvent
 } from "@pige/schemas";
+import { captureReferencesByUserEvent } from "./agent-conversation-capture-reference";
 
 const DEFAULT_CURSOR_CAPACITY = 256;
 
@@ -95,6 +96,7 @@ export function selectConversationTimelineMessages(
     throw invalidConversationTimelineCursor();
   }
   const selected: AgentConversationMessage[] = [];
+  const captureReferences = captureReferencesByUserEvent(events);
   let textBytes = 0;
   let earliestSelectedIndex = boundaryIndex;
   for (let index = boundaryIndex - 1; index >= 0 && selected.length < limit; index -= 1) {
@@ -106,6 +108,7 @@ export function selectConversationTimelineMessages(
       ? AgentConversationInputPresentationSchema.safeParse(event.inputPresentation)
       : undefined;
     const inputPresentation = parsedPresentation?.success ? parsedPresentation.data : undefined;
+    const eventCaptureReferences = captureReferences.get(event.id);
     selected.push({
       id: event.id,
       role: event.type === "user_message" ? "user" : "assistant",
@@ -113,6 +116,7 @@ export function selectConversationTimelineMessages(
       text: inputPresentation?.kind === "reader_selection_transform" ? "" : event.text,
       ...(event.jobId === undefined ? {} : { jobId: event.jobId }),
       ...(inputPresentation ? { inputPresentation } : {}),
+      ...(eventCaptureReferences?.length ? { captureReferences: eventCaptureReferences } : {}),
       ...(event.type === "assistant_message" && event.answerGrounding !== undefined ? {
         answer: {
           answer: event.text,

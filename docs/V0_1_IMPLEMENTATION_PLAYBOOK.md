@@ -243,7 +243,8 @@ Build:
 - [B2.06 -> E2.08] Stable source ID generation.
 - [B2.07 -> E2.08] Source-record creation and policy-driven source-asset preservation.
 - [B2.08 -> E2.01] Persistent job queue.
-- [B2.09 -> E2.03] Reference-based conversation events for captures.
+- [B2.09 -> E2.03] Reference-based conversation events for file, large-paste, and explicit
+  authored-text captures, with deterministic replay and safe restart projection.
 - [B2.10 -> E2.09] Home queued, running, failed, completed, waiting-dependency, and awaiting-review status presentation.
 - [B2.11 -> E2.10] Retry and cooperative cancellation contracts.
 - [B2.12 -> E2.09] Timeline progress events with safe summaries.
@@ -263,7 +264,9 @@ Exit criteria:
   ordinary text stays within its Unicode code-point bound; larger exact pastes share one
   ordered staged list with files, remain side-effect free until Send, and are stored once
   as managed sources with reference-only conversation history and duplicate-free retry.
-- [E2.03] Capture events are durable and reference sources/jobs; only bounded short chat text may remain inline.
+- [E2.03] Capture events are durable, body/path-free, and reference exact Source, Capture,
+  parent conversation event, and Job identities; restart projects the safe references and
+  page-backed captures reopen through Reader while only bounded short chat text remains inline.
 - [E2.04] Supported macOS dictation inserts local transcript text after on-demand microphone permission; unsupported platforms show a clear state and no dictation audio is sent to model providers.
 - [E2.05] Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.
 - [E2.06] PDF, DOCX, PPTX, and image capture preserves evidence before processing and

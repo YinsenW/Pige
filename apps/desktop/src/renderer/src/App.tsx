@@ -34,6 +34,7 @@ import { useLibraryBrowse } from "./components/useLibraryBrowse";
 export { filterLibraryPages } from "./components/library-panel-model";
 import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
+import { ConversationCaptureReferences } from "./components/ConversationCaptureReferences";
 import { ConversationMessageActions } from "./components/ConversationSaveAnswerAction";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
 import { ConversationCitations, RetrievalResults, toRetrievalAskResult } from "./components/HomeRetrievalResults";
@@ -5228,7 +5229,7 @@ function HomeComposer(props: {
     : message.text;
   const visibleConversationMessages = conversationPagination.messages.filter((message) => {
     if (agentAnswer && message.role === "assistant" && message.id === liveAnswerEventId) return false;
-    return message.answer?.datasetResult !== undefined || conversationMessageMarkdown(message).trim().length > 0;
+    return message.answer?.datasetResult !== undefined || message.captureReferences?.length || conversationMessageMarkdown(message).trim().length > 0;
   });
   const visibleOptimisticConversationTurns = (viewingHistory ? [] : optimisticConversationTurns).filter((turn) =>
     !(conversationPagination.messages.some((message) =>
@@ -6618,6 +6619,7 @@ function HomeComposer(props: {
                     />
                   </>
                 )}
+                {message.captureReferences?.length ? <ConversationCaptureReferences references={message.captureReferences} onOpen={(pageId) => void openSearchResult(pageId)} t={props.t} /> : null}
                 {message.role === "assistant" ? <ConversationMessageActions messageId={message.id} markdown={markdown}
                   {...props.activeVault && conversationTimeline ? { save: { activeVaultId: props.activeVault.vaultId,
                     conversationId: conversationTimeline.conversationId, assistantEventId: message.id,

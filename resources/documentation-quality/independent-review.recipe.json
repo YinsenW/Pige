@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T13:32:55Z",
+  "reviewedAt": "2026-08-01T13:30:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,43 +52,89 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Required human-readable Vault root-document validation during creation, explicit open and startup restoration.",
-    "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
-    "minimumFileCount": 35,
-    "reviewedSha256": "276ef4d7fdf98d6dd9abb80916ffabb1cd147b733863ea3b57189cc5c090d923"
-  },
-  "reviewers": [{
-    "reviewerId": "vault-root-markdown-review",
-      "task": "Review required human-readable Vault root-document activation gates",
-    "independentDimensions": [
-      "navigation_and_resource_lifecycle",
-      "cross_document_contract_consistency",
-      "continuous_traceability_and_acceptance",
-      "ongoing_development_support",
-      "documentation_leanness_and_maintainability"
+    "scope": "B2.09/E2.03 durable body-free capture references across file, large-paste and explicit authored-text ingress.",
+    "exclude": [
+      "resources/documentation-quality/independent-review.recipe.json"
     ],
-      "independence": "Planning reviews onboarding, Markdown and API ownership plus one durable Decision; Development supplies separate no-follow validation, current-binding retention and startup recovery evidence."
-  }],
+    "minimumFileCount": 35,
+    "reviewedSha256": "62df7e3480467318cd9bc73c6248622dc01c8517ee48035ed5bc2831bdf92bf0"
+  },
+  "reviewers": [
+    {
+      "reviewerId": "capture-reference-workflow-review",
+      "task": "Review durable capture-to-conversation reference workflow",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance",
+        "ongoing_development_support",
+        "documentation_leanness_and_maintainability"
+      ],
+      "independence": "Planning reviews capture reference truth across durable conversation, Source/Job ownership, renderer projection and acceptance while Development supplies separate service, restart and UI evidence."
+    }
+  ],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"The existing create/open flow stays unchanged while malformed required root Markdown fails before active Vault replacement or startup lease acquisition."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Onboarding, Markdown schema, API and D-20260801-Vault-Root-Markdown-Activation-Gate agree on required files, validation and failure retention."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Direct layout and service tests cover valid creation, malformed policy/index/log, machine-path absence, current-binding retention and restart rejection."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"The existing Vault layout/open/startup owners reuse one validator without a second IPC channel, renderer path authority or durable format."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-root-markdown-review","blockerCount":0,"summary":"Three existing owner sections plus one durable Decision bind the compatibility rule without creating another design document."}
+    {
+      "id": "navigation_and_resource_lifecycle",
+      "score": 9.8,
+      "reviewerId": "capture-reference-workflow-review",
+      "blockerCount": 0,
+      "summary": "Home conversation history renders safe capture names after restart and opens only page-backed evidence through the existing Reader path."
+    },
+    {
+      "id": "cross_document_contract_consistency",
+      "score": 9.8,
+      "reviewerId": "capture-reference-workflow-review",
+      "blockerCount": 0,
+      "summary": "Schemas, contracts, durable events, Source/Capture/Job identities and the renderer agree on one body- and path-free reference projection."
+    },
+    {
+      "id": "continuous_traceability_and_acceptance",
+      "score": 9.8,
+      "reviewerId": "capture-reference-workflow-review",
+      "blockerCount": 0,
+      "summary": "B2.09/E2.03 evidence now covers file, large-paste and explicit authored-text writers without overclaiming the remaining packaged scenario."
+    },
+    {
+      "id": "ongoing_development_support",
+      "score": 9.8,
+      "reviewerId": "capture-reference-workflow-review",
+      "blockerCount": 0,
+      "summary": "One bounded capture-reference owner centralizes deterministic event identity, replay matching and safe projection without duplicating source bodies."
+    },
+    {
+      "id": "documentation_leanness_and_maintainability",
+      "score": 9.8,
+      "reviewerId": "capture-reference-workflow-review",
+      "blockerCount": 0,
+      "summary": "Existing Playbook, Spec, acceptance and service inventory owners absorb the closure without a new design document."
+    }
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Root-document compatibility truth and ownership remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/vault-layout.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/pige-policy-service.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Creation emits valid readable roots, open retains a healthy current Vault on invalid input, and startup clears an invalid binding before lease acquisition."},
-    {"command":"npm run verify:architecture-reset && node scripts/verify/pi-runtime-responsibility.mjs","status":"passed","evidence":"Vault validation stays in the existing storage owner with no public channel, renderer authority or service-owner expansion."}
+    {
+      "command": "npx vitest run tests/unit/agent-turn-conversation-store.test.ts tests/unit/home-agent-attachment-service.test.ts tests/unit/conversation-capture-references.test.ts",
+      "status": "passed",
+      "evidence": "Deterministic durable capture references, restart projection, mixed source capture and page-backed UI opening pass."
+    },
+    {
+      "command": "npm run typecheck && npm run build",
+      "status": "passed",
+      "evidence": "Shared timeline contracts, Main capture composition and renderer presentation compile and build together."
+    },
+    {
+      "command": "npm run verify:architecture-reset && npm run verify:change",
+      "status": "passed",
+      "evidence": "Frozen oversized owners stay within budget and change classification, package impact and whitespace gates pass."
+    }
   ],
   "coordination": {
-    "taskId": "vault-root-markdown-bind-20260801",
-    "taskTitle": "Bind required human-readable Vault root-document validation",
+    "taskId": "capture-conversation-reference-bind-20260801",
+    "taskTitle": "Bind durable capture conversation references",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns bounded no-follow validation and activation; renderer receives no root path, document body or new authority.",
-    "acknowledgement": "Planning binds required root-document activation while broader Vault repair and import remain separately owned."
+    "compatibility": "Existing capture Source truth and Job execution remain unchanged; conversation events add only deterministic safe references and no duplicate body bytes.",
+    "acknowledgement": "Planning binds the B2.09/E2.03 workflow while the packaged Electron continuity scenario remains separately open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
