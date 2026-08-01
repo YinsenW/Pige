@@ -5618,6 +5618,38 @@ References:
 - `docs/SOURCE_STORAGE_STRATEGY.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260802-Portable-Safe-Preference-Transfer
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Pige v0.1 provides one versioned, Main-owned preference export/import workflow for
+locale, appearance, startup, update channel, OCR, and dictation preferences. Import
+uses a pathless preview, explicit native confirmation, safe-preference digest CAS, and
+one writer-lease-protected atomic commit. Vault identity and paths, recent/dismissed
+Vault history, window state, provider profiles and credentials, permission grants, and
+external bindings are excluded.
+
+Rationale:
+
+Users need a portable way to move ordinary preferences without turning a settings file
+into a credential, filesystem-authority, or permission-transfer channel.
+
+Consequences:
+
+- The renderer never receives selected paths or document bodies.
+- Secret/provider/permission transfer requires a separately designed redacted workflow.
+- Excluded machine-local state survives every committed import unchanged.
+- Stale, cancelled, malformed, linked, oversized, or failed imports have no effect.
+
+References:
+
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -34,6 +34,12 @@ import type {
   AppearanceSettingsSummary,
   AppearanceThemeMutationResult,
   AppearanceThemePreference,
+  SettingsProfileExportRequest,
+  SettingsProfileExportResult,
+  SettingsProfileImportPreviewRequest,
+  SettingsProfileImportPreviewResult,
+  SettingsProfileImportApplyRequest,
+  SettingsProfileImportApplyResult,
   GeneratedKnowledgeLanguage,
   KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
@@ -559,6 +565,12 @@ import type {
 } from "@pige/schemas";
 
 export type {
+  SettingsProfileExportRequest,
+  SettingsProfileExportResult,
+  SettingsProfileImportPreviewRequest,
+  SettingsProfileImportPreviewResult,
+  SettingsProfileImportApplyRequest,
+  SettingsProfileImportApplyResult,
   AgentAttachmentCandidate,
   AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
@@ -2928,6 +2940,13 @@ export interface PigeDesktopApi {
     readonly setStartupDestination: (
       request: SetStartupDestinationRequest
     ) => Promise<StartupDestinationMutationResult>;
+    readonly exportProfile: (request: SettingsProfileExportRequest) => Promise<SettingsProfileExportResult>;
+    readonly previewProfileImport: (
+      request: SettingsProfileImportPreviewRequest
+    ) => Promise<SettingsProfileImportPreviewResult>;
+    readonly applyProfileImport: (
+      request: SettingsProfileImportApplyRequest
+    ) => Promise<SettingsProfileImportApplyResult>;
     readonly onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void) => () => void;
     readonly registry: () => Promise<SettingsRegistrySummary>;
     readonly pigePolicy: () => Promise<PigePolicySummary>;

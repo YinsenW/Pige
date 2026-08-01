@@ -7,6 +7,7 @@ import {
   MachineLocalSettingsSchema,
   OcrEnginePreferenceMachineSettingsSchema,
   OcrLanguagePreferenceMachineSettingsSchema,
+  SettingsProfilePreferencesSchema,
   UpdateMachineSettingsSchema,
   type AppearanceMachineSettings,
   type DictationLanguagePreferenceMachineSettings,
@@ -14,6 +15,7 @@ import {
   type MachineLocalSettings,
   type OcrEnginePreferenceMachineSettings,
   type OcrLanguagePreferenceMachineSettings,
+  type SettingsProfilePreferences,
   type StartupDestination,
   type UpdateMachineSettings,
   type WindowPreferences
@@ -81,6 +83,10 @@ export interface StartupDestinationSettingsMutation {
   readonly settings: StartupDestinationMachineSettings;
 }
 
+export type SettingsProfileApplyMutation =
+  | { readonly status: "committed"; readonly preferences: SettingsProfilePreferences }
+  | { readonly status: "stale"; readonly preferences: SettingsProfilePreferences };
+
 export class LocalSettingsStore {
   readonly #userDataPath: string;
   readonly #settingsPath: string;
@@ -118,6 +124,71 @@ export class LocalSettingsStore {
 
   getAppearanceSettings(): AppearanceMachineSettings {
     return this.read().appearance ?? createDefaultAppearanceSettings();
+  }
+
+  getSettingsProfilePreferences(fallbackLocale: Locale): SettingsProfilePreferences {
+    return projectSettingsProfilePreferences(this.read(), fallbackLocale);
+  }
+
+  applySettingsProfilePreferences(
+    expectedDigest: string,
+    fallbackLocale: Locale,
+    preferences: SettingsProfilePreferences
+  ): SettingsProfileApplyMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const currentPreferences = projectSettingsProfilePreferences(current, fallbackLocale);
+      if (digestSettingsProfilePreferences(currentPreferences) !== expectedDigest) {
+        return { status: "stale", preferences: currentPreferences };
+      }
+      const appearance = current.appearance ?? createDefaultAppearanceSettings();
+      const startup = current.startupDestination ?? { revision: 0, destination: "home" as const };
+      const updates = current.updates ?? createDefaultUpdateSettings();
+      const ocrEngine = current.ocrEnginePreference ?? createDefaultOcrEnginePreferenceSettings();
+      const ocrLanguage = current.ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
+      const dictationLanguage = current.dictationLanguagePreference ?? createDefaultDictationLanguagePreferenceSettings();
+      const nextRevision = (revision: number): number => {
+        if (revision === Number.MAX_SAFE_INTEGER) {
+          throw new PigeDomainError("settings.revision_exhausted", "Settings revision is exhausted.");
+        }
+        return revision + 1;
+      };
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: preferences.appLocale,
+        appearance: AppearanceMachineSettingsSchema.parse({
+          revision: nextRevision(appearance.revision),
+          ...preferences.appearance
+        }),
+        startupDestination: {
+          revision: nextRevision(startup.revision),
+          destination: preferences.startupDestination
+        },
+        window: current.window,
+        updates: UpdateMachineSettingsSchema.parse({
+          revision: nextRevision(updates.revision),
+          channel: preferences.updateChannel
+        }),
+        ocrEnginePreference: OcrEnginePreferenceMachineSettingsSchema.parse({
+          revision: nextRevision(ocrEngine.revision),
+          preference: preferences.ocrEnginePreference
+        }),
+        ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.parse({
+          revision: nextRevision(ocrLanguage.revision),
+          preference: preferences.ocrLanguagePreference
+        }),
+        dictationLanguagePreference: DictationLanguagePreferenceMachineSettingsSchema.parse({
+          revision: nextRevision(dictationLanguage.revision),
+          preference: preferences.dictationLanguagePreference
+        }),
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return {
+        status: "committed",
+        preferences: projectSettingsProfilePreferences(this.read(), fallbackLocale)
+      };
+    });
   }
 
   getOcrLanguagePreferenceSettings(): OcrLanguagePreferenceMachineSettings {
@@ -885,5 +956,34 @@ function createDefaultDictationLanguagePreferenceSettings(): DictationLanguagePr
   return DictationLanguagePreferenceMachineSettingsSchema.parse({
     revision: 0,
     preference: { mode: "automatic" }
+  });
+}
+
+export function digestSettingsProfilePreferences(preferences: SettingsProfilePreferences): string {
+  return createHash("sha256").update(JSON.stringify(preferences), "utf8").digest("hex");
+}
+
+function projectSettingsProfilePreferences(
+  settings: MachineLocalSettings,
+  fallbackLocale: Locale
+): SettingsProfilePreferences {
+  const appearance = settings.appearance ?? createDefaultAppearanceSettings();
+  return SettingsProfilePreferencesSchema.parse({
+    appLocale: settings.appLocale ?? fallbackLocale,
+    appearance: {
+      themePreference: appearance.themePreference,
+      generatedKnowledgeLanguage: appearance.generatedKnowledgeLanguage ?? "preserve_source"
+    },
+    startupDestination: settings.startupDestination?.destination ?? "home",
+    updateChannel: (settings.updates ?? createDefaultUpdateSettings()).channel,
+    ocrEnginePreference: (
+      settings.ocrEnginePreference ?? createDefaultOcrEnginePreferenceSettings()
+    ).preference,
+    ocrLanguagePreference: (
+      settings.ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings()
+    ).preference,
+    dictationLanguagePreference: (
+      settings.dictationLanguagePreference ?? createDefaultDictationLanguagePreferenceSettings()
+    ).preference
   });
 }

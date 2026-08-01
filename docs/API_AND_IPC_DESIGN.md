@@ -896,6 +896,9 @@ Queries:
 - `settings.registry`
 - `settings.appearance`
 - `settings.startupDestination`
+- `settings.exportProfile`
+- `settings.previewProfileImport`
+- `settings.applyProfileImport`
 - `settings.pigePolicy`
 - `localCapabilities.ocrEnginePreference`
 - `models.summary`
@@ -911,6 +914,12 @@ binds that vault and revision, validates the canonical heading structure and rej
 content before confirmation, then re-proves the same bytes and authority before an atomic write.
 Settled updates publish a `change_setting` Operation for Activity/Undo and restart recovery;
 invalid, denied, stale, or failed attempts preserve the renderer draft and do not mutate policy.
+
+Settings profile transfer keeps file paths in Main. Export writes only the strict portable
+preference document. Import preview returns an opaque `previewId` and safe key list; apply
+requires native confirmation and rechecks the exact safe-preference digest inside the
+machine-local settings writer lease. Results never disclose paths, file bodies, Vaults,
+credentials, permission grants, recent history, or window state.
 
 `localCapabilities.ocrEnginePreference` returns strict machine-local
 `automatic | platform_native | paddleocr_local` preference plus an integer revision.

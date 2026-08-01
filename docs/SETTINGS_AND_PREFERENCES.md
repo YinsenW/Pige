@@ -321,7 +321,16 @@ Restore rules:
 
 Settings export:
 
-- Default export excludes secrets.
+- General exposes one Main-owned preference export/import workflow for app locale,
+  appearance and generated-knowledge language, startup destination, update channel,
+  OCR engine/language, and dictation language. The versioned JSON file contains values,
+  not machine-local revisions.
+- Import first returns a pathless opaque preview, then requires explicit native
+  confirmation and an unchanged safe-preference digest before one atomic settings write.
+- Default export excludes secrets, provider profiles, permission grants, Vault identity
+  and paths, recent/dismissed Vault history, external bindings, and window state.
+- Cancelled, stale, malformed, linked, oversized, or failed imports preserve all current
+  settings; excluded machine-local state is retained when an import commits.
 - Secret export is out of scope for v0.1 unless explicitly designed later.
 - Diagnostics export must redact secrets and avoid full source bodies by default.
 

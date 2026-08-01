@@ -6035,6 +6035,84 @@ export const MachineLocalSettingsSchema = z.object({
   )
 });
 
+export const SettingsProfileTransferKeySchema = z.enum([
+  "app_locale",
+  "appearance",
+  "startup_destination",
+  "update_channel",
+  "ocr_engine",
+  "ocr_language",
+  "dictation_language"
+]);
+export const SettingsProfilePreferencesSchema = z.object({
+  appLocale: LocaleSchema,
+  appearance: z.object({
+    themePreference: AppearanceThemePreferenceSchema,
+    generatedKnowledgeLanguage: GeneratedKnowledgeLanguageSchema
+  }).strict(),
+  startupDestination: StartupDestinationSchema,
+  updateChannel: UpdateChannelSchema,
+  ocrEnginePreference: OcrEnginePreferenceSchema,
+  ocrLanguagePreference: OcrLanguagePreferenceSchema,
+  dictationLanguagePreference: DictationLanguagePreferenceSchema
+}).strict();
+export const SettingsProfileDocumentSchema = z.object({
+  schemaVersion: z.literal(1),
+  kind: z.literal("pige_preferences"),
+  preferences: SettingsProfilePreferencesSchema
+}).strict();
+export const SettingsProfileRequestIdSchema = z.string()
+  .regex(/^settingsprofilereq_[a-z0-9]{16,64}$/u);
+export const SettingsProfilePreviewIdSchema = z.string()
+  .regex(/^settingspreview_[a-f0-9]{32}$/u);
+export const SettingsProfileExportRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SettingsProfileRequestIdSchema
+}).strict();
+const SettingsProfileExportIdentitySchema = SettingsProfileExportRequestSchema;
+export const SettingsProfileExportResultSchema = z.discriminatedUnion("status", [
+  SettingsProfileExportIdentitySchema.extend({
+    status: z.literal("exported"),
+    keys: z.array(SettingsProfileTransferKeySchema).min(1).max(7).readonly()
+  }).strict(),
+  SettingsProfileExportIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SettingsProfileExportIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SettingsProfileImportPreviewRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SettingsProfileRequestIdSchema
+}).strict();
+const SettingsProfileImportPreviewIdentitySchema = SettingsProfileImportPreviewRequestSchema;
+export const SettingsProfileImportPreviewResultSchema = z.discriminatedUnion("status", [
+  SettingsProfileImportPreviewIdentitySchema.extend({
+    status: z.literal("ready"),
+    previewId: SettingsProfilePreviewIdSchema,
+    keys: z.array(SettingsProfileTransferKeySchema).min(1).max(7).readonly()
+  }).strict(),
+  SettingsProfileImportPreviewIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SettingsProfileImportPreviewIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SettingsProfileImportApplyRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SettingsProfileRequestIdSchema,
+  previewId: SettingsProfilePreviewIdSchema
+}).strict();
+const SettingsProfileImportApplyIdentitySchema = SettingsProfileImportApplyRequestSchema;
+export const SettingsProfileImportApplyResultSchema = z.discriminatedUnion("status", [
+  SettingsProfileImportApplyIdentitySchema.extend({
+    status: z.literal("committed"),
+    keys: z.array(SettingsProfileTransferKeySchema).min(1).max(7).readonly()
+  }).strict(),
+  SettingsProfileImportApplyIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  SettingsProfileImportApplyIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SettingsProfileImportApplyIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  SettingsProfileImportApplyIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+export const SETTINGS_PROFILE_EXPORT_CHANNEL = "settings.exportProfile" as const;
+export const SETTINGS_PROFILE_IMPORT_PREVIEW_CHANNEL = "settings.previewProfileImport" as const;
+export const SETTINGS_PROFILE_IMPORT_APPLY_CHANNEL = "settings.applyProfileImport" as const;
+
 export const RecentVaultRevisionSchema = z.string()
   .regex(/^recentvaultrev_[a-f0-9]{64}$/u);
 export const RecentVaultSummaryProjectionSchema = z.object({
@@ -13105,6 +13183,15 @@ export type ReferencedOriginalReconnectJobProjection = z.infer<
 >;
 export type ReferencedOriginalReconnectResult = z.infer<typeof ReferencedOriginalReconnectResultSchema>;
 export type MachineLocalSettings = z.infer<typeof MachineLocalSettingsSchema>;
+export type SettingsProfileTransferKey = z.infer<typeof SettingsProfileTransferKeySchema>;
+export type SettingsProfilePreferences = z.infer<typeof SettingsProfilePreferencesSchema>;
+export type SettingsProfileDocument = z.infer<typeof SettingsProfileDocumentSchema>;
+export type SettingsProfileExportRequest = z.infer<typeof SettingsProfileExportRequestSchema>;
+export type SettingsProfileExportResult = z.infer<typeof SettingsProfileExportResultSchema>;
+export type SettingsProfileImportPreviewRequest = z.infer<typeof SettingsProfileImportPreviewRequestSchema>;
+export type SettingsProfileImportPreviewResult = z.infer<typeof SettingsProfileImportPreviewResultSchema>;
+export type SettingsProfileImportApplyRequest = z.infer<typeof SettingsProfileImportApplyRequestSchema>;
+export type SettingsProfileImportApplyResult = z.infer<typeof SettingsProfileImportApplyResultSchema>;
 export type DiagnosticsWorkflowRequestId = z.infer<typeof DiagnosticsWorkflowRequestIdSchema>;
 export type DiagnosticsScopeContextId = z.infer<typeof DiagnosticsScopeContextIdSchema>;
 export type DiagnosticsSupportBundleJobSummary = z.infer<typeof DiagnosticsSupportBundleJobSummarySchema>;

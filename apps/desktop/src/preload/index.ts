@@ -348,6 +348,12 @@ import type {
   SetSidebarOpenRequest,
   SetWindowModeRequest,
   SettingsRegistrySummary,
+  SettingsProfileExportRequest,
+  SettingsProfileExportResult,
+  SettingsProfileImportPreviewRequest,
+  SettingsProfileImportPreviewResult,
+  SettingsProfileImportApplyRequest,
+  SettingsProfileImportApplyResult,
   SpeechAvailabilityRequest,
   SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
@@ -996,6 +1002,15 @@ import {
   SetKnowledgeLanguageRequestSchema,
   SetStartupDestinationRequestSchema,
   SetThemeRequestSchema,
+  SETTINGS_PROFILE_EXPORT_CHANNEL,
+  SETTINGS_PROFILE_IMPORT_APPLY_CHANNEL,
+  SETTINGS_PROFILE_IMPORT_PREVIEW_CHANNEL,
+  SettingsProfileExportRequestSchema,
+  SettingsProfileExportResultSchema,
+  SettingsProfileImportPreviewRequestSchema,
+  SettingsProfileImportPreviewResultSchema,
+  SettingsProfileImportApplyRequestSchema,
+  SettingsProfileImportApplyResultSchema,
   StartupDestinationMutationResultSchema,
   StartupDestinationSummarySchema,
   WindowLayoutRequestSchema,
@@ -3284,6 +3299,27 @@ const api: PigeDesktopApi = {
           SetStartupDestinationRequestSchema.parse(request)
         )
       ),
+    exportProfile: async (request: SettingsProfileExportRequest): Promise<SettingsProfileExportResult> =>
+      SettingsProfileExportResultSchema.parse(await ipcRenderer.invoke(
+        SETTINGS_PROFILE_EXPORT_CHANNEL,
+        SettingsProfileExportRequestSchema.parse(request)
+      )),
+    previewProfileImport: async (
+      request: SettingsProfileImportPreviewRequest
+    ): Promise<SettingsProfileImportPreviewResult> => SettingsProfileImportPreviewResultSchema.parse(
+      await ipcRenderer.invoke(
+        SETTINGS_PROFILE_IMPORT_PREVIEW_CHANNEL,
+        SettingsProfileImportPreviewRequestSchema.parse(request)
+      )
+    ),
+    applyProfileImport: async (
+      request: SettingsProfileImportApplyRequest
+    ): Promise<SettingsProfileImportApplyResult> => SettingsProfileImportApplyResultSchema.parse(
+      await ipcRenderer.invoke(
+        SETTINGS_PROFILE_IMPORT_APPLY_CHANNEL,
+        SettingsProfileImportApplyRequestSchema.parse(request)
+      )
+    ),
     onAppearanceChanged: (listener: (settings: AppearanceSettingsSummary) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, value: unknown): void => {
         const parsed = AppearanceSettingsSummarySchema.safeParse(value);
