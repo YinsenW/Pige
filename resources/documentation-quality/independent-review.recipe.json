@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T10:24:00Z",
+  "reviewedAt": "2026-08-01T12:25:59Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,14 +52,14 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation, revision-fenced Question state lifecycle, machine-local persisted dictation language, the vault PIGE.md policy editor, and machine-local OCR engine preference with real Main routing.",
+    "scope": "Acceptance-ledger reconciliation for the complete four-class Knowledge Health report and its exact eligible reversible repairs, plus evidence-only corrections for recently merged provider, Managed Collection, diagnostics, current-note, context, conflict-review, generated-note restore, and reviewed Pi BTW runtime capabilities.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "48d89d6e087eb8b7872aaba86519876c3ee0158e0c8e827bbe04d560cb48788c"
+    "reviewedSha256": "3b0c87069c8fcfa91a5f267296a8a82c2dac498782b7a425f3603486f9f5797f"
   },
   "reviewers": [{
-    "reviewerId": "ocr-engine-preference-review",
-      "task": "Review machine-local OCR engine preference, strict CAS and real Main adapter routing",
+    "reviewerId": "acceptance-ledger-review",
+      "task": "Independently reconcile Knowledge Health completion and recent exact acceptance evidence",
     "independentDimensions": [
       "navigation_and_resource_lifecycle",
       "cross_document_contract_consistency",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-      "independence": "Planning reviews the OCR preference across API, Settings, UI, architecture and one durable Decision; Development supplies separate schema, CAS persistence, IPC, router and renderer evidence."
+      "independence": "The acceptance audit did not implement the reviewed Knowledge Health or recent product changes; it independently inspected their exact durable service, Operation/Undo, restart, IPC and UI tests before changing status or open projections."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"ocr-engine-preference-review","blockerCount":0,"summary":"Local Capabilities owns one calm OCR selector; existing Paddle install and lifecycle controls remain separate."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"ocr-engine-preference-review","blockerCount":0,"summary":"API, Settings, UI, architecture and D-20260801-Machine-Local-OCR-Engine-Preference agree on CAS, scope and fallback behavior."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"ocr-engine-preference-review","blockerCount":0,"summary":"Direct schema, service, IPC, router and Settings tests prove an actual feature without claiming P5 or PIGE-INGEST-004 completion."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"ocr-engine-preference-review","blockerCount":0,"summary":"A bounded preference owner composes with the existing OCR adapter router and leaves install, tool leases and artifacts with their current owners."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"ocr-engine-preference-review","blockerCount":0,"summary":"Existing API, Settings, UI and architecture owners plus one durable Decision absorb the feature without a new design document."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"acceptance-ledger-review","blockerCount":0,"summary":"Existing requirement, build and exit owners remain the only navigation route; the audit adds no parallel status document."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"acceptance-ledger-review","blockerCount":0,"summary":"SPEC_TRACEABILITY, the implementation playbook and machine-readable acceptance manifest agree on Knowledge Health completion and remaining feature gaps."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"acceptance-ledger-review","blockerCount":0,"summary":"Every promotion and evidence correction binds an exact current test selector; only PIGE-KNOW-005 and E9.05 meet their complete exit semantics."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"acceptance-ledger-review","blockerCount":0,"summary":"Corrected open descriptions preserve the concrete next missing work instead of sending Development back through already merged capabilities."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"acceptance-ledger-review","blockerCount":0,"summary":"The reconciliation changes only existing trace owners, evidence selectors and the required independent-review snapshot."}
   ],
   "verification": [
-    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Grouped knowledge-lifecycle Redo semantics, owner routing and references remain structurally synchronized."},
-    {"command":"npx vitest run tests/unit/ocr-engine-preference-service.test.ts tests/unit/ocr-engine-preference-schemas.test.ts tests/unit/native-ocr-adapter-router.test.ts tests/unit/local-capabilities-ipc.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact machine-local CAS, body-free IPC and preference-driven adapter order are executable."},
-    {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
+    {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Requirement ownership, document routing and references remain structurally synchronized."},
+    {"command":"npx vitest run tests/unit/local-database-service.test.ts tests/unit/knowledge-health-service.test.ts tests/unit/knowledge-health-duplicate-topic-service.test.ts tests/unit/knowledge-health-unsourced-claim-service.test.ts","status":"passed","evidence":"All four Knowledge Health issue classes and every safely eligible reversible repair pass against current durable owners."},
+    {"command":"npm run verify:documentation-quality","status":"passed","evidence":"The independent review snapshot and five documentation-quality dimensions remain above the required threshold."}
   ],
   "coordination": {
-    "taskId": "ocr-engine-preference-bind-20260801",
-    "taskTitle": "Bind machine-local OCR engine preference",
+    "taskId": "acceptance-ledger-reconciliation-20260801",
+    "taskTitle": "Reconcile verified Knowledge Health and recent acceptance evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main binds one machine-local revision to a closed engine preference and changes only new OCR adapter order without renderer paths or installation authority.",
-    "acknowledgement": "Planning binds the OCR engine preference while broader P5 and PIGE-INGEST-004 exits remain open; existing Paddle lifecycle and OCR artifact contracts remain unchanged."
+    "compatibility": "No product, schema, IPC, storage or runtime behavior changes; only exact current evidence and open acceptance obligations are reconciled.",
+    "acknowledgement": "PIGE-KNOW-005 and E9.05 are promoted only because the four-class report and every safely eligible repair are directly proven; all other touched requirements remain partial."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
