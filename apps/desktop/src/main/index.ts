@@ -341,6 +341,7 @@ import {
 import { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import { NoteMarkdownEditorRedoService } from "./services/note-markdown-editor-redo-service";
 import { OcrService } from "./services/ocr-service";
+import { OcrImageTestService } from "./services/ocr-image-test-service";
 import {
   LocalSettingsOcrLanguagePreferenceStore,
   OcrLanguagePreferenceService
@@ -499,6 +500,7 @@ let sourceRefreshService: SourceRefreshService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
+let ocrImageTestService: OcrImageTestService | undefined;
 let ocrEnginePreferenceService: OcrEnginePreferenceService | undefined;
 let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let dictationLanguagePreferenceService: DictationLanguagePreferenceService | undefined;
@@ -1474,6 +1476,14 @@ const getDatasetQueryService = (): DatasetQueryService => {
 const getOcrService = (): OcrService => {
   if (!ocrService) ocrService = new OcrService(getPaddleOcrRuntimeComposition().adapter);
   return ocrService;
+};
+
+const getOcrImageTestService = (): OcrImageTestService => {
+  ocrImageTestService ??= new OcrImageTestService(
+    getPaddleOcrRuntimeComposition().adapter,
+    getOcrLanguagePreferenceService()
+  );
+  return ocrImageTestService;
 };
 
 const getAgentIngestService = (): AgentIngestService => {
@@ -3216,6 +3226,9 @@ registerMemoryIpc({
 });
 registerLocalCapabilitiesIpc({
   ipcMain,
+  getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
+  showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
+  testOcrImage: (request, inputPath) => getOcrImageTestService().run(request, inputPath),
   ocrEnginePreference: (request) => getOcrEnginePreferenceService().read(request),
   setOcrEnginePreference: (request) => getOcrEnginePreferenceService().set(request),
   dictationLanguagePreference: (request) => getDictationLanguagePreferenceService().read(request),

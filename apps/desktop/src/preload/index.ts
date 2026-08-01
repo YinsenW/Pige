@@ -144,6 +144,8 @@ import type {
   SetOcrLanguagePreferenceResult,
   OcrEnginePreferenceRequest,
   OcrEnginePreferenceResult,
+  OcrImageTestRequest,
+  OcrImageTestResult,
   SetOcrEnginePreferenceRequest,
   SetOcrEnginePreferenceResult,
   PaddleOcrDisableRequest,
@@ -645,6 +647,9 @@ import {
   OcrLanguagePreferenceResultSchema,
   OCR_ENGINE_PREFERENCE_CHANNEL,
   SET_OCR_ENGINE_PREFERENCE_CHANNEL,
+  OCR_IMAGE_TEST_CHANNEL,
+  OcrImageTestRequestSchema,
+  OcrImageTestResultSchema,
   OcrEnginePreferenceRequestSchema,
   OcrEnginePreferenceResultSchema,
   SetOcrEnginePreferenceRequestSchema,
@@ -2407,6 +2412,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           SET_OCR_ENGINE_PREFERENCE_CHANNEL,
           SetOcrEnginePreferenceRequestSchema.parse(request)
+        )
+      ),
+    testOcrImage: async (
+      request: OcrImageTestRequest
+    ): Promise<OcrImageTestResult> =>
+      OcrImageTestResultSchema.parse(
+        await ipcRenderer.invoke(
+          OCR_IMAGE_TEST_CHANNEL,
+          OcrImageTestRequestSchema.parse(request)
         )
       ),
     dictationLanguagePreference: async (

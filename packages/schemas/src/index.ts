@@ -4967,6 +4967,35 @@ export const OCR_ENGINE_PREFERENCE_CHANNEL =
   "localCapabilities.ocrEnginePreference" as const;
 export const SET_OCR_ENGINE_PREFERENCE_CHANNEL =
   "localCapabilities.setOcrEnginePreference" as const;
+export const OCR_IMAGE_TEST_CHANNEL = "localCapabilities.testOcrImage" as const;
+export const OcrImageTestRequestIdSchema = z.string()
+  .regex(/^ocrimagetest_[a-z0-9]{16,64}$/u);
+export const OcrImageTestRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrImageTestRequestIdSchema
+}).strict();
+const OcrImageTestResultIdentitySchema = OcrImageTestRequestSchema;
+export const OcrImageTestPreviewSchema = z.object({
+  adapterId: z.enum(["macos_vision_ocr", "paddleocr_local"]),
+  engine: z.enum(["macos_vision_document", "macos_vision_text", "Paddle"]),
+  engineVersion: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._+-]{0,79}$/u),
+  text: z.string().max(4_096),
+  truncated: z.boolean(),
+  blockCount: z.number().int().nonnegative().max(10_000),
+  confidence: z.number().min(0).max(1).optional(),
+  languageHints: z.array(z.string().min(2).max(35)).max(8),
+  warnings: z.array(z.string().min(1).max(160)).max(8)
+}).strict();
+export const OcrImageTestResultSchema = z.discriminatedUnion("status", [
+  OcrImageTestResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    preview: OcrImageTestPreviewSchema
+  }).strict(),
+  OcrImageTestResultIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  OcrImageTestResultIdentitySchema.extend({ status: z.literal("unavailable") }).strict(),
+  OcrImageTestResultIdentitySchema.extend({ status: z.literal("busy") }).strict(),
+  OcrImageTestResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const OcrEnginePreferenceRequestIdSchema = z.string()
   .regex(/^ocrenginereq_[a-z0-9]{16,64}$/u);
 export const OcrEnginePreferenceSchema = z.enum(["automatic", "platform_native", "paddleocr_local"]);
@@ -11919,6 +11948,10 @@ export type LocalRerankerDisableResult = z.infer<typeof LocalRerankerDisableResu
 export type LocalRerankerRemoveResult = z.infer<typeof LocalRerankerRemoveResultSchema>;
 export type OcrLanguagePreferenceRequestId = z.infer<typeof OcrLanguagePreferenceRequestIdSchema>;
 export type OcrEnginePreferenceRequestId = z.infer<typeof OcrEnginePreferenceRequestIdSchema>;
+export type OcrImageTestRequestId = z.infer<typeof OcrImageTestRequestIdSchema>;
+export type OcrImageTestRequest = z.infer<typeof OcrImageTestRequestSchema>;
+export type OcrImageTestPreview = z.infer<typeof OcrImageTestPreviewSchema>;
+export type OcrImageTestResult = z.infer<typeof OcrImageTestResultSchema>;
 export type OcrEnginePreference = z.infer<typeof OcrEnginePreferenceSchema>;
 export type OcrEnginePreferenceMachineSettings = z.infer<typeof OcrEnginePreferenceMachineSettingsSchema>;
 export type OcrEnginePreferenceSummary = z.infer<typeof OcrEnginePreferenceSummarySchema>;

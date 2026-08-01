@@ -1,4 +1,4 @@
-import type { IpcMain } from "electron";
+import type { BrowserWindow, IpcMain, OpenDialogOptions, WebContents } from "electron";
 import {
   DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
   SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
@@ -10,6 +10,7 @@ import {
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
   OCR_ENGINE_PREFERENCE_CHANNEL,
   SET_OCR_ENGINE_PREFERENCE_CHANNEL,
+  OCR_IMAGE_TEST_CHANNEL,
   TOOLCHAIN_REPAIR_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
@@ -19,6 +20,8 @@ import {
   OcrEnginePreferenceResultSchema,
   SetOcrEnginePreferenceRequestSchema,
   SetOcrEnginePreferenceResultSchema,
+  OcrImageTestRequestSchema,
+  OcrImageTestResultSchema,
   ToolchainRepairRequestSchema,
   ToolchainRepairResultSchema,
   PADDLE_OCR_ENGINE_ID,
@@ -58,6 +61,8 @@ import {
   type OcrEnginePreferenceResult,
   type SetOcrEnginePreferenceRequest,
   type SetOcrEnginePreferenceResult,
+  type OcrImageTestRequest,
+  type OcrImageTestResult,
   type ToolchainRepairRequest,
   type ToolchainRepairResult
 } from "@pige/schemas";
@@ -66,6 +71,15 @@ type Awaitable<T> = T | Promise<T>;
 
 export interface RegisterLocalCapabilitiesIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
+  readonly getWindow: (sender: WebContents) => BrowserWindow | undefined;
+  readonly showOpenDialog: (
+    window: BrowserWindow,
+    options: OpenDialogOptions
+  ) => Promise<{ readonly canceled: boolean; readonly filePaths: readonly string[] }>;
+  readonly testOcrImage: (
+    request: OcrImageTestRequest,
+    inputPath: string
+  ) => Awaitable<OcrImageTestResult>;
   readonly dictationLanguagePreference: (
     request: DictationLanguagePreferenceRequest
   ) => Awaitable<DictationLanguagePreferenceResult>;
@@ -164,6 +178,26 @@ export function registerLocalCapabilitiesIpc(
       return SetOcrEnginePreferenceResultSchema.parse(await options.setOcrEnginePreference(parsed));
     }
   );
+
+  options.ipcMain.handle(OCR_IMAGE_TEST_CHANNEL, async (event, request: unknown) => {
+    const parsed = OcrImageTestRequestSchema.parse(request);
+    const window = options.getWindow(event.sender);
+    if (!window || event.sender.isDestroyed()) return imageTestResult(parsed, "failed");
+    try {
+      const selection = await options.showOpenDialog(window, {
+        title: "Test OCR with an image",
+        properties: ["openFile"],
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "heic", "heif", "tif", "tiff", "webp"] }]
+      });
+      if (event.sender.isDestroyed()) return imageTestResult(parsed, "failed");
+      if (selection.canceled) return imageTestResult(parsed, "cancelled");
+      if (selection.filePaths.length !== 1) return imageTestResult(parsed, "failed");
+      const result = OcrImageTestResultSchema.parse(await options.testOcrImage(parsed, selection.filePaths[0]!));
+      return result.requestId === parsed.requestId ? result : imageTestResult(parsed, "failed");
+    } catch {
+      return imageTestResult(parsed, "failed");
+    }
+  });
 
   options.ipcMain.handle(
     SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
@@ -300,4 +334,11 @@ function failedToolchainRepair(
     ...request,
     status: "failed"
   };
+}
+
+function imageTestResult(
+  request: OcrImageTestRequest,
+  status: "cancelled" | "failed"
+): OcrImageTestResult {
+  return OcrImageTestResultSchema.parse({ ...request, status });
 }
