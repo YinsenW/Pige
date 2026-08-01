@@ -67,6 +67,7 @@ function jobSummaryFromChangedEvent(event: JobChangedEvent): JobSummary {
     canContinueIncomplete: job.canContinueIncomplete,
     canCancel: job.canCancel,
     canRetry: job.canRetry,
+    ...(job.waitingDependency !== undefined ? { waitingDependency: job.waitingDependency } : {}),
     ...(job.agentKnowledgeOutcome !== undefined ? { agentKnowledgeOutcome: job.agentKnowledgeOutcome } : {}),
     ...(job.error !== undefined ? { error: job.error } : {}),
     message: job.message, createdAt: job.createdAt, updatedAt: job.updatedAt

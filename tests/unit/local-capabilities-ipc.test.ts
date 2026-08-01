@@ -232,6 +232,7 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
       ...input,
       status: "opened" as const
     })),
+    onPaddleOcrReady: vi.fn(),
     ...overrides
   };
 
@@ -265,6 +266,7 @@ describe("registerLocalCapabilitiesIpc", () => {
       "testPaddleOcr",
       "disablePaddleOcr",
       "removePaddleOcr",
+      "onPaddleOcrReady",
       "repairToolchain"
     ]) {
       expect(source).toContain(`${callback}:`);
@@ -368,6 +370,7 @@ describe("registerLocalCapabilitiesIpc", () => {
       expect(callback).toHaveBeenCalledWith(request);
     }
     expect(callbacks.paddleOcrSummary).toHaveBeenCalledWith({ apiVersion: 1 });
+    expect(callbacks.onPaddleOcrReady).toHaveBeenCalledTimes(1);
     await expect(call(handlers, TOOLCHAIN_REPAIR_CHANNEL, toolchainRepairRequest))
       .resolves.toEqual({ ...toolchainRepairRequest, status: "opened" });
     expect(callbacks.repairToolchain).toHaveBeenCalledWith(toolchainRepairRequest);

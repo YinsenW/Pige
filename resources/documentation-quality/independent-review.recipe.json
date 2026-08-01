@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "One strict YAML and type-specific boundary validates, rewrites and indexes all Pige-managed Markdown page types and closes PIGE-SCHEMA-001.",
+    "scope": "Structured local-tool waits route to Local Capabilities and exact preserved OCR and Agent-ingest work resumes immediately after verified PaddleOCR enable or after restart.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "83bee32d909d1bfd77041935f2caef9cac3d65b12b3773be8d917e826c8cb2ab"
+    "reviewedSha256": "7fab2ce905d6d36ade24fe3f9b0a39affd030b3620da109581e5b1949cccea6d"
   },
   "reviewers": [
     {
-      "reviewerId": "managed-markdown-schema-review",
-      "task": "Review strict managed Markdown parsing, round-trip and index acceptance",
+      "reviewerId": "local-tool-wait-resume-review",
+      "task": "Review structured local-tool repair routing and exact in-session recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the durable Markdown contract and acceptance facts; Development supplies separate parser, writer, index and regression evidence."
+      "independence": "Planning reviews the Job and renderer-safe repair contract; Development supplies separate IPC, toolchain, scheduler and UI regression evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "managed-markdown-schema-review",
+      "reviewerId": "local-tool-wait-resume-review",
       "blockerCount": 0,
-      "summary": "Managed Markdown keeps exact user body bytes and unknown safe fields while invalid files remain outside Library and index truth."
+      "summary": "The renderer receives only strict dependency kind and repair action while Main retains durable Job, tool and scheduling authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "managed-markdown-schema-review",
+      "reviewerId": "local-tool-wait-resume-review",
       "blockerCount": 0,
-      "summary": "Schema, parser, writers, Source projection, index rebuild, architecture registry and accepted decision use one validation contract."
+      "summary": "Schemas, contracts, Job summaries, Home routing, capability IPC and toolchain recovery use one structured waiting-dependency contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "managed-markdown-schema-review",
+      "reviewerId": "local-tool-wait-resume-review",
       "blockerCount": 0,
-      "summary": "PIGE-SCHEMA-001 cites seven-type round-trip, malformed-page exclusion, Source projection and Agent-ingest evidence without an open gap."
+      "summary": "PIGE-JOB-004 and E2.11 cite executable exact requeue evidence while legacy and other runtime-capability wait classes remain explicit."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "managed-markdown-schema-review",
+      "reviewerId": "local-tool-wait-resume-review",
       "blockerCount": 0,
-      "summary": "The shared schema/parser boundary replaces hand-written index interpretation while existing writer and storage owners retain publication authority."
+      "summary": "The shared recovery helper eliminates separate startup and explicit-enable scheduling paths while retaining existing scheduler deduplication."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "managed-markdown-schema-review",
+      "reviewerId": "local-tool-wait-resume-review",
       "blockerCount": 0,
-      "summary": "Existing Markdown, architecture, playbook, decision and traceability owners contain the complete delta without a new design document."
+      "summary": "Existing Job, API, decision and traceability owners contain the complete delta without adding a new design document or public channel."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/markdown-frontmatter.test.ts tests/unit/markdown-page-index.test.ts tests/unit/source-page-service.test.ts tests/unit/note-markdown-import-service.test.ts tests/unit/agent-ingest-service.test.ts",
+      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/jobs-service.test.ts tests/unit/local-capabilities-ipc.test.ts tests/unit/toolchain-service.test.ts tests/unit/home-agent-conversation-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused parser, index and writer tests cover every page type, exact body/unknown-field round-trip, invalid-page exclusion and bounded Source projection."
+      "evidence": "Focused tests cover strict safe wait projection, Home repair routing, explicit enable callback, exact OCR and Agent requeue, restart convergence and deduplication."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with the existing Markdown and index owners inside protected architecture budgets."
+      "evidence": "The candidate compiles and builds with Main and App frozen owners kept inside protected architecture budgets."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Markdown, architecture, playbook, decision, acceptance and semantic-claim owners agree; remote Verify owns the final concurrent trace execution."
+      "evidence": "Job, API, decision, acceptance and semantic-claim owners agree; remote Verify owns the final concurrent trace execution."
     }
   ],
   "coordination": {
-    "taskId": "managed-markdown-schema-bind-20260802",
-    "taskTitle": "Bind strict managed Markdown schema and rebuild acceptance",
+    "taskId": "local-tool-wait-resume-bind-20260802",
+    "taskTitle": "Bind structured local-tool repair and exact resume acceptance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "The legacy top-level parser remains available for migration/input inspection; only managed-page write and rebuild truth use the strict contract.",
-    "acknowledgement": "Planning promotes PIGE-SCHEMA-001 from partial to verified on complete managed-page round-trip and invalid-index exclusion evidence."
+    "compatibility": "Legacy waiting records without structured dependency metadata remain fail-closed; startup recovery and existing generic Retry behavior remain available.",
+    "acknowledgement": "Planning records the local-tool wait closure while PIGE-JOB-004 and E2.11 remain partial for legacy and unexercised runtime-capability classes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

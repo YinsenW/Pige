@@ -421,6 +421,7 @@ type JobSummary = {
   sourceDisplayName?: string;
   sourceKind?: SourceKind;
   backupKind?: "user_backup" | "restore_rollback";
+  waitingDependency?: WaitingDependencySummary;
   canReconnectDependency: boolean;
   error?: PigeErrorSummary;
   stage?: JobStage;
@@ -455,6 +456,9 @@ Rules:
 - Summaries may include source display name/kind and Backup ownership/error types, never
   record/copy/original/destination paths, bodies, prompts, responses, secrets, raw error
   detail or archive internals. Settings filters rollback children.
+- A waiting summary may include only the strict body/path-free dependency kind and repair
+  action. Home routes `local_tool + repair_tool` to Local Capabilities instead of issuing a
+  blind retry; Main still re-proves the durable Job and capability before any requeue.
 - Required `canReconnectDependency` is true only for parsed durable
   `backup + waiting_dependency + reconnect_path + (vault_binding | external_source)`;
   otherwise false/skipped, exposing no private wait field.
@@ -463,6 +467,10 @@ Rules:
   false/absent action-safety guard; active process-local parse/OCR/`agent_turn`/Agent
   ingest/`index_rebuild` becomes idempotent `cancel_requested`. Running capture remains non-cooperative.
 - `jobs.retry` updates eligible `failed_retryable`, `waiting_dependency`, or `cancelled` jobs back to `queued` for later processing.
+- A successful explicit PaddleOCR enable performs the same exact toolchain recheck used by
+  recovery and requeues preserved OCR and downstream Agent-ingest work in-session. Failure
+  to schedule recovery does not rewrite the authoritative enabled result; restart recovery
+  remains the convergence path.
 - Before a queued/waiting/retryable Job is written as `cancelled`,
   `durableWritesApplied: true` returns `not_allowed` unchanged; retry retains this guard.
   Active parse/OCR/`agent_turn`/Agent ingest/`index_rebuild` may still become

@@ -54,6 +54,7 @@ import type {
   SpeechCancelRequest,
   SpeechSessionRequest,
   SpeechStartRequest,
+  ToolchainHealth,
   ToolchainRepairRequest,
   UpdateApplyRequest,
   UpdateCheckRequest,
@@ -1157,6 +1158,21 @@ const getToolchainRepairService = (): ToolchainRepairService => {
   });
   return toolchainRepairService;
 };
+
+const recoverReadyLocalCapabilities = (): ToolchainHealth =>
+  getToolchainService().recheckAndRecover({
+    hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
+    requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
+    requeueWaitingOcr: () => getJobsService().requeueWaitingOcr(),
+    requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
+    scheduleParseProcessing,
+    scheduleOcrProcessing,
+    scheduleAgentIngestProcessing,
+    onRecoveryFailure: (owner) => recordBackgroundFailure(
+      `toolchain.${owner}.recovery_failed`,
+      "Preserved work could not be resumed after the local toolchain became ready."
+    )
+  });
 
 const getSpeechService = (): SpeechService => {
   if (!speechService) {
@@ -3487,6 +3503,7 @@ registerLocalCapabilitiesIpc({
   paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),
   installPaddleOcr: (request) => getPaddleOcrLifecycleService().install(request),
   enablePaddleOcr: (request) => getPaddleOcrLifecycleService().enable(request),
+  onPaddleOcrReady: () => { recoverReadyLocalCapabilities(); },
   testPaddleOcr: (request) => getPaddleOcrLifecycleService().test(request),
   disablePaddleOcr: (request) => getPaddleOcrLifecycleService().disable(request),
   removePaddleOcr: (request) => getPaddleOcrLifecycleService().remove(request),
@@ -3944,17 +3961,7 @@ ipcMain.handle("updates.apply", async (_event, request: UpdateApplyRequest) =>
     await getUpdateService().apply(UpdateApplyRequestSchema.parse(request))
   )
 );
-ipcMain.handle("system.toolchainHealth", () => getToolchainService().recheckAndRecover({
-  hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
-  requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
-  requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
-  scheduleParseProcessing,
-  scheduleAgentIngestProcessing,
-  onRecoveryFailure: (owner) => recordBackgroundFailure(
-    `toolchain.${owner}.recovery_failed`,
-    "Preserved work could not be resumed after the local toolchain became ready."
-  )
-}));
+ipcMain.handle("system.toolchainHealth", recoverReadyLocalCapabilities);
 
 app.whenReady().then(async () => {
   if (!ownsAppInstanceLock) return;

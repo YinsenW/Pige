@@ -4254,6 +4254,7 @@ function toJobSummary(vaultPath: string, job: JobRecord, hasActiveExecution = fa
     canContinueIncomplete: canContinueIncomplete(job),
     canCancel: canCancelJob(job, hasActiveExecution),
     canRetry: canRetryJob(job),
+    ...(job.waitingDependency ? { waitingDependency: job.waitingDependency } : {}),
     ...(job.agentKnowledgeOutcome ? { agentKnowledgeOutcome: job.agentKnowledgeOutcome } : {}),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,

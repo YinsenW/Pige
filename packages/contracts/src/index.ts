@@ -1520,6 +1520,7 @@ export interface JobSummary {
   readonly canContinueIncomplete: boolean;
   readonly canCancel?: boolean;
   readonly canRetry?: boolean;
+  readonly waitingDependency?: JobRecord["waitingDependency"];
   readonly agentKnowledgeOutcome?: JobRecord["agentKnowledgeOutcome"];
   readonly error?: PigeErrorSummary;
   readonly message: string;

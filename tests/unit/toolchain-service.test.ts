@@ -115,7 +115,7 @@ describe("toolchain service", () => {
     expect(health.tools[0]).toMatchObject({ status: "missing", repairHint: "Repair the application installation." });
   });
 
-  it("requeues preserved parser work after an explicit healthy recheck without duplicate scheduling", () => {
+  it("requeues preserved parser, OCR, and Agent work after an explicit healthy recheck without duplicate scheduling", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-toolchain-recovery-test-"));
     tempRoots.push(root);
     const toolPath = path.join(root, "bin/tool");
@@ -127,13 +127,16 @@ describe("toolchain service", () => {
       tools: [{ id: "parser", name: "Parser", required: true, bundledPath: "bin/tool" }]
     })}\n`, "utf8");
     const scheduleParseProcessing = vi.fn();
+    const scheduleOcrProcessing = vi.fn();
     const scheduleAgentIngestProcessing = vi.fn();
     let first = true;
     const dependencies = {
       hasActiveVault: () => true,
       requeueWaitingParses: vi.fn(() => ({ requeued: first ? 2 : 0 })),
+      requeueWaitingOcr: vi.fn(() => ({ requeued: first ? 3 : 0 })),
       requeueWaitingAgentIngest: vi.fn(() => ({ requeued: first ? 1 : 0 })),
       scheduleParseProcessing,
+      scheduleOcrProcessing,
       scheduleAgentIngestProcessing,
       onRecoveryFailure: vi.fn()
     };
@@ -144,8 +147,10 @@ describe("toolchain service", () => {
     expect(service.recheckAndRecover(dependencies).status).toBe("ready");
 
     expect(dependencies.requeueWaitingParses).toHaveBeenCalledTimes(2);
+    expect(dependencies.requeueWaitingOcr).toHaveBeenCalledTimes(2);
     expect(dependencies.requeueWaitingAgentIngest).toHaveBeenCalledTimes(2);
     expect(scheduleParseProcessing).toHaveBeenCalledTimes(1);
+    expect(scheduleOcrProcessing).toHaveBeenCalledTimes(1);
     expect(scheduleAgentIngestProcessing).toHaveBeenCalledTimes(1);
   });
 
@@ -160,8 +165,10 @@ describe("toolchain service", () => {
     const dependencies = {
       hasActiveVault: vi.fn(() => true),
       requeueWaitingParses,
+      requeueWaitingOcr: vi.fn(() => ({ requeued: 1 })),
       requeueWaitingAgentIngest: vi.fn(() => ({ requeued: 1 })),
       scheduleParseProcessing: vi.fn(),
+      scheduleOcrProcessing: vi.fn(),
       scheduleAgentIngestProcessing: vi.fn(),
       onRecoveryFailure: vi.fn()
     };
@@ -201,8 +208,10 @@ describe("toolchain service", () => {
     expect(new ToolchainService(manifestPath).recheckAndRecover({
       hasActiveVault: () => true,
       requeueWaitingParses: () => { throw new Error("damaged private job record"); },
+      requeueWaitingOcr: () => ({ requeued: 0 }),
       requeueWaitingAgentIngest: () => ({ requeued: 1 }),
       scheduleParseProcessing: vi.fn(),
+      scheduleOcrProcessing: vi.fn(),
       scheduleAgentIngestProcessing,
       onRecoveryFailure
     }).status).toBe("ready");

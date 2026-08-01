@@ -11800,6 +11800,7 @@ export const JobChangedSummarySchema = z.object({
   canContinueIncomplete: z.boolean(),
   canCancel: z.boolean(),
   canRetry: z.boolean(),
+  waitingDependency: WaitingDependencySummarySchema.optional(),
   agentKnowledgeOutcome: AgentKnowledgeOutcomeSummarySchema.optional(),
   error: PigeErrorSummarySchema.optional(),
   message: z.string().min(1),
