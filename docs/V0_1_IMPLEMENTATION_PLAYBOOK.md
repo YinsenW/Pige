@@ -582,7 +582,8 @@ analytical snapshots, longer relation paths/aggregate joins, scale/platform and 
 authority proof keep E6.11/PIGE-DATA-002 partial. B6.12/B6.14 prove main-owned rebuildable
 tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, branch
 collapse/expand with hidden-match reveal, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep
-E6.07/E6.09 partial.
+E6.07/E6.09 partial. The same body-free tree now supports bounded title/type result lists,
+ancestor-path reveal, keyboard selection and stable-ID Reader open without changing durable state.
 PIGE-CONTEXT-001 and PIGE-CONTEXT-002 are verified for the v0.1 local desktop runtime:
 Home/current-note, selection/retrieval, mixed attachments, lower-authority memory and
 compacted conversation state use bounded cited reference packs; exact pack identity and
