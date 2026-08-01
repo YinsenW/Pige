@@ -2246,6 +2246,8 @@
   "system.crashRecovery.proposals": "복구된 검토",
   "system.crashRecovery.awaitingReview": "검토 대기 항목",
   "system.crashRecovery.sources": "복구할 소스",
+  "system.crashRecovery.history": "최근 시작 복구",
+  "system.crashRecovery.historySummary": "복구 기록 표시",
   "pigePolicy.title": "Vault Agent 정책",
   "pigePolicy.description": "Agent가 이 Vault를 관리하는 검증된 지침인 PIGE.md를 확인하고 편집합니다.",
   "pigePolicy.edit": "정책 편집",

@@ -3,7 +3,7 @@
   "baseline": "f2f9e7818c5be6a8e9fdfe9fab3b67e0d1c5bbb1",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 271,
-  "baselineLines": 122674,
+  "baselineLines": 122708,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -46,7 +46,7 @@
       ["generated-note-file.ts", 515, "rdf"],
       ["agent-turn-publication.ts", 386, "jrd"],
       ["durable-agent-turn-answer.ts", 79, "rd"],
-      ["crash-recovery-service.ts", 184, "rd"],
+      ["crash-recovery-service.ts", 218, "rd"],
       ["diagnostics-lifecycle-service.ts", 868, "jrd"],
       ["dictation-language-preference-service.ts", 65, ""],
       ["home-agent-attachment-service.ts", 358, "jrd"],

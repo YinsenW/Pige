@@ -128,6 +128,7 @@ interface DiagnosticsServiceOptions {
   readonly maxStringBytes?: number;
   readonly exporter?: DiagnosticsExportPort;
   readonly crashRecoverySummary?: () => DiagnosticsHealth["crashRecovery"];
+  readonly crashRecoveryHistory?: () => NonNullable<DiagnosticsHealth["crashRecoveryHistory"]>;
 }
 
 interface PersistedDiagnosticEvent extends DiagnosticEvent {
@@ -150,6 +151,7 @@ export class DiagnosticsService {
   readonly #maxStringBytes: number;
   readonly #exporter: DiagnosticsExportPort;
   readonly #crashRecoverySummary: () => DiagnosticsHealth["crashRecovery"];
+  readonly #crashRecoveryHistory: () => NonNullable<DiagnosticsHealth["crashRecoveryHistory"]>;
   #currentSegmentBytes: number | undefined;
   #nextExpiryAtMs: number | undefined;
   #storeBytes: number | undefined;
@@ -182,6 +184,7 @@ export class DiagnosticsService {
     );
     this.#exporter = options.exporter ?? new DiagnosticsExportWorkerService();
     this.#crashRecoverySummary = options.crashRecoverySummary ?? (() => undefined);
+    this.#crashRecoveryHistory = options.crashRecoveryHistory ?? (() => []);
   }
 
   health(): DiagnosticsHealth {
@@ -208,6 +211,7 @@ export class DiagnosticsService {
       localOnly: true,
       recentErrorCount,
       checks,
+      crashRecoveryHistory: this.#crashRecoveryHistory().slice(-10),
       ...(crashRecovery ? { crashRecovery } : {})
     };
   }

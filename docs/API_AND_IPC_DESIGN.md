@@ -955,6 +955,11 @@ type DiagnosticsHealth = {
     status: "ok" | "warning" | "error";
     message: string;
   }>;
+  crashRecovery?: CrashRecoverySummary;
+  crashRecoveryHistory?: Array<CrashRecoverySummary & {
+    status: "recovered" | "needs_attention";
+    completedAt: string;
+  }>; // max 10, newest boundary is machine-local
 };
 ```
 
@@ -966,6 +971,8 @@ return the authoritative workflow, while `failed` remains identity-only.
 Rules:
 
 - Diagnostics DTOs are redacted by default.
+- Startup recovery summaries carry one opaque `recoveryId`; the same value correlates the
+  local started/completed events. History is bounded to ten completed pathless summaries.
 - Support bundle export is user-initiated, previewed, cancelable, and local-only in v0.1.
 - `diagnostics.exportSupportBundle` requires a current `previewId` from `diagnostics.previewSupportBundle`.
 - Export uses a trusted OS save dialog; canceling the dialog returns `status: "canceled"` without creating a file.

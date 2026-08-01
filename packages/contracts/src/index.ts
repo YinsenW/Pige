@@ -1146,6 +1146,7 @@ export interface DiagnosticsHealth {
     readonly message: string;
   }[];
   readonly crashRecovery?: {
+    readonly recoveryId: string;
     readonly status: "recovering" | "recovered" | "needs_attention";
     readonly detectedAt: string;
     readonly completedAt?: string | undefined;
@@ -1157,6 +1158,19 @@ export interface DiagnosticsHealth {
     readonly sourcesNeedRepair: number;
     readonly indexRebuildRunning: boolean;
   } | undefined;
+  readonly crashRecoveryHistory?: readonly {
+    readonly recoveryId: string;
+    readonly status: "recovering" | "recovered" | "needs_attention";
+    readonly detectedAt: string;
+    readonly completedAt?: string | undefined;
+    readonly capturesPreserved: number;
+    readonly jobsRecovered: number;
+    readonly jobsNeedRetry: number;
+    readonly proposalsRecovered: number;
+    readonly proposalsAwaitingReview: number;
+    readonly sourcesNeedRepair: number;
+    readonly indexRebuildRunning: boolean;
+  }[] | undefined;
 }
 
 export type SupportBundleExportResult = DiagnosticsExportSupportBundleResult;

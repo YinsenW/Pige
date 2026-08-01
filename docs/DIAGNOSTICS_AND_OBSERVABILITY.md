@@ -169,6 +169,12 @@ On startup after abnormal exit, Pige should:
 7. Produce a user-visible recovery summary.
 8. Record a local `crash_recovery.completed` event.
 
+Each detected recovery mints one pathless `recoveryId`. The started/completed events use it
+as their safe correlation ID, and Main retains only the ten most recent completed summaries
+in machine-local diagnostics. Settings exposes that bounded history behind progressive
+disclosure, and support export includes the same redacted summaries; neither surface exposes
+Vault paths, content, secrets, or an upload action.
+
 The recovery summary should say:
 
 - Whether any captures were preserved.

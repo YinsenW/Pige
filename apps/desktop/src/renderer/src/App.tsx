@@ -69,6 +69,7 @@ import {
   supportBundlePreviewIsFullyProjected
 } from "./components/DiagnosticsWorkflowCards";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
+import { CrashRecoveryHistory } from "./components/CrashRecoveryHistory";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -8713,6 +8714,7 @@ export function SystemSettingsPanel(props: {
               </span>
             </div>
           ) : null}
+          <CrashRecoveryHistory history={props.diagnosticsHealth?.crashRecoveryHistory} t={props.t} />
           <div className="settings-row tall">
             <div className="settings-row-copy">
               <strong>{props.t("system.supportBundle")}</strong>
