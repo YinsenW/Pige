@@ -6,12 +6,14 @@ export function projectReaderSourceDetails(
   vaultPath: string,
   sourceIds: readonly string[],
   includeReconnect: boolean,
+  refreshableSourceIds?: readonly string[],
 ) {
   const metadata = sourceIds.length > 0 ? { sourceMetadata: projectNoteSourceMetadata(vaultPath, sourceIds) } : {};
   if (!includeReconnect) return metadata;
   const reconnectOriginalSources = reconnectableOriginalSources(vaultPath, sourceIds);
   return {
     ...metadata,
+    ...(refreshableSourceIds ? { refreshableSourceIds: [...refreshableSourceIds] } : {}),
     reconnectOriginalSourceIds: reconnectOriginalSources.map((source) => source.sourceId),
     reconnectOriginalSources,
   };

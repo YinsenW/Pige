@@ -220,7 +220,12 @@ describe("notes service", () => {
     }), "utf8");
     writeSourceRecord({ vaultPath, sourceId: overflowSourceId, displayName: "overflow-secret.txt" });
 
-    const rendered = await makeNotes(vaultPath, vault).render({ pageId }, OWNER_ID);
+    const rendered = await new NotesService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    }, undefined, undefined, undefined, {
+      refreshableSourceIds: (sourceIds) => sourceIds.filter((id) => id === sourceId)
+    }).render({ pageId }, OWNER_ID);
     expect(rendered.sourceMetadata).toEqual({
       items: [
         {
@@ -248,6 +253,7 @@ describe("notes service", () => {
       rendered.reconnectOriginalSources?.map((source) => source.sourceId)
     );
     expect(rendered.reconnectOriginalSourceIds).not.toContain(mismatchedSourceId);
+    expect(rendered.refreshableSourceIds).toEqual([sourceId]);
     expect(JSON.stringify(rendered.sourceMetadata)).not.toMatch(
       /private-ocr|private-text|pige-test|checksum|path|hunter2|db\.internal|must-not-render|overflow-secret/iu
     );

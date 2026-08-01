@@ -24,6 +24,16 @@ afterEach(() => {
 });
 
 describe("SourceRefreshService", () => {
+  it("projects only current sources supported by the active refresh adapters", () => {
+    const fixture = makeFixture("plain_text_file", "current evidence\n");
+    const service = makeService(fixture);
+
+    expect(service.refreshableSourceIds([
+      fixture.source.id,
+      "src_20260731_missing123"
+    ])).toEqual([fixture.source.id]);
+  });
+
   it("previews without exposing local evidence and publishes the exact confirmed text revision", async () => {
     const fixture = makeFixture("plain_text_file", "old evidence\n");
     fs.writeFileSync(fixture.originalPath, "new confirmed evidence\n", "utf8");

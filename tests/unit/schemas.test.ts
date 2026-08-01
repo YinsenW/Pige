@@ -4905,12 +4905,16 @@ describe("schemas", () => {
     })).toThrow();
     expect(NoteRenderResultSchema.parse({
       ...render,
+      refreshableSourceIds: ["src_20260730_note1234"],
       sourceMetadata: {
         items: [{ sourceId: "src_20260730_note1234", status: "current", displayName: "receipt.png",
           category: "image", storage: "managed_copy", extraction: "ocr" }],
         remainingCount: 0
       }
-    }).sourceMetadata?.items[0]).toMatchObject({ displayName: "receipt.png", category: "image" });
+    })).toMatchObject({
+      refreshableSourceIds: ["src_20260730_note1234"],
+      sourceMetadata: { items: [{ displayName: "receipt.png", category: "image" }] }
+    });
     for (const displayName of [
       "/private/receipt.png",
       "postgres:alice:hunter2@db.internal",

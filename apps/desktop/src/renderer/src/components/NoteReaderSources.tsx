@@ -63,6 +63,7 @@ export function NoteReaderSources(props: {
         })}
         <NoteReaderSourceActions currentPageId={summary.pageId} sourceIds={summary.sourceIds}
           visibleSourceIds={visibleSourceIds} labels={readerSourceActionLabels(props.t)}
+          {...(props.note.refreshableSourceIds ? { refreshableSourceIds: props.note.refreshableSourceIds } : {})}
           sourceLabel={(number) => props.t("note.savedSource").replace("{number}", String(number))}
           t={props.t} getFocusRoot={props.getFocusRoot}
           {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}

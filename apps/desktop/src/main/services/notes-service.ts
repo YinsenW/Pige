@@ -65,6 +65,8 @@ export interface NotesMarkdownRenderer {
   }>;
 }
 
+export interface NotesSourceRefreshProjectionPort { refreshableSourceIds(sourceIds: readonly string[]): readonly string[] }
+
 interface FileIdentity {
   readonly size: number;
   readonly mtimeMs: number;
@@ -150,21 +152,16 @@ export class NotesService {
   readonly #vaults: NotesVaultPort;
   readonly #referenceIndex: NotesInlineReferenceIndexPort | undefined;
   readonly #renderMarkdown: NotesMarkdownRenderer;
-  readonly #editor: NoteMarkdownEditorService | undefined;
+  readonly #editor: NoteMarkdownEditorService | undefined; readonly #sourceRefresh: NotesSourceRefreshProjectionPort | undefined;
   readonly #renderContexts = new Map<string, Map<string, NoteRenderContext>>();
   readonly #editorBindings = new Map<string, NoteEditorBinding>();
   readonly #ownerEpochs = new Map<string, number>();
 
-  constructor(
-    vaults: NotesVaultPort,
-    referenceIndex?: NotesInlineReferenceIndexPort,
-    renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml,
-    editor?: NoteMarkdownEditorService
-  ) {
-    this.#vaults = vaults;
-    this.#referenceIndex = referenceIndex;
-    this.#renderMarkdown = renderMarkdown;
-    this.#editor = editor;
+  constructor(vaults: NotesVaultPort, referenceIndex?: NotesInlineReferenceIndexPort,
+    renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml, editor?: NoteMarkdownEditorService,
+    sourceRefresh?: NotesSourceRefreshProjectionPort) {
+    this.#vaults = vaults; this.#referenceIndex = referenceIndex; this.#renderMarkdown = renderMarkdown;
+    this.#editor = editor; this.#sourceRefresh = sourceRefresh;
   }
 
   get(request: NoteGetRequest): NoteDocument {
@@ -216,7 +213,8 @@ export class NotesService {
       },
       html: rendered.html,
       byteSize: stable.document.byteSize,
-      ...projectReaderSourceDetails(vaultPath, stable.document.summary.sourceIds, ownerId !== undefined),
+      ...projectReaderSourceDetails(vaultPath, stable.document.summary.sourceIds, ownerId !== undefined,
+        ownerId === undefined ? undefined : this.#sourceRefresh?.refreshableSourceIds(stable.document.summary.sourceIds)),
       ...(renderContextId ? {
         renderContextId,
         ...(stable.document.summary.pageType === "note"

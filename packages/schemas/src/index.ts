@@ -1877,6 +1877,7 @@ export const NoteRenderResultSchema = z.object({
   questionState: NoteQuestionStateSummarySchema.optional(),
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
+  refreshableSourceIds: z.array(SourceIdSchema).max(1_000).optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();

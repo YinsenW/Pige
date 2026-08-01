@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReaderSourceRefreshAction } from "../../apps/desktop/src/renderer/src/components/ReaderSourceRefreshAction";
+import { NoteReaderSourceActions } from "../../apps/desktop/src/renderer/src/components/ReaderSourceActions";
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "MouseEvent"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -19,6 +20,38 @@ afterEach(() => {
 });
 
 describe("Reader source refresh action", () => {
+  it("renders actions only for Main-projected refreshable sources", async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" });
+    installDom(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(NoteReaderSourceActions, {
+        activeVaultId: "vault_20260731_abcdefgh",
+        currentPageId: "page_20260731_reader1234",
+        renderContextId: `notectx_${"a".repeat(32)}`,
+        sourceIds: ["src_20260731_source1234", "src_20260731_source5678"],
+        visibleSourceIds: ["src_20260731_source1234", "src_20260731_source5678"],
+        refreshableSourceIds: ["src_20260731_source5678"],
+        labels: {
+          reveal: "Show original", revealing: "Showing…", revealed: "Shown", cancelled: "Cancelled",
+          stale: "Stale", notFound: "Not found", unavailable: "Unavailable", failed: "Failed",
+          reconnect: "Reconnect", reconnecting: "Reconnecting…", reconnected: "Reconnected",
+          reconnectChangedTitle: "Changed", reconnectChangedDescription: "Changed", reconnectChangedConfirm: "Confirm",
+          reconnectChangedCancel: "Cancel"
+        },
+        sourceLabel: (number: number) => `Saved source ${number}`,
+        t: (key: string) => key,
+        getFocusRoot: () => dom.window.document.querySelector("#root")
+      }));
+      await settle(dom);
+    });
+
+    expect(dom.window.document.querySelector('[data-reader-source-refresh="src_20260731_source1234"]')).toBeNull();
+    expect(dom.window.document.querySelector('[data-reader-source-refresh="src_20260731_source5678"]')).not.toBeNull();
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("shows a bounded change preview and confirms only its exact preview revision", async () => {
     const previewId = `sourcerefreshpreview_${"b".repeat(32)}`;
     const revision = `sourcerefreshrev_${"c".repeat(64)}`;

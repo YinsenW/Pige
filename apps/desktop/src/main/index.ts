@@ -1815,7 +1815,8 @@ const getNotesService = (): NotesService => {
       getVaultService(),
       getLocalDatabaseService(),
       undefined,
-      getNoteMarkdownEditorService()
+      getNoteMarkdownEditorService(),
+      getSourceRefreshService()
     );
   }
   return notesService;
