@@ -821,6 +821,11 @@ Commands:
 - `tools.install`
 - `tools.remove`
 
+`models.setDefaultModel` binds the selected enabled model profile to the exact visible
+Model Provider Registry `expectedRevision`. A stale Home or Settings choice fails before
+persistence; only the current committed default is recovered on restart and resolved by
+new Pi calls.
+
 Queries:
 
 - `settings.registry`

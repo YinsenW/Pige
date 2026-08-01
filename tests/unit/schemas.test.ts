@@ -257,6 +257,7 @@ import {
   SetOcrLanguagePreferenceResultSchema,
   SetDictationLanguagePreferenceRequestSchema,
   SetDictationLanguagePreferenceResultSchema,
+  SetDefaultModelRequestSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageCatalogQueryRequestSchema,
@@ -345,6 +346,19 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("requires the exact model-settings revision when choosing the global default", () => {
+    const request = {
+      modelProfileId: "model_default_profile",
+      expectedRevision: `sha256:${"a".repeat(64)}`
+    } as const;
+    expect(SetDefaultModelRequestSchema.parse(request)).toEqual(request);
+    expect(() => SetDefaultModelRequestSchema.parse({ modelProfileId: request.modelProfileId })).toThrow();
+    expect(() => SetDefaultModelRequestSchema.parse({
+      ...request,
+      expectedRevision: `sha256:${"b".repeat(63)}`
+    })).toThrow();
+  });
+
   it("keeps source refresh previews renderer-safe and confirmation identity revision-bound", () => {
     const identity = {
       apiVersion: 1 as const,
