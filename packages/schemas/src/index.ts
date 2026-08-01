@@ -8883,7 +8883,11 @@ export const RetrievalSearchResultSchema = z.object({
   total: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   invalidPageCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   degraded: z.boolean(),
-  degradedReason: z.enum(["local_database_not_ready", "local_rag_not_installed"]).optional(),
+  degradedReason: z.enum([
+    "local_database_not_ready",
+    "local_rag_not_installed",
+    "local_rag_unavailable"
+  ]).optional(),
   results: z.array(RetrievalSearchResultItemSchema).max(20).readonly()
 }).strict();
 

@@ -627,7 +627,11 @@ Events:
 types. Preload/Main fence the vault; results contain bound IDs, relative Markdown paths,
 snippets/reasons, never bodies, absolute paths, vector/policy internals or uncalibrated
 scores. Closed modes add `semantic_hybrid` only after private runtime/index/span
-revalidation; async failure returns the unchanged lexical result. No new runtime/UI DTO.
+revalidation. When the optional asset is disabled, lexical search remains an ordinary
+result. When it is enabled but the embedding runtime or current vector generation is
+unavailable, Main returns the same bounded lexical evidence with
+`degradedReason: local_rag_unavailable`; Home exposes the existing degraded notice rather
+than presenting semantic retrieval as healthy.
 Other DTOs follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
 `notes.openSearchMatch` accepts only the active Vault ID, result page ID and the bounded
@@ -641,6 +645,10 @@ returns asset state/fixed bytes, lexical availability and only an install/verify
 Install is `accepted|already_installed|stale|failed`; Enable adds
 `already_enabled|not_found`; Disable/Remove use `committed|stale|not_found|failed`.
 `ready` remains asset-only; B6.06 consumes only a private reverified lease.
+Committing or replay-adopting Enable schedules one durable `index_rebuild` Job. If the
+enabled semantic adapter cannot publish its generation, the lexical rebuild is retained
+but the same Job becomes `failed_retryable`; retry and startup recovery re-enter the
+ordinary Job executor after capability repair.
 
 Schema-v1 `agent.submitTurn` pairs optional conversation/tail IDs and strict
 `current_note` scope; `follow_up` requires the pair, `file_picker` may carry it and other

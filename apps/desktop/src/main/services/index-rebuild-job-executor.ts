@@ -56,7 +56,7 @@ export interface IndexRebuildDatabasePort {
 }
 
 export interface IndexRebuildSemanticPort {
-  rebuild(vaultPath: string, signal?: AbortSignal): Promise<"ready" | "skipped" | "failed">;
+  rebuild(vaultPath: string, signal?: AbortSignal): Promise<"ready" | "skipped" | "unavailable" | "failed">;
 }
 
 export class IndexRebuildJobExecutor {
@@ -128,9 +128,16 @@ export class IndexRebuildJobExecutor {
         let message = `Index rebuilt from Markdown: ${rebuild.pageCount} pages, ${rebuild.invalidPageCount} invalid pages skipped.`;
         const semantic = await this.#semantic?.rebuild(candidate.vaultPath, execution.control.signal);
         execution.control.throwIfCancellationRequested();
-        if (semantic === "failed") {
-          completionState = "completed_with_warnings";
-          message = `${message} Semantic vectors remain on the previous generation; lexical search is available.`;
+        if (semantic === "failed" || semantic === "unavailable") {
+          execution.fail(
+            new PigeDomainError(
+              semantic === "unavailable" ? "rag.embedding_runtime_unavailable" : "rag.semantic_index_failed",
+              "The enabled local semantic adapter could not publish a current vector index."
+            ),
+            `${message} Lexical search is available, but the enabled semantic adapter could not publish a current index; retry this Job after repairing Local Retrieval.`
+          );
+          failed += 1;
+          continue;
         }
         try {
           this.#port.appendActivity(

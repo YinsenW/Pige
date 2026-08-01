@@ -3203,6 +3203,65 @@ describe("jobs service", () => {
     expect(log).toContain("Rebuilt local database index from Markdown");
   });
 
+  it("retains an unavailable semantic adapter as a retryable index Job across restart", async () => {
+    const { vaultPath, vault } = makeVault();
+    const database = makeInlineWorkerDatabase();
+    const vaults = { current: () => vault, activeVaultPath: () => vaultPath };
+    const semanticRebuild = vi.fn()
+      .mockResolvedValueOnce("unavailable" as const)
+      .mockResolvedValueOnce("ready" as const);
+    writePage(vaultPath, "wiki/semantic-retry.md", {
+      id: "page_20260710_semanticretry",
+      title: "Semantic retry",
+      body: "Lexical search remains available while semantic indexing is repaired."
+    });
+
+    const first = new JobsService(
+      vaults,
+      undefined,
+      database,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { rebuild: semanticRebuild }
+    );
+    await expect(first.indexRebuildExecutor().request()).rejects.toMatchObject({
+      code: "index_rebuild_failed"
+    });
+    const failed = requireValue(first.list({
+      classes: ["index_rebuild"],
+      states: ["failed_retryable"]
+    }).jobs[0]);
+    expect(failed.canRetry).toBe(true);
+    expect(failed.message).toContain("Lexical search is available");
+
+    const restarted = new JobsService(
+      vaults,
+      undefined,
+      database,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { rebuild: semanticRebuild }
+    );
+    expect(restarted.list({ classes: ["index_rebuild"] }).jobs[0]?.id).toBe(failed.id);
+    expect(restarted.retry({ jobId: failed.id })).toMatchObject({
+      status: "requeued",
+      job: { id: failed.id, state: "queued" }
+    });
+    await expect(restarted.indexRebuildExecutor().process({ jobIds: [failed.id] }))
+      .resolves.toMatchObject({ completed: 1, failed: 0 });
+    expect(restarted.list({ classes: ["index_rebuild"], states: ["completed"] }).jobs[0]?.id)
+      .toBe(failed.id);
+    expect(semanticRebuild).toHaveBeenCalledTimes(2);
+  });
+
   it("cooperatively cancels a running index worker without changing durable Markdown", async () => {
     const { vaultPath, vault } = makeVault();
     let markStarted: (() => void) | undefined;

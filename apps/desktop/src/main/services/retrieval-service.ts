@@ -124,7 +124,10 @@ export class RetrievalService {
     const parsed = RetrievalSearchResultSchema.safeParse(result);
     if (
       !parsed.success ||
-      parsed.data.mode !== "semantic_hybrid" ||
+      (
+        parsed.data.mode !== "semantic_hybrid" &&
+        !(parsed.data.mode === lexical.mode && parsed.data.degradedReason === "local_rag_unavailable")
+      ) ||
       parsed.data.activeVaultId !== binding.vaultId ||
       parsed.data.query !== lexical.query
     ) {

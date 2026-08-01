@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T14:30:18Z",
+  "reviewedAt": "2026-08-01T14:27:41Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E3.04 exact Agent ingest publication authority and append-only log recovery convergence.",
+    "scope": "Visible and retryable Local RAG degradation from Settings enable through durable index rebuild, Home lexical fallback and restart recovery.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "f7d64db799e05f051bdc19799ad46147bedf0dbf208d07f6ab13805beb80a862"
+    "reviewedSha256": "735965f61e69189068b200edd0d46a9adbe80728187ed47f48c1de1f2828b268"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-ingest-publication-review",
-      "task": "Review E3.04 cited publication and retry convergence",
+      "reviewerId": "local-rag-degraded-recovery-review",
+      "task": "Review enabled Local RAG degradation, Job retry and restart recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the acceptance and recovery contract; Development supplies separate publication-authority and crash-retry implementation evidence."
+      "independence": "Planning reviews the API and Job lifecycle boundary; Development supplies separate engine, retrieval, registrar and durable restart/retry evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-ingest-publication-review",
+      "reviewerId": "local-rag-degraded-recovery-review",
       "blockerCount": 0,
-      "summary": "The first knowledge effect re-proves the exact active Vault, running Job, Source and unique durable capture event before publication."
+      "summary": "Settings Enable schedules the existing durable rebuild owner; Home retains bounded lexical evidence and visibly marks an unhealthy enabled adapter."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-ingest-publication-review",
+      "reviewerId": "local-rag-degraded-recovery-review",
       "blockerCount": 0,
-      "summary": "The Playbook and durable Job owner agree on cited note, index, Operation and Operation-keyed append-only log convergence."
+      "summary": "Schema, retrieval engine, Main registrar, Job executor and existing Home warning agree on one local_rag_unavailable degraded state."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-ingest-publication-review",
+      "reviewerId": "local-rag-degraded-recovery-review",
       "blockerCount": 0,
-      "summary": "E3.04 is verified by direct authority and post-log-crash recovery evidence while broader PIGE-KNOW-006 outcomes remain partial."
+      "summary": "Focused evidence covers optional-disabled health, enabled adapter failure, lexical projection, durable retry and same-Job restart adoption without claiming all E1.18 adapter parity."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-ingest-publication-review",
+      "reviewerId": "local-rag-degraded-recovery-review",
       "blockerCount": 0,
-      "summary": "A bounded private authority owner keeps publication revalidation out of the frozen Agent orchestrator while Jobs retains settlement ownership."
+      "summary": "Existing Local Semantic, Local RAG and index_rebuild owners remain authoritative; no parallel retry store, renderer runtime assumption or new Job class is introduced."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-ingest-publication-review",
+      "reviewerId": "local-rag-degraded-recovery-review",
       "blockerCount": 0,
-      "summary": "Two existing owner documents and the acceptance projection bind the closure without a new design document or duplicate public contract."
+      "summary": "Two existing owner paragraphs bind the behavior without a new design document, status promotion or duplicated runtime contract."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-ingest-publication-authority.test.ts tests/unit/jobs-service.test.ts",
+      "command": "npx vitest run tests/unit/local-rag-engine-service.test.ts tests/unit/retrieval-service.test.ts tests/unit/register-local-semantic-retrieval-ipc.test.ts tests/unit/index-rebuild-job-executor.test.ts tests/unit/jobs-service.test.ts tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Vault, Job, Source and capture-event drift fail before effect; retry after the log write adopts one note, Operation and log marker without another model turn."
+      "evidence": "Enabled/disabled capability distinctions, visible degraded lexical fallback, Enable scheduling and durable retry/restart pass directly."
+    },
+    {
+      "command": "npx vitest run tests/unit/jobs-service.test.ts -t 'retains an unavailable semantic adapter as a retryable index Job across restart'",
+      "status": "passed",
+      "evidence": "The same failed_retryable index Job survives service restart, is requeued explicitly, and completes after adapter repair."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The exact publication candidate compiles while Agent ingest, Jobs and the new bounded authority owner remain within frozen architecture budgets."
-    },
-    {
-      "command": "npm run verify:docs && npm run verify:decisions",
-      "status": "passed",
-      "evidence": "Playbook, Job recovery owner, acceptance projection and semantic-claim lock remain mutually consistent."
+      "evidence": "The revised degraded projection, Main recovery ordering and existing runtime owners compile within current architecture budgets."
     }
   ],
   "coordination": {
-    "taskId": "agent-ingest-publication-bind-20260801",
-    "taskTitle": "Bind E3.04 publication authority and recovery",
+    "taskId": "local-rag-degraded-recovery-20260801",
+    "taskTitle": "Bind visible and retryable enabled Local RAG degradation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing ingest DTOs and durable formats remain unchanged; publication now fails closed on authority drift and log replay adopts the same committed Operation.",
-    "acknowledgement": "Planning promotes E3.04 from direct product evidence while leaving broader Agent-output outcome and cross-process acceptance open."
+    "compatibility": "Disabled optional assets retain healthy lexical-only behavior; enabled adapter failure now reports degradation and keeps the existing index Job retryable.",
+    "acknowledgement": "Planning keeps E1.18 partial because tool and parser adapter parity remain open; this closes the user-triggerable Local RAG degraded retry/restart path."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

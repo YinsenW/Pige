@@ -103,7 +103,11 @@ describe("LocalRagEngineService", () => {
     await expect(engine.search("/vault", {
       scope: { kind: "active_vault", vaultId: lexical.activeVaultId },
       query: lexical.query
-    }, lexical)).resolves.toBe(lexical);
+    }, lexical)).resolves.toEqual({
+      ...lexical,
+      degraded: true,
+      degradedReason: "local_rag_unavailable"
+    });
   });
 
   it("reranks bounded local candidates and preserves the hybrid fallback on runtime failure", async () => {
@@ -151,7 +155,45 @@ describe("LocalRagEngineService", () => {
     ]);
 
     fail = true;
+    await expect(engine.search("/vault", request, lexical)).resolves.toMatchObject({
+      mode: "lexical_sqlite_fts",
+      degraded: true,
+      degradedReason: "local_rag_unavailable"
+    });
+  });
+
+  it("distinguishes an optional absent asset from an enabled adapter that cannot load", async () => {
+    const lexical = lexicalResult();
+    let enabled = false;
+    const engine = new LocalRagEngineService({
+      database: {
+        chunkIndexStatus: () => STATUS,
+        semanticChunkBatch: () => undefined,
+        semanticChunksById: () => undefined
+      },
+      embeddings: {
+        available: async () => false,
+        availableNow: () => false,
+        embedQuery: async () => normalizedVector(),
+        embedDocuments: async () => []
+      },
+      embeddingAssetEnabled: () => enabled,
+      createVectorPort: () => { throw new Error("unavailable runtime must not open vectors"); }
+    });
+    const request = {
+      scope: { kind: "active_vault" as const, vaultId: lexical.activeVaultId },
+      query: lexical.query
+    };
+
+    await expect(engine.rebuild("/vault")).resolves.toBe("skipped");
     await expect(engine.search("/vault", request, lexical)).resolves.toBe(lexical);
+
+    enabled = true;
+    await expect(engine.rebuild("/vault")).resolves.toBe("unavailable");
+    await expect(engine.search("/vault", request, lexical)).resolves.toMatchObject({
+      degraded: true,
+      degradedReason: "local_rag_unavailable"
+    });
   });
 });
 

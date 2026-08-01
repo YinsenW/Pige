@@ -1672,6 +1672,15 @@ describe("desktop shell build contract", () => {
     ];
 
     expect(mainSource).toContain("registerLocalSemanticRetrievalIpc({");
+    expect(mainSource).toContain("onEnabled: scheduleActivityIndexRebuild");
+    expect(mainSource).toContain("await getLocalSemanticRetrievalService().recover()");
+    expect(mainSource).toContain(
+      "embeddingAssetEnabled: () => getLocalSemanticRetrievalService().embeddingModelInstalled()"
+    );
+    expect(registrarSource).toContain(
+      'if (parsedResult.status === "committed" || parsedResult.status === "already_enabled")'
+    );
+    expect(registrarSource).toContain("options.onEnabled?.()");
     for (const channel of channels) {
       expect(registrarSource).toContain(`options.ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke(\n          "${channel}"`);

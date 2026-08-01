@@ -36,6 +36,7 @@ export interface LocalRagEngineServiceOptions {
     "available" | "availableNow" | "embedQuery" | "embedDocuments"
   >;
   readonly reranker?: Pick<LocalRerankerRuntime, "available" | "availableNow" | "rerank">;
+  readonly embeddingAssetEnabled?: () => boolean;
   readonly createVectorPort: (vaultPath: string) => LocalRagVectorPort | Promise<LocalRagVectorPort>;
 }
 
@@ -59,6 +60,7 @@ export class LocalRagEngineService {
   readonly #database: LocalRagEngineServiceOptions["database"];
   readonly #embeddings: LocalRagEngineServiceOptions["embeddings"];
   readonly #reranker: LocalRagEngineServiceOptions["reranker"];
+  readonly #embeddingAssetEnabled: () => boolean;
   readonly #createVectorPort: LocalRagEngineServiceOptions["createVectorPort"];
   readonly #readyGenerations = new Map<string, string>();
 
@@ -66,18 +68,20 @@ export class LocalRagEngineService {
     this.#database = options.database;
     this.#embeddings = options.embeddings;
     this.#reranker = options.reranker;
+    this.#embeddingAssetEnabled = options.embeddingAssetEnabled ?? (() => true);
     this.#createVectorPort = options.createVectorPort;
   }
 
   async rebuild(
     vaultPath: string,
     signal?: AbortSignal
-  ): Promise<"ready" | "skipped" | "failed"> {
+  ): Promise<"ready" | "skipped" | "unavailable" | "failed"> {
     let session: LocalRagVectorRebuildSession | undefined;
     try {
       const status = this.#database.chunkIndexStatus(vaultPath);
       if (!status) return "failed";
-      if (!await this.#embeddings.available()) return "skipped";
+      if (!this.#embeddingAssetEnabled()) return "skipped";
+      if (!await this.#embeddings.available()) return "unavailable";
       const vectors = await this.#createVectorPort(vaultPath);
       const metadata = vectorMetadata(status);
       session = vectors.beginRebuild(metadata);
@@ -120,40 +124,42 @@ export class LocalRagEngineService {
   ): Promise<RetrievalSearchResult> {
     try {
       const status = this.#database.chunkIndexStatus(vaultPath);
-      if (!status || !await this.#embeddings.available()) return this.#rerank(request, lexical);
+      if (!status || !this.#embeddingAssetEnabled()) return this.#rerank(request, lexical);
+      if (!await this.#embeddings.available()) return this.#degraded(request, lexical);
       const vectors = await this.#createVectorPort(vaultPath);
       const metadata = vectorMetadata(status);
-      if (vectors.readCurrent(metadata).status !== "ready") return this.#rerank(request, lexical);
+      if (vectors.readCurrent(metadata).status !== "ready") return this.#degraded(request, lexical);
       const queryVector = await this.#embeddings.embedQuery(request.query);
       const vectorResult = vectors.search({
         metadata,
         queryVector: Array.from(queryVector),
         k: VECTOR_CANDIDATE_LIMIT
       });
-      if (vectorResult.status !== "ready" || vectorResult.matches.length === 0) return this.#rerank(request, lexical);
+      if (vectorResult.status !== "ready") return this.#degraded(request, lexical);
+      if (vectorResult.matches.length === 0) return this.#rerank(request, lexical);
       const selected = this.#database.semanticChunksById(vaultPath, {
         expectedGeneration: status.indexGeneration,
         chunkIds: vectorResult.matches.map(({ chunkId }) => chunkId)
       });
-      if (!selected || selected.indexGeneration !== status.indexGeneration) return this.#rerank(request, lexical);
+      if (!selected || selected.indexGeneration !== status.indexGeneration) return this.#degraded(request, lexical);
       const chunks = new Map(selected.chunks.map((chunk) => [chunk.chunkId, chunk]));
       const semantic: LocalDatabaseSemanticChunk[] = [];
       const seenPages = new Set<string>();
       for (const match of vectorResult.matches) {
         const chunk = chunks.get(match.chunkId);
-        if (!chunk) return this.#rerank(request, lexical);
+        if (!chunk) return this.#degraded(request, lexical);
         if (!seenPages.has(chunk.summary.pageId)) {
           seenPages.add(chunk.summary.pageId);
           semantic.push(chunk);
         }
       }
       const current = this.#database.chunkIndexStatus(vaultPath);
-      if (!current || current.indexGeneration !== status.indexGeneration) return this.#rerank(request, lexical);
+      if (!current || current.indexGeneration !== status.indexGeneration) return this.#degraded(request, lexical);
       this.#readyGenerations.set(vaultPath, status.indexGeneration);
       return this.#rerank(request, fuseResults(lexical, semantic, request.limit));
     } catch {
       this.#readyGenerations.delete(vaultPath);
-      return this.#rerank(request, lexical);
+      return this.#degraded(request, lexical);
     }
   }
 
@@ -198,6 +204,17 @@ export class LocalRagEngineService {
     } catch {
       return result;
     }
+  }
+
+  async #degraded(
+    request: RetrievalSearchRequest,
+    lexical: RetrievalSearchResult
+  ): Promise<RetrievalSearchResult> {
+    return this.#rerank(request, {
+      ...lexical,
+      degraded: true,
+      degradedReason: "local_rag_unavailable"
+    });
   }
 }
 
