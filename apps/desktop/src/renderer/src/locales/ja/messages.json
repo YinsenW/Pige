@@ -1261,6 +1261,7 @@
   "note.selection.explain": "説明",
   "note.selection.copy": "コピー",
   "note.selection.copyAsQuote": "引用としてコピー",
+  "note.selection.quoteIntoCapture": "ホームで引用",
   "note.selection.copied": "コピーしました。",
   "note.selection.sentToAgent": "Note Agent で開きました。",
   "note.selection.actionFailed": "選択範囲の操作を開始できませんでした。もう一度範囲を選択して再試行してください。",

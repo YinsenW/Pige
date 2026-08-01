@@ -668,6 +668,45 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("quotes an exact Library Reader selection into the existing Home draft and restores composer focus", async () => {
+    const dom = createDom(1200);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowMode = "expanded";
+    harness.windowLayoutWidth = 1200;
+    const renderNote = harness.renderNote;
+    harness.renderNote = async (pageId) => {
+      const note = await renderNote(pageId);
+      return pageId === "page_20260715_note0001"
+        ? { ...note, html: '<p><span data-pige-selection-segment="readerseg_aaaaaaaaaaaaaaaa">Reader quote fixture.</span></p>' }
+        : note;
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await setTextareaValue(dom, container, "Existing thought");
+    await openLibraryNote(dom, container, "Note A");
+    const paragraph = requireElement(container.querySelector(".markdown-body p"));
+    const selectionNode = requireElement(paragraph.querySelector("[data-pige-selection-segment]")).firstChild!;
+    Object.defineProperty(dom.window, "getSelection", { configurable: true, value: () => ({
+      isCollapsed: false, rangeCount: 1, anchorNode: selectionNode, anchorOffset: 0,
+      focusNode: selectionNode, focusOffset: 8, toString: () => "First line\nSecond line",
+      getRangeAt: () => ({ commonAncestorContainer: paragraph, startContainer: selectionNode, startOffset: 0,
+        endContainer: selectionNode, endOffset: 8,
+        getBoundingClientRect: () => ({ left: 80, top: 90, width: 120, height: 18, right: 200, bottom: 108 }) })
+    }) });
+    await act(async () => { dom.window.document.dispatchEvent(new dom.window.Event("selectionchange")); await settle(dom); });
+    await waitFor(dom, () => container.querySelector('[data-selection-action="more"]') !== null);
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-action="more"]')));
+    await clickElement(dom, requireElement(container.querySelector<HTMLButtonElement>('[data-selection-more-action="quoteIntoCapture"]')));
+    await waitFor(dom, () => container.querySelector(".note-reader") === null);
+    const restoredComposer = requireElement(container.querySelector<HTMLTextAreaElement>('[data-home-composer="true"]'));
+    expect(restoredComposer.value).toBe("Existing thought\n\n> First line\n> Second line\n>\n> - Note A");
+    await waitFor(dom, () => dom.window.document.activeElement === restoredComposer);
+    expect(harness.submitRequests).toHaveLength(0);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fences and bounds the exact accepted picker turn projection", () => {
     const timeline = completedTimeline();
     const binding = {

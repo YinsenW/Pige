@@ -1261,6 +1261,7 @@
   "note.selection.explain": "Explain",
   "note.selection.copy": "Copy",
   "note.selection.copyAsQuote": "Copy as quote",
+  "note.selection.quoteIntoCapture": "Quote in Home",
   "note.selection.copied": "Copied.",
   "note.selection.sentToAgent": "Opened in Note Agent.",
   "note.selection.actionFailed": "This selection action could not be started. Select the passage again and retry.",

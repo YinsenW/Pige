@@ -42,6 +42,7 @@ import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence";
 import { ReaderConceptParents } from "./ReaderConceptParents";
 import { ReaderTopicParents } from "./ReaderTopicParents";
+import { createReaderQuoteIntoCapture, type ReaderQuoteIntoCapture } from "../reader-quote-into-capture";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 function readerSelectionEndpoint(
   reader: HTMLElement | null,
@@ -64,18 +65,9 @@ function readerSelectionEndpoint(
   }
 }
 
-function createReaderSelectionRequestId(): string {
-  return `readerselreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-function createSourceReferenceRequestId(): string {
-  return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-type SourceReferenceState = {
-  readonly sourceId: string;
-  readonly status: "resolving" | "not_found" | "stale" | "failed";
-};
+function createReaderSelectionRequestId(): string { return `readerselreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`; }
+function createSourceReferenceRequestId(): string { return `noteref_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`; }
+type SourceReferenceState = { readonly sourceId: string; readonly status: "resolving" | "not_found" | "stale" | "failed" };
 
 export function NoteReader(props: {
   readonly note: NoteRenderResult;
@@ -95,6 +87,7 @@ export function NoteReader(props: {
   readonly locale?: Locale;
   readonly onSelectionActionResult?: (result: ReaderSelectionActionResult) => void;
   readonly onSelectionTransformResult?: (result: ReaderSelectionTransformResult) => void;
+  readonly onQuoteIntoCapture?: (quote: ReaderQuoteIntoCapture) => boolean;
   readonly related: NoteRelatedState;
   readonly relatedLoadingPageId: string | null;
   readonly onOpenRelated: (pageId: string) => Promise<void>;
@@ -726,7 +719,7 @@ export function NoteReader(props: {
   const selectionActions = selectionResolution.kind === "resolved"
     ? (["explain", "summarize", "link", "more"] as const)
     : (["copy", "copyAsQuote"] as const);
-  const selectionMoreActions = ["ask", "createNote", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"] as const;
+  const selectionMoreActions = ["ask", "createNote", "quoteIntoCapture", "copy", "copyAsQuote", "translate", "polish", "expand", "shorten"] as const;
   return (
     <article className="note-reader" ref={readerRef} tabIndex={-1}>
       {selectionAnchor && selectionPosition ? <>
@@ -846,6 +839,12 @@ export function NoteReader(props: {
                   data-selection-more-action={action}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => {
+                    if (action === "quoteIntoCapture") {
+                      const quote = selectionResolution.kind === "resolved" ? createReaderQuoteIntoCapture(props.activeVaultId, props.note, selectionResolution.selection, selectionTextRef.current) : null;
+                      if (!quote || !props.onQuoteIntoCapture?.(quote)) setSelectionFeedback(props.t("note.selection.actionFailed"));
+                      else closeSelectionToolbar(false);
+                      return;
+                    }
                     if (action === "ask") {
                       if (selectionResolution.kind === "resolved" && props.onSubmitSelectionAction) {
                         selectionMoreOpenRef.current = false;
