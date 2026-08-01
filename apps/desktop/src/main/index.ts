@@ -228,6 +228,7 @@ import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-ca
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { CrashRecoveryService } from "./services/crash-recovery-service";
 import { DiagnosticsLifecycleService } from "./services/diagnostics-lifecycle-service";
+import { projectDiagnosticsProviderMetadata } from "./services/diagnostics-provider-metadata";
 import { DatasetIngestWorkerService } from "./services/dataset-ingest-worker-service";
 import { DatasetQueryService } from "./services/dataset-query-service";
 import { DatasetService } from "./services/dataset-service";
@@ -2387,7 +2388,8 @@ const getDiagnosticsLifecycleService = (): DiagnosticsLifecycleService => {
   diagnosticsLifecycleService ??= new DiagnosticsLifecycleService({
     userDataPath: app.getPath("userData"),
     diagnostics: getDiagnosticsService(),
-    getActiveVaultId: () => getVaultService().current()?.vaultId
+    getActiveVaultId: () => getVaultService().current()?.vaultId,
+    providerMetadata: () => projectDiagnosticsProviderMetadata(getModelProviderRegistry().summary())
   });
   return diagnosticsLifecycleService;
 };

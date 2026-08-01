@@ -8,6 +8,7 @@ import {
 } from "./diagnostics-export-core";
 import type { DiagnosticsExportPort, DiagnosticsExportWriteOptions } from "./diagnostics-export-types";
 import { DiagnosticsExportWorkerService } from "./diagnostics-export-worker-service";
+import type { DiagnosticsProviderMetadata } from "./diagnostics-provider-metadata";
 
 export { redactDiagnosticText, redactPaths } from "./diagnostics-export-core";
 
@@ -218,15 +219,19 @@ export class DiagnosticsService {
 
   previewSupportBundle(context?: Pick<SupportBundlePreview,
     "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
-  >): SupportBundlePreview {
+  > & Partial<Pick<SupportBundlePreview, "selectedOptionalCategories">>): SupportBundlePreview {
     const recentEvents = this.#readRecentEvents();
     const generatedAt = this.#nowIso();
-    const preview = buildSupportBundlePreview(estimateBundleBytes(recentEvents), generatedAt, context ?? {
+    const preview = buildSupportBundlePreview(estimateBundleBytes(recentEvents), generatedAt, context ? {
+      ...context,
+      selectedOptionalCategories: context.selectedOptionalCategories ?? []
+    } : {
       apiVersion: 1,
       requestId: `diagpreviewreq_${randomUUID().replaceAll("-", "")}`,
       scopeContextId: `diagctx_${createHash("sha256").update("legacy-diagnostics-preview").digest("hex").slice(0, 48)}`,
       expectedRevision: 0,
-      activeVaultId: null
+      activeVaultId: null,
+      selectedOptionalCategories: []
     });
     this.recordEvent({
       level: "info",
@@ -254,7 +259,11 @@ export class DiagnosticsService {
     return { status: "exported", exportedAt: exportedAt.exportedAt, outputPath: safeOutputPath, bytesWritten };
   }
 
-  createSupportBundlePayload(preview: SupportBundlePreview): string {
+  createSupportBundlePayload(
+    preview: SupportBundlePreview,
+    optional: { readonly providerMetadata?: DiagnosticsProviderMetadata } = {}
+  ): string {
+    const health = this.health();
     const bundle = {
       schemaVersion: 1,
       exportedAt: this.#nowIso(),
@@ -262,6 +271,7 @@ export class DiagnosticsService {
       preview: {
         previewId: preview.previewId,
         generatedAt: preview.generatedAt,
+        selectedOptionalCategories: preview.selectedOptionalCategories,
         includedCategories: preview.includedCategories,
         excludedCategories: preview.excludedCategories,
         privacyWarnings: preview.privacyWarnings
@@ -272,8 +282,17 @@ export class DiagnosticsService {
         node: process.versions.node,
         electron: process.versions.electron ?? "unknown"
       },
-      diagnosticsHealth: this.health(),
-      recentEvents: this.#readRecentEvents()
+      diagnosticsHealth: {
+        status: health.status,
+        checkedAt: health.checkedAt,
+        localOnly: health.localOnly,
+        recentErrorCount: health.recentErrorCount,
+        checks: health.checks
+      },
+      recentEvents: this.#readRecentEvents(),
+      ...(preview.selectedOptionalCategories.includes("provider_metadata") && optional.providerMetadata
+        ? { providerMetadata: optional.providerMetadata }
+        : {})
     };
     return `${JSON.stringify(redactDiagnosticValue(bundle), null, 2)}\n`;
   }
@@ -518,7 +537,8 @@ function buildSupportBundlePreview(
   estimatedBytes: number,
   generatedAt: string,
   context: Pick<SupportBundlePreview,
-    "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
+    "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId" |
+    "selectedOptionalCategories"
   >
 ): SupportBundlePreview {
   return {
@@ -527,6 +547,7 @@ function buildSupportBundlePreview(
     generatedAt,
     localOnly: true,
     estimatedBytes,
+    selectedOptionalCategories: context.selectedOptionalCategories,
     includedCategories: [
       {
         id: "app_runtime",
@@ -545,7 +566,13 @@ function buildSupportBundlePreview(
         label: "Recent redacted diagnostic events",
         included: true,
         reason: "Bounded and redacted event summaries."
-      }
+      },
+      ...(context.selectedOptionalCategories.includes("provider_metadata") ? [{
+        id: "provider_metadata",
+        label: "Redacted model-provider metadata",
+        included: true as const,
+        reason: "Aggregate provider types and health only; credentials, URLs, names, and model IDs stay excluded."
+      }] : [])
     ],
     excludedCategories: [
       {
@@ -565,7 +592,13 @@ function buildSupportBundlePreview(
         label: "Local models, parser binaries, packages, and source artifacts",
         included: false,
         reason: "Large binaries and artifacts are excluded."
-      }
+      },
+      ...(!context.selectedOptionalCategories.includes("provider_metadata") ? [{
+        id: "provider_metadata",
+        label: "Model-provider metadata",
+        included: false as const,
+        reason: "Provider metadata is included only after explicit preview selection."
+      }] : [])
     ],
     privacyWarnings: [
       "The bundle is created locally and is not uploaded automatically.",

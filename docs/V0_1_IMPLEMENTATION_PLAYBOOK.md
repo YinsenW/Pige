@@ -180,7 +180,7 @@ Build:
 - [B1.11 -> E1.05] Settings registry and typed scopes for vault-portable, machine-local, machine-vault binding, secret, permission, and derived values.
 - [B1.12 -> E1.06] Agent Runtime Policy Context builder for storage, model, cloud-send, confirmation, permission, language, memory, retrieval, and capability status.
 - [B1.13 -> E1.12] Agent runtime-status foundation, provider/model profile storage, and one effective default-model contract without Advanced/Fast routing UI.
-- [B1.14 -> E1.07] Bounded local diagnostics, redaction, health summary, and user-initiated support-bundle preview/export.
+- [B1.14 -> E1.07] Bounded local diagnostics, redaction, health summary, user-initiated support-bundle preview/export, and explicitly reviewed aggregate Provider metadata without Provider/model identity or credentials.
 - [B1.15 -> E1.08] Local SQLite abstraction and empty migration system.
 - [B1.16 -> E1.09] Reset Local Database repair action.
 - [B1.17 -> E1.13] Agent-first Home/navigation contract: essential empty state, no modes, collapsible sidebar, layout continuity, and a browsable three-level Library tree.

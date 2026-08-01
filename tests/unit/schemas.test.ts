@@ -110,6 +110,8 @@ import {
   DatasetTableSchema,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
+  DiagnosticsPreviewSupportBundleRequestSchema,
+  SupportBundlePreviewSchema,
   ExternalWebSkillHttpsOriginSchema,
   ExternalWebSkillReadRequestSchema,
   ExternalWebSkillReadResultSchema,
@@ -351,6 +353,56 @@ import {
 } from "@pige/schemas";
 
 describe("schemas", () => {
+  it("bounds optional diagnostics support categories and echoes the reviewed selection", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "diagpreviewreq_providermetadata0",
+      optionalCategories: ["provider_metadata"]
+    } as const;
+    expect(DiagnosticsPreviewSupportBundleRequestSchema.parse(request)).toEqual(request);
+    expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
+      ...request,
+      optionalCategories: ["provider_metadata", "provider_metadata"]
+    })).toThrow();
+    expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
+      ...request,
+      optionalCategories: ["raw_provider_profiles"]
+    })).toThrow();
+
+    const preview = {
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      previewId: `supportpreview_${"a".repeat(48)}`,
+      generatedAt: "2026-08-01T00:00:00.000Z",
+      localOnly: true,
+      estimatedBytes: 1024,
+      scopeContextId: `diagctx_${"b".repeat(48)}`,
+      expectedRevision: 2,
+      activeVaultId: null,
+      selectedOptionalCategories: request.optionalCategories,
+      includedCategories: [{
+        id: "provider_metadata",
+        label: "Redacted model-provider metadata",
+        included: true,
+        reason: "Aggregate facts only."
+      }],
+      excludedCategories: [{
+        id: "secrets",
+        label: "Secrets",
+        included: false,
+        reason: "Never exported."
+      }],
+      privacyWarnings: ["Review before exporting."]
+    } as const;
+    expect(SupportBundlePreviewSchema.parse(preview).selectedOptionalCategories)
+      .toEqual(["provider_metadata"]);
+    expect(() => SupportBundlePreviewSchema.parse({
+      ...preview,
+      selectedOptionalCategories: ["provider_metadata"],
+      providerId: "private-provider"
+    })).toThrow();
+  });
+
   it("requires the exact model-settings revision when choosing the global default", () => {
     const request = {
       modelProfileId: "model_default_profile",

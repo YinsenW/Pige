@@ -195,6 +195,13 @@ crash recovery. Credentials; full notes, sources, conversations, memory, model t
 unsafe output; binaries; and unredacted grants stay excluded. Selected redacted excerpts,
 paths, or Provider metadata require preview review.
 
+Provider metadata is an optional preview category. When explicitly selected, the bundle
+may contain only bounded aggregate Provider kind/protocol/auth/boundary/discovery and
+generation-health counts. Provider profile identifiers and labels, endpoint URLs, model
+identifiers, headers, credentials, and raw Provider responses remain excluded. The exact
+reviewed aggregate is bound to the preview and reused by the durable export Job; unavailable
+or inconsistent metadata fails before publication.
+
 UX shows categories, estimated size, privacy warning, preview, cancel, retry and a trusted
 local destination; it never uploads. Preview, scope context and revision create one bounded
 machine-local Job before writing. Main owns the picker/path and records only a private

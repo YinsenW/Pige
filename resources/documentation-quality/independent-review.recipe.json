@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:54:48.000Z",
+  "reviewedAt": "2026-08-01T16:53:36.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "B6.16 bounded same-Dataset two-hop relation query and restart-stable evidence.",
+    "scope": "PIGE-DIAG-002 explicitly reviewed aggregate Provider metadata in local support bundles without status promotion.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "d0bff6507eaab67b1ed2e91b5899cd86603ca5ddbfc8ff2e5b2a2c6bc428638f"
+    "reviewedSha256": "6fb618ae8a583f2d15a7f92403d6102edfda00065236db81793867f6ace1f1e7"
   },
   "reviewers": [
     {
-      "reviewerId": "dataset-two-hop-review",
-      "task": "Review bounded two-hop Dataset relation query authority and acceptance",
+      "reviewerId": "diagnostics-provider-metadata-review",
+      "task": "Review optional Provider metadata support-bundle privacy and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews query-policy and acceptance facts; Development supplies separate typed-plan validation, immutable Dataset execution, restart and negative-ref evidence."
+      "independence": "Planning reviews diagnostics and acceptance facts; Development supplies separate projection, export-core, durable lifecycle and Settings evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "dataset-two-hop-review",
+      "reviewerId": "diagnostics-provider-metadata-review",
       "blockerCount": 0,
-      "summary": "The Home Dataset bridge exposes only opaque catalog refs and follows at most two declared same-Dataset relations while longer paths fail closed."
+      "summary": "Provider metadata remains machine-local, user-selected and bound to one preview/export lifecycle without automatic upload."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "dataset-two-hop-review",
+      "reviewerId": "diagnostics-provider-metadata-review",
       "blockerCount": 0,
-      "summary": "Context policy, typed tool contract, Dataset service and acceptance ledger agree on one two-edge maximum with no renderer or SQL authority."
+      "summary": "Diagnostics, privacy, schemas, Main lifecycle and Settings agree on one optional aggregate-only Provider category."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "dataset-two-hop-review",
+      "reviewerId": "diagnostics-provider-metadata-review",
       "blockerCount": 0,
-      "summary": "PIGE-DATA-002 remains partial while its evidence now covers deterministic one-hop and two-hop relation queries, invalid-hop rejection and restart parity."
+      "summary": "PIGE-DIAG-002 gains exact Provider projection and durable export evidence while broader path/platform evidence stays open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "dataset-two-hop-review",
+      "reviewerId": "diagnostics-provider-metadata-review",
       "blockerCount": 0,
-      "summary": "The existing Dataset query service and relation core absorb the bounded path extension without a new IPC channel, durable format or public query language."
+      "summary": "One deterministic projection owner isolates safe Provider aggregates from registry identity, credentials and raw model traffic."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "dataset-two-hop-review",
+      "reviewerId": "diagnostics-provider-metadata-review",
       "blockerCount": 0,
-      "summary": "Existing context-policy, decision, playbook and trace owners contain the feature without introducing another design document."
+      "summary": "Existing diagnostics, playbook, trace, acceptance and responsibility owners contain the delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/dataset-query-service.test.ts tests/unit/home-agent-service.test.ts",
+      "command": "npx vitest run tests/unit/diagnostics-provider-metadata.test.ts tests/unit/diagnostics-export-core.test.ts tests/unit/diagnostics-lifecycle-service.test.ts tests/unit/diagnostics-service.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/schemas.test.ts",
       "status": "passed",
-      "evidence": "The bounded two-hop query, invented-hop rejection, restart parity, citation/result integrity and real Home tool contract pass together."
+      "evidence": "All 221 focused projection, export, lifecycle, Settings and strict schema tests pass on the rebased candidate."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The typed two-hop plan compiles and builds while existing Dataset and Home owners remain inside governed architecture boundaries."
+      "evidence": "The candidate compiles and builds while the 47-line deterministic projection owner is recorded within architecture boundaries."
     },
     {
       "command": "npm run verify:traceability && npm run verify:documentation-quality",
       "status": "passed",
-      "evidence": "Context policy, decision, playbook, acceptance and semantic-claim owners agree on the two-edge boundary and remaining partial gaps."
+      "evidence": "Diagnostics, privacy, playbook, acceptance and semantic-claim owners agree on the reviewed optional Provider aggregate."
     }
   ],
   "coordination": {
-    "taskId": "dataset-two-hop-bind-20260802",
-    "taskTitle": "Bind bounded two-hop Dataset relation queries",
+    "taskId": "diagnostics-provider-metadata-bind-20260801",
+    "taskTitle": "Bind reviewed Provider metadata support-bundle evidence",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing one-hop plans, opaque refs, Dataset bundles, result hashes, citations and Home channels remain compatible; only an optional bounded second relation edge is added.",
-    "acknowledgement": "Planning records the new two-hop evidence while PIGE-DATA-002 remains partial for analytical snapshots, longer paths, aggregate joins, scale and complete authority proof."
+    "compatibility": "Existing support previews remain valid with an empty optional-category selection; selected aggregates add no credential, path, Provider profile or model identity projection.",
+    "acknowledgement": "Planning adds exact Provider metadata evidence while keeping PIGE-DIAG-002 partial and broader platform/path evidence explicit."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

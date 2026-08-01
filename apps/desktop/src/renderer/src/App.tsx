@@ -69,7 +69,9 @@ import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import {
   DiagnosticsJobCard,
+  ProviderMetadataSupportOption,
   SupportBundlePreviewCard,
+  SupportBundlePreviewTrigger,
   supportBundlePreviewIsFullyProjected
 } from "./components/DiagnosticsWorkflowCards";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
@@ -8230,6 +8232,7 @@ export function SystemSettingsPanel(props: {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null);
   const [clearConfirming, setClearConfirming] = useState(false);
+  const [includeProviderMetadata, setIncludeProviderMetadata] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
@@ -8364,8 +8367,10 @@ export function SystemSettingsPanel(props: {
     setNotice(null);
     try {
       const requestId = `diagpreviewreq_${crypto.randomUUID().replaceAll("-", "")}`;
-      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId });
-      if (preview.requestId !== requestId) throw new Error("diagnostics_preview_identity_mismatch");
+      const optionalCategories = includeProviderMetadata ? ["provider_metadata" as const] : [];
+      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId, optionalCategories });
+      if (preview.requestId !== requestId || JSON.stringify(preview.selectedOptionalCategories) !==
+        JSON.stringify(optionalCategories)) throw new Error("diagnostics_preview_identity_mismatch");
       props.onSupportBundlePreviewChange(preview);
     } catch {
       setNotice({ kind: "error", key: "system.previewFailed" });
@@ -8731,20 +8736,15 @@ export function SystemSettingsPanel(props: {
             </div>
           ) : null}
           <CrashRecoveryHistory history={props.diagnosticsHealth?.crashRecoveryHistory} t={props.t} />
-          <div className="settings-row tall">
-            <div className="settings-row-copy">
-              <strong>{props.t("system.supportBundle")}</strong>
-              <span>{props.t("system.supportBundleDescription")}</span>
-            </div>
-            <button
-              className="settings-button"
-              type="button"
-              disabled={Boolean(diagnosticsBusy)}
-              onClick={() => void previewSupportBundle()}
-            >
-              {props.t("system.previewSupport")}
-            </button>
-          </div>
+          <SupportBundlePreviewTrigger disabled={Boolean(diagnosticsBusy)}
+            onPreview={() => void previewSupportBundle()} t={props.t} />
+          <ProviderMetadataSupportOption checked={includeProviderMetadata}
+            disabled={Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
+            onChange={(checked) => {
+              setIncludeProviderMetadata(checked);
+              props.onSupportBundlePreviewChange(null);
+              setNotice(null);
+            }} t={props.t} />
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.clearDiagnostics")}</strong>

@@ -33,6 +33,7 @@ function safeBundle(event?: Record<string, unknown>): string {
     preview: {
       previewId: "support_20260715000000",
       generatedAt: "2026-07-15T00:00:00.000Z",
+      selectedOptionalCategories: [],
       includedCategories: [
         { id: "app_runtime", label: "App version, platform, and architecture", included: true, reason: "Needed to diagnose platform-specific failures." },
         { id: "diagnostics_health", label: "Diagnostics health summary", included: true, reason: "Redacted operational status only." },
@@ -41,7 +42,8 @@ function safeBundle(event?: Record<string, unknown>): string {
       excludedCategories: [
         { id: "secrets", label: "API keys, tokens, cookies, and credentials", included: false, reason: "Secrets are never exported by default." },
         { id: "content", label: "Full notes, source files, conversations, memory, prompts, and model responses", included: false, reason: "Support bundles must not duplicate private knowledge content by default." },
-        { id: "binaries", label: "Local models, parser binaries, packages, and source artifacts", included: false, reason: "Large binaries and artifacts are excluded." }
+        { id: "binaries", label: "Local models, parser binaries, packages, and source artifacts", included: false, reason: "Large binaries and artifacts are excluded." },
+        { id: "provider_metadata", label: "Model-provider metadata", included: false, reason: "Provider metadata is included only after explicit preview selection." }
       ],
       privacyWarnings: [
         "The bundle is created locally and is not uploaded automatically.",
@@ -59,6 +61,43 @@ function safeBundle(event?: Record<string, unknown>): string {
     },
     recentEvents: event ? [event] : []
   }, null, 2)}\n`;
+}
+
+function safeProviderMetadataBundle(): string {
+  const parsed = JSON.parse(safeBundle()) as Record<string, unknown>;
+  const preview = parsed.preview as Record<string, unknown>;
+  preview.selectedOptionalCategories = ["provider_metadata"];
+  preview.includedCategories = [
+    ...(preview.includedCategories as unknown[]),
+    {
+      id: "provider_metadata",
+      label: "Redacted model-provider metadata",
+      included: true,
+      reason: "Aggregate provider types and health only; credentials, URLs, names, and model IDs stay excluded."
+    }
+  ];
+  preview.excludedCategories = (preview.excludedCategories as Array<{ id: string }>).filter(
+    (category) => category.id !== "provider_metadata"
+  );
+  parsed.providerMetadata = {
+    schemaVersion: 1,
+    providerCount: 1,
+    modelCount: 2,
+    enabledModelCount: 1,
+    hasDefaultModel: true,
+    providers: [{
+      providerKind: "openai_compatible",
+      endpointProtocol: "openai_responses",
+      authRequirement: "api_key",
+      modelListStrategy: "list_models",
+      cloudBoundary: "custom_cloud_endpoint",
+      discovery: "verified",
+      generation: "verified",
+      modelCount: 2,
+      enabledModelCount: 1
+    }]
+  };
+  return `${JSON.stringify(parsed, null, 2)}\n`;
 }
 
 describe("diagnostics export core", () => {
@@ -89,6 +128,34 @@ describe("diagnostics export core", () => {
     ["control byte", safeBundle({ detail: "unsafe value" }).replace("unsafe value", "unsafe\u0000value")]
   ])("fails closed for %s", (_label, content) => {
     expect(() => assertSafeDiagnosticExportText(content)).toThrow(DiagnosticsExportBlockedError);
+  });
+
+  it("accepts only explicitly selected aggregate provider metadata", () => {
+    const selected = safeProviderMetadataBundle();
+    expect(() => assertSafeDiagnosticExportText(selected)).not.toThrow();
+
+    const unselected = JSON.parse(safeBundle()) as Record<string, unknown>;
+    unselected.providerMetadata = JSON.parse(selected).providerMetadata;
+    expect(() => assertSafeDiagnosticExportText(`${JSON.stringify(unselected)}\n`))
+      .toThrow(DiagnosticsExportBlockedError);
+
+    const privateProvider = JSON.parse(selected) as Record<string, unknown>;
+    const metadata = privateProvider.providerMetadata as { providers: Array<Record<string, unknown>> };
+    metadata.providers[0]!.baseUrl = "https://private.example.test/v1";
+    expect(() => assertSafeDiagnosticExportText(`${JSON.stringify(privateProvider)}\n`))
+      .toThrow(DiagnosticsExportBlockedError);
+  });
+
+  it("rejects missing or internally inconsistent selected provider metadata", () => {
+    const missing = JSON.parse(safeProviderMetadataBundle()) as Record<string, unknown>;
+    delete missing.providerMetadata;
+    expect(() => assertSafeDiagnosticExportText(`${JSON.stringify(missing)}\n`))
+      .toThrow(DiagnosticsExportBlockedError);
+
+    const mismatched = JSON.parse(safeProviderMetadataBundle()) as Record<string, unknown>;
+    (mismatched.providerMetadata as Record<string, unknown>).modelCount = 3;
+    expect(() => assertSafeDiagnosticExportText(`${JSON.stringify(mismatched)}\n`))
+      .toThrow(DiagnosticsExportBlockedError);
   });
 
   it("does not reconcile a symbolic link or a non-regular destination", () => {
