@@ -183,6 +183,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `vault.recentVaults` | `none` | Main-process recent-vault store |
 | `vault.displayName` | `none` | Strict pathless Main IPC plus manifest metadata-revision CAS; rename and relocation are mutually exclusive while either action is pending |
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
+| `vault.pigePolicy` | `explicit_confirmation` | Pathless `PIGE.md` read plus validation-before-confirmation, vault/revision CAS, atomic write, Activity/Undo and restart recovery |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
 | `memory.includeMemoryInBackup` | `none` | Revision-fenced active-Vault config write; active Backup work blocks mutation and the next Backup reads the durable choice |

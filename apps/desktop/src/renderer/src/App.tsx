@@ -227,7 +227,6 @@ export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticR
 export { LocalRerankerSettingsPanel } from "./components/LocalRerankerSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
-export { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 const startupDestinationApi: StartupDestinationApi = {
   load: () => window.pige.settings.startupDestination(),
@@ -3070,14 +3069,12 @@ export function App(): React.JSX.Element {
               t={t}
             />
           ) : settingsSection === "memory" ? (
-            <>
-              <PigePolicySettingsPanel activeVaultId={activeVault?.vaultId ?? null} t={t} />
+            <><PigePolicySettingsPanel activeVaultId={activeVault?.vaultId ?? null} t={t} />
               <AgentMemorySettingsPanel
                 activeVaultId={activeVault?.vaultId ?? null}
                 focusRequest={memoryActivityFocusRequest}
                 onFocusRequestSettled={settleMemoryActivityFocus}
-                t={t}
-              />
+                t={t} />
             </>
           ) : settingsSection === "privacy" ? (
             <PermissionsPrivacySettingsPanel
