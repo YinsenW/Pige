@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T13:30:00Z",
+  "reviewedAt": "2026-08-01T14:05:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "B2.09/E2.03 durable body-free capture references across file, large-paste and explicit authored-text ingress.",
+    "scope": "Revision-fenced Global Default selection across Settings, persistent model profiles, restart recovery and Pi runtime binding.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "62df7e3480467318cd9bc73c6248622dc01c8517ee48035ed5bc2831bdf92bf0"
+    "reviewedSha256": "f4d8f9608c02ee959bdd39416de62f9b7d0782c3af791cea3a2f667cd3d0e67c"
   },
   "reviewers": [
     {
-      "reviewerId": "capture-reference-workflow-review",
-      "task": "Review durable capture-to-conversation reference workflow",
+      "reviewerId": "default-model-currentness-review",
+      "task": "Review Global Default currentness, restart and runtime binding",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews capture reference truth across durable conversation, Source/Job ownership, renderer projection and acceptance while Development supplies separate service, restart and UI evidence."
+      "independence": "Planning reviews the API and acceptance boundary; Development supplies separate schema, stale-CAS, registry reopen, Pi binding and UI evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "capture-reference-workflow-review",
+      "reviewerId": "default-model-currentness-review",
       "blockerCount": 0,
-      "summary": "Home conversation history renders safe capture names after restart and opens only page-backed evidence through the existing Reader path."
+      "summary": "Home and Settings bind one visible registry revision; stale choices fail before persistence and leave the current default authoritative."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "capture-reference-workflow-review",
+      "reviewerId": "default-model-currentness-review",
       "blockerCount": 0,
-      "summary": "Schemas, contracts, durable events, Source/Capture/Job identities and the renderer agree on one body- and path-free reference projection."
+      "summary": "Schema, contract, API owner, registry mutation and both renderer callers agree on the same expectedRevision boundary."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "capture-reference-workflow-review",
+      "reviewerId": "default-model-currentness-review",
       "blockerCount": 0,
-      "summary": "B2.09/E2.03 evidence now covers file, large-paste and explicit authored-text writers without overclaiming the remaining packaged scenario."
+      "summary": "Acceptance adds exact stale-CAS and restart evidence while retaining the integrated Settings-to-Pi executable gap as partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "capture-reference-workflow-review",
+      "reviewerId": "default-model-currentness-review",
       "blockerCount": 0,
-      "summary": "One bounded capture-reference owner centralizes deterministic event identity, replay matching and safe projection without duplicating source bodies."
+      "summary": "The existing Model Provider Registry remains the sole persistence owner and Pi consumers continue resolving only its committed default."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "capture-reference-workflow-review",
+      "reviewerId": "default-model-currentness-review",
       "blockerCount": 0,
-      "summary": "Existing Playbook, Spec, acceptance and service inventory owners absorb the closure without a new design document."
+      "summary": "One API paragraph and the existing acceptance ledger bind the change without a new design document or duplicated runtime contract."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-turn-conversation-store.test.ts tests/unit/home-agent-attachment-service.test.ts tests/unit/conversation-capture-references.test.ts",
+      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/model-provider-registry.test.ts tests/unit/model-settings-error-ui.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Deterministic durable capture references, restart projection, mixed source capture and page-backed UI opening pass."
+      "evidence": "Strict request parsing, stale rejection, persistent reopen and existing hidden routing controls pass directly."
     },
     {
-      "command": "npm run typecheck && npm run build",
+      "command": "npx vitest run tests/unit/home-agent-conversation-ui.test.ts -t 'loads the App-owned Home model summary|keeps the Home model selection unchanged'",
       "status": "passed",
-      "evidence": "Shared timeline contracts, Main capture composition and renderer presentation compile and build together."
+      "evidence": "Both successful and failed Home choices carry a visible model-registry revision without exposing another model role."
     },
     {
-      "command": "npm run verify:architecture-reset && npm run verify:change",
+      "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "Frozen oversized owners stay within budget and change classification, package impact and whitespace gates pass."
+      "evidence": "The revised public request and both production callers compile while the frozen registry ownership budget remains unchanged."
     }
   ],
   "coordination": {
-    "taskId": "capture-conversation-reference-bind-20260801",
-    "taskTitle": "Bind durable capture conversation references",
+    "taskId": "default-model-cas-bind-20260801",
+    "taskTitle": "Bind revision-fenced Global Default selection",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing capture Source truth and Job execution remain unchanged; conversation events add only deterministic safe references and no duplicate body bytes.",
-    "acknowledgement": "Planning binds the B2.09/E2.03 workflow while the packaged Electron continuity scenario remains separately open."
+    "compatibility": "Existing default-model storage and Pi runtime resolution remain unchanged; only stale renderer mutations lose authority.",
+    "acknowledgement": "Planning keeps E1.12 partial until one integrated Settings-to-restart-to-Pi executable proof exists."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
