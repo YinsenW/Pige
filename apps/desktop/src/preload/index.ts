@@ -327,6 +327,7 @@ import type {
   MemoryResetRequest,
   MemorySummary,
   SkillRegistryMutationResult,
+  SkillRegistryQueryRequest,
   SkillRegistryQueryResult,
   SkillRegistrySummary,
   SupportBundleExportResult,
@@ -741,6 +742,7 @@ import {
   MemoryMutationResultSchema,
   MemoryResetRequestSchema,
   MemorySummarySchema,
+  SkillRegistryQueryRequestSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
   SkillStageFromUrlRequestSchema,
@@ -1793,8 +1795,9 @@ const api: PigeDesktopApi = {
     }
   },
   skills: {
-    summary: async (): Promise<SkillRegistryQueryResult> =>
-      SkillRegistryQueryResultSchema.parse(await ipcRenderer.invoke("skills.summary")),
+    summary: async (request: SkillRegistryQueryRequest): Promise<SkillRegistryQueryResult> =>
+      SkillRegistryQueryResultSchema.parse(await ipcRenderer.invoke("skills.summary",
+        SkillRegistryQueryRequestSchema.parse(request))),
     pendingStagedReviews: async (
       request: SkillPendingStagedReviewsRequest
     ): Promise<SkillPendingStagedReviewsResult> =>

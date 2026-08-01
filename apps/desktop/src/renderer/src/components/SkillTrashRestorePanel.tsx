@@ -45,6 +45,7 @@ export function SkillTrashRestorePanel(props: {
         apiVersion: 1,
         requestId,
         activeVaultId: requestedVault.vaultId,
+        scope: item.scope,
         restoreContextId: item.restoreContextId,
         skillId: item.skillId,
         expectedRegistryRevision: registry.revision
@@ -52,10 +53,11 @@ export function SkillTrashRestorePanel(props: {
       const currentVault = await window.pige.vault.current();
       if (sequence !== requestSequenceRef.current || operationIdentity !== identityKey ||
         result.requestId !== requestId || result.activeVaultId !== requestedVault.vaultId ||
+        result.scope !== item.scope ||
         result.restoreContextId !== item.restoreContextId || result.skillId !== item.skillId ||
         currentVault?.vaultId !== requestedVault.vaultId) return;
       if (result.status === "committed") {
-        const restored = result.registry.skills.find((skill) => skill.id === item.skillId);
+        const restored = result.registry.skills.find((skill) => skill.id === item.skillId && skill.scope === item.scope);
         if (!restored || restored.enabled || result.registry.restorableSkills.some((skill) => skill.skillId === item.skillId)) {
           setNotice("failed");
           return;

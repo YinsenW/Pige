@@ -1678,7 +1678,7 @@ describe("desktop shell build contract", () => {
     );
 
     expect(contractsSource).toContain("readonly skills: {");
-    expect(contractsSource).toContain("readonly summary: () => Promise<SkillRegistryQueryResult>;");
+    expect(contractsSource).toContain("readonly summary: (request: SkillRegistryQueryRequest) => Promise<SkillRegistryQueryResult>;");
     expect(contractsSource).toContain("readonly pendingStagedReviews: (");
     expect(contractsSource).toContain("request: SkillPendingStagedReviewsRequest");
     expect(contractsSource).toContain("Promise<SkillPendingStagedReviewsResult>");
@@ -1702,7 +1702,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).not.toContain("readonly readExternalWeb");
     expect(preloadApi).not.toContain("readExternalWeb");
     expect(mainSource).toContain("registerSkillsIpc({");
-    expect(mainSource).toContain("restore: (request) => getSkillRegistryService().restore(request)");
+    expect(mainSource).toContain("restore: (request) => getScopedSkillRegistryService().restore(request)");
     expect(handlers).toContain('options.ipcMain.handle("skills.summary"');
     expect(handlers).toContain('options.ipcMain.handle("skills.pendingStagedReviews"');
     expect(handlers).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
@@ -1718,7 +1718,8 @@ describe("desktop shell build contract", () => {
     expect(handlers).toContain("await options.showSaveDialog(window");
     expect(handlers).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(handlers).toContain("options.publishRegistryChanged(result)");
-    expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary")');
+    expect(preloadApi).toContain('ipcRenderer.invoke("skills.summary",');
+    expect(preloadApi).toContain("SkillRegistryQueryRequestSchema.parse(request)");
     expect(preloadApi).toContain('"skills.pendingStagedReviews"');
     expect(preloadApi).toContain("SkillPendingStagedReviewsRequestSchema.parse(request)");
     expect(preloadApi).toContain("SkillPendingStagedReviewsResultSchema.parse(");

@@ -3000,7 +3000,7 @@ export const SkillRestorableSummarySchema = z.object({
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(80),
   kind: z.literal("pure"),
-  scope: z.literal("machine_local"),
+  scope: z.enum(["machine_local", "vault"]),
   uninstalledAt: z.string().datetime({ offset: true }),
   canRestore: z.literal(true)
 }).strict();
@@ -3031,9 +3031,9 @@ export const SkillSummarySchema = z.object({
   warnings: z.lazy(() => z.array(SkillStageWarningSchema).max(2)
     .refine((values) => new Set(values).size === values.length, "Skill warnings must be unique.")).optional()
 }).strict().superRefine((skill, context) => {
-  const userManaged = skill.scope === "machine_local" && skill.trust === "user_confirmed";
+  const userManaged = ["machine_local", "vault"].includes(skill.scope) && skill.trust === "user_confirmed";
   const pureLifecycle = userManaged && skill.kind === "pure";
-  const externalRuntime = userManaged && skill.kind === "external_web" &&
+  const externalRuntime = skill.scope === "machine_local" && userManaged && skill.kind === "external_web" &&
     hasSupportedExternalWebRuntime(skill.capabilities, skill.runtime);
   if (skill.canEnable && ((!pureLifecycle && !externalRuntime) || skill.enabled)) {
     context.addIssue({ code: "custom", path: ["canEnable"], message: "Skill enable eligibility is invalid." });
@@ -3082,10 +3082,14 @@ export const SkillRegistrySummarySchema = z.object({
   restorableSkills: z.array(SkillRestorableSummarySchema).max(512)
 }).strict().superRefine((registry, context) => {
   const installedIds = new Set(registry.skills.map((skill) => skill.id));
+  if (installedIds.size !== registry.skills.length) {
+    context.addIssue({ code: "custom", path: ["skills"], message: "Scoped Skill identities must be unique." });
+  }
   const restoreContexts = new Set<string>();
   const restorableIds = new Set<string>();
   for (const [index, restorable] of registry.restorableSkills.entries()) {
-    if (installedIds.has(restorable.skillId) || restorableIds.has(restorable.skillId)) {
+    const scopedId = restorable.skillId;
+    if (installedIds.has(scopedId) || restorableIds.has(scopedId)) {
       context.addIssue({
         code: "custom",
         path: ["restorableSkills", index, "skillId"],
@@ -3099,13 +3103,15 @@ export const SkillRegistrySummarySchema = z.object({
         message: "Skill restore contexts must be unique."
       });
     }
-    restorableIds.add(restorable.skillId);
+    restorableIds.add(scopedId);
     restoreContexts.add(restorable.restoreContextId);
   }
 });
 
 export const SkillDisableRequestSchema = z.object({
   apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   skillId: SkillIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
@@ -3239,7 +3245,7 @@ export const SkillStagedSummarySchema = z.object({
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(80),
   description: z.string().min(1).max(500),
-  scope: z.literal("machine_local"),
+  scope: z.enum(["machine_local", "vault"]),
   kind: z.enum(["pure", "external_web"]),
   capabilities: SkillCapabilityListSchema,
   dataBoundaries: SkillDataBoundaryListSchema,
@@ -3270,7 +3276,7 @@ export const SkillStagedSummarySchema = z.object({
       context.addIssue({ code: "custom", path: ["kind"], message: "Pure Skill review disclosure is invalid." });
     }
   } else {
-    if (permissionCapabilities.length === 0 || staged.source === undefined ||
+    if (staged.scope !== "machine_local" || permissionCapabilities.length === 0 || staged.source === undefined ||
       !hasExactOrderedValues(staged.dataBoundaries, deriveSkillDataBoundaries(staged.capabilities))) {
       context.addIssue({ code: "custom", path: ["dataBoundaries"], message: "External/Web Skill review disclosure is incomplete." });
     }
@@ -3311,6 +3317,7 @@ export const SkillStagedSummarySchema = z.object({
 export const SkillStageFromUrlRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema,
   sourceUrl: SkillInstallUrlSchema
 }).strict();
 export const SkillStageFromMarkdownRequestSchema = z.object({
@@ -3322,6 +3329,8 @@ export const SkillStageFromZipRequestSchema = SkillStageFromMarkdownRequestSchem
 export const SkillInstallStagedRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
@@ -3331,6 +3340,8 @@ export const SkillInstallStagedRequestSchema = z.object({
 export const SkillDiscardStagedRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   stagingId: SkillStagingIdSchema,
   manifestSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
   bundleSha256: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
@@ -3340,6 +3351,7 @@ const SkillInstalledLifecycleRequestIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillLifecycleRequestIdSchema,
   activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   skillId: SkillIdSchema,
   expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
@@ -3351,6 +3363,7 @@ export const SkillRestoreRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillLifecycleRequestIdSchema,
   activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   restoreContextId: SkillRestoreContextIdSchema,
   skillId: SkillIdSchema,
   expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
@@ -3360,6 +3373,7 @@ const SkillInstalledLifecycleResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillLifecycleRequestIdSchema,
   activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   skillId: SkillIdSchema
 }).strict();
 
@@ -3367,7 +3381,8 @@ const SkillRegistryErrorSummarySchema = PigeErrorCoreSchema.strict()
   .superRefine(requireErrorDomainMatchesCode);
 
 const SkillInstallResultIdentitySchema = z.object({
-  requestId: SkillInstallRequestIdSchema
+  requestId: SkillInstallRequestIdSchema,
+  activeVaultId: VaultIdSchema.optional()
 }).strict();
 
 export const SkillStageFromUrlResultSchema = z.discriminatedUnion("status", [
@@ -3528,9 +3543,19 @@ export const SkillDiscardStagedResultSchema = z.discriminatedUnion("status", [
   }).strict()
 ]);
 
+export const SkillRegistryQueryRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SkillLifecycleRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+const SkillRegistryQueryResultIdentitySchema = z.object({
+  apiVersion: z.literal(1).optional(),
+  requestId: SkillLifecycleRequestIdSchema.optional(),
+  activeVaultId: VaultIdSchema.optional()
+}).strict();
 export const SkillRegistryQueryResultSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("ready"), registry: SkillRegistrySummarySchema }).strict(),
-  z.object({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
+  SkillRegistryQueryResultIdentitySchema.extend({ status: z.literal("ready"), registry: SkillRegistrySummarySchema }).strict(),
+  SkillRegistryQueryResultIdentitySchema.extend({ status: z.literal("failed"), error: SkillRegistryErrorSummarySchema }).strict()
 ]);
 
 export const SkillRegistryMutationResultSchema = z.discriminatedUnion("status", [
@@ -3560,6 +3585,7 @@ const SkillRestoreResultIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: SkillLifecycleRequestIdSchema,
   activeVaultId: VaultIdSchema,
+  scope: z.enum(["machine_local", "vault"]),
   restoreContextId: SkillRestoreContextIdSchema,
   skillId: SkillIdSchema
 }).strict();
@@ -11250,6 +11276,7 @@ export type SkillRegistryFile = z.infer<typeof SkillRegistryFileSchema>;
 export type SkillSummary = z.infer<typeof SkillSummarySchema>;
 export type SkillRestorableSummary = z.infer<typeof SkillRestorableSummarySchema>;
 export type SkillRegistrySummary = z.infer<typeof SkillRegistrySummarySchema>;
+export type SkillRegistryQueryRequest = z.infer<typeof SkillRegistryQueryRequestSchema>;
 export type SkillRegistryQueryResult = z.infer<typeof SkillRegistryQueryResultSchema>;
 export type SkillDisableRequest = z.infer<typeof SkillDisableRequestSchema>;
 export type SkillRegistryMutationResult = z.infer<typeof SkillRegistryMutationResultSchema>;

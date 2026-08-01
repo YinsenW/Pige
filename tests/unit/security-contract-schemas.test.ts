@@ -318,21 +318,28 @@ describe("security-sensitive shared contracts", () => {
     })).toThrow();
     expect(SkillDisableRequestSchema.parse({
       apiVersion: 1,
+      activeVaultId: "vault_20260728_abcdefgh",
+      scope: "machine_local",
       skillId: "paper-reading",
       expectedRevision: 4
     }).skillId).toBe("paper-reading");
     expect(() => SkillDisableRequestSchema.parse({
       apiVersion: 1,
+      activeVaultId: "vault_20260728_abcdefgh",
+      scope: "machine_local",
       skillId: "../../outside",
       expectedRevision: 4
     })).toThrow();
     for (const skillId of ["con", "nul.logs", "com1", "portable."]) {
-      expect(() => SkillDisableRequestSchema.parse({ apiVersion: 1, skillId, expectedRevision: 4 })).toThrow();
+      expect(() => SkillDisableRequestSchema.parse({
+        apiVersion: 1, activeVaultId: "vault_20260728_abcdefgh", scope: "machine_local", skillId, expectedRevision: 4
+      })).toThrow();
     }
     const updateRequest = {
       apiVersion: 1 as const,
       requestId: "skill_lifecycle_request_abcdefghijklmnop",
       activeVaultId: "vault_20260728_abcdefgh",
+      scope: "machine_local" as const,
       skillId: "paper-reading",
       expectedRegistryRevision: 4
     };
@@ -345,6 +352,7 @@ describe("security-sensitive shared contracts", () => {
       apiVersion: 1,
       requestId: updateRequest.requestId,
       activeVaultId: updateRequest.activeVaultId,
+      scope: updateRequest.scope,
       skillId: updateRequest.skillId,
       status: "failed",
       error: { path: "/private/source" }

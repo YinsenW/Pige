@@ -4,11 +4,14 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import {
   deriveSkillDataBoundaries,
+  SkillDisableRequestSchema,
+  SkillDiscardStagedRequestSchema,
   SkillManifestSchema,
   SkillDiscardStagedResultSchema,
   SkillEnableRequestSchema,
   SkillExportRequestSchema,
   SkillExportResultSchema,
+  SkillInstallStagedRequestSchema,
   SkillInstallStagedResultSchema,
   SkillLifecycleMutationResultSchema,
   SkillRegistryFileSchema,
@@ -63,6 +66,7 @@ import {
   type SkillStagingStorePort,
   type SkillUpdateResolution
 } from "./skill-source-update-registry";
+import { withLegacySkillScope } from "./skill-scope-policy";
 
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
@@ -90,11 +94,14 @@ export class SkillRegistryService {
   readonly #rootPath: string;
   readonly #registryPath: string;
   readonly #registryLockPath: string;
+  readonly #scope: "machine_local" | "vault";
   readonly #lifecycleStore: SkillRegistryLifecycleStore;
   readonly #sourceUpdate: SkillSourceUpdateRegistry;
   readonly #restore: SkillRegistryRestoreService;
 
-  constructor(appDataRoot: string, options: { readonly recoverOrphanedMutationLock?: boolean } = {}) {
+  constructor(appDataRoot: string, options: {
+    readonly recoverOrphanedMutationLock?: boolean; readonly scope?: "machine_local" | "vault";
+  } = {}) {
     if (!path.isAbsolute(appDataRoot)) {
       throw skillError("skill.registry_root_invalid", "Skill Registry requires an absolute app-data root.");
     }
@@ -111,6 +118,7 @@ export class SkillRegistryService {
       throw skillError("skill.registry_root_invalid", "Skill Registry app-data root is unavailable.");
     }
     this.#appDataRoot = canonicalRoot;
+    this.#scope = options.scope ?? "machine_local";
     this.#rootPath = path.join(canonicalRoot, "skills");
     this.#registryPath = path.join(this.#rootPath, "registry.json");
     this.#registryLockPath = path.join(this.#rootPath, ".registry.lock");
@@ -123,6 +131,7 @@ export class SkillRegistryService {
     });
     this.#restore = new SkillRegistryRestoreService({
       appDataRoot: canonicalRoot, readRegistry: () => this.#readRegistry(), parseManifest: parseSkillManifest,
+      scope: this.#scope,
       project: (registry) => this.#project(registry), nextRegistry: (current, skills) => this.#nextRegistry(current, skills),
       writeRegistry: (registry) => this.#writeRegistry(registry), lifecycleStore: this.#lifecycleStore
     });
@@ -144,7 +153,6 @@ export class SkillRegistryService {
       }
     }
   }
-
   summary(): SkillRegistryQueryResult {
     try {
       return SkillRegistryQueryResultSchema.parse({ status: "ready", registry: this.#project(this.#readRegistry()) });
@@ -152,17 +160,22 @@ export class SkillRegistryService {
       return skillQueryFailed();
     }
   }
-
   currentRevision(): number { return this.#readRegistry().revision; }
-
+  registryFor(scope: "machine_local" | "vault", _activeVaultId: string): SkillRegistryService {
+    if (scope !== this.#scope) throw skillError("skill.registry_scope_invalid", "Skill Registry scope is unavailable.");
+    return this;
+  }
+  revisionFor(scope: "machine_local" | "vault", activeVaultId: string): number {
+    return this.registryFor(scope, activeVaultId).currentRevision();
+  }
   enabledExternalWebRuntimes = (): readonly EnabledExternalWebSkillRuntime[] =>
     projectEnabledExternalWebSkillRuntimes(this.#readRegistry(), (id) => this.#readManifest(id));
 
   restore(requestInput: SkillRestoreRequest): SkillRestoreResult {
-    const request = SkillRestoreRequestSchema.parse(requestInput);
+    const request = SkillRestoreRequestSchema.parse(withLegacySkillScope(requestInput, this.#scope));
     const identity = {
       apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      restoreContextId: request.restoreContextId, skillId: request.skillId
+      scope: request.scope, restoreContextId: request.restoreContextId, skillId: request.skillId
     };
     let lock: SkillRegistryMutationLock | undefined;
     try { this.#prepare();
@@ -171,7 +184,6 @@ export class SkillRegistryService {
       return SkillRestoreResultSchema.parse({ ...identity, ...result });
     } catch { return SkillRestoreResultSchema.parse({ ...identity, status: "failed" }); } finally { lock?.release(); }
   }
-
   hasTriggerOverlap(manifest: SkillManifest): boolean {
     const requested = new Set((manifest.triggers ?? []).map(normalizeTrigger));
     if (requested.size === 0) return false;
@@ -181,17 +193,13 @@ export class SkillRegistryService {
     }
     return false;
   }
-
   resolveUpdateTarget(requestInput: SkillStageUpdateRequest): SkillUpdateResolution { return this.#sourceUpdate.resolveTarget(requestInput); }
-
-  stageUpdateResult(
-    requestInput: SkillStageUpdateRequest,
-    status: "current" | "stale" | "not_found" | "failed"
-  ): SkillStageUpdateResult {
+  stageUpdateResult(requestInput: SkillStageUpdateRequest,
+    status: "current" | "stale" | "not_found" | "failed"): SkillStageUpdateResult {
     return this.#sourceUpdate.result(requestInput, status);
   }
-
-  installStaged(request: SkillInstallStagedRequest, staging: SkillStagingStorePort): SkillInstallStagedResult {
+  installStaged(requestInput: SkillInstallStagedRequest, staging: SkillStagingStorePort): SkillInstallStagedResult {
+    const request = SkillInstallStagedRequestSchema.parse(withLegacySkillScope(requestInput, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
@@ -211,19 +219,22 @@ export class SkillRegistryService {
       if (!candidate || candidate === "stale") {
         return SkillInstallStagedResultSchema.parse({ status: "not_found", requestId: request.requestId });
       }
-      if (candidate.stagingId !== request.stagingId || candidate.manifestSha256 !== request.manifestSha256 || candidate.bundleSha256 !== request.bundleSha256) {
+      if (request.scope !== this.#scope || candidate.activeVaultId !== request.activeVaultId ||
+        candidate.stagingId !== request.stagingId || candidate.manifestSha256 !== request.manifestSha256 || candidate.bundleSha256 !== request.bundleSha256) {
         return skillInstallFailed(request.requestId, "unavailable");
       }
       const parsed = parseSkillManifest(candidate.bytes.toString("utf8"));
       assertSkillManifestRendererSafe(parsed);
       if (
-        parsed.scope !== "machine_local" || !isInstallableSkillKind(parsed.kind) ||
+        parsed.scope !== this.#scope || !isInstallableSkillKind(parsed.kind) ||
+        (this.#scope === "vault" && parsed.kind !== "pure") ||
         parsed.id !== candidate.manifest.id || parsed.version !== candidate.manifest.version ||
         digestBytes(candidate.bytes) !== request.manifestSha256 ||
         (parsed.kind === "external_web" && request.enabled)
       ) return skillInstallFailed(request.requestId, "unavailable");
       const update = candidate.update;
       const existingIndex = current.skills.findIndex((skill) => skill.id === parsed.id);
+      if (!update && this.#scope === "vault" && request.enabled) return skillInstallFailed(request.requestId, "unavailable");
       if (!update && existingIndex >= 0) return skillInstallFailed(request.requestId, "unavailable");
       if (update) {
         return this.#sourceUpdate.commit(request, candidate, parsed, current, staging, mutationLock.assertOwned);
@@ -266,8 +277,8 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
-  discardStaged(request: SkillDiscardStagedRequest, staging: SkillStagingStorePort): SkillDiscardStagedResult {
+  discardStaged(requestInput: SkillDiscardStagedRequest, staging: SkillStagingStorePort): SkillDiscardStagedResult {
+    const request = SkillDiscardStagedRequestSchema.parse(withLegacySkillScope(requestInput, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
@@ -280,10 +291,11 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
-  disable(request: SkillDisableRequest): SkillRegistryMutationResult {
+  disable(requestInput: SkillDisableRequest): SkillRegistryMutationResult {
+    const request = SkillDisableRequestSchema.parse(withLegacySkillScope(requestInput, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
+      if (request.scope !== this.#scope) return skillMutationFailed("unavailable");
       this.#prepare();
       mutationLock = acquireSkillRegistryMutationLock(this.#registryLockPath);
       this.#restore.recoverPreparedUninstalls(this.#lifecycleStore.listPreparedUninstalls(), mutationLock.assertOwned);
@@ -318,9 +330,8 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
   enable(request: SkillEnableRequest): SkillLifecycleMutationResult {
-    const parsed = SkillEnableRequestSchema.parse(request);
+    const parsed = SkillEnableRequestSchema.parse(withLegacySkillScope(request, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
@@ -334,7 +345,7 @@ export class SkillRegistryService {
       }
       const index = current.skills.findIndex((record) => record.id === parsed.skillId);
       if (index < 0 || current.skills[index]!.enabled ||
-        !readSkillEnableEligibility(current.skills[index]!, (id) => this.#readManifest(id))) {
+        !readSkillEnableEligibility(current.skills[index]!, (id) => this.#readManifest(id), this.#scope)) {
         return SkillLifecycleMutationResultSchema.parse({
           ...skillLifecycleIdentity(parsed), status: "not_found", registry: this.#project(current)
         });
@@ -353,9 +364,8 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
   uninstall(request: SkillUninstallRequest): SkillLifecycleMutationResult {
-    const parsed = SkillUninstallRequestSchema.parse(request);
+    const parsed = SkillUninstallRequestSchema.parse(withLegacySkillScope(request, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
@@ -404,9 +414,8 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
   export(request: SkillExportRequest, destinationPath: string): SkillExportResult {
-    const parsed = SkillExportRequestSchema.parse(request);
+    const parsed = SkillExportRequestSchema.parse(withLegacySkillScope(request, this.#scope));
     let mutationLock: SkillRegistryMutationLock | undefined;
     try {
       this.#prepare();
@@ -434,7 +443,6 @@ export class SkillRegistryService {
       mutationLock?.release();
     }
   }
-
   #recoverOrphanedMutationLock(): void {
     this.#prepare();
     let stats: fs.Stats | undefined;
@@ -461,7 +469,6 @@ export class SkillRegistryService {
     }
     fsyncDirectory(this.#rootPath);
   }
-
   #project(registry: SkillRegistryFile): SkillRegistrySummary {
     const skills: SkillSummary[] = [];
     let invalidManifestCount = 0;
@@ -481,7 +488,6 @@ export class SkillRegistryService {
       restorableSkills: this.#restore.projectCandidates(registry)
     });
   }
-
   #projectRecord(record: SkillRegistryRecord): SkillSummary {
     if (record.trust !== "user_confirmed") {
       throw skillError("skill.registry_record_invalid", "Machine-local Skill trust provenance is invalid.");
@@ -491,7 +497,8 @@ export class SkillRegistryService {
       loaded.sha256 !== record.manifestSha256 ||
       loaded.manifest.id !== record.id ||
       loaded.manifest.version !== record.version ||
-      loaded.manifest.scope !== "machine_local" ||
+      loaded.manifest.scope !== this.#scope ||
+      (this.#scope === "vault" && loaded.manifest.kind !== "pure") ||
       !isInstallableSkillKind(loaded.manifest.kind)
     ) {
       throw skillError("skill.manifest_changed", "Installed Skill identity no longer matches its registry record.");
@@ -525,25 +532,22 @@ export class SkillRegistryService {
         : {})
     };
   }
-
   #isLifecycleEligible(record: SkillRegistryRecord): boolean {
     try {
       const loaded = this.#readManifest(record.id);
       return record.trust === "user_confirmed" && loaded.sha256 === record.manifestSha256 &&
         loaded.manifest.id === record.id && loaded.manifest.version === record.version &&
-        loaded.manifest.scope === "machine_local" && loaded.manifest.kind === "pure";
+        loaded.manifest.scope === this.#scope && loaded.manifest.kind === "pure";
     } catch {
       return false;
     }
   }
-
   #nextRegistry(current: SkillRegistryFile, skills: readonly SkillRegistryRecord[]): SkillRegistryFile {
     if (current.revision === Number.MAX_SAFE_INTEGER) {
       throw skillError("skill.registry_revision_exhausted", "Skill Registry revision is exhausted.");
     }
     return SkillRegistryFileSchema.parse({ schemaVersion: 1, revision: current.revision + 1, skills });
   }
-
   #readRegistry(): SkillRegistryFile {
     this.#prepare();
     const body = readBoundedNoFollow(this.#registryPath, MAX_REGISTRY_BYTES);
@@ -554,7 +558,6 @@ export class SkillRegistryService {
       throw skillError("skill.registry_invalid", "Skill Registry state is unavailable or invalid.");
     }
   }
-
   #writeRegistry(registry: SkillRegistryFile): void {
     this.#prepare();
     const parsed = SkillRegistryFileSchema.parse(registry);
@@ -586,7 +589,6 @@ export class SkillRegistryService {
       if (!renamed) fs.rmSync(temporaryPath, { force: true });
     }
   }
-
   #readManifest(skillId: string): LoadedSkillManifest {
     try {
       const { bytes, sha256, bundleSha256, files } = this.#lifecycleStore.readInstalled(skillId);
@@ -600,7 +602,6 @@ export class SkillRegistryService {
       throw skillError("skill.manifest_invalid", "Installed Skill manifest is unavailable or invalid.");
     }
   }
-
   #findInstallReplay(request: SkillInstallStagedRequest, registry: SkillRegistryFile): boolean | "conflict" {
     for (const record of registry.skills) {
       const receipt = this.#lifecycleStore.readInstallReceipt(record.id);
@@ -611,7 +612,6 @@ export class SkillRegistryService {
     }
     return false;
   }
-
   #prepare(): void {
     const rootStats = fs.lstatSync(this.#appDataRoot);
     if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {

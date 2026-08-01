@@ -12,7 +12,7 @@ export const HOME_STAGE_SUBMITTED_SKILL_URL_TOOL_NAME = "pige_stage_submitted_sk
 
 export interface HomeSkillStagingServicePort {
   stageFromChatUrl(
-    request: { readonly apiVersion: 1; readonly requestId: string; readonly sourceUrl: string },
+    request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string; readonly sourceUrl: string },
     binding: SkillChatStageBinding,
     signal: AbortSignal,
     assertCurrent: () => void
@@ -113,6 +113,7 @@ export class HomeSkillStagingToolService {
         const result = await this.#staging.stageFromChatUrl({
           apiVersion: 1,
           requestId: createChatSkillStageRequestId(binding),
+          activeVaultId: turn.activeVaultId,
           sourceUrl
         }, binding, signal, turn.assertCurrent);
         turn.assertCurrent();

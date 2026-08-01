@@ -15,6 +15,7 @@ function register(overrides: Record<string, unknown> = {}) {
     apiVersion: 1 as const,
     requestId: request.requestId,
     activeVaultId: request.activeVaultId,
+    scope: request.scope,
     skillId: request.skillId,
     registryRevision: 2,
     status: "exported" as const
@@ -25,7 +26,7 @@ function register(overrides: Record<string, unknown> = {}) {
     getWindow: () => ({}) as never,
     showOpenDialog: async () => ({ canceled: false, filePaths: ["/tmp/local-SKILL.md"] }),
     showSaveDialog: async () => ({ canceled: false, filePath: "/tmp/exported-SKILL.md" }),
-    summary: () => ({ status: "ready", registry: registry(2) }),
+    summary: (request) => ({ ...request, status: "ready", registry: registry(2) }),
     pendingStagedReviews: (request) => ({
       ...request,
       status: "ready",
@@ -34,6 +35,7 @@ function register(overrides: Record<string, unknown> = {}) {
     stageFromUrl: (request) => ({
       status: "ready",
       requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
       staged: {
         stagingId,
         manifestSha256,
@@ -86,24 +88,32 @@ function register(overrides: Record<string, unknown> = {}) {
       apiVersion: 1,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       status: "current",
       registry: registry(2)
     }),
-    installStaged: (request) => ({ status: "committed", requestId: request.requestId, registry: registry(3) }),
-    discardStaged: (request) => ({ status: "discarded", requestId: request.requestId }),
-    disable: () => ({ status: "committed", registry: registry(3) }),
+    installStaged: (request) => ({
+      status: "committed", requestId: request.requestId, activeVaultId: request.activeVaultId, registry: registry(3)
+    }),
+    discardStaged: (request) => ({
+      status: "discarded", requestId: request.requestId, activeVaultId: request.activeVaultId
+    }),
+    disable: (request) => ({
+      apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId, scope: request.scope,
+      skillId: request.skillId, status: "committed", registry: registry(3)
+    }),
     enable: (request) => ({
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      skillId: request.skillId, status: "committed", registry: registry(3)
+      scope: request.scope, skillId: request.skillId, status: "committed", registry: registry(3)
     }),
     uninstall: (request) => ({
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      skillId: request.skillId, status: "committed", registry: registry(3)
+      scope: request.scope, skillId: request.skillId, status: "committed", registry: registry(3)
     }),
     restore: (request) => ({
       apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      restoreContextId: request.restoreContextId, skillId: request.skillId,
+      scope: request.scope, restoreContextId: request.restoreContextId, skillId: request.skillId,
       status: "committed", registry: registry(3)
     }),
     exportSkill,
@@ -191,6 +201,7 @@ describe("registerSkillsIpc", () => {
     const stage = await handlers.get("skills.stageFromUrl")?.({}, {
       apiVersion: 1,
       requestId,
+      activeVaultId,
       sourceUrl: "https://example.com/SKILL.md"
     });
     expect(stage).toMatchObject({ status: "ready", requestId });
@@ -201,6 +212,8 @@ describe("registerSkillsIpc", () => {
     const install = await handlers.get("skills.installStaged")?.({}, {
       apiVersion: 1,
       requestId,
+      activeVaultId,
+      scope: "machine_local",
       stagingId,
       manifestSha256,
       bundleSha256,
@@ -213,6 +226,8 @@ describe("registerSkillsIpc", () => {
     await handlers.get("skills.discardStaged")?.({}, {
       apiVersion: 1,
       requestId,
+      activeVaultId,
+      scope: "machine_local",
       stagingId,
       manifestSha256,
       bundleSha256
@@ -226,6 +241,7 @@ describe("registerSkillsIpc", () => {
       apiVersion: 1 as const,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       status: "cancelled" as const
     }));
@@ -236,6 +252,7 @@ describe("registerSkillsIpc", () => {
       apiVersion: 1,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       skillId: request.skillId,
       status: "cancelled"
     });
@@ -266,11 +283,14 @@ describe("registerSkillsIpc", () => {
     await expect(handlers.get("skills.stageFromUrl")?.({}, {
       apiVersion: 1,
       requestId,
+      activeVaultId,
       sourceUrl: "https://example.com/SKILL.md"
     })).rejects.toThrow("identity");
     await expect(handlers.get("skills.installStaged")?.({}, {
       apiVersion: 1,
       requestId,
+      activeVaultId,
+      scope: "machine_local",
       stagingId,
       manifestSha256,
       bundleSha256,
@@ -284,7 +304,7 @@ describe("registerSkillsIpc", () => {
   it("vault-fences installed lifecycle mutations and publishes only exact committed identities", async () => {
     const enable = vi.fn((request) => ({
       apiVersion: 1 as const, requestId: request.requestId, activeVaultId: request.activeVaultId,
-      skillId: request.skillId, status: "committed" as const, registry: registry(3)
+      scope: request.scope, skillId: request.skillId, status: "committed" as const, registry: registry(3)
     }));
     const { handlers, publishRegistryChanged } = register({ enable });
     const request = lifecycleRequest();
@@ -315,6 +335,7 @@ describe("registerSkillsIpc", () => {
       apiVersion: request.apiVersion,
       requestId: request.requestId,
       activeVaultId: request.activeVaultId,
+      scope: request.scope,
       restoreContextId: request.restoreContextId,
       skillId: request.skillId,
       status: "committed" as const,
@@ -324,6 +345,7 @@ describe("registerSkillsIpc", () => {
       apiVersion: 1 as const,
       requestId: lifecycleRequestId,
       activeVaultId,
+      scope: "machine_local" as const,
       restoreContextId: `skill_restore_context_v2_${"a".repeat(48)}`,
       skillId: "paper-reading",
       expectedRegistryRevision: 2
@@ -384,6 +406,7 @@ function lifecycleRequest() {
     apiVersion: 1 as const,
     requestId: lifecycleRequestId,
     activeVaultId,
+    scope: "machine_local" as const,
     skillId: "paper-reading",
     expectedRegistryRevision: 2
   };

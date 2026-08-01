@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { SkillExportResult, SkillLifecycleMutationResult, SkillStageInvalidReason, SkillStageUpdateResult,
-  SkillStagedSummary, SkillRegistryQueryResult, SkillRegistrySummary, SkillSummary } from "@pige/contracts";
+import type { SkillStageInvalidReason, SkillStagedSummary, SkillRegistryQueryResult,
+  SkillRegistrySummary, SkillSummary } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
 import { SkillTrashRestorePanel, formatSkillByteSize } from "./SkillTrashRestorePanel";
 import { ExternalSkillUpdateDiff } from "./ExternalSkillUpdateDiff";
+import {
+  createSkillInstallRequestId, createSkillLifecycleRequestId, currentSkillVaultId,
+  loadCurrentSkillRegistry, matchesSkillLifecycleIdentity
+} from "./skill-settings-api";
 
 type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
@@ -120,9 +124,9 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     };
     const unsubscribe = window.pige.skills.onChanged(adoptRegistry);
     if (registry === null) setReadState("loading");
-    void window.pige.skills.summary().then((result: SkillRegistryQueryResult) => {
+    void loadCurrentSkillRegistry().then((result: SkillRegistryQueryResult | undefined) => {
       if (!requestCurrent) return;
-      if (result.status === "failed") {
+      if (!result || result.status === "failed") {
         if (active && latestRevisionRef.current < 0) setReadState("failed");
         return;
       }
@@ -172,7 +176,6 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     setStatusKey(null);
     return sequence;
   };
-
   const isCurrentLifecycleAction = (sequence: number): boolean => (
     mountedRef.current && lifecycleSequenceRef.current === sequence
   );
@@ -182,30 +185,26 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     lifecycleActiveRef.current = false;
     setLifecycleAction(null);
   };
-
   const adoptRegistry = (next: SkillRegistrySummary): void => {
     if (next.revision < latestRevisionRef.current) return;
     latestRevisionRef.current = next.revision;
     setRegistry(next);
     setReadState("ready");
   };
-
   const reloadAuthoritativeRegistry = async (sequence: number): Promise<void> => {
     try {
-      const result = await window.pige.skills.summary();
-      if (isCurrentLifecycleAction(sequence) && result.status === "ready") adoptRegistry(result.registry);
+      const result = await loadCurrentSkillRegistry();
+      if (isCurrentLifecycleAction(sequence) && result?.status === "ready") adoptRegistry(result.registry);
     } catch {
       // The body-free lifecycle status remains authoritative even if refresh is unavailable.
     }
   };
-
   const queueInstalledFocus = (skillId?: string, action?: InstalledLifecycleKind): void => {
     pendingInstalledFocusRef.current = {
       skillId: skillId ?? null,
       ...(action ? { action } : {})
     };
   };
-
   const releaseStagedReview = (review: StagedSkillReview): void => {
     setCurrentStagedReview(null);
     if (review.kind === "update") { setInstallOpen(false); queueInstalledFocus(review.skillId, "update"); }
@@ -228,8 +227,12 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     const sequence = beginLifecycleAction("disable", skill.id);
     if (sequence === null) return;
     try {
+      const activeVaultId = await currentSkillVaultId();
+      if (!activeVaultId) throw new Error("No active Vault");
       const result = await window.pige.skills.disable({
         apiVersion: 1,
+        activeVaultId,
+        scope: skill.scope as "machine_local" | "vault",
         skillId: skill.id,
         expectedRevision: registry.revision
       });
@@ -273,13 +276,14 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
         apiVersion: 1,
         requestId,
         activeVaultId: requestedVault.vaultId,
+        scope: skill.scope as "machine_local" | "vault",
         skillId: skill.id,
         expectedRegistryRevision: expectedRevision
       });
       if (!isCurrentLifecycleAction(sequence)) return;
       const currentVault = await window.pige.vault.current();
       if (!isCurrentLifecycleAction(sequence)) return;
-      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+      if (!matchesSkillLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.scope, skill.id) ||
           currentVault?.vaultId !== requestedVault.vaultId) {
         setStatusKey("skills.lifecycleFailed");
         return;
@@ -338,13 +342,14 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
         apiVersion: 1,
         requestId,
         activeVaultId: requestedVault.vaultId,
+        scope: skill.scope as "machine_local" | "vault",
         skillId: skill.id,
         expectedRegistryRevision: expectedRevision
       });
       if (!isCurrentLifecycleAction(sequence)) return;
       const currentVault = await window.pige.vault.current();
       if (!isCurrentLifecycleAction(sequence)) return;
-      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+      if (!matchesSkillLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.scope, skill.id) ||
           currentVault?.vaultId !== requestedVault.vaultId ||
           (result.status === "exported" || result.status === "cancelled") &&
             result.registryRevision !== expectedRevision) {
@@ -383,13 +388,14 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
         apiVersion: 1,
         requestId,
         activeVaultId: requestedVault.vaultId,
+        scope: skill.scope as "machine_local" | "vault",
         skillId: skill.id,
         expectedRegistryRevision
       });
       if (!isCurrentLifecycleAction(sequence)) return;
       const currentVault = await window.pige.vault.current();
       if (!isCurrentLifecycleAction(sequence)) return;
-      if (!matchesLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.id) ||
+      if (!matchesSkillLifecycleIdentity(result, requestId, requestedVault.vaultId, skill.scope, skill.id) ||
           currentVault?.vaultId !== requestedVault.vaultId) {
         setStatusKey("skills.updateFailed");
         return;
@@ -447,14 +453,17 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     setInstallBusy("stage");
     setStatusKey(null);
     try {
+      const activeVaultId = await currentSkillVaultId();
+      if (!activeVaultId) throw new Error("No active Vault");
       const requestId = createSkillInstallRequestId();
       const result = await window.pige.skills.stageFromUrl({
         apiVersion: 1,
         requestId,
+        activeVaultId,
         sourceUrl: installUrl
       });
       if (!finishInstallOperation(operation)) return;
-      if (result.requestId !== requestId) {
+      if (result.requestId !== requestId || result.activeVaultId !== activeVaultId) {
         setStatusKey("skills.stageFailed");
         return;
       }
@@ -561,17 +570,21 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     setStatusKey(null);
     try {
       const requestId = createSkillInstallRequestId();
+      const activeVaultId = await currentSkillVaultId();
+      if (!activeVaultId) throw new Error("No active Vault");
       const result = await window.pige.skills.installStaged({
         apiVersion: 1,
         requestId,
+        activeVaultId,
+        scope: staged.scope,
         stagingId: staged.stagingId,
         manifestSha256: staged.manifestSha256,
         bundleSha256: staged.bundleSha256,
         expectedRegistryRevision: staged.registryRevision,
-        enabled: review.kind === "update" ? review.enabled : staged.kind === "pure"
+        enabled: review.kind === "update" ? review.enabled : staged.kind === "pure" && staged.scope === "machine_local"
       });
       if (!finishInstallOperation(operation)) return;
-      if (result.requestId !== requestId) {
+      if (result.requestId !== requestId || result.activeVaultId !== activeVaultId) {
         setStatusKey("skills.installFailed");
         return;
       }
@@ -622,15 +635,19 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     setStatusKey(null);
     try {
       const requestId = createSkillInstallRequestId();
+      const activeVaultId = await currentSkillVaultId();
+      if (!activeVaultId) throw new Error("No active Vault");
       const result = await window.pige.skills.discardStaged({
         apiVersion: 1,
         requestId,
+        activeVaultId,
+        scope: staged.scope,
         stagingId: staged.stagingId,
         manifestSha256: staged.manifestSha256,
         bundleSha256: staged.bundleSha256
       });
       if (!finishInstallOperation(operation)) return;
-      if (result.requestId !== requestId) {
+      if (result.requestId !== requestId || result.activeVaultId !== activeVaultId) {
         setStatusKey("skills.discardFailed");
         return;
       }
@@ -968,23 +985,6 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
       </section>
     </section>
   );
-}
-
-function createSkillInstallRequestId(): `skillreq_${string}` {
-  return `skillreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-function createSkillLifecycleRequestId(): `skill_lifecycle_request_${string}` {
-  return `skill_lifecycle_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
-}
-
-function matchesLifecycleIdentity(
-  result: SkillLifecycleMutationResult | SkillExportResult | SkillStageUpdateResult,
-  requestId: string,
-  activeVaultId: string,
-  skillId: string
-): boolean {
-  return result.requestId === requestId && result.activeVaultId === activeVaultId && result.skillId === skillId;
 }
 
 function deferFocus(callback: () => void): void {
