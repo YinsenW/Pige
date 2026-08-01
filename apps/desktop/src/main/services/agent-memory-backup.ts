@@ -29,7 +29,7 @@ import { readVaultConfig } from "./vault-layout";
 export type AgentMemoryBackupIntegrity = NonNullable<BackupManifest["memoryIntegrity"]>;
 
 const EMPTY_REGISTRY: MemoryRegistry = { schemaVersion: 1, revision: 0, events: [], records: [] };
-const RECEIPT_PATH = /^(?:\.pige\/memory\/(?:edits|mutations)|\.pige\/trash\/memory)\/memory_request_[a-z0-9]{16,64}\.json$/u;
+const RECEIPT_PATH = /^(?:\.pige\/memory\/(?:creates|edits|mutations)|\.pige\/trash\/memory)\/memory_request_[a-z0-9]{16,64}\.json$/u;
 const RESTORE_INTENT_PATH = /^\.pige\/trash\/memory\/(op_\d{8}_[a-z0-9]{8,})\.restore\.json$/u;
 const OPERATION_PATH = /^\.pige\/operations\/\d{4}\/\d{2}\/(op_\d{8}_[a-z0-9]{8,})\.json$/u;
 const MEMORY_OPERATION_KINDS = new Set(["create_memory", "update_memory", "trash_memory", "restore_memory"]);
