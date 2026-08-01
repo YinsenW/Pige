@@ -1724,6 +1724,7 @@ export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchiver
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
 export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
+export const NoteClaimContradictionRequestIdSchema = z.string().regex(/^claimcontradictionreq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
 export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteRenameRequestIdSchema = z.string().regex(/^noterenamereq_[a-z0-9]{16,64}$/);
@@ -1848,6 +1849,16 @@ export const NoteQuestionStateSummarySchema = z.object({
   canChange: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const NoteClaimContradictionItemSchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const NoteClaimContradictionsSummarySchema = z.object({
+  items: z.array(NoteClaimContradictionItemSchema).max(32),
+  canEdit: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteRenderResultSchema = z.object({
   summary: NoteRenderPageSummarySchema,
   html: NoteRenderedHtmlSchema,
@@ -1864,6 +1875,7 @@ export const NoteRenderResultSchema = z.object({
   sourceMetadata: NoteSourceMetadataSummarySchema.optional(),
   questionState: NoteQuestionStateSummarySchema.optional(),
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
+  claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
@@ -1944,6 +1956,8 @@ export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
 export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers" as const;
 export const NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer" as const;
+export const NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContradictions" as const;
+export const NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL = "notes.changeClaimContradiction" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
@@ -2070,6 +2084,59 @@ export const NoteChangeQuestionAnswerResultSchema = z.discriminatedUnion("status
     expectedRevision: NoteEditorRevisionSchema, action: z.enum(["add", "remove"]), targetPageId: PageIdSchema,
     expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional(), status: z.literal(status)
   }).strict())
+]);
+const NoteClaimContradictionIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteClaimContradictionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteSearchClaimContradictionsRequestSchema = NoteClaimContradictionIdentitySchema.extend({
+  query: z.string().trim().min(1).max(160)
+}).strict();
+export const NoteSearchClaimContradictionsResultSchema = z.discriminatedUnion("status", [
+  NoteSearchClaimContradictionsRequestSchema.extend({
+    status: z.literal("ready"),
+    candidates: z.array(NoteClaimContradictionItemSchema).max(20)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSearchClaimContradictionsRequestSchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteChangeClaimContradictionRequestSchema = NoteClaimContradictionIdentitySchema.extend({
+  action: z.enum(["add", "remove"]),
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).superRefine((value, context) => {
+  if (value.action === "add" && !value.expectedTargetUpdatedAt) {
+    context.addIssue({ code: "custom", path: ["expectedTargetUpdatedAt"], message: "Adding a contradiction requires the current target identity." });
+  }
+  if (value.action === "remove" && value.expectedTargetUpdatedAt !== undefined) {
+    context.addIssue({ code: "custom", path: ["expectedTargetUpdatedAt"], message: "Removing a contradiction must not accept renderer target authority." });
+  }
+});
+const NoteChangeClaimContradictionResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteClaimContradictionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  action: z.enum(["add", "remove"]),
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+export const NoteChangeClaimContradictionResultSchema = z.discriminatedUnion("status", [
+  NoteChangeClaimContradictionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteChangeClaimContradictionResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
 ]);
 export const NoteAddTagRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -11399,6 +11466,8 @@ export type NoteQuestionState = z.infer<typeof NoteQuestionStateSchema>;
 export type NoteQuestionStateSummary = z.infer<typeof NoteQuestionStateSummarySchema>;
 export type NoteQuestionAnswerItem = z.infer<typeof NoteQuestionAnswerItemSchema>;
 export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSummarySchema>;
+export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
+export type NoteClaimContradictionsSummary = z.infer<typeof NoteClaimContradictionsSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
 export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
@@ -11427,6 +11496,10 @@ export type NoteSearchQuestionAnswersRequest = z.infer<typeof NoteSearchQuestion
 export type NoteSearchQuestionAnswersResult = z.infer<typeof NoteSearchQuestionAnswersResultSchema>;
 export type NoteChangeQuestionAnswerRequest = z.infer<typeof NoteChangeQuestionAnswerRequestSchema>;
 export type NoteChangeQuestionAnswerResult = z.infer<typeof NoteChangeQuestionAnswerResultSchema>;
+export type NoteSearchClaimContradictionsRequest = z.infer<typeof NoteSearchClaimContradictionsRequestSchema>;
+export type NoteSearchClaimContradictionsResult = z.infer<typeof NoteSearchClaimContradictionsResultSchema>;
+export type NoteChangeClaimContradictionRequest = z.infer<typeof NoteChangeClaimContradictionRequestSchema>;
+export type NoteChangeClaimContradictionResult = z.infer<typeof NoteChangeClaimContradictionResultSchema>;
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
 export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
 export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;

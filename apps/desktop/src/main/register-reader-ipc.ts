@@ -107,6 +107,12 @@ import {
   NoteSearchQuestionAnswersResultSchema,
   NoteChangeQuestionAnswerRequestSchema,
   NoteChangeQuestionAnswerResultSchema,
+  NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL,
+  NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL,
+  NoteSearchClaimContradictionsRequestSchema,
+  NoteSearchClaimContradictionsResultSchema,
+  NoteChangeClaimContradictionRequestSchema,
+  NoteChangeClaimContradictionResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -176,6 +182,7 @@ import type { NoteRevisionHistoryService } from "./services/note-revision-histor
 import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import type { QuestionStateService } from "./services/question-state-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
+import type { ClaimContradictionService } from "./services/claim-contradiction-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -195,6 +202,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getQuestionStateService: () => QuestionStateService;
   readonly getQuestionAnswerService: () => QuestionAnswerService;
+  readonly getClaimContradictionService: () => ClaimContradictionService;
   readonly getNoteTagService: () => NoteTagService;
   readonly getNoteRenameService: () => NoteRenameService;
   readonly getNoteAliasService: () => NoteAliasService;
@@ -480,6 +488,38 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
         ? result : NoteChangeQuestionAnswerResultSchema.parse({ ...parsed, status: "failed" });
     } catch { return NoteChangeQuestionAnswerResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSearchClaimContradictionsRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteSearchClaimContradictionsResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try {
+      return NoteSearchClaimContradictionsResultSchema.parse(
+        options.getClaimContradictionService().search(ownerId, parsed)
+      );
+    } catch {
+      return NoteSearchClaimContradictionsResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeClaimContradictionRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try {
+      const result = NoteChangeClaimContradictionResultSchema.parse(
+        await options.getClaimContradictionService().change(ownerId, parsed)
+      );
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result
+        : NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
+    } catch {
+      return NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
+    }
   });
   options.ipcMain.handle(NOTE_ADD_TAG_CHANNEL, async (event, request: unknown) => {
     const parsed = NoteAddTagRequestSchema.parse(request);

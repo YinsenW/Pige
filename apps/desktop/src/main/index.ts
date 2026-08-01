@@ -327,6 +327,7 @@ import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
+import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
@@ -465,6 +466,7 @@ let assistantAnswerNoteService: AssistantAnswerNoteService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
+let claimContradictionService: ClaimContradictionService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteAliasService: NoteAliasService | undefined;
 let noteMergeService: NoteMergeService | undefined;
@@ -1836,6 +1838,16 @@ const getQuestionAnswerService = (): QuestionAnswerService => {
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowQuestion: true }),
     () => getVaultService().activeVaultPath());
   return questionAnswerService;
+};
+const getClaimContradictionService = (): ClaimContradictionService => {
+  claimContradictionService ??= new ClaimContradictionService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  return claimContradictionService;
 };
 const getNoteTagService = (): NoteTagService => {
   noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
@@ -3278,6 +3290,7 @@ registerReaderIpc({
   getNoteArchiveService,
   getQuestionStateService,
   getQuestionAnswerService,
+  getClaimContradictionService,
   getNoteTagService,
   getNoteAliasService,
   getNoteMergeService,
@@ -3765,6 +3778,13 @@ app.whenReady().then(async () => {
   questionAnswerService = new QuestionAnswerService(getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowQuestion: true }),
     () => getVaultService().activeVaultPath());
+  claimContradictionService = new ClaimContradictionService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowClaim: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteAliasService = new NoteAliasService(getNotesService(), noteMarkdownEditorService, () => getVaultService().activeVaultPath());
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());

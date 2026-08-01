@@ -181,6 +181,10 @@ import type {
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
   NoteChangeQuestionAnswerResult,
+  NoteSearchClaimContradictionsRequest,
+  NoteSearchClaimContradictionsResult,
+  NoteChangeClaimContradictionRequest,
+  NoteChangeClaimContradictionResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -675,6 +679,12 @@ import {
   NoteSearchQuestionAnswersResultSchema,
   NoteChangeQuestionAnswerRequestSchema,
   NoteChangeQuestionAnswerResultSchema,
+  NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL,
+  NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL,
+  NoteSearchClaimContradictionsRequestSchema,
+  NoteSearchClaimContradictionsResultSchema,
+  NoteChangeClaimContradictionRequestSchema,
+  NoteChangeClaimContradictionResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -2121,6 +2131,20 @@ const api: PigeDesktopApi = {
     changeQuestionAnswer: async (request: NoteChangeQuestionAnswerRequest): Promise<NoteChangeQuestionAnswerResult> =>
       NoteChangeQuestionAnswerResultSchema.parse(await ipcRenderer.invoke(
         NOTE_CHANGE_QUESTION_ANSWER_CHANNEL, NoteChangeQuestionAnswerRequestSchema.parse(request))),
+    searchClaimContradictions: async (
+      request: NoteSearchClaimContradictionsRequest
+    ): Promise<NoteSearchClaimContradictionsResult> =>
+      NoteSearchClaimContradictionsResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL,
+        NoteSearchClaimContradictionsRequestSchema.parse(request)
+      )),
+    changeClaimContradiction: async (
+      request: NoteChangeClaimContradictionRequest
+    ): Promise<NoteChangeClaimContradictionResult> =>
+      NoteChangeClaimContradictionResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL,
+        NoteChangeClaimContradictionRequestSchema.parse(request)
+      )),
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(
         await ipcRenderer.invoke(NOTE_ADD_TAG_CHANNEL, NoteAddTagRequestSchema.parse(request))
