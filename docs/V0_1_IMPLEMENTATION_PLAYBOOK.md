@@ -472,7 +472,7 @@ governed structured-source matrix.
 Evidence exists for preserved PDF -> recoverable local worker -> deterministic text/metadata artifacts -> page locators -> checksum-safe source-page refresh -> OCR handoff -> Agent ingest when text coverage is useful.
 
 Agent-led Office evidence proves preserve→inspect→parse→inspect→publish for useful
-DOCX/PPTX text and preserve→inspect→parse(`needs_ocr`)→selected PPTX media OCR→inspect→
+DOCX/PPTX text and preserve→inspect→parse(`needs_ocr`)→selected DOCX/PPTX raster media OCR→inspect→
 publish when required. Deterministic children survive wait/retry, parent cancellation
 reaches parsing, optional unavailable OCR keeps useful native evidence with warnings,
 and no-readable evidence waits without a note. Already-persisted schema-compatible
@@ -515,7 +515,7 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
 Still open before P5 completion: signed packaged proof, Windows/Paddle,
-full-slide/vector/chart/DOCX-media OCR, unsupported/oversized PPTX targets,
+full-slide/vector/chart OCR, unsupported/oversized PPTX targets,
 progress/cancel UI, other Job classes, and strict cross-process CAS.
 
 Deferred from this phase:
