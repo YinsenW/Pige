@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T07:49:41Z",
+  "reviewedAt": "2026-08-01T08:15:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,10 +52,10 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit and Library tag lifecycle Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle and active-note title/filename Redo, explainable Knowledge Tree density, and reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "a382c2ffdffc9bd21a16d0ceff6f133a71874be0fb50896f3c145fb7cc064335"
+    "reviewedSha256": "d76db539195a8973ff1d95d739c340e9f5c9bf01b77bd5ba734544c91ba401f3"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed exact Reader tag removal and exact-selection create-page semantics across knowledge, Markdown, API, Job, UI and Decision owners; Development supplied schema, durable artifact/service and navigation evidence; UI Design keeps all six actions behind the existing Turn into… disclosure."
+    "independence": "Planning reviewed active-note title/filename Redo across API, Job, UI and the existing rename Decision while retaining exact Reader create-page and Library tag Redo contracts; Development supplied Main/service/path-transition/recovery evidence and the existing Activity UI remains authoritative."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias and tag management; Knowledge Tree density retains exact counts and navigation; Reader Turn into… reviews six page types and opens only the matching authoritative page."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Knowledge, API, UI and D-20260730-Grounded-Knowledge-Page-Creation agree on exact selected-byte/type binding, explicit review and create_page ownership while existing note corrections retain revision CAS."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader action schema, artifact/service, security and UI tests bind all six types without promoting broader PIGE-KNOW-001/E7.01; existing correction evidence remains scoped."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"One schema-approved action drives Job binding, type-specific frontmatter, create_page/Undo/restart and matching navigation; existing Main ownership and recovery remain executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing grounded-page decision and Reader selection sections absorb the extension; no new owner document or default control is added."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias, tag and exact create-page workflows while Activity can safely repeat an undone active-note title/filename rename."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"API, Job, UI and D-20260731-Exact-Note-Title-And-Filename-Rename agree on matching-Undo authority, restored-byte/destination reproof and deterministic forward rename_page."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Service, Main routing, stale/conflict and restart tests bind title/filename Redo without promoting broader PIGE-KNOW-001/PIGE-JOB-005 exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"The existing rename receipt owns exact images, path transition, deterministic Redo identity and repeatable Undo/Redo; no new renderer contract or state owner is introduced."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing Activity and note-rename owner sections absorb the Redo extension without a new document, locale key, schema or status promotion."}
   ],
   "verification": [
     {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Exact tag-removal semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npm exec -- vitest run tests/unit/{schemas,security-contract-schemas,reader-selection-create-note-service,home-agent-service,full-ui-library,note-agent-ui}.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"All six Reader create-page actions, strict bindings, durable artifacts, review/navigation and localized UI are executable."},
+    {"command":"npx vitest run tests/unit/note-rename-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run typecheck && npm run build","status":"passed","evidence":"Exact title/filename Redo, repeatable inverse lineage, stale closure, Main routing and interrupted-operation adoption are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "reader-selection-knowledge-pages-bind-20260801",
-    "taskTitle": "Bind reviewed Reader selection knowledge-page creation",
+    "taskId": "active-note-rename-redo-bind-20260801",
+    "taskTitle": "Bind active-note title and filename Redo",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Exact current selection and requested type enter one bounded proposal; approval publishes one schema-valid create_page and opens only the matching page type; renderer owns no bytes, path or apply authority.",
-    "acknowledgement": "Planning binds six reviewed Reader create-page actions while PIGE-KNOW-001 and E7.01 remain partial; no default Reader UI expansion."
+    "compatibility": "Main binds one exact rename_page and matching Undo to its private before/after images, re-proves restored bytes and destination vacancy, and publishes one deterministic forward rename_page without exposing paths or Markdown.",
+    "acknowledgement": "Planning binds active-note title/filename Redo while broader restore/Redo, PIGE-KNOW-001 and PIGE-JOB-005 remain partial; existing Reader and Activity UI contracts remain unchanged."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [
