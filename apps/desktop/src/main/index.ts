@@ -1944,10 +1944,11 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
 
 const getReaderSourceRevealService = (): ReaderSourceRevealService =>
   new ReaderSourceRevealService(getNotesService(), {
-    reveal: (absolutePath) => {
+    revealFile: (absolutePath) => {
       shell.showItemInFolder(absolutePath);
       return "revealed";
-    }
+    },
+    openWebUrl: (url) => shell.openExternal(url)
   });
 
 const getSourceOriginalReconnectService = (): SourceOriginalReconnectService => {
