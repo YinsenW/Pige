@@ -5436,7 +5436,7 @@ describe("full UI Settings surface", () => {
     });
     expect(installLanguageAsset).toHaveBeenCalledTimes(2);
     expect(container.querySelector('[role="alert"]')?.textContent)
-      .toBe("Pige could not install the language resource. Try again.");
+      .toBe("Status unavailable");
     expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install resource"));
 
     await act(async () => root.unmount());
@@ -5524,7 +5524,7 @@ describe("full UI Settings surface", () => {
     expect(installLanguageAsset.mock.calls[1]?.[0].languageTag).toBe("fr");
     expect(refreshSpeechAvailability).not.toHaveBeenCalled();
     expect(container.querySelector('[role="alert"]')?.textContent)
-      .toBe("Pige could not install the language resource. Try again.");
+      .toBe("Status unavailable");
 
     await act(async () => root.unmount());
     dom.window.close();

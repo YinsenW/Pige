@@ -5,6 +5,15 @@ import type { ToolchainHealth, ToolchainToolStatus } from "@pige/contracts";
 import { ToolchainManifestSchema } from "@pige/schemas";
 import { toolchainRepairEligibility } from "./toolchain-repair-service";
 
+export interface ToolchainRecoveryDependencies {
+  readonly hasActiveVault: () => boolean;
+  readonly requeueWaitingParses: () => { readonly requeued: number };
+  readonly requeueWaitingAgentIngest: () => { readonly requeued: number };
+  readonly scheduleParseProcessing: () => void;
+  readonly scheduleAgentIngestProcessing: () => void;
+  readonly onRecoveryFailure: (owner: "parse" | "ingest") => void;
+}
+
 export class ToolchainService {
   readonly #manifestPath: string;
   readonly #resolveModule: (moduleId: string) => string;
@@ -44,6 +53,23 @@ export class ToolchainService {
     };
     const repair = toolchainRepairEligibility(health);
     return repair ? { ...health, repair } : health;
+  }
+
+  recheckAndRecover(dependencies: ToolchainRecoveryDependencies): ToolchainHealth {
+    const health = this.health();
+    if (health.status !== "ready" || !dependencies.hasActiveVault()) return health;
+
+    try {
+      if (dependencies.requeueWaitingParses().requeued > 0) dependencies.scheduleParseProcessing();
+    } catch {
+      dependencies.onRecoveryFailure("parse");
+    }
+    try {
+      if (dependencies.requeueWaitingAgentIngest().requeued > 0) dependencies.scheduleAgentIngestProcessing();
+    } catch {
+      dependencies.onRecoveryFailure("ingest");
+    }
+    return health;
   }
 }
 
