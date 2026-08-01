@@ -459,7 +459,7 @@ function appendNullRow(
       for (const column of table.columns.filter((candidate) => !candidate.calculation)) {
         (column.relation ? insertRelationCell : column.lookup ? insertLookupCell : insertCell).run(input.rowId, column.id);
       }
-      formulaStats = new Map(appendFormulaCellsForNewRow(db, table, input.rowId));
+      formulaStats = new Map(appendFormulaCellsForNewRow(db, table, input.rowId, binding.schema));
       for (const column of table.columns) {
         const stats = column.stats ?? { missing: 0, empty: 0, null: 0, value: 0 };
         const added = formulaStats.get(column.id);

@@ -571,8 +571,9 @@ Dataset boundary:
 - Formula/relation/lookup/rollup writes bind revision, IDs and eligibility; relations store same-Dataset row
   IDs/labels, while lookups and rollups stay derived. Lookup definition updates accept one current
   relation and scalar target; rollup updates accept count or numeric-sum. Existing formula add/update
-  accepts current numeric scalar or acyclic Pige-formula operands; Main rejects direct/indirect cycles and
-  recomputes downstream formulas in stable topological order. CAS/Undo exposes no path/query.
+  accepts current numeric scalar, numeric lookup/rollup or acyclic Pige-formula operands. Main rejects
+  direct/indirect cycles and recomputes downstream formulas in stable topological order after base-cell edit,
+  relation retarget or derived-definition update. CAS/Undo exposes no path/query.
 - `collections.updateView`/`collections.renameView`/`collections.trashView` bind Dataset, stable
   view and view revision; definition updates accept only the bounded typed filter/sort shape.
   Committed/stale returns the safe authoritative snapshot and update conflicts retain the renderer draft.

@@ -8,6 +8,7 @@ import {
   CollectionAddFormulaColumnResultSchema,
   DatasetManifestSchema,
   DatasetPigeFormulaExpressionSchema,
+  DatasetPigeRelationCellSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   OperationRecordSchema,
@@ -68,6 +69,11 @@ export interface FormulaProjectionStats {
   readonly null: number;
   readonly value: number;
 }
+
+export type FormulaProjectionStatsByTable = ReadonlyMap<
+  string,
+  ReadonlyMap<string, FormulaProjectionStats>
+>;
 
 export type FormulaOperandReader = (columnId: string) => number | null | undefined | "";
 
@@ -202,6 +208,7 @@ export function commitFormulaColumnAdd(input: {
       beforeRevisionId: current.revision.id,
       revisionId: input.identity.revisionId,
       table,
+      schema: current.schema,
       column: formulaColumn
     });
     const column = { ...formulaColumn, stats: formulaStats };
@@ -247,13 +254,14 @@ export function commitFormulaColumnAdd(input: {
 export function recomputeFormulaCellsForEditedRow(
   database: DatabaseSync,
   table: DatasetSchemaRecord["tables"][number],
-  rowId: string
+  rowId: string,
+  schema?: DatasetSchemaRecord
 ): ReadonlyMap<string, FormulaProjectionStats> {
   const formulaColumns = assertFormulaGraph({ table });
   const stats = new Map(formulaColumns.map((column) => [column.id, mutableStats()]));
   assertRowBelongsToTable(database, table.id, rowId);
   for (const column of formulaColumns) {
-    const encoded = evaluateFormulaCell(database, table, rowId, column);
+    const encoded = evaluateFormulaCell(database, table, rowId, column, schema);
     const changed = database.prepare([
       "UPDATE pige_dataset_cells SET state = ?, source_type = ?, lexical_raw = NULL, lexical_text = NULL,",
       "quoted = NULL, projection_kind = ?, projection_json = ?, formula_json = ?, source_style_json = NULL",
@@ -268,15 +276,45 @@ export function recomputeFormulaCellsForEditedRow(
   return freezeStats(stats);
 }
 
+export function recomputeFormulaDependenciesForRelationRow(
+  database: DatabaseSync,
+  schema: DatasetSchemaRecord,
+  tableId: string,
+  rowId: string
+): FormulaProjectionStatsByTable {
+  const table = schema.tables.find((candidate) => candidate.id === tableId);
+  if (!table) throw payloadInvalid();
+  return recomputeFormulaRows(database, schema, new Map([[table.id, new Set([rowId])]]));
+}
+
+export function recomputeAllFormulaRowsInTable(
+  database: DatabaseSync,
+  schema: DatasetSchemaRecord,
+  tableId: string
+): FormulaProjectionStatsByTable {
+  const table = schema.tables.find((candidate) => candidate.id === tableId);
+  if (!table) throw payloadInvalid();
+  const rows = database.prepare(
+    "SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal"
+  ).all(table.id) as Array<{ row_id?: unknown }>;
+  if (rows.length !== table.rowCount) throw payloadInvalid();
+  const rowIds = new Set(rows.map((row) => {
+    if (typeof row.row_id !== "string") throw payloadInvalid();
+    return row.row_id;
+  }));
+  return recomputeFormulaRows(database, schema, new Map([[table.id, rowIds]]));
+}
+
 export function appendFormulaCellsForNewRow(
   database: DatabaseSync,
   table: DatasetSchemaRecord["tables"][number],
-  rowId: string
+  rowId: string,
+  schema?: DatasetSchemaRecord
 ): ReadonlyMap<string, FormulaProjectionStats> {
   assertRowBelongsToTable(database, table.id, rowId);
   const stats = new Map<string, MutableFormulaStats>();
   for (const column of assertFormulaGraph({ table })) {
-    const encoded = evaluateFormulaCell(database, table, rowId, column);
+    const encoded = evaluateFormulaCell(database, table, rowId, column, schema);
     const inserted = database.prepare([
       "INSERT INTO pige_dataset_cells",
       "(row_id, column_id, state, source_type, lexical_raw, lexical_text, quoted, projection_kind, projection_json, formula_json, source_style_json)",
@@ -299,6 +337,7 @@ export function recomputeFormulaProjectionsInStagedPayload(input: {
   readonly beforeRevisionId: string;
   readonly revisionId: string;
   readonly table: DatasetSchemaRecord["tables"][number];
+  readonly schema?: DatasetSchemaRecord;
   readonly rowIds?: readonly string[];
 }): ReadonlyMap<string, FormulaProjectionStats> {
   const database = new DatabaseSync(input.payloadPath);
@@ -317,7 +356,7 @@ export function recomputeFormulaProjectionsInStagedPayload(input: {
       });
       if (rowIds.length !== input.table.rowCount) throw payloadInvalid();
       for (const rowId of uniqueRowIds(rowIds)) {
-        const rowStats = recomputeFormulaCellsForEditedRow(database, input.table, rowId);
+        const rowStats = recomputeFormulaCellsForEditedRow(database, input.table, rowId, input.schema);
         for (const [columnId, value] of rowStats) {
           const total = aggregate.get(columnId);
           if (!total) throw payloadInvalid();
@@ -374,7 +413,7 @@ export function commitCollectionCellMutation(input: {
   try {
     fs.copyFileSync(current.payloadPath, stagedPayload);
     const formulaStats = mutateCellAndFormulas(stagedPayload, current.manifest.datasetId, current.revision.id,
-      input.identity.revisionId, table, input.rowId, currentCell, input.value);
+      input.identity.revisionId, current.schema, table, input.rowId, currentCell, input.value);
     const schema = nextCellSchema(current.schema, input.identity.revisionId, currentCell, input.value, formulaStats);
     publishImmutableFile(stagedPayload, resolveBundleRelativePath(current.bundlePath, payloadRelativePath));
     writeJsonImmutable(resolveBundleRelativePath(current.bundlePath, schemaRelativePath), schema);
@@ -407,6 +446,7 @@ function addFormulaColumnToPayload(input: {
   readonly beforeRevisionId: string;
   readonly revisionId: string;
   readonly table: DatasetSchemaRecord["tables"][number];
+  readonly schema: DatasetSchemaRecord;
   readonly column: DatasetColumn;
 }): FormulaProjectionStats {
   const database = new DatabaseSync(input.payloadPath);
@@ -426,7 +466,7 @@ function addFormulaColumnToPayload(input: {
       const stats = mutableStats();
       for (const row of rows) {
         if (typeof row.row_id !== "string") throw payloadInvalid();
-        const encoded = evaluateFormulaCell(database, input.table, row.row_id, input.column);
+        const encoded = evaluateFormulaCell(database, input.table, row.row_id, input.column, input.schema);
         database.prepare([
           "INSERT INTO pige_dataset_cells",
           "(row_id, column_id, state, source_type, lexical_raw, lexical_text, quoted, projection_kind, projection_json, formula_json, source_style_json)",
@@ -462,11 +502,12 @@ function mutateCellAndFormulas(
   datasetId: string,
   beforeRevisionId: string,
   revisionId: string,
+  schema: DatasetSchemaRecord,
   table: DatasetSchemaRecord["tables"][number],
   rowId: string,
   cell: CollectionCellBinding,
   value: CollectionScalarValue
-): ReadonlyMap<string, FormulaProjectionStats> {
+): FormulaProjectionStatsByTable {
   const database = new DatabaseSync(payloadPath);
   try {
     database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
@@ -480,12 +521,8 @@ function mutateCellAndFormulas(
         "WHERE row_id = ? AND column_id = ? AND formula_json IS NULL"
       ].join(" ")).run(encoded.state, "pige_user_edit", encoded.projectionKind, encoded.projectionJson, rowId, cell.column.id);
       if (changed.changes !== 1) throw new PigeDomainError("collection.cell_changed", "The Collection cell changed before commit.");
-      recomputeFormulaCellsForEditedRow(database, table, rowId);
-      const stats = readFormulaStats(database, table);
-      const updateStats = database.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE table_id = ? AND column_id = ?");
-      for (const [columnId, formulaStats] of stats) {
-        if (updateStats.run(JSON.stringify(formulaStats), table.id, columnId).changes !== 1) throw payloadInvalid();
-      }
+      const rows = affectedFormulaRowsForCellEdit(database, schema, table.id, rowId, cell.column.id);
+      const stats = recomputeFormulaRows(database, schema, rows);
       if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) {
         throw payloadInvalid();
       }
@@ -526,6 +563,77 @@ function readFormulaStats(
   return result;
 }
 
+function affectedFormulaRowsForCellEdit(
+  database: DatabaseSync,
+  schema: DatasetSchemaRecord,
+  editedTableId: string,
+  editedRowId: string,
+  editedColumnId: string
+): Map<string, Set<string>> {
+  const rows = new Map<string, Set<string>>([[editedTableId, new Set([editedRowId])]]);
+  for (const sourceTable of schema.tables) {
+    const relationIds = new Set<string>();
+    for (const column of sourceTable.columns) {
+      const derived = column.lookup ?? column.rollup;
+      if (!derived) continue;
+      const relationColumn = sourceTable.columns.find((candidate) => candidate.id === derived.relationColumnId);
+      const relation = relationColumn?.relation;
+      if (!relation || relation.targetTableId !== editedTableId) continue;
+      if (column.lookup?.targetColumnId === editedColumnId ||
+          (column.rollup?.aggregation === "sum" && column.rollup.targetColumnId === editedColumnId)) {
+        relationIds.add(relationColumn.id);
+      }
+    }
+    if (relationIds.size === 0 || assertFormulaGraph({ table: sourceTable }).length === 0) continue;
+    const sourceRows = rows.get(sourceTable.id) ?? new Set<string>();
+    for (const relationId of relationIds) {
+      const candidates = database.prepare([
+        "SELECT c.row_id, c.state, c.projection_json FROM pige_dataset_cells AS c",
+        "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
+        "WHERE r.table_id = ? AND c.column_id = ? ORDER BY r.ordinal"
+      ].join(" ")).all(sourceTable.id, relationId) as Array<{
+        row_id?: unknown; state?: unknown; projection_json?: unknown
+      }>;
+      for (const candidate of candidates) {
+        if (typeof candidate.row_id !== "string") throw payloadInvalid();
+        if (candidate.state === "null" && candidate.projection_json === "null") continue;
+        if (candidate.state !== "value" || typeof candidate.projection_json !== "string") throw payloadInvalid();
+        const target = DatasetPigeRelationCellSchema.parse(JSON.parse(candidate.projection_json));
+        if (!target) throw payloadInvalid();
+        if (target.targetRowId === editedRowId) sourceRows.add(candidate.row_id);
+      }
+    }
+    if (sourceRows.size > 0) rows.set(sourceTable.id, sourceRows);
+  }
+  return rows;
+}
+
+function recomputeFormulaRows(
+  database: DatabaseSync,
+  schema: DatasetSchemaRecord,
+  rows: ReadonlyMap<string, ReadonlySet<string>>
+): FormulaProjectionStatsByTable {
+  const result = new Map<string, ReadonlyMap<string, FormulaProjectionStats>>();
+  const updateStats = database.prepare(
+    "UPDATE pige_dataset_columns SET stats_json = ? WHERE table_id = ? AND column_id = ?"
+  );
+  for (const [tableId, rowIds] of rows) {
+    const table = schema.tables.find((candidate) => candidate.id === tableId);
+    if (!table) throw payloadInvalid();
+    const formulas = assertFormulaGraph({ table });
+    if (formulas.length === 0) continue;
+    for (const rowId of [...rowIds].sort()) {
+      recomputeFormulaCellsForEditedRow(database, table, rowId, schema);
+    }
+    const stats = readFormulaStats(database, table);
+    for (const [columnId, formulaStats] of stats) {
+      if (updateStats.run(JSON.stringify(formulaStats), table.id, columnId).changes !== 1) throw payloadInvalid();
+    }
+    result.set(table.id, stats);
+  }
+  return result;
+}
+
 function encodeCellValue(value: CollectionScalarValue, logicalType: DatasetLogicalType) {
   if (value === null) return { state: "null" as const, projectionKind: "null", projectionJson: null };
   if (logicalType === "string") return {
@@ -544,14 +652,14 @@ function nextCellSchema(
   revisionId: string,
   cell: CollectionCellBinding,
   value: CollectionScalarValue,
-  formulaStats: ReadonlyMap<string, FormulaProjectionStats>
+  formulaStats: FormulaProjectionStatsByTable
 ): DatasetSchemaRecord {
   const oldState = normalizedState(cell.state);
   const newState = value === null ? "null" : value === "" && cell.column.logicalType === "string" ? "empty" : "value";
   return DatasetSchemaRecordSchema.parse({
     ...current, revisionId, createdAt: new Date().toISOString(),
     tables: current.tables.map((table) => ({ ...table, columns: table.columns.map((column) => {
-      const calculatedStats = formulaStats.get(column.id);
+      const calculatedStats = formulaStats.get(table.id)?.get(column.id);
       if (calculatedStats) return { ...column, stats: calculatedStats };
       if (column.id !== cell.column.id || !column.stats || oldState === newState) return column;
       return { ...column, stats: { ...column.stats,
@@ -569,13 +677,18 @@ function evaluateFormulaCell(
   database: DatabaseSync,
   table: DatasetSchemaRecord["tables"][number],
   rowId: string,
-  column: DatasetColumn
+  column: DatasetColumn,
+  schema?: DatasetSchemaRecord
 ) {
   if (!isPigeFormulaColumn(column)) throw payloadInvalid();
   const columnsById = new Map(table.columns.map((candidate) => [candidate.id, candidate]));
   const value = evaluateFormulaExpression(column.calculation.expression, (columnId) => {
     const operand = columnsById.get(columnId);
     if (!operand || !isEligibleFormulaOperand(operand)) throw payloadInvalid();
+    if (operand.lookup || operand.rollup) {
+      if (!schema) throw payloadInvalid();
+      return readDerivedNumericOperand(database, schema, table, rowId, operand);
+    }
     const row = database.prepare(
       "SELECT state, projection_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     ).get(rowId, columnId) as { state?: unknown; projection_json?: unknown } | undefined;
@@ -590,6 +703,63 @@ function evaluateFormulaCell(
   return value === null
     ? { state: "null" as const, projectionKind: "null", projectionJson: null }
     : { state: "value" as const, projectionKind: "real", projectionJson: JSON.stringify({ kind: "real", value }) };
+}
+
+function readDerivedNumericOperand(
+  database: DatabaseSync,
+  schema: DatasetSchemaRecord,
+  sourceTable: DatasetSchemaRecord["tables"][number],
+  sourceRowId: string,
+  column: DatasetColumn
+): number | null {
+  const descriptor = column.lookup ?? column.rollup;
+  if (!descriptor) throw payloadInvalid();
+  const relationColumn = sourceTable.columns.find((candidate) => candidate.id === descriptor.relationColumnId);
+  const relation = relationColumn?.relation;
+  const targetTable = relation
+    ? schema.tables.find((candidate) => candidate.id === relation.targetTableId)
+    : undefined;
+  if (!relationColumn || !relation || !targetTable) throw payloadInvalid();
+  const targetRowId = readRelationTargetId(database, sourceRowId, relationColumn.id);
+  if (column.rollup?.aggregation === "count") return targetRowId === null ? 0 : 1;
+  if (targetRowId === null) return null;
+  const targetColumnId = column.lookup?.targetColumnId ?? column.rollup?.targetColumnId;
+  const targetColumn = targetTable.columns.find((candidate) => candidate.id === targetColumnId);
+  if (!targetColumn || (targetColumn.logicalType !== "integer" && targetColumn.logicalType !== "number")) {
+    throw payloadInvalid();
+  }
+  const target = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?")
+    .get(targetRowId) as { table_id?: unknown } | undefined;
+  if (target?.table_id !== targetTable.id) throw payloadInvalid();
+  return readNumericCell(database, targetRowId, targetColumn.id, targetColumn.logicalType);
+}
+
+function readRelationTargetId(database: DatabaseSync, rowId: string, columnId: string): string | null {
+  const raw = database.prepare(
+    "SELECT state, projection_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
+  ).get(rowId, columnId) as { state?: unknown; projection_json?: unknown } | undefined;
+  if (raw?.state === "null" && raw.projection_json === "null") return null;
+  if (raw?.state !== "value" || typeof raw.projection_json !== "string") throw payloadInvalid();
+  const target = DatasetPigeRelationCellSchema.parse(JSON.parse(raw.projection_json));
+  if (!target) throw payloadInvalid();
+  return target.targetRowId;
+}
+
+function readNumericCell(
+  database: DatabaseSync,
+  rowId: string,
+  columnId: string,
+  logicalType: DatasetLogicalType
+): number | null {
+  const raw = database.prepare(
+    "SELECT state, projection_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
+  ).get(rowId, columnId) as { state?: unknown; projection_json?: unknown } | undefined;
+  if (!raw || raw.state === "missing" || raw.state === "empty" || raw.state === "null") return null;
+  if (raw.state !== "value" || typeof raw.projection_json !== "string") throw payloadInvalid();
+  const projection = JSON.parse(raw.projection_json) as { value?: unknown };
+  const value = typeof projection.value === "number" ? projection.value : Number(projection.value);
+  if (!Number.isFinite(value) || (logicalType === "integer" && !Number.isSafeInteger(value))) throw payloadInvalid();
+  return Object.is(value, -0) ? 0 : value;
 }
 
 function makeFormulaColumn(

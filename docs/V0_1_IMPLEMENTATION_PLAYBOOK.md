@@ -583,7 +583,8 @@ Build:
 - [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update,
   bounded acyclic same-table nested formula dependencies with stable downstream recomputation,
   one same-Dataset row relation, editable read-only scalar lookup, and editable count/numeric-sum
-  rollup definitions use distinct Activity/Undo.
+  rollup definitions use distinct Activity/Undo. Numeric lookup/rollup values feed formulas and propagate
+  through relation retarget, target scalar edit, descriptor update, exact Undo, and restart.
   Relation/lookup breadth, broader schema, scale/platform and exceptions stay open.
 
 Deferred from this phase:

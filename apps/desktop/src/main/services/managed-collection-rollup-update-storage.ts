@@ -25,6 +25,10 @@ import {
   replaceManifestCas, requestConflict, resolveBundleRelativePath, syncFile,
   validatePayloadMeta, writeJsonExclusive, writeJsonImmutable, type BundleBinding
 } from "./managed-collection-storage";
+import {
+  recomputeAllFormulaRowsInTable,
+  type FormulaProjectionStatsByTable
+} from "./managed-collection-formula-storage";
 
 interface RollupUpdateIdentity { readonly revisionId: string; readonly operationId: string; }
 
@@ -122,13 +126,15 @@ function publish(input: {
       ? resolveBundleRelativePath(input.current.bundlePath, input.restore.revision.payload.path)
       : input.current.payloadPath;
     fs.copyFileSync(sourcePayload, stagedPayload);
-    adoptPayload(stagedPayload, input.current.manifest.datasetId,
-      input.restore?.revision.id ?? input.current.revision.id, input.identity.revisionId);
     const baseSchema = input.restore?.schema ?? input.current.schema;
-    const schema = DatasetSchemaRecordSchema.parse({ ...baseSchema, revisionId: input.identity.revisionId,
+    let schema = DatasetSchemaRecordSchema.parse({ ...baseSchema, revisionId: input.identity.revisionId,
       createdAt: new Date().toISOString(), tables: baseSchema.tables.map((table) => table.id === input.tableId
         ? { ...table, columns: table.columns.map((column) => column.id === input.columnId ? { ...column, rollup: input.descriptor } : column) }
         : table) });
+    const formulaStats = adoptPayload(stagedPayload, input.current.manifest.datasetId,
+      input.restore?.revision.id ?? input.current.revision.id, input.identity.revisionId,
+      input.restore ? undefined : { schema, tableId: input.tableId });
+    if (!input.restore) schema = applyFormulaStats(schema, formulaStats);
     publishImmutableFile(stagedPayload, resolveBundleRelativePath(input.current.bundlePath, payloadRelativePath));
     writeJsonImmutable(resolveBundleRelativePath(input.current.bundlePath, schemaRelativePath), schema);
     const now = new Date().toISOString();
@@ -200,16 +206,35 @@ function requireRollup(schema: DatasetSchemaRecord, tableId: string, columnId: s
 function isNumericTarget(column: DatasetColumn): boolean { return !column.calculation && !column.relation && !column.lookup && !column.rollup &&
   (column.logicalType === "integer" || column.logicalType === "number") &&
   ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula")); }
-function adoptPayload(payloadPath: string, datasetId: string, beforeRevisionId: string, revisionId: string): void {
+function adoptPayload(
+  payloadPath: string,
+  datasetId: string,
+  beforeRevisionId: string,
+  revisionId: string,
+  recompute?: { readonly schema: DatasetSchemaRecord; readonly tableId: string }
+): FormulaProjectionStatsByTable {
   const database = new DatabaseSync(payloadPath);
+  let formulaStats: FormulaProjectionStatsByTable = new Map();
   try { database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;");
     validatePayloadMeta(database, datasetId, beforeRevisionId);
+    if (recompute) formulaStats = recomputeAllFormulaRowsInTable(database, recompute.schema, recompute.tableId);
     if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) throw payloadInvalid();
     database.exec("COMMIT");
     const row = database.prepare("PRAGMA integrity_check").get() as { integrity_check?: unknown } | undefined;
     if (row?.integrity_check !== "ok") throw payloadInvalid();
   } catch (caught) { try { database.exec("ROLLBACK"); } catch { /* no active transaction */ } throw caught; }
   finally { database.close(); syncFile(payloadPath); }
+  return formulaStats;
+}
+
+function applyFormulaStats(schema: DatasetSchemaRecord, stats: FormulaProjectionStatsByTable): DatasetSchemaRecord {
+  return DatasetSchemaRecordSchema.parse({ ...schema, tables: schema.tables.map((table) => ({
+    ...table,
+    columns: table.columns.map((column) => {
+      const next = stats.get(table.id)?.get(column.id);
+      return next ? { ...column, stats: next } : column;
+    })
+  })) });
 }
 function createIdentity(request: CollectionUpdateRollupColumnRequest): RollupUpdateIdentity {
   const dateKey = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u.exec(request.expectedRevisionId)?.[1];

@@ -6140,9 +6140,10 @@ function datasetColumnContainsImportedFormula(column: {
 }
 
 function datasetColumnIsPigeFormulaOperand(column: z.infer<typeof DatasetColumnSchema>): boolean {
-  return column.relation === undefined && column.lookup === undefined && column.rollup === undefined &&
+  return column.relation === undefined &&
     (column.logicalType === "integer" || column.logicalType === "number") &&
-    (column.calculation?.kind === "pige_numeric_formula" ||
+    (column.lookup !== undefined || column.rollup !== undefined ||
+      column.calculation?.kind === "pige_numeric_formula" ||
       (column.calculation === undefined && !datasetColumnContainsImportedFormula(column)));
 }
 
@@ -6282,7 +6283,7 @@ export const DatasetTableSchema = z.object({
         context.addIssue({
           code: "custom",
           path: ["columns", index, "calculation", "expression"],
-          message: "Pige Dataset formulas may reference only same-table numeric scalar or acyclic Pige formula columns."
+          message: "Pige Dataset formulas may reference only same-table numeric scalar or acyclic Pige formula columns, including numeric derived lookup/rollup columns."
         });
         break;
       }
@@ -7118,13 +7119,13 @@ export const CollectionColumnSummarySchema = z.object({
   if (
     column.canUseAsFormulaOperand &&
     ((column.calculation !== undefined && column.calculation.kind !== "pige_numeric_formula") ||
-      column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
+      column.relation !== undefined ||
       (column.logicalType !== "integer" && column.logicalType !== "number"))
   ) {
     context.addIssue({
       code: "custom",
       path: ["canUseAsFormulaOperand"],
-      message: "Only scalar numeric or Pige numeric formula columns may be projected as formula operands."
+      message: "Only numeric scalar, derived lookup/rollup, or Pige numeric formula columns may be projected as formula operands."
     });
   }
   if (column.calculation?.kind === "pige_numeric_formula" && column.logicalType !== "number") {
@@ -7180,11 +7181,12 @@ export const CollectionColumnSummarySchema = z.object({
     });
   }
   if (column.lookup !== undefined &&
-      (column.canUseAsLookupTarget || column.canUseAsFormulaOperand || column.canEditRelation)) {
+      (column.canUseAsLookupTarget || column.canEditRelation ||
+       (column.canUseAsFormulaOperand && column.logicalType !== "integer" && column.logicalType !== "number"))) {
     context.addIssue({ code: "custom", path: ["lookup"], message: "Lookup columns must remain derived and read-only." });
   }
   if (column.rollup !== undefined &&
-      (column.logicalType !== "number" || column.canUseAsFormulaOperand || column.canUseAsLookupTarget ||
+      (column.logicalType !== "number" || !column.canUseAsFormulaOperand || column.canUseAsLookupTarget ||
        column.canUseAsRollupTarget || column.canEditRelation)) {
     context.addIssue({ code: "custom", path: ["rollup"], message: "Rollup columns must remain derived numeric fields." });
   }

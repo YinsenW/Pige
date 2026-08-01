@@ -54,7 +54,10 @@ export function projectLookupColumns(
     return {
       ...summary,
       canTrash: summary.canTrash && !lookupDependencies.has(column.id),
-      canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !column.lookup,
+      canUseAsFormulaOperand: column.lookup !== undefined &&
+        (column.logicalType === "integer" || column.logicalType === "number")
+        ? true
+        : summary.canUseAsFormulaOperand,
       canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.lookup,
       canUseAsLookupTarget: scalar,
       canEditLookup: column.lookup?.kind === "pige_single_lookup",

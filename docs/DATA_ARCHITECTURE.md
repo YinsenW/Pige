@@ -86,12 +86,15 @@ revisions and previews stay immutable.
 
 Formula/relation/lookup/rollup descriptors are schema truth, including empty tables. Formula V1 is a
 <=8-depth/31-node nullable numeric AST; invalid math is null. Formula operands may include current
-same-table Pige numeric formulas only when the bounded dependency graph remains acyclic; Main evaluates
-the stable topological order and recomputes the transitive downstream closure. A relation binds one same-Dataset
+same-table numeric scalar, numeric lookup/rollup, or Pige numeric formula columns only when the bounded
+dependency graph remains acyclic; Main evaluates the stable topological order and recomputes the
+transitive downstream closure. A relation binds one same-Dataset
 table/scalar label and stores row IDs; its scalar lookup stays derived/read-only. Lookup definitions
 can switch the current relation/scalar target while target edits reproject it; null/dangling resolves null.
 A single-relation rollup derives count or numeric sum; both derived definitions are editable without
-making their cells writable. Inbound targets block trash; descriptor changes use
+making their cells writable. Relation retarget, referenced scalar edit and lookup/rollup definition update
+propagate through dependent formulas in the same immutable revision; exact payload Undo and restart retain
+the same derived values. Inbound targets block trash; descriptor changes use
 immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
 
 ```ts

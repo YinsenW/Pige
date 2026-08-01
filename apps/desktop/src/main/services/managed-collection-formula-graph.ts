@@ -33,8 +33,9 @@ export function isPigeFormulaColumn(column: DatasetColumn): column is PigeFormul
 }
 
 export function isEligibleFormulaOperand(column: DatasetColumn): boolean {
-  if (column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined) return false;
+  if (column.relation !== undefined) return false;
   if (column.logicalType !== "integer" && column.logicalType !== "number") return false;
+  if (column.lookup !== undefined || column.rollup !== undefined) return true;
   if (isPigeFormulaColumn(column)) return true;
   return column.calculation === undefined && ![column.sourceType, ...(column.sourceTypes ?? [])]
     .some((value) => value.toLocaleLowerCase("en-US").includes("formula"));
