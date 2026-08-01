@@ -32,6 +32,14 @@ type ActiveDraftBinding = {
 type CurrentNoteMutationProposalPreview = CurrentNoteAppendProposalPreview | CurrentNoteReplaceProposalPreview;
 type CurrentNoteMutationProposalDecisionResult =
   CurrentNoteAppendProposalDecisionResult | CurrentNoteReplaceProposalDecisionResult;
+type ProposalAction =
+  | "reject"
+  | "later"
+  | "apply"
+  | "keep_current"
+  | "apply_proposed"
+  | "save_proposed_as_new_page"
+  | "manual_edit";
 
 export function CurrentNoteAgent(props: {
   readonly modal: boolean;
@@ -45,7 +53,7 @@ export function CurrentNoteAgent(props: {
   readonly onSelectModel: (modelId: string) => Promise<boolean>;
   readonly proposal?: ReaderSelectionProposalPreview | null;
   readonly proposalErrorMessageKey?: string;
-  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply") => void;
+  readonly onProposalAction?: (proposalId: string, action: ProposalAction) => void;
   readonly onDurableTurnCompleted?: (identity: {
     readonly vaultId: string;
     readonly pageId: string;
@@ -547,7 +555,8 @@ export function CurrentNoteAgent(props: {
       onSelectModel={selectModel}
       onProposalAction={(proposalId, action) => {
         if (appendProposal?.preview.proposalId === proposalId) void decideAppendProposal(proposalId, action);
-        else if (action === "reject" || action === "later" || action === "apply") props.onProposalAction?.(proposalId, action);
+        else if (action === "manual_edit") props.onClose();
+        else props.onProposalAction?.(proposalId, action);
       }}
       onOpenCitation={props.onOpenCitation}
       onCopyMessage={async (messageId) => {

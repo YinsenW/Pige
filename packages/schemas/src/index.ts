@@ -11144,8 +11144,18 @@ export const ReaderSelectionProposalPreviewSchema = z.object({
   action: ReaderSelectionProposalActionSchema,
   state: ReaderSelectionProposalStateSchema,
   revision: z.number().int().min(1),
+  currentRevision: NoteEditorRevisionSchema.optional(),
   lines: z.array(ReaderSelectionProposalLineSchema).max(8)
-}).strict();
+}).strict().superRefine((value, context) => {
+  const isTransform = ReaderSelectionTransformActionSchema.safeParse(value.action).success;
+  if (value.currentRevision !== undefined && (!isTransform || value.state !== "conflicted")) {
+    context.addIssue({
+      code: "custom",
+      path: ["currentRevision"],
+      message: "Only a conflicted Reader selection transform exposes its current note revision."
+    });
+  }
+});
 export const ReaderSelectionTransformRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: ReaderSelectionActionRequestIdSchema,
@@ -11295,8 +11305,20 @@ export const ReaderSelectionProposalDecisionRequestSchema = z.object({
   apiVersion: z.literal(1),
   proposalId: ReaderSelectionProposalIdSchema,
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject"])
-}).strict();
+  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed", "save_proposed_as_new_page"]),
+  expectedCurrentRevision: NoteEditorRevisionSchema.optional()
+}).strict().superRefine((value, context) => {
+  const resolvesConflict = value.decision === "keep_current" ||
+    value.decision === "apply_proposed" ||
+    value.decision === "save_proposed_as_new_page";
+  if (resolvesConflict !== (value.expectedCurrentRevision !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["expectedCurrentRevision"],
+      message: "Reader selection conflict resolution requires the exact reviewed note revision."
+    });
+  }
+});
 export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion("status", [
   z.object({
     apiVersion: z.literal(1),
@@ -11330,11 +11352,11 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
     return;
   }
   const expectsCreatedPage = ReaderSelectionCreatePageActionSchema.safeParse(result.proposal.action).success;
-  if (expectsCreatedPage !== (result.createdPageId !== undefined)) {
+  if (expectsCreatedPage && result.createdPageId === undefined) {
     context.addIssue({
       code: "custom",
       path: ["createdPageId"],
-      message: "Only an applied create-page proposal must return its created page identity."
+      message: "An applied create-page proposal must return its created page identity."
     });
   }
 });

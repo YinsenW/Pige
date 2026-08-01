@@ -669,6 +669,25 @@ describe("security-sensitive shared contracts", () => {
       expectedRevision: 1,
       decision: "approve"
     })).toMatchObject({ decision: "approve" });
+    const conflictRevision = `noteeditrev_${"c".repeat(64)}`;
+    expect(ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "apply_proposed",
+      expectedCurrentRevision: conflictRevision
+    })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: conflictRevision });
+    expect(() => ReaderSelectionProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "apply_proposed"
+    })).toThrow();
+    expect(ReaderSelectionProposalGetResultSchema.parse({
+      apiVersion: 1,
+      status: "available",
+      proposal: { ...proposal, state: "conflicted", currentRevision: conflictRevision }
+    })).toMatchObject({ proposal: { state: "conflicted", currentRevision: conflictRevision } });
     expect(() => ReaderSelectionProposalDecisionRequestSchema.parse({
       apiVersion: 1,
       proposalId: proposal.proposalId,

@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Agent Memory individual-delete and reset-wide trash restore now share exact receipts, Operations, restart recovery, strict IPC and body-free Settings evidence while remaining lifecycle gaps stay explicit.",
+    "scope": "One strict YAML and type-specific boundary validates, rewrites and indexes all Pige-managed Markdown page types and closes PIGE-SCHEMA-001.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "aa9cdf7fa46098bbd5bcd5d27b8181e9419f2601d971d8354854cf282a715908"
+    "reviewedSha256": "83bee32d909d1bfd77041935f2caef9cac3d65b12b3773be8d917e826c8cb2ab"
   },
   "reviewers": [
     {

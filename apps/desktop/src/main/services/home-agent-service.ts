@@ -2082,7 +2082,7 @@ export class HomeAgentService {
     if (readerSelectionReplacement !== undefined && readerSelectionTransform && readerSelectionMutations) {
       signal?.throwIfAborted();
       assertCurrentBindingAndVault();
-      stageReaderSelectionPublicationIntent(vaultPath, session.current, readerSelectionReplacement);
+      stageReaderSelectionPublicationIntent(vaultPath, session.current, readerSelectionReplacement, defaultModel.id);
     }
     if (readerSelectionLink && readerSelectionMutations && readerSelectionLinkTarget) {
       signal?.throwIfAborted();
@@ -2223,10 +2223,10 @@ export class HomeAgentService {
         mutations.publishLink({ vaultPath, job: session.current, selection: linkIntent.selection, target: linkIntent.target })
       : mutations.readPublication({
           vaultPath, job: session.current, selection: intent!.selection,
-          replacement: intent!.replacement, action: intent!.action
+          replacement: intent!.replacement, action: intent!.action, modelProfileId: intent!.modelProfileId
         }) ?? mutations.publish({
           vaultPath, job: session.current, selection: intent!.selection,
-          replacement: intent!.replacement, action: intent!.action
+          replacement: intent!.replacement, action: intent!.action, modelProfileId: intent!.modelProfileId
         });
     const refreshed = this.#jobs.readAgentTurnJob(session.current.id);
     if (refreshed) session.current = refreshed;

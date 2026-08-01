@@ -2382,10 +2382,8 @@ export function App(): React.JSX.Element {
     return openNoteTarget(result.currentPageId);
   };
 
-  const decideReaderSelectionProposal = async (
-    proposalId: string,
-    action: "reject" | "later" | "apply"
-  ): Promise<void> => {
+  const decideReaderSelectionProposal = async (proposalId: string,
+    action: "reject" | "later" | "apply" | "keep_current" | "apply_proposed" | "save_proposed_as_new_page" | "manual_edit"): Promise<void> => {
     const current = readerSelectionProposal;
     if (!current || current.preview.proposalId !== proposalId) return;
     if (action === "later") {
@@ -2393,7 +2391,10 @@ export function App(): React.JSX.Element {
       setReaderSelectionProposal(null);
       return;
     }
-    if (readerSelectionProposalDecisionInFlight.current || current.preview.state !== "ready") return;
+    if (action === "manual_edit") { await closeNoteAgent(); return; }
+    const conflictDecision = action === "keep_current" || action === "apply_proposed" || action === "save_proposed_as_new_page";
+    const actionable = current.preview.state === "ready" ? (action === "apply" || action === "reject") : current.preview.state === "conflicted" && current.preview.currentRevision !== undefined && conflictDecision;
+    if (readerSelectionProposalDecisionInFlight.current || !actionable) return;
     if (
       activeVaultIdRef.current !== current.vaultId ||
       !readerSelectionProposalOwnerMatches(
@@ -2421,7 +2422,8 @@ export function App(): React.JSX.Element {
         apiVersion: 1,
         proposalId,
         expectedRevision: current.preview.revision,
-        decision: action === "apply" ? "approve" : "reject"
+        decision: action === "apply" ? "approve" : action === "reject" ? "reject" : action,
+        ...(conflictDecision && current.preview.currentRevision ? { expectedCurrentRevision: current.preview.currentRevision } : {})
       });
     } catch {
       if (sequence === readerSelectionProposalSequence.current) {
@@ -2462,12 +2464,10 @@ export function App(): React.JSX.Element {
     }
     setReaderSelectionProposal({ vaultId: current.vaultId, pageId: current.pageId, preview: result.proposal });
     if (result.status === "applied") {
-      const createdPageType = readerSelectionCreatedPageType(result.proposal.action); const opened = createdPageType && result.createdPageId
-        ? await openNoteTarget(result.createdPageId, false, createdPageType)
-        : createdPageType === undefined
-          ? await openNoteTarget(current.pageId)
-          : false;
-      if (!opened && createdPageType) {
+      const createdPageType = readerSelectionCreatedPageType(result.proposal.action);
+      const opened = result.createdPageId ? await openNoteTarget(result.createdPageId, false, createdPageType ?? "note")
+        : createdPageType === undefined ? await openNoteTarget(current.pageId) : false;
+      if (!opened && (createdPageType || result.createdPageId)) {
         setReaderSelectionProposal({
           vaultId: current.vaultId,
           pageId: current.pageId,

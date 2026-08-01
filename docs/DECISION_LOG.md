@@ -1059,6 +1059,37 @@ References:
 
 - `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`
 
+### D-20260802-Reader-Selection-Conflict-Resolution
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+When a reviewed Reader selection transform conflicts with a newer note revision, it uses the existing
+current-note conflict exits: keep current, apply proposed, save proposed as a new note, or edit manually.
+The renderer binds only the proposal and exact current revision. Main preserves the immutable proposal,
+model-profile identity, live before-image, durable resolution, Operation, and restart adoption.
+
+Rationale:
+
+A terminal conflict made translate, polish, expand, and shorten unusable after an ordinary concurrent
+edit. Reusing the established conflict vocabulary keeps the UI simple while preserving exact CAS and
+Undo rather than silently overwriting the newer note.
+
+Consequences:
+
+- Apply proposed records the reviewed live note bytes as the reversible before-image.
+- Save as new leaves the current note unchanged and publishes one related reversible note.
+- Drift refreshes the bounded conflict; a second or different resolution fails closed.
+- No path, note body, model output, or mutation authority crosses to the renderer.
+
+References:
+
+- `docs/UI_PROTOTYPE.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ### D-20260802-Complete-Managed-Knowledge-Page-Lifecycle
 
 Status: Accepted

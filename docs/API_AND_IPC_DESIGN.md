@@ -584,7 +584,10 @@ and commands `readerSelection.submitAction`, `readerSelection.submitTransform`,
 - `create_note | create_claim | create_question | create_concept | create_entity | create_topic`
   share review; navigation requires the matching authoritative page type.
 - Preview exposes opaque identity/state/revision and <=8 lines of <=160 characters; decisions bind
-  revision, private details stay Main-only, and Activity owns Undo.
+  revision, private details stay Main-only, and Activity owns Undo. A conflicted transform additionally
+  exposes only `currentRevision`; `keep_current | apply_proposed | save_proposed_as_new_page` must bind
+  that exact revision. Main preserves the model-profile publication identity and immutable proposal,
+  while manual edit remains renderer-local.
 
 Current-note append/replace stay under `agent.submitTurn`, accept <=16 KiB and cite `citation_1`.
 Replace needs authored intent plus same-turn read and always enters review.
@@ -594,7 +597,8 @@ and restart convergence. Append/replace conflicts additionally expose only an op
 revision and bounded base/current/proposed lines. Exact `keep_current` records a durable no-write
 resolution. Exact `apply_proposed` rechecks that same reviewed current revision, records the current
 bytes as the reversible before-image, and then applies the immutable proposal; revision drift returns
-the refreshed conflict, while manual edit remains renderer-local.
+the refreshed conflict, while manual edit remains renderer-local. Reader selection transform conflicts
+reuse that decision vocabulary and restart convergence without adding renderer write authority.
 
 Dataset boundary:
 
