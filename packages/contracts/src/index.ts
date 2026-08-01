@@ -332,6 +332,12 @@ import type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteClaimEvidenceItem,
+  NoteClaimEvidenceSummary,
+  NoteSearchClaimEvidenceRequest,
+  NoteSearchClaimEvidenceResult,
+  NoteChangeClaimEvidenceRequest,
+  NoteChangeClaimEvidenceResult,
   NoteConceptParentItem,
   NoteConceptParentsSummary,
   NoteSearchConceptParentsRequest,
@@ -809,6 +815,12 @@ export type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteClaimEvidenceItem,
+  NoteClaimEvidenceSummary,
+  NoteSearchClaimEvidenceRequest,
+  NoteSearchClaimEvidenceResult,
+  NoteChangeClaimEvidenceRequest,
+  NoteChangeClaimEvidenceResult,
   NoteConceptParentItem,
   NoteConceptParentsSummary,
   NoteSearchConceptParentsRequest,
@@ -2612,6 +2624,12 @@ export interface PigeDesktopApi {
     readonly changeClaimContradiction: (
       request: NoteChangeClaimContradictionRequest
     ) => Promise<NoteChangeClaimContradictionResult>;
+    readonly searchClaimEvidence: (
+      request: NoteSearchClaimEvidenceRequest
+    ) => Promise<NoteSearchClaimEvidenceResult>;
+    readonly changeClaimEvidence: (
+      request: NoteChangeClaimEvidenceRequest
+    ) => Promise<NoteChangeClaimEvidenceResult>;
     readonly searchConceptParents: (
       request: NoteSearchConceptParentsRequest
     ) => Promise<NoteSearchConceptParentsResult>;
