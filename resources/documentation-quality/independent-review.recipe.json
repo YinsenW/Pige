@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-SKILL-001 complete inert External/Web lifecycle and disabled restore authority.",
+    "scope": "E7.01 saved Collection view matching-Undo Redo and restart recovery.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "6afabcb6ec40d2378333ed8156527fe26f2b6e30fb06d9e50738d65a076f7434"
+    "reviewedSha256": "7448ac9891b03e26cb66dda6c66c842cd60dd98b95fa9ad8d1c9eb3940c641be"
   },
   "reviewers": [
     {

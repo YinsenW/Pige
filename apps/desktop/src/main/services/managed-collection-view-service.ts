@@ -94,6 +94,7 @@ const ViewRevisionSchema = z.object({
   requestHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/),
   undoOfOperationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/).optional(),
+  redoOfOperationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/).optional(),
   createdAt: z.string().datetime({ offset: true })
 }).strict();
 
@@ -109,8 +110,7 @@ const ViewPointerSchema = z.object({
 
 type ViewRevision = z.infer<typeof ViewRevisionSchema>;
 type ViewPointer = z.infer<typeof ViewPointerSchema>;
-const MAX_VIEWS = 32;
-const MAX_OPEN_ROWS = 50;
+const MAX_VIEWS = 32; const MAX_OPEN_ROWS = 50;
 const REVISION_DATE = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
 
 export class ManagedCollectionViewService {
@@ -415,8 +415,9 @@ export class ManagedCollectionViewService {
     const existing = fs.existsSync(revisionPath)
       ? ViewRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES))
       : undefined;
+    const { undoOfOperationId: _undo, redoOfOperationId: _redo, ...entryRevision } = entry.revision;
     const revision = ViewRevisionSchema.parse({
-      ...entry.revision,
+      ...entryRevision,
       ...(prior ? { name: prior.name, filter: prior.filter, sort: prior.sort } : {}),
       viewRevision: nextRevision,
       state: action === "trash" ? "trashed" : "active",
@@ -478,8 +479,9 @@ export class ManagedCollectionViewService {
       const existing = fs.existsSync(revisionPath)
         ? ViewRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES))
         : undefined;
+      const { undoOfOperationId: _undo, redoOfOperationId: _redo, ...entryRevision } = entry.revision;
       const revision = ViewRevisionSchema.parse({
-        ...entry.revision,
+        ...entryRevision,
         viewRevision: entry.revision.viewRevision + 1,
         action,
         state: action === "trash" ? "trashed" : "active",
@@ -489,9 +491,8 @@ export class ManagedCollectionViewService {
           sort: (request as CollectionUpdateViewRequest).sort
         } : {}),
         requestHash: stable.requestHash,
-        operationId: stable.operationId,
-        undoOfOperationId: undefined,
-        createdAt: existing?.createdAt ?? new Date().toISOString()
+      operationId: stable.operationId,
+      createdAt: existing?.createdAt ?? new Date().toISOString()
       });
       if (existing && hashCanonical(existing) !== hashCanonical(revision)) throw requestConflict();
       if (!existing) writeJsonImmutable(revisionPath, revision);

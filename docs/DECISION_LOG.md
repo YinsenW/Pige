@@ -4980,6 +4980,37 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260802-Managed-Collection-View-Redo
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Saved Collection view create, definition update, rename and trash Operations support restart-safe
+Activity Redo only after their exact matching Undo remains current. Redo advances the private view
+revision and publishes one deterministic forward Operation; it never rewrites Dataset rows or the
+Dataset manifest.
+
+Rationale:
+
+Saved views already use immutable private revisions and exact Activity Undo. Reusing that durable
+authority closes the user-visible inverse action without introducing a renderer mutation contract or
+duplicating view definitions in Activity.
+
+Consequences:
+
+- Dataset/vault/view identity, the original Operation and matching Undo are re-proved before effect.
+- Drift fails closed; interrupted revision/pointer/Operation publication is adopted once at restart.
+- Existing Activity Redo UI and IPC remain generic; no new renderer channel or visible setting exists.
+- Other Collection mutation Redo families remain open under E7.01/E7.06.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
