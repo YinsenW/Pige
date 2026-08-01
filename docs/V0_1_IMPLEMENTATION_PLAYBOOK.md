@@ -356,7 +356,10 @@ Exit criteria:
 - [E3.03] Explicit Send to an exact connected Provider/model transmits the exact
   user-authored and selected bounded context unchanged. Stored credentials stay outside
   payload content; no content classification, rewriting, blocking, or egress audit occurs.
-- [E3.04] Pasted text can autonomously become a cited source page, schema-valid wiki note, index update, append-only log, and Operation when eligibility passes.
+- [E3.04] Pasted text autonomously becomes a cited source page, schema-valid wiki note,
+  index update, append-only log, and Operation when eligibility passes. Publication
+  re-proves the exact active Vault, running Job, Source and durable capture event; retry
+  adopts the same Operation-bound log entry without another model turn or duplicate write.
 - [E3.05] Upstream Pi's final assistant message is not rejected for missing a Host semantic
   schema, terminal tool, grounding label, or citation shape. Invalid tool input or durable
   mutation still fails at its owner boundary without applying an effect; true technical,
@@ -481,8 +484,10 @@ open under Source Storage.
 Generated-note evidence covers first-wins cancellation, two Source Record fences,
 durable pre-link guard, create-only publication, conflict
 preservation, bounded same-job provenance, guarded missing-index repair, and recovery.
-Strict cross-process SourceRecord-to-note CAS, parent-swap,
-note/index/operation transactions, and packaged-platform proof remain open.
+The eligible pasted-text path now converges its cited note, index, Operation and append-only
+log across restart after exact Vault/Job/Source/capture-event revalidation. Strict
+cross-process SourceRecord-to-note CAS, parent-swap, broader multi-effect transactions,
+and packaged-platform proof remain open outside E3.04.
 
 Evidence exists for validated-address-pinned static URL fetch -> bounded response -> charset-aware snapshot -> serial Readability/jsdom worker -> checksummed article text and redacted metadata -> quality-aware Agent handoff.
 

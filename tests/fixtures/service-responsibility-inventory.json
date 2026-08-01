@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "f2f9e7818c5be6a8e9fdfe9fab3b67e0d1c5bbb1",
+  "baseline": "3005169d95d69ea596ae8b818f0007377ab25a6b",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 280,
-  "baselineLines": 124961,
+  "baselineFileCount": 281,
+  "baselineLines": 125098,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -19,6 +19,7 @@
       ["pi-agent-runtime-adapter.ts", 1398, "aprf"]
     ],
     "authority_reliability": [
+      ["agent-ingest-publication-authority.ts", 137, "jrd"],
       ["agent-conversation-capture-reference.ts", 114, "rd"],
       ["agent-conversation-export-service.ts", 182, "prd"],
       ["agent-conversation-history.ts", 538, "r"],
@@ -313,7 +314,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 280,
+    "serviceOwnerCount": 281,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

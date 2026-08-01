@@ -434,6 +434,11 @@ Examples:
   reconciled before model-readiness checks; recovery must not require credentials or a
   replacement model turn merely to adopt an already durable effect.
 - If a wiki note already exists for the deterministic source-derived page ID, retry treats the note as existing rather than creating a duplicate.
+- Before an eligible Agent ingest publishes its first knowledge effect, Main re-proves the
+  exact active Vault, immutable running Job identity, bound Source/capture identity, and
+  unique durable capture-reference event. Drift fails before publication. Its append-only
+  activity line carries the committed Operation ID, so a crash after the log write and a
+  subsequent retry adopt that line instead of appending it again or calling the model again.
 - If a backup zip finalization failed, retry creates a new archive path or replaces only a verified incomplete temp file.
 
 ## 8. Retry Policy
