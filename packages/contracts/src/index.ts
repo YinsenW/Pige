@@ -398,6 +398,10 @@ import type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  SourceRefreshConflictReadRequest,
+  SourceRefreshConflictReadResult,
+  SourceRefreshConflictResolveRequest,
+  SourceRefreshConflictResolveResult,
   ReferencedOriginalReconnectCandidate,
   ReferencedOriginalReconnectProof,
   SourceReconnectListRequest,
@@ -889,6 +893,10 @@ export type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  SourceRefreshConflictReadRequest,
+  SourceRefreshConflictReadResult,
+  SourceRefreshConflictResolveRequest,
+  SourceRefreshConflictResolveResult,
   ReferencedOriginalReconnectCandidate,
   ReferencedOriginalReconnectProof,
   SourceReconnectListRequest,
@@ -2699,6 +2707,8 @@ export interface PigeDesktopApi {
   readonly sourceRefresh: {
     readonly preview: (request: SourceRefreshPreviewRequest) => Promise<SourceRefreshPreviewResult>;
     readonly confirm: (request: SourceRefreshConfirmRequest) => Promise<SourceRefreshConfirmResult>;
+    readonly readConflict: (request: SourceRefreshConflictReadRequest) => Promise<SourceRefreshConflictReadResult>;
+    readonly resolveConflict: (request: SourceRefreshConflictResolveRequest) => Promise<SourceRefreshConflictResolveResult>;
   };
   readonly localCapabilities: {
     readonly ocrEnginePreference: (

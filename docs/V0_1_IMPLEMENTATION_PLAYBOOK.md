@@ -488,7 +488,9 @@ later source-path replacement. The remaining packaged-platform matrix stays open
 
 B5.09 source-page evidence covers stale baselines, concurrent Source Record/Markdown
 changes, pending recovery, confined projections/previews, and a capture Job guard that
-must persist before new, recovered, adopted, or conflicted projection writes. Strict
+must persist before new, recovered, adopted, or conflicted projection writes. Edited-page
+refresh conflicts now survive restart with four explicit exits; Apply and Save publish exact
+Activity/Undo Operations, while stale Source/page revision closes without mutation. Strict
 cross-process revision CAS, parent-swap, and cross-file source-page transactions remain
 open under Source Storage.
 

@@ -387,6 +387,7 @@ import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { SourceRefreshService } from "./services/source-refresh-service";
+import { SourceRefreshConflictService } from "./services/source-refresh-conflict-service";
 import { WebSourceRefreshService } from "./services/web-source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
@@ -549,6 +550,7 @@ let localRerankerService: LocalRerankerService | undefined;
 let localRerankerRuntime: LocalRerankerRuntime | undefined;
 let documentParserService: DocumentParserService | undefined;
 let sourceRefreshService: SourceRefreshService | undefined;
+let sourceRefreshConflictService: SourceRefreshConflictService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
@@ -1559,6 +1561,9 @@ const getSourceRefreshService = (): SourceRefreshService => {
   );
   return sourceRefreshService;
 };
+
+const getSourceRefreshConflictService = (): SourceRefreshConflictService =>
+  sourceRefreshConflictService ??= new SourceRefreshConflictService(getVaultService(), getNoteMarkdownEditorService());
 
 const getDatasetService = (): DatasetService => {
   if (!datasetService) datasetService = new DatasetService(new DatasetIngestWorkerService());
@@ -3602,6 +3607,7 @@ registerReaderIpc({
   getReaderGeneratedNoteRevealService,
   getReaderSourceReconnectService,
   getSourceRefreshService,
+  getSourceRefreshConflictService,
   getNoteTrashService,
   getNoteTrashPurgeService,
   getNoteArchiveService,
@@ -4199,6 +4205,7 @@ app.whenReady().then(async () => {
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
   documentParserService = new DocumentParserService();
   sourceRefreshService = undefined;
+  sourceRefreshConflictService = undefined;
   agentPageUpdateRedoService = new AgentPageUpdateRedoService();
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),

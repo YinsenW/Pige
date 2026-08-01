@@ -254,6 +254,10 @@ import type {
   SourceRefreshPreviewResult,
   SourceRefreshConfirmRequest,
   SourceRefreshConfirmResult,
+  SourceRefreshConflictReadRequest,
+  SourceRefreshConflictReadResult,
+  SourceRefreshConflictResolveRequest,
+  SourceRefreshConflictResolveResult,
   SourceReconnectListRequest,
   SourceReconnectListResult,
   SourceReconnectRequest,
@@ -852,10 +856,16 @@ import {
   NoteReconnectOriginalSourceResultSchema,
   SOURCE_REFRESH_PREVIEW_CHANNEL,
   SOURCE_REFRESH_CONFIRM_CHANNEL,
+  SOURCE_REFRESH_CONFLICT_READ_CHANNEL,
+  SOURCE_REFRESH_CONFLICT_RESOLVE_CHANNEL,
   SourceRefreshPreviewRequestSchema,
   SourceRefreshPreviewResultSchema,
   SourceRefreshConfirmRequestSchema,
   SourceRefreshConfirmResultSchema,
+  SourceRefreshConflictReadRequestSchema,
+  SourceRefreshConflictReadResultSchema,
+  SourceRefreshConflictResolveRequestSchema,
+  SourceRefreshConflictResolveResultSchema,
   SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
   SOURCE_RECONNECT_ORIGINAL_CHANNEL,
   SourceReconnectListRequestSchema,
@@ -2659,6 +2669,16 @@ const api: PigeDesktopApi = {
       SourceRefreshConfirmResultSchema.parse(await ipcRenderer.invoke(
         SOURCE_REFRESH_CONFIRM_CHANNEL,
         SourceRefreshConfirmRequestSchema.parse(request)
+      )),
+    readConflict: async (request: SourceRefreshConflictReadRequest): Promise<SourceRefreshConflictReadResult> =>
+      SourceRefreshConflictReadResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_REFRESH_CONFLICT_READ_CHANNEL,
+        SourceRefreshConflictReadRequestSchema.parse(request)
+      )),
+    resolveConflict: async (request: SourceRefreshConflictResolveRequest): Promise<SourceRefreshConflictResolveResult> =>
+      SourceRefreshConflictResolveResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_REFRESH_CONFLICT_RESOLVE_CHANNEL,
+        SourceRefreshConflictResolveRequestSchema.parse(request)
       ))
   },
   readerSelection: {

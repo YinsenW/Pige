@@ -1402,6 +1402,8 @@
   "note.refreshSource.unchanged": "이 소스는 최신입니다.",
   "note.refreshSource.refreshed": "소스를 새로 고쳤습니다.",
   "note.refreshSource.refreshedConflict": "소스를 새로 고쳤습니다. 편집한 소스 페이지는 변경하지 않고 유지했습니다.",
+  "note.refreshSource.conflictTitle": "소스 페이지 충돌 검토",
+  "note.refreshSource.conflictDescription": "편집 후 소스가 새로 고쳐졌습니다. 유지할 버전을 선택하세요.",
   "note.refreshSource.stale": "소스 또는 페이지가 변경되었습니다. 다시 확인하세요.",
   "note.refreshSource.ineligible": "이 소스 형식은 여기서 새로 고칠 수 없습니다.",
   "note.refreshSource.unavailable": "연결된 파일을 사용할 수 없거나 확인 중 변경되었습니다.",

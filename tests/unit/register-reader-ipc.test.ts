@@ -7,6 +7,7 @@ import type { ReaderSourceRevealService } from "../../apps/desktop/src/main/serv
 import type { ReaderGeneratedNoteRevealService } from "../../apps/desktop/src/main/services/reader-generated-note-reveal-service";
 import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
 import type { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
+import type { SourceRefreshConflictService } from "../../apps/desktop/src/main/services/source-refresh-conflict-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteTrashPurgeService } from "../../apps/desktop/src/main/services/note-trash-purge-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
@@ -63,7 +64,8 @@ function makeHarness(
   claimConfidenceService?: Partial<ClaimConfidenceService>,
   entityTypeService?: Partial<EntityTypeService>,
   topicParentService?: Partial<TopicParentService>,
-  entityMentionService?: Partial<EntityMentionService>
+  entityMentionService?: Partial<EntityMentionService>,
+  sourceRefreshConflictService?: Partial<SourceRefreshConflictService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -97,6 +99,10 @@ function makeHarness(
     getSourceRefreshService: () => {
       if (sourceRefreshService) return sourceRefreshService as SourceRefreshService;
       throw new Error("Source refresh service was not expected.");
+    },
+    getSourceRefreshConflictService: () => {
+      if (sourceRefreshConflictService) return sourceRefreshConflictService as SourceRefreshConflictService;
+      throw new Error("Source refresh conflict service was not expected.");
     },
     getWindow: () => ({}) as never,
     showOpenDialog: async () => ({ canceled: false, filePaths: ["/private/replacement.txt"] }),
@@ -242,6 +248,8 @@ describe("registerReaderIpc", () => {
       "notes.reconnectOriginalSource",
       "source.refresh.preview",
       "source.refresh.confirm",
+      "source.refresh.conflict.read",
+      "source.refresh.conflict.resolve",
       "readerSelection.resolve",
       "readerSelection.submitAction",
       "readerSelection.submitLink",
@@ -1252,6 +1260,36 @@ describe("registerReaderIpc", () => {
       .resolves.toMatchObject({ status: "refreshed", operationId: "op_20260731_refresh1234" });
     expect(confirm).toHaveBeenCalledWith(confirmRequest, expect.any(Function));
     expect(onSourceRefreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds Source Page conflict review and resolution to the current Reader context", async () => {
+    const identity = { apiVersion: 1 as const, requestId: "sourcerefreshreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260802_conflict", currentPageId: "page_20260802_conflict1",
+      renderContextId: `notectx_${"a".repeat(32)}`, sourceId: "src_20260802_conflict1" };
+    const review = { conflictId: `sourcerefreshconflict_${"b".repeat(32)}`,
+      expectedSourceRevision: `sourcerefreshrev_${"c".repeat(64)}`,
+      expectedPageRevision: `noteeditrev_${"d".repeat(64)}`,
+      lines: [{ kind: "removed" as const, text: "Current edit" }, { kind: "added" as const, text: "Refresh" }] };
+    const read = vi.fn((request) => ({ ...request, status: "ready" as const, review }));
+    const resolve = vi.fn((request) => ({ ...request, status: "kept" as const }));
+    const notes = { render: vi.fn().mockResolvedValue({ summary: { pageId: identity.currentPageId,
+      title: "Source", pageType: "source", pagePath: "sources/source.md", sourceIds: [identity.sourceId],
+      status: "active", updatedAt: "2026-08-02T01:00:00.000Z" }, html: "<p>Source</p>", byteSize: 6,
+      renderContextId: identity.renderContextId }), isRenderContextCurrent: vi.fn(() => true) };
+    const handlers = makeHarness(notes, undefined, undefined, vi.fn(), undefined, undefined, undefined, vi.fn(),
+      undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, { read, resolve });
+    const sender = makeSender(132);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: identity.currentPageId });
+    expect(handlers.get("source.refresh.conflict.read")!({ sender } as IpcMainInvokeEvent, identity))
+      .toMatchObject({ status: "ready", review: { conflictId: review.conflictId } });
+    const decision = { ...identity, requestId: "sourcerefreshreq_qrstuvwxyzabcdef",
+      conflictId: review.conflictId, expectedSourceRevision: review.expectedSourceRevision,
+      expectedPageRevision: review.expectedPageRevision, decision: "keep_current" as const };
+    expect(handlers.get("source.refresh.conflict.resolve")!({ sender } as IpcMainInvokeEvent, decision))
+      .toMatchObject({ status: "kept" });
+    expect(read).toHaveBeenCalledWith(identity, expect.any(Function));
+    expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ conflictId: review.conflictId }), expect.any(Function));
   });
 
   it("binds source reconnect to the tracked Reader owner and Main-owned picker", async () => {

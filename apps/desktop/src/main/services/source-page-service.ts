@@ -67,7 +67,7 @@ export class SourcePageService {
     const currentSourceRecord = readRequiredRegularTextFile(vaultPath, absoluteSourceRecordPath);
     assertExpectedSourceRecord(currentSourceRecord, expectedCurrentSourceRecord);
     let sourceRecordRevision = currentSourceRecord.revision;
-    const title = createTitle(vaultPath, sourceRecord);
+    const title = createSourcePageTitle(vaultPath, sourceRecord);
     const now = new Date().toISOString();
     const sourceRecordForPage = SourceRecordSchema.parse({ ...sourceRecord, updatedAt: now });
     const pending = readRefreshPending(sourceRecord.metadata.sourcePageRefreshPending);
@@ -199,7 +199,7 @@ export class SourcePageService {
         absolutePagePath,
         pageId: sourceRecord.knowledgePageId,
         pagePath: sourceRecord.knowledgePagePath,
-        title: createTitle(vaultPath, sourceRecord),
+        title: createSourcePageTitle(vaultPath, sourceRecord),
         pending,
         sourceRecordRevision,
         onPublicationStart: startPublication
@@ -210,7 +210,7 @@ export class SourcePageService {
         created: recovered.created,
         updated: recovered.updated,
         conflict: recovered.conflict,
-        title: createTitle(vaultPath, sourceRecord)
+        title: createSourcePageTitle(vaultPath, sourceRecord)
       };
     }
     const currentPage = readOptionalRegularTextFile(vaultPath, absolutePagePath);
@@ -242,12 +242,12 @@ export class SourcePageService {
         created: false,
         updated: false,
         conflict: true,
-        title: createTitle(vaultPath, sourceRecord)
+        title: createSourcePageTitle(vaultPath, sourceRecord)
       };
     }
 
     const now = sourceRecord.updatedAt;
-    const title = createTitle(vaultPath, sourceRecord);
+    const title = createSourcePageTitle(vaultPath, sourceRecord);
     const renderedPage = renderSourcePage({
       pageId: sourceRecord.knowledgePageId,
       pagePath: sourceRecord.knowledgePagePath,
@@ -349,7 +349,7 @@ export class SourcePageService {
   }
 }
 
-function renderSourcePage(input: {
+export function renderSourcePage(input: {
   readonly pageId: string;
   readonly pagePath: string;
   readonly sourceRecord: SourceRecord;
@@ -452,7 +452,7 @@ function createSourceBody(sourceText: SourceTextPreview | undefined): string {
   return `Source text is longer than the inline preview limit. The complete body is preserved in the ${completeLocation}.\n\n${createFence(`${sourceText.text.slice(0, PREVIEW_LIMIT).trimEnd()}\n...`, "text")}\n`;
 }
 
-function createTitle(vaultPath: string, sourceRecord: SourceRecord): string {
+export function createSourcePageTitle(vaultPath: string, sourceRecord: SourceRecord): string {
   if (typeof sourceRecord.metadata.title === "string" && sourceRecord.metadata.title.trim()) {
     return trimTitle(sourceRecord.metadata.title);
   }

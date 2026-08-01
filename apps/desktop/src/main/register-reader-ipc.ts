@@ -20,6 +20,8 @@ import type {
   NoteReconnectOriginalSourceRequest,
   SourceRefreshPreviewRequest,
   SourceRefreshConfirmRequest,
+  SourceRefreshConflictReadRequest,
+  SourceRefreshConflictResolveRequest,
   NoteRevealSourceRequest,
   NoteRevealGeneratedRequest,
   NoteRevealGeneratedResult,
@@ -101,6 +103,12 @@ import {
   SourceRefreshPreviewResultSchema,
   SourceRefreshConfirmRequestSchema,
   SourceRefreshConfirmResultSchema,
+  SOURCE_REFRESH_CONFLICT_READ_CHANNEL,
+  SOURCE_REFRESH_CONFLICT_RESOLVE_CHANNEL,
+  SourceRefreshConflictReadRequestSchema,
+  SourceRefreshConflictReadResultSchema,
+  SourceRefreshConflictResolveRequestSchema,
+  SourceRefreshConflictResolveResultSchema,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   NOTE_REVEAL_GENERATED_CHANNEL,
@@ -219,6 +227,7 @@ import type { ReaderGeneratedNoteRevealService } from "./services/reader-generat
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import type { ReaderSourceCitationService } from "./services/reader-source-citation-service";
 import type { SourceRefreshService } from "./services/source-refresh-service";
+import type { SourceRefreshConflictService } from "./services/source-refresh-conflict-service";
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteTrashPurgeService } from "./services/note-trash-purge-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
@@ -251,6 +260,7 @@ interface RegisterReaderIpcOptions {
   readonly getReaderGeneratedNoteRevealService: () => ReaderGeneratedNoteRevealService;
   readonly getReaderSourceReconnectService: () => ReaderSourceReconnectService;
   readonly getSourceRefreshService: () => SourceRefreshService;
+  readonly getSourceRefreshConflictService: () => SourceRefreshConflictService;
   readonly getWindow: (sender: WebContents) => BrowserWindow | undefined;
   readonly showOpenDialog: (window: BrowserWindow, options: OpenDialogOptions) => Promise<{
     readonly canceled: boolean;
@@ -1013,6 +1023,30 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       await options.getSourceRefreshService().confirm(parsed, contextCurrent)
     );
     if (result.status === "refreshed") options.onSourceRefreshed();
+    return result;
+  });
+  options.ipcMain.handle(SOURCE_REFRESH_CONFLICT_READ_CHANNEL, (event, request: SourceRefreshConflictReadRequest) => {
+    const parsed = SourceRefreshConflictReadRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const contextCurrent = (): boolean => ownerId !== undefined && !event.sender.isDestroyed() &&
+      notesTrackedSenders.get(event.sender.id) === ownerId && options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId, pageId: parsed.currentPageId, renderContextId: parsed.renderContextId
+      });
+    return SourceRefreshConflictReadResultSchema.parse(
+      options.getSourceRefreshConflictService().read(parsed, contextCurrent)
+    );
+  });
+  options.ipcMain.handle(SOURCE_REFRESH_CONFLICT_RESOLVE_CHANNEL, (event, request: SourceRefreshConflictResolveRequest) => {
+    const parsed = SourceRefreshConflictResolveRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    const contextCurrent = (): boolean => ownerId !== undefined && !event.sender.isDestroyed() &&
+      notesTrackedSenders.get(event.sender.id) === ownerId && options.getNotesService().isRenderContextCurrent(ownerId, {
+        activeVaultId: parsed.activeVaultId, pageId: parsed.currentPageId, renderContextId: parsed.renderContextId
+      });
+    const result = SourceRefreshConflictResolveResultSchema.parse(
+      options.getSourceRefreshConflictService().resolve(parsed, contextCurrent)
+    );
+    if (result.status === "applied" || result.status === "saved") options.onSourceRefreshed();
     return result;
   });
   options.ipcMain.handle("readerSelection.resolve", (event, request: ReaderSelectionResolveRequest) => {

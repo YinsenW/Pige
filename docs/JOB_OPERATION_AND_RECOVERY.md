@@ -196,7 +196,11 @@ opaque preview candidate and expected source revision. Confirmation rechecks can
 currentness before the Job records before/after receipts and publishes one
 `update_source_record` Operation. Restart adopts or rolls back the same transaction;
 Activity Undo restores the before receipt. Source-page conflicts preserve edited Markdown,
-and index refresh is scheduled only after the durable source commit.
+and index refresh is scheduled only after the durable source commit. The resulting review is
+persisted independently of renderer lifetime. Keep records a no-write decision; Apply commits the
+reviewed refreshed projection through the existing reversible `update_page` owner; Save creates one
+reversible generated note. Every decision binds the exact Source revision and current page revision,
+and restart adopts only the matching Operation/page receipt.
 
 ## 5. Job State Machine
 
