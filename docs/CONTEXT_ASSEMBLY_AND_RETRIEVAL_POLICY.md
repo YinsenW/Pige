@@ -148,9 +148,10 @@ Current Home Dataset bridge permits one bounded catalog followed by one typed qu
 Pi selects `pige_query_dataset@1`. The model receives only opaque Dataset/table/column
 refs, a strict filter/group/aggregate/order/limit vocabulary, and the bounded escaped
 result; SQL, paths, handles, whole payloads, repeated query, and page/URL evidence mixing
-fail closed. A catalog-declared same-Dataset single relation may additionally bind one
-target table for projection, filtering and ordering; Main validates the stored target row
-IDs and both table schemas, while multi-hop joins and joined aggregation remain closed.
+fail closed. A catalog-declared same-Dataset relation path may additionally bind at most
+two relation edges (three tables) for projection, filtering and ordering; Main validates
+every stored target row ID, relation descriptor and table schema, while longer paths and
+joined aggregation remain closed.
 For a preserved-source continuation, the catalog is additionally restricted
 to the exact durable source, Dataset, and revision refs created for that turn; unrelated
 historical Dataset records are omitted rather than becoming context or blockers. Dataset

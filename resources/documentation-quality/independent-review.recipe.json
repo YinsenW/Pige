@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:51:25.854Z",
+  "reviewedAt": "2026-08-01T16:54:48.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Typed Library browsing and search for each durable Topic, Concept, Entity, Claim and Question family.",
+    "scope": "B6.16 bounded same-Dataset two-hop relation query and restart-stable evidence.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "4eaa3593ddb1dd58943b38ee0a297addb0b434963bb5e882617b6f237fc69583"
+    "reviewedSha256": "d0bff6507eaab67b1ed2e91b5899cd86603ca5ddbfc8ff2e5b2a2c6bc428638f"
   },
   "reviewers": [
     {
-      "reviewerId": "typed-library-review",
-      "task": "Review exact typed Knowledge discovery and Library navigation acceptance",
+      "reviewerId": "dataset-two-hop-review",
+      "task": "Review bounded two-hop Dataset relation query authority and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews Knowledge and UI acceptance facts; Development supplies separate renderer model, localized Library interaction and stale-result evidence."
+      "independence": "Planning reviews query-policy and acceptance facts; Development supplies separate typed-plan validation, immutable Dataset execution, restart and negative-ref evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "typed-library-review",
+      "reviewerId": "dataset-two-hop-review",
       "blockerCount": 0,
-      "summary": "Each managed Knowledge family is independently discoverable while stable page identity remains the only Reader-open authority."
+      "summary": "The Home Dataset bridge exposes only opaque catalog refs and follows at most two declared same-Dataset relations while longer paths fail closed."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "typed-library-review",
+      "reviewerId": "dataset-two-hop-review",
       "blockerCount": 0,
-      "summary": "Library browse, local search, locale copy and the durable page-type vocabulary agree without adding renderer or backend authority."
+      "summary": "Context policy, typed tool contract, Dataset service and acceptance ledger agree on one two-edge maximum with no renderer or SQL authority."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "typed-library-review",
+      "reviewerId": "dataset-two-hop-review",
       "blockerCount": 0,
-      "summary": "PIGE-KNOW-001 gains exact typed discovery evidence while PIGE-UI-003 remains partial for unrelated shell and Windows breadth."
+      "summary": "PIGE-DATA-002 remains partial while its evidence now covers deterministic one-hop and two-hop relation queries, invalid-hop rejection and restart parity."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "typed-library-review",
+      "reviewerId": "dataset-two-hop-review",
       "blockerCount": 0,
-      "summary": "The existing Library model and retrieval pageTypes contract absorb the feature without a new channel, service, index or durable format."
+      "summary": "The existing Dataset query service and relation core absorb the bounded path extension without a new IPC channel, durable format or public query language."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "typed-library-review",
+      "reviewerId": "dataset-two-hop-review",
       "blockerCount": 0,
-      "summary": "Existing UI, playbook, decision and trace owners contain the behavior without introducing another design document."
+      "summary": "Existing context-policy, decision, playbook and trace owners contain the feature without introducing another design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/library-browse-ui-model.test.ts tests/unit/full-ui-library.test.ts",
+      "command": "npx vitest run tests/unit/dataset-query-service.test.ts tests/unit/home-agent-service.test.ts",
       "status": "passed",
-      "evidence": "Exact typed empty-query browsing, typed local search, stable page open and old-family result fencing pass directly."
+      "evidence": "The bounded two-hop query, invented-hop rejection, restart parity, citation/result integrity and real Home tool contract pass together."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The existing bounded Library renderer owner compiles and builds without a new service or architecture-budget change."
+      "evidence": "The typed two-hop plan compiles and builds while existing Dataset and Home owners remain inside governed architecture boundaries."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:traceability && npm run verify:documentation-quality",
       "status": "passed",
-      "evidence": "UI, playbook, accepted decision, acceptance evidence and semantic-claim owners agree on typed Knowledge discovery."
+      "evidence": "Context policy, decision, playbook, acceptance and semantic-claim owners agree on the two-edge boundary and remaining partial gaps."
     }
   ],
   "coordination": {
-    "taskId": "typed-library-browse-bind-20260802",
-    "taskTitle": "Bind exact typed Knowledge discovery in Library",
+    "taskId": "dataset-two-hop-bind-20260802",
+    "taskTitle": "Bind bounded two-hop Dataset relation queries",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing page IDs, Library search IPC, retrieval indexes and Reader open semantics remain compatible; only exact existing pageTypes are selected.",
-    "acknowledgement": "Planning records typed Knowledge discovery as additional verified PIGE-KNOW-001 evidence and narrows PIGE-UI-003 without promoting its unrelated shell/platform acceptance."
+    "compatibility": "Existing one-hop plans, opaque refs, Dataset bundles, result hashes, citations and Home channels remain compatible; only an optional bounded second relation edge is added.",
+    "acknowledgement": "Planning records the new two-hop evidence while PIGE-DATA-002 remains partial for analytical snapshots, longer paths, aggregate joins, scale and complete authority proof."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
