@@ -597,6 +597,11 @@ Editing mode:
   add is disabled but removal stays available. Conflict/stale/failure retains the entry and focus;
   success adopts Main's authoritative render and remains Activity/Undo recoverable. Paths, Markdown,
   hashes, reference-key proofs, and revision internals stay hidden.
+- Active Question pages show their current `open`, `partially answered`, `answered`, or `stale`
+  state beside Reader metadata. Changing it binds the exact Reader revision, writes only the typed
+  Question state and `updated_at`, adopts Main's authoritative render, and remains Activity/Undo
+  recoverable. Closed outcomes retain the visible page, selected value, and keyboard focus; the
+  renderer never receives Markdown, paths, hashes, or frontmatter authority.
 - Settings Trash lists safe notes and opens only Main's restored page. All mutations are recoverable;
   permanent/source deletion and restyle stay absent.
 

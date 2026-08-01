@@ -4198,6 +4198,11 @@ Reader and Library expose a confirmed Remove action for one existing tag on one 
 The pathless `notes.removeTag` request binds active Vault, page, render context, immutable revision,
 and canonical tag; Main alone proves and commits the frontmatter mutation.
 
+Rationale:
+
+A one-click correction is clearer than reopening the complete taxonomy editor, while confirmation
+and the existing atomic owner preserve the same conflict and recovery boundary.
+
 Consequences:
 
 - The ordinary complete tags/topics editor remains available; Remove is a calm narrow shortcut, not
@@ -4255,11 +4260,17 @@ Stable knowledge and Job identity must survive a moved original without granting
 
 Consequences:
 
-Reader and Vault & Note Storage expose only bounded eligibility and closed outcomes. Cancel, stale state, symlinks, and checksum/size/format mismatch leave durable truth unchanged. Success preserves IDs, records a path-free `relink_source` Operation, uses private receipts, and resumes only matching current waits.
+- Reader and Vault & Note Storage expose only bounded eligibility and closed outcomes.
+- Cancel, stale state, symlinks, and checksum/size/format mismatch leave durable truth unchanged.
+- Success preserves IDs, records a path-free `relink_source` Operation, uses private receipts, and
+  resumes only matching current waits.
 
 References:
 
-`docs/SOURCE_STORAGE_STRATEGY.md`; `docs/API_AND_IPC_DESIGN.md`; `docs/JOB_OPERATION_AND_RECOVERY.md`; `docs/UI_PROTOTYPE.md`.
+- `docs/SOURCE_STORAGE_STRATEGY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
 
 ### D-20260731-Explicit-Current-Note-Related-Retrieval
 
@@ -4375,6 +4386,37 @@ References:
 
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
+
+### D-20260801-Question-State-Lifecycle
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Reader exposes one revision-fenced state control for active Question pages. Main alone parses and
+updates the typed `question.state` field, preserves page identity/body/other frontmatter, and commits
+the change through the existing atomic Markdown `update_page` Activity lifecycle.
+
+Rationale:
+
+Question pages were durable but users could not advance an open research question without editing
+frontmatter directly. A bounded state mutation makes the page type usable while retaining the
+existing Reader simplicity and durable conflict boundary.
+
+Consequences:
+
+- Only `open`, `partially_answered`, `answered`, and `stale` are accepted.
+- The renderer submits stable identity, opaque currentness, and the selected state; it receives no
+  Markdown, path, checksum, or frontmatter authority.
+- Stale or malformed pages remain unchanged, while committed state changes inherit Activity,
+  Undo/Redo, restart recovery, and index refresh from the existing Markdown editor owner.
+
+References:
+
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
 
 ## 4. Deferred Decisions
