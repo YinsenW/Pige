@@ -629,6 +629,11 @@ chat, related facts and actions without internals.
 Current production boundary:
 
 - Current note owns timeline/citations/wait/egress; stale ownership/drafts fail closed.
+- The Note Agent attach action stages bounded removable file chips locally, then submits the exact
+  current-note scope and ordered attachments as one turn. The note and files remain separate cited
+  evidence; selection/removal has no side effect, and accepted submission alone clears the chips.
+  Failure preserves the local draft/chips; page or Vault change resets them for the new scope and
+  ignores late results.
 - An ordinary explicit request can find related notes without a chip, mode, or new panel control.
   The answer stays in the existing scoped timeline with citations; current-note/evidence drift uses
   the existing failed-turn state and never publishes a partially grounded answer.

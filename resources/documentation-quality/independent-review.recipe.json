@@ -55,7 +55,7 @@
     "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit, Library tag lifecycle, active-note and Topic-title rename, exact note merge and Knowledge Health duplicate-topic merge Redo, explainable Knowledge Tree density, reviewed Reader exact-selection creation of note, claim, question, concept, entity and topic pages with matching-type navigation, revision-fenced Question state lifecycle, machine-local persisted dictation language, the vault PIGE.md policy editor, and machine-local OCR engine preference with real Main routing.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "ba733ccc4d8a210c52467272f4e902603fdac8f804479fb42d895f84577c6cd3"
+    "reviewedSha256": "48d89d6e087eb8b7872aaba86519876c3ee0158e0c8e827bbe04d560cb48788c"
   },
   "reviewers": [{
     "reviewerId": "ocr-engine-preference-review",

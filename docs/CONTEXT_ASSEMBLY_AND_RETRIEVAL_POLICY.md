@@ -182,6 +182,11 @@ Rules:
   re-reads selected evidence, and assigns search refs from `citation_2`. Neutral/quoted text grants
   no expansion, no mutation tool is co-registered for that intent, and Vault/note/evidence drift
   blocks publication.
+- An explicit Note Agent file-picker turn may bind the exact current note and bounded preserved
+  attachments into one Job. Pi reads the current note before using source tools, and the Host keeps
+  the page and every attachment as separate evidence with their existing refs. The mixed turn does
+  not grant vault search, Dataset, URL, External/Web Skill or other ambient authority; attachment
+  tools can inspect only the exact Host-bound sources.
 - Selection actions default to selection scope and may retrieve local neighbors only when useful.
 - Ingest starts with the current preserved source. Related summaries enter only after
   the Agent selects a retrieval tool; parser/OCR evidence enters only from its selected
