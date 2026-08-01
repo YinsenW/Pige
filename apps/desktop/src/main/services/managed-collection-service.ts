@@ -71,7 +71,7 @@ import { commitRollupUpdateUndoOperation, executeRollupUpdate } from "./managed-
 export interface ManagedCollectionVaultPort { current(): VaultSummary | undefined; activeVaultPath(): string | undefined; }
 export interface ManagedCollectionRecoveryResult { readonly recovered: number; readonly failed: number; }
 interface MutationIdentity { readonly revisionId: string; readonly operationId: string; }
-interface CollectionOperationBinding {
+export interface CollectionOperationBinding {
   readonly datasetId: string; readonly tableId: string; readonly rowId?: string; readonly columnId?: string;
   readonly beforeRevisionId: string; readonly afterRevisionId: string;
   readonly changeKind:
@@ -787,12 +787,12 @@ function createUndoIdentity(operationId: string, revisionId: string): MutationId
     operationId: createUndoOperationId(operationId)
   };
 }
-function createUndoOperationId(operationId: string): string {
+export function createUndoOperationId(operationId: string): string {
   const dateKey = OPERATION_ID.exec(operationId)?.[1];
   if (!dateKey) throw operationConflict();
   return `op_${dateKey}_${digest("pige:collection-undo-operation:v1", operationId).slice(0, 20)}`;
 }
-function createOperationForRevision(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
+export function createOperationForRevision(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
   const change = revision.change;
   if (!change || change.kind === "initial_import" || !revision.parentRevisionId) throw operationConflict();
   if (change.kind === "dataset_title_rename" || change.kind === "dataset_title_rename_undo") throw operationConflict();
@@ -855,7 +855,7 @@ function createOperationForRevision(binding: BundleBinding, revision: DatasetRev
     warnings: []
   });
 }
-function readOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
+export function readOperationBinding(operation: OperationRecord): CollectionOperationBinding | undefined {
   if (operation.kind !== "update_collection_cell" && operation.kind !== "add_collection_row" &&
       operation.kind !== "add_collection_column" && operation.kind !== "rename_collection_column" &&
       operation.kind !== "trash_collection_column" &&
@@ -920,7 +920,7 @@ function readOperationBinding(operation: OperationRecord): CollectionOperationBi
         : (undo ? "collection_cell_undo" : "collection_cell_edit")
   };
 }
-function isMatchingUndoOperation(original: OperationRecord, candidate: OperationRecord): boolean {
+export function isMatchingUndoOperation(original: OperationRecord, candidate: OperationRecord): boolean {
   const originalBinding = readOperationBinding(original);
   const candidateBinding = readOperationBinding(candidate);
   return !!originalBinding && !!candidateBinding &&
@@ -959,7 +959,7 @@ function isMatchingUndoOperation(original: OperationRecord, candidate: Operation
     candidateBinding.beforeRevisionId === originalBinding.afterRevisionId &&
     candidate.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === original.id);
 }
-function isUndoableCollectionChange(changeKind: CollectionOperationBinding["changeKind"]): boolean {
+export function isUndoableCollectionChange(changeKind: CollectionOperationBinding["changeKind"]): boolean {
   return changeKind === "collection_cell_edit" || changeKind === "collection_row_add" ||
     changeKind === "collection_column_add" || changeKind === "collection_column_rename" ||
     changeKind === "collection_column_trash" || changeKind === "collection_formula_update" ||

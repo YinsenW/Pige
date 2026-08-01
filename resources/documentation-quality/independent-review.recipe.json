@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-KNOW-001 complete managed knowledge-page lifecycle, including Topic archive/restore and revision history.",
+    "scope": "E7.01 complete current Collection mutation matching-Undo Redo and restart recovery.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "1737b50a2583d3df40b0786d058848acc0e80228052793b3f45f6733f78b3be7"
+    "reviewedSha256": "2b890842cab6bff9986102f4d13114c69f458e68464aad7bf8b05b8852c5aaec"
   },
   "reviewers": [
     {

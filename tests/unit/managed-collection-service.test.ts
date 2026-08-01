@@ -18,6 +18,7 @@ import { DatasetService } from "../../apps/desktop/src/main/services/dataset-ser
 import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dataset-ingest-types";
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { ManagedCollectionService } from "../../apps/desktop/src/main/services/managed-collection-service";
+import { ManagedCollectionRedoService } from "../../apps/desktop/src/main/services/managed-collection-redo-service";
 import {
   readBundle,
   readCollectionSnapshot,
@@ -230,6 +231,54 @@ describe("ManagedCollectionService", () => {
         undoOfOperationId: committed.operationId
       }
     });
+    const undoOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${undone.undoOperationId}.json`
+    )));
+    const redo = new ManagedCollectionRedoService(port);
+    expect(redo.activityState(OperationRecordSchema.parse(readJson(operationPath)), undoOperation))
+      .toEqual({ canRedo: true });
+    expect(redo.redo({ operationId: committed.operationId, expectedRevisionId: committed.snapshot.revisionId }))
+      .toMatchObject({ status: "stale", currentRevisionId: undone.revisionId });
+    const redone = redo.redo({ operationId: committed.operationId, expectedRevisionId: undone.revisionId });
+    expect(redone).toMatchObject({ status: "redone", operationId: committed.operationId,
+      undoOperationId: undone.undoOperationId, redoOperationId: expect.stringMatching(/^op_/),
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    if (redone.status !== "redone" || !redone.redoOperationId || !redone.revisionId) {
+      throw new Error("Collection row trash was not redone");
+    }
+    const afterRedo = await service.open({
+      apiVersion: 1, requestId: "collection_request_trashredoabcdefg", activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId, tableId: table.id
+    });
+    expect(afterRedo).toMatchObject({ status: "ready", snapshot: { revisionId: redone.revisionId,
+      totalRowCount: 1, returnedRowCount: 1 } });
+    const redoRevision = DatasetRevisionSchema.parse(readJson(path.join(
+      fixture.bundlePath, readManifest(fixture.bundlePath).revision.path
+    ))) as typeof undoRevision & { redoOfOperationId?: string; undoOperationId?: string };
+    expect(redoRevision).toMatchObject({ parentRevisionId: undone.revisionId,
+      redoOfOperationId: committed.operationId, undoOperationId: undone.undoOperationId,
+      change: { kind: "collection_row_trash", tableId: table.id, rowId: trashedRow.rowId } });
+    const redoOperationPath = findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${redone.redoOperationId}.json`
+    );
+    const redoOperation = OperationRecordSchema.parse(readJson(redoOperationPath));
+    expect(service.activitySummary(redoOperation)).toMatchObject({
+      kind: "trash_collection_row", canUndo: true, target: { revisionId: redone.revisionId }
+    });
+    expect(redo.activityState(OperationRecordSchema.parse(readJson(operationPath)), undoOperation))
+      .toEqual({ canRedo: false, redoUnavailableReason: "already_redone" });
+    fs.rmSync(redoOperationPath);
+    expect(new ManagedCollectionRedoService(port).recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    const recoveredRedo = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${redone.redoOperationId}.json`
+    )));
+    const secondUndo = await service.undo(recoveredRedo, redone.revisionId);
+    expect(secondUndo).toMatchObject({ status: "undone", revisionId: expect.stringMatching(/^dataset_rev_/) });
+    const finalOpen = await service.open({
+      apiVersion: 1, requestId: "collection_request_trashredo2undoabcdef", activeVaultId: vault.vaultId,
+      datasetId: initialManifest.datasetId, tableId: table.id
+    });
+    expect(finalOpen).toMatchObject({ status: "ready", snapshot: { totalRowCount: 2, returnedRowCount: 2 } });
   });
 
   it("creates a numeric formula column, recomputes edits and rows atomically, and preserves column Undo policy", async () => {
@@ -427,6 +476,29 @@ describe("ManagedCollectionService", () => {
     expect(undoRevision.change).toEqual({
       kind: "collection_formula_update_undo", tableId: table.id, columnId: added.columnId,
       undoOfOperationId: updated.operationId
+    });
+    const formulaOperation = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${updated.operationId}.json`
+    )));
+    const formulaUndo = OperationRecordSchema.parse(readJson(findFile(
+      path.join(fixture.vaultPath, ".pige/operations"), `${undone.undoOperationId}.json`
+    )));
+    const formulaRedo = new ManagedCollectionRedoService(port);
+    expect(formulaRedo.activityState(formulaOperation, formulaUndo)).toEqual({ canRedo: true });
+    const redone = formulaRedo.redo({ operationId: updated.operationId });
+    expect(redone).toMatchObject({ status: "redone", revisionId: expect.stringMatching(/^dataset_rev_/),
+      redoOperationId: expect.stringMatching(/^op_/) });
+    const reopened = await service.open({
+      apiVersion: 1, requestId: "collection_request_formulaafterredo", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    if (reopened.status !== "ready") throw new Error("Redone formula did not reopen");
+    expect(reopened.snapshot.columns).toContainEqual(expect.objectContaining({
+      columnId: added.columnId, calculation: { kind: "pige_numeric_formula", schemaVersion: 1,
+        expression: request.expression }
+    }));
+    expect(reopened.snapshot.rows[0]?.cells).toContainEqual({
+      columnId: added.columnId, value: 9, editable: false, readOnlyReason: "formula"
     });
   });
 
