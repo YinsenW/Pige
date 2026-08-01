@@ -918,9 +918,7 @@ export function App(): React.JSX.Element {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
   };
-
   useHomeJobEvents(onboarding?.activeVault?.vaultId, HOME_JOB_CLASSES, refreshVaultState, setRecentJobs, setBackupJobs);
-
   const refreshActivityJobs = async (): Promise<boolean> => {
     const activeVaultId = activeVaultIdRef.current;
     const sequence = ++activityJobsRefreshSequence.current;
