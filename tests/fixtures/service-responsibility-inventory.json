@@ -95,6 +95,7 @@
       ["managed-collection-reveal-service.ts", 90, "p"],
       ["managed-collection-rollup-storage.ts", 391, "rdf"],
       ["managed-collection-redo-service.ts", 362, "rd"],
+      ["managed-collection-revision-history-service.ts", 444, "rdf"],
       ["managed-collection-view-redo-service.ts", 362, "rd"],
       ["managed-collection-view-service.ts", 986, "rdf"],
       ["managed-dataset-lifecycle-service.ts", 414, "rd"],

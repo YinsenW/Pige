@@ -126,6 +126,12 @@ import type {
   CollectionRenameDatasetResult,
   CollectionListRequest,
   CollectionListResult,
+  CollectionListRevisionHistoryRequest,
+  CollectionListRevisionHistoryResult,
+  CollectionOpenRevisionHistoryRequest,
+  CollectionOpenRevisionHistoryResult,
+  CollectionRestoreRevisionHistoryRequest,
+  CollectionRestoreRevisionHistoryResult,
   CollectionOpenCitationRequest,
   CollectionOpenCitationResult,
   CollectionOpenRequest,
@@ -1677,6 +1683,7 @@ export interface KnowledgeActivitySummary {
     | "restore_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
+    | "restore_collection_revision"
     | "trash_dataset"
     | "restore_dataset"
     | "purge_dataset"
@@ -2537,6 +2544,15 @@ export interface PigeDesktopApi {
   readonly collections: {
     readonly list: (request: CollectionListRequest) => Promise<CollectionListResult>;
     readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
+    readonly listRevisionHistory: (
+      request: CollectionListRevisionHistoryRequest
+    ) => Promise<CollectionListRevisionHistoryResult>;
+    readonly openRevisionHistory: (
+      request: CollectionOpenRevisionHistoryRequest
+    ) => Promise<CollectionOpenRevisionHistoryResult>;
+    readonly restoreRevisionHistory: (
+      request: CollectionRestoreRevisionHistoryRequest
+    ) => Promise<CollectionRestoreRevisionHistoryResult>;
     readonly reveal: (request: CollectionRevealRequest) => Promise<CollectionRevealResult>;
     readonly openCitation: (
       request: CollectionOpenCitationRequest

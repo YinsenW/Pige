@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T06:40:00.000+08:00",
+  "reviewedAt": "2026-08-02T06:52:52.000+08:00",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review reviewed safe preference transfer plus the confirmed, revision-fenced and reversible future-capture source-storage preference without migration of existing evidence.",
+    "scope": "Review bounded immutable Managed Collection history, read-only preview and explicit forward-only restore, plus existing stable table and saved-view edits.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "fbcca3a0998261211396f0e9e83e268ad305ddf169a709e9c20b452d17491f25"
+    "reviewedSha256": "68a0eff86052f4af718eda311083ad86a4c19ae5367749b4c6eb8331694cb594"
   },
   "reviewers": [
     {
-      "reviewerId": "settings-integrity-review",
-      "task": "Review safe preference transfer and reversible source-storage policy",
+      "reviewerId": "collection-revision-review",
+      "task": "Review Managed Collection history and forward restore",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks transfer scope, excluded authority, future-only source behavior, confirmation, receipt recovery and atomic currentness separately from implementation authorship."
+      "independence": "Project review checks reachable history, read-only projection, explicit restore, forward Undo and durable identity evidence separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "settings-integrity-review",
+      "reviewerId": "collection-revision-review",
       "blockerCount": 0,
-      "summary": "Main owns transfer dialogs and source-policy confirmation; renderer receives only typed safe differences, while current, cancel, stale and failure preserve settings, focus and existing evidence bytes."
+      "summary": "Main owns history traversal and restore authority; renderer receives bounded pathless summaries and read-only snapshots, while stale or failed restore preserves current data and focus."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "settings-integrity-review",
+      "reviewerId": "collection-revision-review",
       "blockerCount": 0,
-      "summary": "Settings, Jobs, API, decision, schemas, registry, IPC and tests agree on exact safe transfer review and future-only source-policy changes."
+      "summary": "Data, Jobs, API, UI, decision, schemas, IPC and tests agree on reachable immutable history, explicit forward restore and exact Activity Undo semantics."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "settings-integrity-review",
+      "reviewerId": "collection-revision-review",
       "blockerCount": 0,
-      "summary": "PIGE-SETTINGS-001/002 gain exact transfer, executable registry and source-policy evidence while remaining partial for broader setting-owner and restore coverage."
+      "summary": "PIGE-VAULT-002/007 and PIGE-DATA-003 gain exact table, view and revision-history evidence while remaining partial for broader durable identity, backup, conflict and platform coverage."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "settings-integrity-review",
+      "reviewerId": "collection-revision-review",
       "blockerCount": 0,
-      "summary": "One bounded source-preference owner reuses the Vault writer and Activity owners; no source migration, provider, network, model or release owner expands."
+      "summary": "One bounded revision-history owner reuses Dataset Bundle, writer and Activity owners; no import, Source, query, provider, network, model or release owner expands."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "settings-integrity-review",
+      "reviewerId": "collection-revision-review",
       "blockerCount": 0,
-      "summary": "Existing Settings and Job owner documents plus one durable decision record both behaviors without adding a new design document."
+      "summary": "Existing Data, API, UI, Job and playbook owners plus one durable decision record the workflow without adding a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/settings-profile-transfer-service.test.ts tests/unit/register-settings-profile-ipc.test.ts tests/unit/settings-profile-transfer-ui.test.ts tests/unit/settings-registry.test.ts tests/unit/source-storage-preference-service.test.ts tests/unit/source-storage-policy-contract.test.ts tests/unit/vault-service-writer-lease.test.ts tests/unit/restore-ui.test.ts",
+      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/register-managed-collection-history-ipc.test.ts tests/unit/managed-collection-service.test.ts tests/unit/managed-collection-ui.test.ts tests/unit/managed-collection-table-contract.test.ts tests/unit/managed-collection-table-rename-ui.test.ts tests/unit/managed-collection-view-service.test.ts",
       "status": "passed",
-      "evidence": "Focused service, registry, IPC, writer and renderer tests prove exact safe-difference review, current no-op, focus, confirmed source-policy CAS, receipt recovery, Undo and no migration of existing bytes."
+      "evidence": "Focused schema, service, IPC and renderer tests prove bounded history paging, read-only preview, explicit forward restore, restart adoption, exact Undo, stable table rename and saved-view editing."
     },
     {
       "command": "git diff --check",
       "status": "passed",
-      "evidence": "The focused Main, preload, renderer, tests and governed Settings/Job delta has no whitespace or conflict-marker defects."
+      "evidence": "The focused Main, preload, renderer, tests and governed Data/API/UI/Job delta has no whitespace or conflict-marker defects."
     },
     {
       "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "The current Settings/Job owners, exact evidence selectors, semantic lock and five-dimensional review agree on transfer and future-only reversible source policy."
+      "evidence": "The current Data/API/UI/Job owners, exact evidence selectors, semantic lock and five-dimensional review agree on immutable history and forward restore."
     }
   ],
   "coordination": {
-    "taskId": "settings-integrity-source-policy-20260802",
-    "taskTitle": "Reviewed safe preference transfer and reversible source storage policy",
+    "taskId": "collection-revision-history-20260802",
+    "taskTitle": "Managed Collection history and forward restore",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing source bytes, SourceRecords, managed copies, Vault bindings, provider credentials, permission grants and backup behavior remain unchanged.",
-    "acknowledgement": "Reviewed safe transfer, executable owners and reversible future-capture source policy are bound while PIGE-SETTINGS-001/002/003 and PIGE-JOB-003 remain partial for broader coverage."
+    "compatibility": "Existing historical revisions, Source evidence, imports, saved views, active paging, formulas, relations and collection mutation semantics remain unchanged.",
+    "acknowledgement": "Bounded history, read-only preview and forward restore are bound while PIGE-VAULT-002/007 and PIGE-DATA-003 remain partial for broader durable identity, backup, conflict and platform coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

@@ -2545,6 +2545,10 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("CollectionTrashColumnResultSchema.parse(");
     expect(preloadSource).toContain("CollectionTrashRowRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionTrashRowResultSchema.parse(");
+    expect(schemasSource).toContain('COLLECTION_LIST_REVISION_HISTORY_CHANNEL = "collections.listRevisionHistory"');
+    expect(contractsSource).toContain("readonly restoreRevisionHistory:");
+    expect(preloadSource).toContain("listRevisionHistory: invokeCollectionListRevisionHistory");
+    expect(mainSource).toContain("registerManagedCollectionHistoryIpc({");
     expect(contractsSource).toContain("readonly appendDefaultRow:");
     expect(contractsSource).toContain("CollectionAppendDefaultRowRequest");
     expect(contractsSource).toContain("readonly addNullableColumn:");

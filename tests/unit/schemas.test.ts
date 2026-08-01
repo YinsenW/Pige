@@ -82,6 +82,12 @@ import {
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionListRevisionHistoryRequestSchema,
+  CollectionListRevisionHistoryResultSchema,
+  CollectionOpenRevisionHistoryRequestSchema,
+  CollectionOpenRevisionHistoryResultSchema,
+  CollectionRestoreRevisionHistoryRequestSchema,
+  CollectionRestoreRevisionHistoryResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
   CollectionRevealRequestSchema,
@@ -1368,6 +1374,34 @@ describe("schemas", () => {
       status: "stale",
       rows: snapshot.rows
     })).toThrow();
+  });
+
+  it("keeps Collection revision history bounded, pathless, and forward-only", () => {
+    const base = { apiVersion: 1 as const, requestId: "collection_request_historyschema0001",
+      activeVaultId: "vault_20260802_history", datasetId: "dataset_20260802_historyabcdef",
+      expectedCurrentRevisionId: "dataset_rev_20260802_currentabcdef" };
+    expect(CollectionListRevisionHistoryRequestSchema.parse({ ...base, limit: 25 })).toMatchObject({ limit: 25 });
+    const cursor = `collection_history_${"a".repeat(64)}`;
+    expect(CollectionListRevisionHistoryResultSchema.parse({ ...base, status: "ready",
+      currentRevisionId: base.expectedCurrentRevisionId, revisions: [{
+        revisionId: base.expectedCurrentRevisionId, parentRevisionId: null,
+        operationId: "op_20260802_historyabcdef", createdAt: "2026-08-02T00:00:00.000Z",
+        category: "import", rowCount: 2, columnCount: 2, isCurrent: true
+      }], hasMore: true, nextCursor: cursor })).toMatchObject({ status: "ready", hasMore: true });
+    expect(() => CollectionListRevisionHistoryResultSchema.parse({ ...base, status: "ready",
+      currentRevisionId: base.expectedCurrentRevisionId, revisions: [], hasMore: false, nextCursor: cursor }))
+      .toThrow("agree with hasMore");
+    const open = { ...base, requestId: "collection_request_historyschema0002",
+      revisionId: "dataset_rev_20260802_historyabcdef", tableId: "table_historyabcdef" };
+    expect(CollectionOpenRevisionHistoryRequestSchema.parse(open)).toEqual(open);
+    expect(CollectionOpenRevisionHistoryResultSchema.parse({ ...open, status: "not_found" })).toMatchObject({ status: "not_found" });
+    const restore = { ...open, requestId: "collection_request_historyschema0003",
+      confirmation: "restore_as_new_revision" as const };
+    expect(CollectionRestoreRevisionHistoryRequestSchema.parse(restore)).toEqual(restore);
+    expect(CollectionRestoreRevisionHistoryResultSchema.parse({ ...restore, status: "ineligible" })).toMatchObject({ status: "ineligible" });
+    for (const unsafe of [{ path: "/private/dataset.sqlite" }, { sourceBody: "private" }, { checksum: `sha256:${"b".repeat(64)}` }]) {
+      expect(() => CollectionListRevisionHistoryResultSchema.parse({ ...base, status: "not_found", ...unsafe })).toThrow();
+    }
   });
 
   it("keeps generated Dataset reveal exact, bounded, and pathless", () => {

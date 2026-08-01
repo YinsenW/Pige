@@ -560,6 +560,9 @@ import {
   COLLECTION_PURGE_DATASET_CHANNEL,
   COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
+  COLLECTION_LIST_REVISION_HISTORY_CHANNEL,
+  COLLECTION_OPEN_REVISION_HISTORY_CHANNEL,
+  COLLECTION_RESTORE_REVISION_HISTORY_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
@@ -608,6 +611,12 @@ import {
   CollectionRevealResultSchema,
   CollectionListRequestSchema,
   CollectionListResultSchema,
+  CollectionListRevisionHistoryRequestSchema,
+  CollectionListRevisionHistoryResultSchema,
+  CollectionOpenRevisionHistoryRequestSchema,
+  CollectionOpenRevisionHistoryResultSchema,
+  CollectionRestoreRevisionHistoryRequestSchema,
+  CollectionRestoreRevisionHistoryResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -1078,6 +1087,12 @@ import type {
   CollectionRevealResult,
   CollectionListRequest,
   CollectionListResult,
+  CollectionListRevisionHistoryRequest,
+  CollectionListRevisionHistoryResult,
+  CollectionOpenRevisionHistoryRequest,
+  CollectionOpenRevisionHistoryResult,
+  CollectionRestoreRevisionHistoryRequest,
+  CollectionRestoreRevisionHistoryResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
@@ -1203,6 +1218,52 @@ async function invokeCollectionList(request: CollectionListRequest): Promise<Col
   );
   if (result.activeVaultId !== parsedRequest.activeVaultId) {
     throw new Error("Invalid Managed Collection list response identity.");
+  }
+  return result;
+}
+
+function sameCollectionHistoryIdentity(
+  request: CollectionListRevisionHistoryRequest | CollectionOpenRevisionHistoryRequest | CollectionRestoreRevisionHistoryRequest,
+  result: CollectionListRevisionHistoryResult | CollectionOpenRevisionHistoryResult | CollectionRestoreRevisionHistoryResult
+): boolean {
+  return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId && result.expectedCurrentRevisionId === request.expectedCurrentRevisionId;
+}
+
+async function invokeCollectionListRevisionHistory(
+  request: CollectionListRevisionHistoryRequest
+): Promise<CollectionListRevisionHistoryResult> {
+  const parsed = CollectionListRevisionHistoryRequestSchema.parse(request);
+  const result = CollectionListRevisionHistoryResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_LIST_REVISION_HISTORY_CHANNEL, parsed)
+  );
+  if (!sameCollectionHistoryIdentity(parsed, result)) throw new Error("Invalid Collection revision-history list identity.");
+  return result;
+}
+
+async function invokeCollectionOpenRevisionHistory(
+  request: CollectionOpenRevisionHistoryRequest
+): Promise<CollectionOpenRevisionHistoryResult> {
+  const parsed = CollectionOpenRevisionHistoryRequestSchema.parse(request);
+  const result = CollectionOpenRevisionHistoryResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_OPEN_REVISION_HISTORY_CHANNEL, parsed)
+  );
+  if (!sameCollectionHistoryIdentity(parsed, result) || result.revisionId !== parsed.revisionId || result.tableId !== parsed.tableId) {
+    throw new Error("Invalid Collection revision-history preview identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionRestoreRevisionHistory(
+  request: CollectionRestoreRevisionHistoryRequest
+): Promise<CollectionRestoreRevisionHistoryResult> {
+  const parsed = CollectionRestoreRevisionHistoryRequestSchema.parse(request);
+  const result = CollectionRestoreRevisionHistoryResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_RESTORE_REVISION_HISTORY_CHANNEL, parsed)
+  );
+  if (!sameCollectionHistoryIdentity(parsed, result) || result.revisionId !== parsed.revisionId ||
+      result.tableId !== parsed.tableId || result.confirmation !== parsed.confirmation) {
+    throw new Error("Invalid Collection revision-history restore identity.");
   }
   return result;
 }
@@ -2405,6 +2466,9 @@ const api: PigeDesktopApi = {
   collections: {
     list: invokeCollectionList,
     open: invokeCollectionOpen,
+    listRevisionHistory: invokeCollectionListRevisionHistory,
+    openRevisionHistory: invokeCollectionOpenRevisionHistory,
+    restoreRevisionHistory: invokeCollectionRestoreRevisionHistory,
     reveal: invokeCollectionReveal,
     openCitation: invokeCollectionOpenCitation,
     editCell: invokeCollectionCellEdit,
