@@ -214,9 +214,17 @@ describe("full UI Settings surface", () => {
         createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:02:00.000Z"
       },
       {
-        id: "job_20260801_activitydone01", class: "index_rebuild", state: "completed",
+        id: "job_20260801_activitydone01", class: "agent_ingest", state: "completed",
         canReconnectDependency: false, canReconnectBackupDestination: false,
         canContinueIncomplete: false, canCancel: false, canRetry: false,
+        agentKnowledgeOutcome: {
+          schemaVersion: 1, kind: "updated", knowledgeFields: ["summary", "citations"],
+          citationRefs: [{ kind: "source", id: "src_20260801_activitydone01" }],
+          writeRefs: [{ kind: "page", id: "page_20260801_activitydone01" }],
+          operationIds: ["op_20260801_activitydone01"],
+          undoOperationIds: ["op_20260801_activitydone01"],
+          recoveryRefs: [{ kind: "source", id: "src_20260801_activitydone01" }]
+        },
         message: "Index rebuilt", createdAt: "2026-08-01T07:00:00.000Z",
         updatedAt: "2026-08-01T07:05:00.000Z"
       }
@@ -239,6 +247,8 @@ describe("full UI Settings surface", () => {
     expect(retryRow.textContent).toContain("Something went wrong");
     expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activitydone01"]')?.textContent)
       .toContain("Completed");
+    expect(dom.window.document.querySelector('[data-agent-knowledge-outcome="updated"]')?.textContent)
+      .toContain("Knowledge updated · 2 fields · 1 citations · 1 durable writes · 1 recovery references · Undo available");
     const retry = buttonNamed(retryRow, "Retry");
     retry.focus();
     await act(async () => { retry.click(); await settle(dom); await settle(dom); });

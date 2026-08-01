@@ -20,6 +20,7 @@ import {
   SourceRecordSchema,
   type ConfirmationProposal,
   type JobClass,
+  type AgentKnowledgeOutcomeSummary,
   type JobRecord,
   type JobStage,
   type JobState,
@@ -94,6 +95,16 @@ import {
   relationshipProposalOperationId
 } from "./agent-relationship-proposal-service";
 import { assertAgentIngestPublicationAuthorityCurrent } from "./agent-ingest-publication-authority";
+import {
+  cancelledKnowledgeOutcome,
+  datasetKnowledgeOutcome,
+  failedKnowledgeOutcome,
+  pendingReviewKnowledgeOutcome,
+  publishedKnowledgeOutcome,
+  resolvedReviewKnowledgeOutcome,
+  responseKnowledgeOutcome,
+  waitingKnowledgeOutcome
+} from "./agent-knowledge-outcome";
 import {
   JobRecordStore,
   type JobRecordSnapshot
@@ -1890,7 +1901,8 @@ export class JobsService {
             "Historical Agent ingest completed without a durable knowledge effect.",
             "source",
             execution.control.durableWriteState(),
-            []
+            [],
+            responseKnowledgeOutcome(runningJob, result)
           );
           return completedJob.state !== "cancelled";
         }
@@ -1915,7 +1927,8 @@ export class JobsService {
             `Pi Agent materialized a validated Dataset revision with ${result.tableCount} table${result.tableCount === 1 ? "" : "s"} and ${result.rowCount} row${result.rowCount === 1 ? "" : "s"}.`,
             "dataset",
             execution.control.durableWriteState(),
-            result.operationIds
+            result.operationIds,
+            datasetKnowledgeOutcome(runningJob, result)
           );
           return completedJob.state !== "cancelled";
         }
@@ -1961,7 +1974,8 @@ export class JobsService {
                   : "Agent ingest wiki note already exists.",
           "source",
           execution.control.durableWriteState(),
-          result.operationIds
+          result.operationIds,
+          publishedKnowledgeOutcome(runningJob, result)
         );
         return completedJob.state !== "cancelled";
       },
@@ -1976,7 +1990,12 @@ export class JobsService {
         const cancellation = resolveCancellation(execution.control, caught);
         const durableState = execution.control.durableWriteState();
         if (cancellation) {
-          this.#markJobCancellationOutcome(jobFile.path, runningJob, cancellation);
+          this.#markJobCancellationOutcome(
+            jobFile.path,
+            runningJob,
+            cancellation,
+            cancelledKnowledgeOutcome(runningJob)
+          );
         } else if (isJobMutationContention(caught)) {
           // Another exact Job revision won; do not overwrite its authoritative state.
         } else if (caught instanceof PigeDomainError && caught.code === "model_provider.default_model_missing") {
@@ -1984,14 +2003,18 @@ export class JobsService {
             jobFile.path,
             runningJob,
             "Waiting for a tested default model before Agent ingest.",
-            durableState
+            durableState,
+            undefined,
+            waitingKnowledgeOutcome(runningJob)
           );
         } else if (caught instanceof PigeDomainError && caught.code === "agent_runtime.tool_dependency_waiting") {
           this.#markJobWaitingDependency(
             jobFile.path,
             runningJob,
             "Agent-selected source processing is waiting for a registered local capability.",
-            durableState
+            durableState,
+            undefined,
+            waitingKnowledgeOutcome(runningJob)
           );
         } else if (caught instanceof PigeDomainError && caught.code === "source.external_unavailable") {
           this.#markJobWaitingDependency(
@@ -2004,7 +2027,8 @@ export class JobsService {
               dependencyId: sourceRecordFile.sourceRecord.id,
               requiredAction: "reconnect_path",
               messageKey: "errors.source.external_unavailable"
-            }
+            },
+            waitingKnowledgeOutcome(runningJob)
           );
         } else if (
           caught instanceof PigeDomainError &&
@@ -2014,7 +2038,8 @@ export class JobsService {
             jobFile.path,
             runningJob,
             "The source cannot be verified safely. Re-import it to create a new source version before Agent ingest.",
-            durableState
+            durableState,
+            failedKnowledgeOutcome(runningJob, caught.code)
           );
         } else if (caught instanceof PigeDomainError && caught.code === "agent_ingest.source_changed") {
           const currentSource = readSourceRecord(vaultPath, sourceRecordFile.sourceRecord.id);
@@ -2023,7 +2048,9 @@ export class JobsService {
               jobFile.path,
               runningJob,
               `Source evidence changed while Agent ingest was running; waiting for ${documentLabel(currentSource.kind)} OCR enrichment before retry.`,
-              durableState
+              durableState,
+              undefined,
+              waitingKnowledgeOutcome(runningJob)
             );
           } else {
             const sourceChangedSnapshot = this.#alignDurableExecutionState(
@@ -2037,12 +2064,14 @@ export class JobsService {
             });
           }
         } else {
+          const retryError = createAgentIngestRetryError(caught);
           this.#markJobFailedRetryable(
             jobFile.path,
             runningJob,
             "Agent ingest failed. Preserved source and source page remain retryable.",
             durableState,
-            createAgentIngestRetryError(caught)
+            retryError,
+            failedKnowledgeOutcome(runningJob, retryError.code)
           );
         }
         return "failed";
@@ -2340,6 +2369,15 @@ export class JobsService {
           stage: "writing",
           outputRefs,
           operationIds,
+          agentKnowledgeOutcome: resolvedReviewKnowledgeOutcome({
+            job: jobFile.job,
+            proposalId: proposal.id,
+            applied: outcome === "applied",
+            ...(pageId ? { pageId } : {}),
+            operationIds,
+            linked: isSupportedRelationshipProposal(proposal),
+            reviewRequired
+          }),
           ...(checkpoints ? { checkpoints } : {}),
           progress: {
             completedUnits: 1,
@@ -3503,7 +3541,8 @@ export class JobsService {
   #markJobCancellationOutcome(
     filePath: string,
     fallback: JobRecord,
-    cancellation: JobCancellationError
+    cancellation: JobCancellationError,
+    agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     let snapshot = this.#requireExecutionSnapshot(filePath, fallback);
@@ -3519,6 +3558,7 @@ export class JobsService {
       cancelledMessage: "Job cancelled at a safe checkpoint. Preserved source data remains in the vault.",
       preservedResultMessage: "Durable output committed before cancellation could safely apply; the completed result was preserved.",
       partialResultMessage: "A retained action-safety guard prevents clean cancellation; the job remains retryable.",
+      ...(agentKnowledgeOutcome ? { facts: { agentKnowledgeOutcome } } : {}),
       ...(cancellation.safeCheckpointId ? { safeCheckpointId: cancellation.safeCheckpointId } : {})
     }).job;
   }
@@ -3528,7 +3568,8 @@ export class JobsService {
     fallback: JobRecord,
     message: string,
     durableState?: JobDurableWriteState,
-    error?: PigeErrorSummary
+    error?: PigeErrorSummary,
+    agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     const snapshot = this.#alignDurableExecutionState(
@@ -3543,7 +3584,8 @@ export class JobsService {
       reason: failure.code,
       maxAutomaticRetries: snapshot.job.retry?.maxAutomaticRetries ?? 0,
       requiresUserAction: true,
-      message
+      message,
+      ...(agentKnowledgeOutcome ? { facts: { agentKnowledgeOutcome } } : {})
     }).job;
   }
 
@@ -3552,7 +3594,8 @@ export class JobsService {
     fallback: JobRecord,
     message: string,
     durableState?: JobDurableWriteState,
-    dependency?: NonNullable<JobRecord["waitingDependency"]>
+    dependency?: NonNullable<JobRecord["waitingDependency"]>,
+    agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     const snapshot = this.#alignDurableExecutionState(
@@ -3568,7 +3611,8 @@ export class JobsService {
         requiredAction: "repair_tool",
         messageKey: "errors.agent_runtime.tool_dependency_waiting"
       },
-      message
+      message,
+      ...(agentKnowledgeOutcome ? { facts: { agentKnowledgeOutcome } } : {})
     }).job;
   }
 
@@ -3576,7 +3620,8 @@ export class JobsService {
     filePath: string,
     fallback: JobRecord,
     message: string,
-    durableState?: JobDurableWriteState
+    durableState?: JobDurableWriteState,
+    agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     const snapshot = this.#alignDurableExecutionState(
@@ -3587,7 +3632,8 @@ export class JobsService {
     return coordinator.settle(snapshot, {
       kind: "failed",
       error: createGenericJobExecutionError(false),
-      message
+      message,
+      ...(agentKnowledgeOutcome ? { facts: { agentKnowledgeOutcome } } : {})
     }).job;
   }
 
@@ -3680,14 +3726,16 @@ export class JobsService {
     message: string,
     defaultUnit: string,
     durableState: JobDurableWriteState,
-    operationIds: readonly string[] = []
+    operationIds: readonly string[] = [],
+    agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary
   ): JobRecord {
     const coordinator = this.#jobExecutionCoordinator(this.#requireActiveVaultPath());
     let snapshot = this.#requireExecutionSnapshot(jobPath, fallback);
     snapshot = this.#alignDurableExecutionState(coordinator, snapshot, durableState);
     const facts: JobExecutionFactsPatch = {
       progress: completedProgress(snapshot.job.progress, defaultUnit),
-      ...(operationIds.length > 0 ? { operationIds } : {})
+      ...(operationIds.length > 0 ? { operationIds } : {}),
+      ...(agentKnowledgeOutcome ? { agentKnowledgeOutcome } : {})
     };
     if (snapshot.job.state === "cancel_requested") {
       return coordinator.cancellationOutcome(snapshot, {
@@ -4206,6 +4254,7 @@ function toJobSummary(vaultPath: string, job: JobRecord, hasActiveExecution = fa
     canContinueIncomplete: canContinueIncomplete(job),
     canCancel: canCancelJob(job, hasActiveExecution),
     canRetry: canRetryJob(job),
+    ...(job.agentKnowledgeOutcome ? { agentKnowledgeOutcome: job.agentKnowledgeOutcome } : {}),
     ...(job.error ? { error: job.error } : {}),
     message: job.message,
     createdAt: job.createdAt,
@@ -4967,6 +5016,7 @@ function markProposalJobConflicted(
     facts: {
       stage: "planning",
       checkpoints,
+      agentKnowledgeOutcome: failedKnowledgeOutcome(current, "agent_runtime.proposal_conflicted"),
       progress: { completedUnits: 0, totalUnits: 1, unit: "proposal" }
     },
     message: proposalConflictMessage()
@@ -5250,6 +5300,7 @@ function markAgentProposalAwaitingReview(
       inputRefs,
       outputRefs,
       operationIds,
+      agentKnowledgeOutcome: pendingReviewKnowledgeOutcome(current, proposalId, operationIds),
       progress: {
         completedUnits: 1,
         totalUnits: 1,
