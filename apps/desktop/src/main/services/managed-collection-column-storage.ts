@@ -45,6 +45,7 @@ import {
   type BundleBinding, type CollectionColumnMutationIdentity
 } from "./managed-collection-storage";
 import { assertRelationTrashGuards } from "./managed-collection-relation-storage";
+import { assertRollupTrashGuards } from "./managed-collection-rollup-storage";
 import { formulaReferencedColumnIds } from "./managed-collection-formula-storage";
 
 const MAX_OPEN_COLUMNS = 32;
@@ -141,6 +142,7 @@ export function executeColumnTrash(input: {
     if (!column) return CollectionTrashColumnResultSchema.parse({ ...resultIdentity, status: "not_found" });
     if (!column.canTrash) return CollectionTrashColumnResultSchema.parse({ ...resultIdentity, status: "ineligible", snapshot });
     assertRelationTrashGuards({ binding, tableId: input.request.tableId, columnId: input.request.columnId });
+    assertRollupTrashGuards({ binding, tableId: input.request.tableId, columnId: input.request.columnId });
     const committed = commitColumnTrash({
       binding, identity: input.identity, tableId: input.request.tableId, columnId: input.request.columnId,
       expectedRevisionId: input.request.expectedRevisionId
@@ -158,7 +160,7 @@ export function executeColumnTrash(input: {
     const latest = readBundle(input.vaultPath, input.request.datasetId);
     const snapshot = latest ? readCollectionSnapshot(latest, input.request.tableId) : undefined;
     if (caught instanceof PigeDomainError &&
-        (caught.code === "collection.column_ineligible" || caught.code === "collection.relation_inbound") && snapshot) {
+        (caught.code === "collection.column_ineligible" || caught.code === "collection.relation_inbound" || caught.code === "collection.rollup_inbound") && snapshot) {
       return CollectionTrashColumnResultSchema.parse({ ...resultIdentity, status: "ineligible", snapshot });
     }
     return CollectionTrashColumnResultSchema.parse(snapshot

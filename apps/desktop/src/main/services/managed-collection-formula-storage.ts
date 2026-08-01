@@ -634,7 +634,7 @@ function assertEligibleOperands(
 }
 
 function isEligibleOperand(column: DatasetColumn): boolean {
-  return column.calculation === undefined && column.relation === undefined && column.lookup === undefined &&
+  return column.calculation === undefined && column.relation === undefined && column.lookup === undefined && column.rollup === undefined &&
     (column.logicalType === "integer" || column.logicalType === "number") &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula"));
 }
@@ -666,6 +666,7 @@ export function projectCollectionFormulaColumns(
       canUseAsRelationDisplay: false,
       canEditRelation: false,
       canUseAsLookupTarget: false,
+      canUseAsRollupTarget: false,
       hasInboundRelationDescriptors: false,
       ...(pigeFormula
         ? { calculation: column.calculation }

@@ -31,6 +31,7 @@ import {
   readRelationCellValue,
 } from "./managed-collection-relation-storage";
 import { projectLookupColumns, readLookupCellValue } from "./managed-collection-lookup-storage";
+import { projectRollupColumns, readRollupCellValue } from "./managed-collection-rollup-storage";
 
 export interface FileRef {
   readonly path: string;
@@ -110,8 +111,9 @@ export function readCollectionSnapshot(
       "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     );
     const allColumns = binding.schema.tables.flatMap((candidate) => candidate.columns);
-    const projectedColumns = projectLookupColumns(columns, allColumns,
-      projectRelationColumns(columns, allColumns, projectCollectionFormulaColumns(columns)));
+    const projectedColumns = projectRollupColumns(columns, allColumns,
+      projectLookupColumns(columns, allColumns,
+        projectRelationColumns(columns, allColumns, projectCollectionFormulaColumns(columns))));
     const inboundRelationRowIds = readInboundRelationRowIds(database, binding.schema);
     const projectedRows = rows.map((row) => {
       if (typeof row.row_id !== "string") throw payloadInvalid();
@@ -133,6 +135,14 @@ export function readCollectionSnapshot(
             value: readLookupCellValue(database, binding.schema, rowId, column),
             editable: false,
             readOnlyReason: "lookup"
+          };
+        }
+        if (column.rollup) {
+          return {
+            columnId: column.id,
+            value: readRollupCellValue(database, binding.schema, rowId, column),
+            editable: false,
+            readOnlyReason: "rollup"
           };
         }
         const reason = collectionCellReadOnlyReason(cell);
@@ -167,13 +177,16 @@ export function readCollectionSnapshot(
         projectedColumns.some((column) => column.canUseAsFormulaOperand),
       canAddRelationColumn: table.columns.length < MAX_OPEN_COLUMNS &&
         binding.schema.tables.some((candidate) => candidate.columns.some((column) =>
-          !column.calculation && !column.relation && !column.lookup &&
+          !column.calculation && !column.relation && !column.lookup && !column.rollup &&
           ["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))),
       canAddLookupColumn: table.columns.length < MAX_OPEN_COLUMNS &&
         table.columns.some((column) => column.relation &&
           binding.schema.tables.find((candidate) => candidate.id === column.relation?.targetTableId)
             ?.columns.some((target) => !target.calculation && !target.relation && !target.lookup &&
               ["string", "integer", "number", "boolean", "date", "datetime"].includes(target.logicalType))),
+      canAddRollupColumn: table.columns.length < MAX_OPEN_COLUMNS &&
+        table.columns.some((column) => column.relation &&
+          binding.schema.tables.some((candidate) => candidate.id === column.relation?.targetTableId)),
       views: projection.views ?? [],
       ...(projection.activeViewId ? { activeViewId: projection.activeViewId } : {})
     });
@@ -260,7 +273,8 @@ export function parseCollectionCellValue(
 
 export function collectionCellReadOnlyReason(
   cell: Omit<CollectionCellBinding, "tableName">
-): "formula" | "lookup" | "unsupported_type" | undefined {
+): "formula" | "lookup" | "rollup" | "unsupported_type" | undefined {
+  if (cell.column.rollup) return "rollup";
   if (cell.column.lookup) return "lookup";
   if (cell.formulaJson !== null) return "formula";
   return EDITABLE_TYPES.has(cell.column.logicalType) ? undefined : "unsupported_type";

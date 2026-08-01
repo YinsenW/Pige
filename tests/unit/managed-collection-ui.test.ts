@@ -12,6 +12,8 @@ import type {
   CollectionAddRelationColumnResult,
   CollectionAddLookupColumnRequest,
   CollectionAddLookupColumnResult,
+  CollectionAddRollupColumnRequest,
+  CollectionAddRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
   CollectionListResult,
@@ -590,6 +592,50 @@ describe("ManagedCollectionPanel", () => {
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("adds one relation-backed count rollup and renders the derived value read-only", async () => {
+    const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
+    const requests: CollectionAddRollupColumnRequest[] = [];
+    const base = relationSourceSnapshot("dataset_rev_20260729_rollup00001", false);
+    const relationRequest = relationAddRequest(base);
+    const initial: CollectionSnapshot = {
+      ...withRelationColumn(base, relationRequest, "row_relationtarget01", "Acme", base.revisionId), canAddRollupColumn: true
+    };
+    const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { collections: {
+      open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({ ...openIdentity(request), status: "ready", snapshot: target }),
+      addRollupColumn: async (request: CollectionAddRollupColumnRequest): Promise<CollectionAddRollupColumnResult> => {
+        requests.push(request); return { apiVersion: request.apiVersion, requestId: request.requestId,
+          activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
+          relationColumnId: request.relationColumnId, aggregation: request.aggregation, status: "committed",
+          columnId: "column_rollupcount001", operationId: "op_20260729_rollup0001", snapshot: {
+            ...initial, revisionId: "dataset_rev_20260729_rollup00002", canAddRollupColumn: false,
+            columns: [...initial.columns, { columnId: "column_rollupcount001", label: request.label, logicalType: "number",
+              canRename: true, canTrash: true, canUseAsFormulaOperand: false, canEditFormula: false,
+              canUseAsRelationDisplay: false, canEditRelation: false, canUseAsLookupTarget: false,
+              canUseAsRollupTarget: false, hasInboundRelationDescriptors: false,
+              rollup: { kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: request.relationColumnId,
+                aggregation: "count" } }],
+            rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells, { columnId: "column_rollupcount001",
+              value: 1, editable: false, readOnlyReason: "rollup" as const }] }))
+          } };
+      }
+    } } });
+    await act(async () => { root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial })); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Add rollup field")); await settle(dom);
+    await inputText(dom, requireElement(container.querySelector<HTMLInputElement>("#collection-rollup-name")), "Related count");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests).toHaveLength(1); expect(requests[0]).toMatchObject({ label: "Related count",
+      relationColumnId: "column_relationlink01", aggregation: "count" });
+    expect(Object.keys(requests[0] ?? {}).sort()).toEqual(["activeVaultId", "aggregation", "apiVersion", "datasetId",
+      "expectedRevisionId", "label", "relationColumnId", "requestId", "tableId"]);
+    expect(container.textContent).toContain("Rollup field added as a new revision.");
+    expect(dom.window.document.activeElement).toBe(container.querySelector('[data-collection-column-id="column_rollupcount001"]'));
+    expect(Array.from(container.querySelectorAll("button")).some((button) =>
+      button.getAttribute("aria-label") === "Edit cell: Related count, row 1")).toBe(false);
+    await act(async () => root.unmount()); dom.window.close();
   });
 
   it("keeps an add-relation draft but removes submit authority when stale revokes the capability", async () => {

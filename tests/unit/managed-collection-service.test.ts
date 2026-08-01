@@ -1485,6 +1485,111 @@ describe("ManagedCollectionService", () => {
       datasetId: initial.manifest.datasetId, tableId: table.id
     })).resolves.toMatchObject({ status: "failed" });
   });
+
+  it("creates count and sum rollups, recomputes from current relation data, and undoes forward", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const nameColumn = required(table.columns.find((column) => column.logicalType === "string"));
+    const numberColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const [targetRowId, sourceRowId] = readRowIds(initial.payloadPath);
+    if (!targetRowId || !sourceRowId) throw new Error("Missing rollup rows");
+    const relation = await service.addRelationColumn({
+      apiVersion: 1, requestId: "collection_request_rolluprelationadd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Rollup person", targetTableId: table.id, targetDisplayColumnId: nameColumn.id
+    });
+    if (relation.status !== "committed") throw new Error("Rollup relation was not created");
+    const linked = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_rolluprelationedit", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: relation.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId
+    });
+    if (linked.status !== "committed") throw new Error("Rollup relation was not linked");
+    const countRequest = {
+      apiVersion: 1 as const, requestId: "collection_request_rollupcountadd01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: linked.snapshot.revisionId,
+      label: "Related count", relationColumnId: relation.columnId, aggregation: "count" as const
+    };
+    const count = await service.addRollupColumn(countRequest);
+    expect(count).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ value: 1, editable: false, readOnlyReason: "rollup" })
+      ]) })
+    ]) } });
+    if (count.status !== "committed") throw new Error("Count rollup was not created");
+    await expect(new ManagedCollectionService(port).addRollupColumn(countRequest)).resolves.toEqual(count);
+    const sum = await service.addRollupColumn({
+      ...countRequest, requestId: "collection_request_rollupsumadd0001", expectedRevisionId: count.snapshot.revisionId,
+      label: "Related sum", aggregation: "sum", targetColumnId: numberColumn.id
+    });
+    expect(sum).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ value: 3, editable: false, readOnlyReason: "rollup" })
+      ]) })
+    ]) } });
+    if (sum.status !== "committed") throw new Error("Sum rollup was not created");
+    expect(sum.snapshot.columns.find((column) => column.columnId === relation.columnId)).toMatchObject({ canTrash: false });
+    expect(sum.snapshot.columns.find((column) => column.columnId === numberColumn.id)).toMatchObject({ canTrash: false, canUseAsRollupTarget: true });
+    expect(sum.snapshot.columns.find((column) => column.columnId === sum.columnId)).toMatchObject({
+      logicalType: "number", rollup: { kind: "pige_single_rollup", relationColumnId: relation.columnId,
+        aggregation: "sum", targetColumnId: numberColumn.id }
+    });
+    await expect(service.trashColumn({ apiVersion: 1, requestId: "collection_request_rolluptrashdependency",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: sum.snapshot.revisionId, columnId: numberColumn.id
+    })).resolves.toMatchObject({ status: "ineligible", snapshot: { revisionId: sum.snapshot.revisionId } });
+    const activity = new KnowledgeActivityService(port, service);
+    expect(activity.list({ limit: 20 }).activities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operationId: sum.operationId, kind: "add_collection_rollup", canUndo: true })
+    ]));
+    const undone = await activity.undo({ operationId: sum.operationId, expectedRevisionId: sum.snapshot.revisionId });
+    expect(undone).toMatchObject({ status: "undone" });
+    if (undone.status !== "undone") throw new Error("Rollup was not undone");
+    const recreated = await service.addRollupColumn({
+      ...countRequest, requestId: "collection_request_rollupsumrecreate", expectedRevisionId: undone.revisionId,
+      label: "Related sum", aggregation: "sum", targetColumnId: numberColumn.id
+    });
+    if (recreated.status !== "committed") throw new Error("Rollup was not recreated");
+    const edited = await service.editCell({
+      apiVersion: 1, requestId: "collection_request_rolluptargetedit", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: recreated.snapshot.revisionId,
+      rowId: targetRowId, columnId: numberColumn.id, value: 9
+    });
+    if (edited.status !== "committed") throw new Error("Rollup target was not edited");
+    const refreshed = await service.open({ apiVersion: 1, requestId: "collection_request_rolluprefresh001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id });
+    expect(refreshed).toMatchObject({ status: "ready", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: recreated.columnId, value: 9, readOnlyReason: "rollup" })
+      ]) })
+    ]) } });
+    if (refreshed.status !== "ready") throw new Error("Rollup did not refresh");
+    const cleared = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_rolluprelationclear", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: refreshed.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId: null
+    });
+    expect(cleared).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: sourceRowId, cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: count.columnId, value: 0 }),
+        expect.objectContaining({ columnId: recreated.columnId, value: null })
+      ]) })
+    ]) } });
+    if (cleared.status !== "committed") throw new Error("Rollup relation was not cleared");
+    const appended = await service.appendDefaultRow({ apiVersion: 1, requestId: "collection_request_rollupappenddefault",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: cleared.snapshot.revisionId });
+    expect(appended).toMatchObject({ status: "committed", snapshot: { rows: expect.arrayContaining([
+      expect.objectContaining({ rowId: expect.any(String), cells: expect.arrayContaining([
+        expect.objectContaining({ columnId: count.columnId, value: 0 }),
+        expect.objectContaining({ columnId: recreated.columnId, value: null })
+      ]) })
+    ]) } });
+  });
 });
 
 async function makeCollectionFixture() {

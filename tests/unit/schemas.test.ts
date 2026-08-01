@@ -34,6 +34,7 @@ import {
   COLLECTION_ADD_FORMULA_COLUMN_CHANNEL,
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
+  COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
@@ -46,6 +47,7 @@ import {
   CollectionAddRelationColumnRequestSchema,
   CollectionAddRelationColumnResultSchema,
   CollectionAddLookupColumnRequestSchema,
+  CollectionAddRollupColumnRequestSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
   CollectionRelationCellValueSchema,
@@ -87,6 +89,7 @@ import {
   DatasetPigeRelationCellSchema,
   DatasetPigeRelationSchema,
   DatasetPigeLookupSchema,
+  DatasetPigeRollupSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   DatasetTableSchema,
@@ -2668,6 +2671,29 @@ describe("schemas", () => {
       { query: "SELECT *" },
       { path: "/private/lookup.sqlite" }
     ]) expect(() => CollectionAddLookupColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+  });
+
+  it("freezes same-Dataset relation rollups to count or numeric sum without renderer query authority", () => {
+    const count = { kind: "pige_single_rollup", schemaVersion: 1, relationColumnId: "column_rolluprelation01", aggregation: "count" } as const;
+    const sum = { ...count, aggregation: "sum", targetColumnId: "column_rolluptarget001" } as const;
+    expect(COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL).toBe("collections.addRollupColumn");
+    expect(DatasetPigeRollupSchema.parse(count)).toEqual(count);
+    expect(DatasetPigeRollupSchema.parse(sum)).toEqual(sum);
+    expect(() => DatasetPigeRollupSchema.parse({ ...count, targetColumnId: sum.targetColumnId })).toThrow();
+    expect(() => DatasetPigeRollupSchema.parse({ ...sum, targetColumnId: undefined })).toThrow();
+    const request = {
+      apiVersion: 1, requestId: "collection_request_rollupschema0001", activeVaultId: "vault_20260729_rollup001",
+      datasetId: "dataset_20260729_rollup000001", tableId: "table_rollupsource01",
+      expectedRevisionId: "dataset_rev_20260729_rollup000001", label: " Total ",
+      relationColumnId: count.relationColumnId, aggregation: "sum", targetColumnId: sum.targetColumnId
+    } as const;
+    expect(CollectionAddRollupColumnRequestSchema.parse(request).label).toBe("Total");
+    for (const unsafe of [{ rawSql: "sum(value)" }, { targetDatasetId: "dataset_other" }, { expression: "value * 2" },
+      { aggregation: "average" }]) expect(() => CollectionAddRollupColumnRequestSchema.parse({ ...request, ...unsafe })).toThrow();
+    expect(KnowledgeActivitySummarySchema.parse({ operationId: "op_20260729_rollupadd01", kind: "add_collection_rollup",
+      createdAt: "2026-07-29T00:00:00.000Z", target: { kind: "collection", datasetId: request.datasetId,
+        tableId: request.tableId, revisionId: request.expectedRevisionId }, status: "applied", canUndo: true }).kind
+    ).toBe("add_collection_rollup");
   });
 
   it("keeps Collection column rename stable, reversible, CAS-bound, and body-free", () => {

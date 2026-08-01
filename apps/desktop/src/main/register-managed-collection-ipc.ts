@@ -4,6 +4,7 @@ import {
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
+  COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
@@ -16,6 +17,8 @@ import {
   CollectionEditRelationCellResultSchema,
   CollectionAddLookupColumnRequestSchema,
   CollectionAddLookupColumnResultSchema,
+  CollectionAddRollupColumnRequestSchema,
+  CollectionAddRollupColumnResultSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
   CollectionAddNullableColumnRequestSchema,
@@ -54,6 +57,8 @@ import {
   type CollectionEditRelationCellResult,
   type CollectionAddLookupColumnRequest,
   type CollectionAddLookupColumnResult,
+  type CollectionAddRollupColumnRequest,
+  type CollectionAddRollupColumnResult,
   type CollectionUpdateFormulaColumnRequest,
   type CollectionUpdateFormulaColumnResult,
   type CollectionCellEditRequest,
@@ -119,6 +124,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly addLookupCollectionColumn?: (
     request: CollectionAddLookupColumnRequest
   ) => CollectionAddLookupColumnResult | Promise<CollectionAddLookupColumnResult>;
+  readonly addRollupCollectionColumn?: (
+    request: CollectionAddRollupColumnRequest
+  ) => CollectionAddRollupColumnResult | Promise<CollectionAddRollupColumnResult>;
   readonly renameCollectionColumn: (
     request: CollectionRenameColumnRequest
   ) => CollectionRenameColumnResult | Promise<CollectionRenameColumnResult>;
@@ -266,6 +274,14 @@ function failedAddLookupColumn(request: CollectionAddLookupColumnRequest): Colle
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId,
     relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId, status: "failed"
+  });
+}
+
+function failedAddRollupColumn(request: CollectionAddRollupColumnRequest): CollectionAddRollupColumnResult {
+  return CollectionAddRollupColumnResultSchema.parse({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, relationColumnId: request.relationColumnId,
+    aggregation: request.aggregation, ...(request.targetColumnId ? { targetColumnId: request.targetColumnId } : {}), status: "failed"
   });
 }
 
@@ -582,6 +598,24 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedAddLookupColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionAddRollupColumnRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.addRollupCollectionColumn) return failedAddRollupColumn(parsed);
+    let rawResult: CollectionAddRollupColumnResult;
+    try { rawResult = await options.addRollupCollectionColumn(parsed); }
+    catch { return failedAddRollupColumn(parsed); }
+    const result = CollectionAddRollupColumnResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.tableId !== parsed.tableId ||
+        result.relationColumnId !== parsed.relationColumnId || result.aggregation !== parsed.aggregation ||
+        result.targetColumnId !== parsed.targetColumnId) {
+      throw new Error("Managed Collection rollup-column response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedAddRollupColumn(parsed);
   });
 
   options.ipcMain.handle("collections.renameColumn", async (event, request: unknown) => {

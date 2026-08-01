@@ -1278,6 +1278,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
+    "add_collection_rollup",
     "rename_collection_column",
     "create_collection_view",
     "update_collection_view",
@@ -5551,6 +5552,27 @@ export const DatasetPigeLookupSchema = z.object({
   targetColumnId: ColumnIdSchema
 }).strict();
 
+/**
+ * Pige rollup v1 follows one source-table single-value relation. Count returns
+ * 0/1 for a missing/current target; sum projects one nullable numeric target.
+ * Values are derived from the immutable revision and never durable authority.
+ */
+export const DatasetPigeRollupSchema = z.object({
+  kind: z.literal("pige_single_rollup"),
+  schemaVersion: z.literal(1),
+  relationColumnId: ColumnIdSchema,
+  aggregation: z.enum(["count", "sum"]),
+  targetColumnId: ColumnIdSchema.optional()
+}).strict().superRefine((rollup, context) => {
+  if ((rollup.aggregation === "sum") !== (rollup.targetColumnId !== undefined)) {
+    context.addIssue({
+      code: "custom",
+      path: ["targetColumnId"],
+      message: "A sum rollup requires one numeric target while count accepts none."
+    });
+  }
+});
+
 /** Canonical SQLite projection_json encoding; clear is represented by JSON null. */
 export const DatasetPigeRelationCellSchema = z.object({
   kind: z.literal("pige_relation_target"),
@@ -5593,6 +5615,7 @@ export const DatasetColumnSchema = z.object({
   calculation: DatasetPigeCalculationSchema.optional(),
   relation: DatasetPigeRelationSchema.optional(),
   lookup: DatasetPigeLookupSchema.optional(),
+  rollup: DatasetPigeRollupSchema.optional(),
   stats: z.object({
     missing: z.number().int().nonnegative(),
     empty: z.number().int().nonnegative(),
@@ -5632,11 +5655,11 @@ export const DatasetTableSchema = z.object({
   }
   const columnsById = new Map(table.columns.map((column) => [column.id, column]));
   for (const [index, column] of table.columns.entries()) {
-    if ([column.calculation, column.relation, column.lookup].filter((value) => value !== undefined).length > 1) {
+    if ([column.calculation, column.relation, column.lookup, column.rollup].filter((value) => value !== undefined).length > 1) {
       context.addIssue({
         code: "custom",
         path: ["columns", index],
-        message: "Dataset columns cannot combine formula, relation, and lookup descriptors."
+        message: "Dataset columns cannot combine formula, relation, lookup, and rollup descriptors."
       });
     }
     if (column.relation !== undefined &&
@@ -5657,6 +5680,14 @@ export const DatasetTableSchema = z.object({
         message: "Pige lookup columns must be nullable scalar Pige columns."
       });
     }
+    if (column.rollup !== undefined &&
+        (column.logicalType !== "number" || !column.nullable || column.sourceType !== "pige.rollup.single")) {
+      context.addIssue({
+        code: "custom",
+        path: ["columns", index, "rollup"],
+        message: "Pige rollup columns must be nullable numeric Pige columns."
+      });
+    }
     if (!column.calculation) continue;
     if (column.logicalType !== "number" || !column.nullable) {
       context.addIssue({
@@ -5672,7 +5703,7 @@ export const DatasetTableSchema = z.object({
         operand.id === column.id ||
         operand.calculation !== undefined ||
         operand.relation !== undefined ||
-        operand.lookup !== undefined ||
+        operand.lookup !== undefined || operand.rollup !== undefined ||
         datasetColumnContainsImportedFormula(operand) ||
         (operand.logicalType !== "integer" && operand.logicalType !== "number")
       ) {
@@ -5706,7 +5737,7 @@ export const DatasetSchemaRecordSchema = z.object({
         if (
           targetTable === undefined || targetColumn === undefined ||
           targetColumn.calculation !== undefined || targetColumn.relation !== undefined ||
-          targetColumn.lookup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
+          targetColumn.lookup !== undefined || targetColumn.rollup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
           !scalarDisplayTypes.has(targetColumn.logicalType)
         ) {
           context.addIssue({
@@ -5724,12 +5755,33 @@ export const DatasetSchemaRecordSchema = z.object({
         const targetColumn = targetTable?.columns.find((candidate) => candidate.id === column.lookup?.targetColumnId);
         if (!relationColumn?.relation || !targetTable || !targetColumn ||
             targetColumn.calculation !== undefined || targetColumn.relation !== undefined ||
-            targetColumn.lookup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
+            targetColumn.lookup !== undefined || targetColumn.rollup !== undefined || datasetColumnContainsImportedFormula(targetColumn) ||
             !scalarDisplayTypes.has(targetColumn.logicalType) || column.logicalType !== targetColumn.logicalType) {
           context.addIssue({
             code: "custom",
             path: ["tables", tableIndex, "columns", columnIndex, "lookup"],
             message: "Pige lookups require one same-table single relation and one scalar field from its target table."
+          });
+        }
+      }
+      if (column.rollup !== undefined) {
+        const relationColumn = table.columns.find((candidate) => candidate.id === column.rollup?.relationColumnId);
+        const targetTable = relationColumn?.relation
+          ? tablesById.get(relationColumn.relation.targetTableId)
+          : undefined;
+        const targetColumn = column.rollup.targetColumnId === undefined
+          ? undefined
+          : targetTable?.columns.find((candidate) => candidate.id === column.rollup?.targetColumnId);
+        const invalidSumTarget = column.rollup.aggregation === "sum" &&
+          (!targetColumn || targetColumn.calculation !== undefined || targetColumn.relation !== undefined ||
+           targetColumn.lookup !== undefined || targetColumn.rollup !== undefined ||
+           datasetColumnContainsImportedFormula(targetColumn) ||
+           (targetColumn.logicalType !== "integer" && targetColumn.logicalType !== "number"));
+        if (!relationColumn?.relation || !targetTable || invalidSumTarget) {
+          context.addIssue({
+            code: "custom",
+            path: ["tables", tableIndex, "columns", columnIndex, "rollup"],
+            message: "Pige rollups require one source-table single relation and an eligible numeric target for sum."
           });
         }
       }
@@ -5861,6 +5913,23 @@ export const DatasetRevisionSchema = z.object({
       columnId: ColumnIdSchema,
       relationColumnId: ColumnIdSchema,
       targetColumnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_rollup_add"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      aggregation: z.enum(["count", "sum"]),
+      targetColumnId: ColumnIdSchema.optional()
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_rollup_add_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      relationColumnId: ColumnIdSchema,
+      aggregation: z.enum(["count", "sum"]),
+      targetColumnId: ColumnIdSchema.optional(),
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
@@ -6331,12 +6400,13 @@ export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationCo
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
 export const COLLECTION_UPDATE_VIEW_CHANNEL = "collections.updateView" as const;
+export const COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL = "collections.addRollupColumn" as const;
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
-export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "lookup", "unsupported_type"]);
+export const CollectionCellReadOnlyReasonSchema = z.enum(["formula", "lookup", "rollup", "unsupported_type"]);
 export const COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES = 256;
 export const COLLECTION_VIEW_NAME_MAX_UTF8_BYTES = 256;
 export const CollectionEditableLogicalTypeSchema = z.enum([
@@ -6398,6 +6468,7 @@ export const CollectionColumnCalculationSummarySchema = z.discriminatedUnion("ki
 
 export const CollectionColumnRelationSummarySchema = DatasetPigeRelationSchema;
 export const CollectionColumnLookupSummarySchema = DatasetPigeLookupSchema;
+export const CollectionColumnRollupSummarySchema = DatasetPigeRollupSchema;
 
 /**
  * Relation source columns may project canTrash only when the existing forward
@@ -6415,21 +6486,23 @@ export const CollectionColumnSummarySchema = z.object({
   canUseAsRelationDisplay: z.boolean().default(false),
   canEditRelation: z.boolean().default(false),
   canUseAsLookupTarget: z.boolean().default(false),
+  canUseAsRollupTarget: z.boolean().default(false),
   hasInboundRelationDescriptors: z.boolean().default(false),
   calculation: CollectionColumnCalculationSummarySchema.optional(),
   relation: CollectionColumnRelationSummarySchema.optional(),
-  lookup: CollectionColumnLookupSummarySchema.optional()
+  lookup: CollectionColumnLookupSummarySchema.optional(),
+  rollup: CollectionColumnRollupSummarySchema.optional()
 }).strict().superRefine((column, context) => {
-  if ([column.calculation, column.relation, column.lookup].filter((value) => value !== undefined).length > 1) {
+  if ([column.calculation, column.relation, column.lookup, column.rollup].filter((value) => value !== undefined).length > 1) {
     context.addIssue({
       code: "custom",
       path: ["relation"],
-      message: "Collection columns cannot combine formula, relation, and lookup descriptors."
+      message: "Collection columns cannot combine formula, relation, lookup, and rollup descriptors."
     });
   }
   if (
     column.canUseAsFormulaOperand &&
-    (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
+    (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
       (column.logicalType !== "integer" && column.logicalType !== "number"))
   ) {
     context.addIssue({
@@ -6468,7 +6541,7 @@ export const CollectionColumnSummarySchema = z.object({
     });
   }
   if (column.canUseAsRelationDisplay &&
-      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
+      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
        !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
     context.addIssue({
       code: "custom",
@@ -6480,10 +6553,20 @@ export const CollectionColumnSummarySchema = z.object({
       (column.canUseAsLookupTarget || column.canUseAsFormulaOperand || column.canEditRelation)) {
     context.addIssue({ code: "custom", path: ["lookup"], message: "Lookup columns must remain derived and read-only." });
   }
+  if (column.rollup !== undefined &&
+      (column.logicalType !== "number" || column.canUseAsFormulaOperand || column.canUseAsLookupTarget ||
+       column.canUseAsRollupTarget || column.canEditRelation)) {
+    context.addIssue({ code: "custom", path: ["rollup"], message: "Rollup columns must remain derived numeric fields." });
+  }
   if (column.canUseAsLookupTarget &&
-      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined ||
+      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
        !["string", "integer", "number", "boolean", "date", "datetime"].includes(column.logicalType))) {
     context.addIssue({ code: "custom", path: ["canUseAsLookupTarget"], message: "Only current scalar fields may be lookup targets." });
+  }
+  if (column.canUseAsRollupTarget &&
+      (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
+       (column.logicalType !== "integer" && column.logicalType !== "number"))) {
+    context.addIssue({ code: "custom", path: ["canUseAsRollupTarget"], message: "Only current scalar numeric fields may be rollup targets." });
   }
   if (column.hasInboundRelationDescriptors && column.canTrash) {
     context.addIssue({
@@ -6690,6 +6773,7 @@ export const CollectionSnapshotSchema = z.object({
   canAddFormulaColumn: z.boolean(),
   canAddRelationColumn: z.boolean().default(false),
   canAddLookupColumn: z.boolean().default(false),
+  canAddRollupColumn: z.boolean().default(false),
   views: z.array(CollectionViewSummarySchema).max(32),
   activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
@@ -6712,6 +6796,9 @@ export const CollectionSnapshotSchema = z.object({
   if (snapshot.canAddLookupColumn && !snapshot.columns.some((column) => column.relation?.kind === "pige_single_relation")) {
     context.addIssue({ code: "custom", path: ["canAddLookupColumn"], message: "Lookup creation requires a current relation field." });
   }
+  if (snapshot.canAddRollupColumn && !snapshot.columns.some((column) => column.relation?.kind === "pige_single_relation")) {
+    context.addIssue({ code: "custom", path: ["canAddRollupColumn"], message: "Rollup creation requires a current relation field." });
+  }
   for (const [index, column] of snapshot.columns.entries()) {
     if (!column.lookup) continue;
     const relationColumn = columnsById.get(column.lookup.relationColumnId);
@@ -6729,6 +6816,20 @@ export const CollectionSnapshotSchema = z.object({
           code: "custom", path: ["columns", index, "lookup", "targetColumnId"],
           message: "Same-table lookup targets must project lookup and trash guards."
         });
+      }
+    }
+  }
+  for (const [index, column] of snapshot.columns.entries()) {
+    if (!column.rollup) continue;
+    const relationColumn = columnsById.get(column.rollup.relationColumnId);
+    if (!relationColumn?.relation || relationColumn.canTrash) {
+      context.addIssue({ code: "custom", path: ["columns", index, "rollup", "relationColumnId"], message: "Rollups require one guarded current relation field." });
+      continue;
+    }
+    if (column.rollup.aggregation === "sum" && relationColumn.relation.targetTableId === snapshot.tableId) {
+      const targetColumn = columnsById.get(column.rollup.targetColumnId!);
+      if (!targetColumn?.canUseAsRollupTarget || targetColumn.canTrash) {
+        context.addIssue({ code: "custom", path: ["columns", index, "rollup", "targetColumnId"], message: "Same-table sum targets must project rollup and trash guards." });
       }
     }
   }
@@ -6776,6 +6877,9 @@ export const CollectionSnapshotSchema = z.object({
           code: "custom", path: ["rows", rowIndex, "cells", cellIndex, "readOnlyReason"],
           message: "Lookup cells must project the strict lookup read-only reason."
         });
+      }
+      if ((column?.rollup !== undefined) !== (cell.readOnlyReason === "rollup" && !cell.editable)) {
+        context.addIssue({ code: "custom", path: ["rows", rowIndex, "cells", cellIndex, "readOnlyReason"], message: "Rollup cells must project the strict rollup read-only reason." });
       }
       const relationValue = typeof cell.value === "object" && cell.value !== null &&
         "kind" in cell.value && cell.value.kind === "relation" ? cell.value : undefined;
@@ -6991,6 +7095,24 @@ export const CollectionAddLookupColumnRequestSchema = z.object({
   relationColumnId: DatasetQueryColumnIdSchema,
   targetColumnId: DatasetQueryColumnIdSchema
 }).strict();
+
+/** Creates one read-only count or sum rollup over an existing source-table relation. */
+export const CollectionAddRollupColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  label: CollectionNewColumnLabelSchema,
+  relationColumnId: DatasetQueryColumnIdSchema,
+  aggregation: z.enum(["count", "sum"]),
+  targetColumnId: DatasetQueryColumnIdSchema.optional()
+}).strict().superRefine((request, context) => {
+  if ((request.aggregation === "sum") !== (request.targetColumnId !== undefined)) {
+    context.addIssue({ code: "custom", path: ["targetColumnId"], message: "A sum rollup requires one numeric target while count accepts none." });
+  }
+});
 
 export const CollectionRenameColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -7342,6 +7464,36 @@ export const CollectionAddLookupColumnResultSchema = z.discriminatedUnion("statu
   if (column?.lookup?.relationColumnId !== result.relationColumnId ||
       column.lookup.targetColumnId !== result.targetColumnId) {
     context.addIssue({ code: "custom", path: ["columnId"], message: "Committed lookup columns must project the exact descriptor." });
+  }
+});
+
+const CollectionAddRollupColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  relationColumnId: DatasetQueryColumnIdSchema,
+  aggregation: z.enum(["count", "sum"]),
+  targetColumnId: DatasetQueryColumnIdSchema.optional()
+}).strict();
+
+export const CollectionAddRollupColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionAddRollupColumnResultIdentitySchema.extend({
+    status: z.literal("committed"), columnId: DatasetQueryColumnIdSchema,
+    operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddRollupColumnResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddRollupColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionAddRollupColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionAddRollupColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection rollup snapshots must match the request identity." });
+  }
+  if (result.status !== "committed") return;
+  const descriptor = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId)?.rollup;
+  if (descriptor?.relationColumnId !== result.relationColumnId || descriptor.aggregation !== result.aggregation ||
+      descriptor.targetColumnId !== result.targetColumnId) {
+    context.addIssue({ code: "custom", path: ["columnId"], message: "Committed rollup columns must project the exact descriptor." });
   }
 });
 
@@ -10005,6 +10157,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
+    "add_collection_rollup",
     "rename_collection_column",
     "create_collection_view",
     "update_collection_view",
@@ -10549,6 +10702,7 @@ export type DatasetPigeFormulaOperator = z.infer<typeof DatasetPigeFormulaOperat
 export type DatasetPigeRelation = z.infer<typeof DatasetPigeRelationSchema>;
 export type DatasetPigeRelationCell = z.infer<typeof DatasetPigeRelationCellSchema>;
 export type DatasetPigeLookup = z.infer<typeof DatasetPigeLookupSchema>;
+export type DatasetPigeRollup = z.infer<typeof DatasetPigeRollupSchema>;
 export type CollectionCell = z.infer<typeof CollectionCellSchema>;
 export type CollectionCellValue = z.infer<typeof CollectionCellValueSchema>;
 export type CollectionCatalogCursor = z.infer<typeof CollectionCatalogCursorSchema>;
@@ -10601,6 +10755,8 @@ export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRel
 export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
 export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLookupColumnRequestSchema>;
 export type CollectionAddLookupColumnResult = z.infer<typeof CollectionAddLookupColumnResultSchema>;
+export type CollectionAddRollupColumnRequest = z.infer<typeof CollectionAddRollupColumnRequestSchema>;
+export type CollectionAddRollupColumnResult = z.infer<typeof CollectionAddRollupColumnResultSchema>;
 export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColumnRequestSchema>;
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
@@ -10620,6 +10776,7 @@ export type CollectionColumnSummary = z.infer<typeof CollectionColumnSummarySche
 export type CollectionColumnCalculationSummary = z.infer<typeof CollectionColumnCalculationSummarySchema>;
 export type CollectionColumnRelationSummary = z.infer<typeof CollectionColumnRelationSummarySchema>;
 export type CollectionColumnLookupSummary = z.infer<typeof CollectionColumnLookupSummarySchema>;
+export type CollectionColumnRollupSummary = z.infer<typeof CollectionColumnRollupSummarySchema>;
 export type CollectionRelationCellValue = z.infer<typeof CollectionRelationCellValueSchema>;
 export type CollectionCitationHighlight = z.infer<typeof CollectionCitationHighlightSchema>;
 export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitationRequestSchema>;

@@ -4,16 +4,16 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { PigeDomainError } from "@pige/domain";
 import {
-  CollectionAddLookupColumnRequestSchema,
-  CollectionAddLookupColumnResultSchema,
+  CollectionAddRollupColumnRequestSchema,
+  CollectionAddRollupColumnResultSchema,
   DatasetManifestSchema,
+  DatasetPigeRelationCellSchema,
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   OperationRecordSchema,
-  type CollectionAddLookupColumnRequest,
-  type CollectionAddLookupColumnResult,
+  type CollectionAddRollupColumnRequest,
+  type CollectionAddRollupColumnResult,
   type CollectionColumnSummary,
-  type CollectionScalarValue,
   type CollectionSnapshot,
   type DatasetColumn,
   type DatasetRevision,
@@ -26,102 +26,108 @@ import {
   syncFile, validatePayloadMeta, writeJsonExclusive, writeJsonImmutable,
   type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
-import { readRelationCellValue } from "./managed-collection-relation-storage";
 
 const MAX_COLLECTION_COLUMNS = 32;
-const LOOKUP_SOURCE_TYPE = "pige.lookup.single";
-const LOOKUP_PROJECTION_KIND = "pige_lookup_derived_v1";
-const SCALAR_TYPES = new Set(["string", "integer", "number", "boolean", "date", "datetime"]);
+const ROLLUP_SOURCE_TYPE = "pige.rollup.single";
+const ROLLUP_PROJECTION_KIND = "pige_rollup_derived_v1";
 
-interface LookupMutationIdentity {
+interface RollupMutationIdentity {
   readonly revisionId: string;
   readonly operationId: string;
   readonly columnId: string;
 }
 
-export function projectLookupColumns(
+export function projectRollupColumns(
   columns: readonly DatasetColumn[],
   allColumns: readonly DatasetColumn[],
   base: readonly CollectionColumnSummary[]
 ): readonly CollectionColumnSummary[] {
-  const lookupDependencies = new Set(allColumns.flatMap((column) => column.lookup
-    ? [column.lookup.relationColumnId, column.lookup.targetColumnId]
+  const dependencies = new Set(allColumns.flatMap((column) => column.rollup
+    ? [column.rollup.relationColumnId, ...(column.rollup.targetColumnId ? [column.rollup.targetColumnId] : [])]
     : []));
   return base.map((summary) => {
     const column = columns.find((candidate) => candidate.id === summary.columnId);
     if (!column) throw payloadInvalid();
-    const scalar = isLookupTarget(column);
+    const numeric = isRollupTarget(column);
     return {
       ...summary,
-      canTrash: summary.canTrash && !lookupDependencies.has(column.id),
-      canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !column.lookup,
-      canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.lookup,
-      canUseAsLookupTarget: scalar,
-      ...(column.lookup ? { lookup: column.lookup } : {})
+      canTrash: summary.canTrash && !dependencies.has(column.id),
+      canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !column.rollup,
+      canUseAsRelationDisplay: summary.canUseAsRelationDisplay && !column.rollup,
+      canUseAsLookupTarget: summary.canUseAsLookupTarget && !column.rollup,
+      canUseAsRollupTarget: numeric,
+      ...(column.rollup ? { rollup: column.rollup } : {})
     };
   });
 }
 
-export function readLookupCellValue(
+export function readRollupCellValue(
   database: DatabaseSync,
   schema: BundleBinding["schema"],
   rowId: string,
   column: DatasetColumn
-): CollectionScalarValue {
-  const lookup = column.lookup;
-  if (!lookup) throw payloadInvalid();
+): number | null {
+  const rollup = column.rollup;
   const sourceTable = schema.tables.find((table) => table.columns.some((candidate) => candidate.id === column.id));
-  const relationColumn = sourceTable?.columns.find((candidate) => candidate.id === lookup.relationColumnId);
+  const relationColumn = sourceTable?.columns.find((candidate) => candidate.id === rollup?.relationColumnId);
   const relation = relationColumn?.relation;
   const targetTable = relation ? schema.tables.find((table) => table.id === relation.targetTableId) : undefined;
-  const targetColumn = targetTable?.columns.find((candidate) => candidate.id === lookup.targetColumnId);
-  if (!sourceTable || !relationColumn || !relation || !targetTable || !targetColumn ||
-      !isLookupTarget(targetColumn) || targetColumn.logicalType !== column.logicalType) throw payloadInvalid();
+  const targetColumn = rollup?.targetColumnId
+    ? targetTable?.columns.find((candidate) => candidate.id === rollup.targetColumnId)
+    : undefined;
+  if (!rollup || !sourceTable || !relationColumn || !relation || !targetTable ||
+      (rollup.aggregation === "sum" && (!targetColumn || !isRollupTarget(targetColumn)))) throw payloadInvalid();
   const relationRaw = database.prepare(
     "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
   ).get(rowId, relationColumn.id) as Record<string, unknown> | undefined;
   if (!relationRaw) throw payloadInvalid();
   const relationCell = parseRawCell(relationColumn, relationRaw);
-  const relationValue = readRelationCellValue(database, schema, relationCell);
-  if (relationValue.targetRowId === null) return null;
+  if (relationCell.state === "null" && relationCell.projectionJson === "null") {
+    return rollup.aggregation === "count" ? 0 : null;
+  }
+  if (relationCell.state !== "value" || relationCell.projectionJson === null) throw payloadInvalid();
+  const relationTarget = DatasetPigeRelationCellSchema.parse(JSON.parse(relationCell.projectionJson));
+  if (!relationTarget) throw payloadInvalid();
   const targetRow = database.prepare("SELECT table_id FROM pige_dataset_rows WHERE row_id = ?")
-    .get(relationValue.targetRowId) as { table_id?: unknown } | undefined;
-  if (targetRow?.table_id !== targetTable.id) throw payloadInvalid();
+    .get(relationTarget.targetRowId) as { table_id?: unknown } | undefined;
+  if (targetRow?.table_id !== targetTable.id) return rollup.aggregation === "count" ? 0 : null;
+  if (rollup.aggregation === "count") return 1;
   const raw = database.prepare(
     "SELECT state, projection_kind, projection_json, formula_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
-  ).get(relationValue.targetRowId, targetColumn.id) as Record<string, unknown> | undefined;
-  if (!raw) throw payloadInvalid();
-  return parseCollectionCellValue(parseRawCell(targetColumn, raw), targetColumn.logicalType);
+  ).get(relationTarget.targetRowId, targetColumn!.id) as Record<string, unknown> | undefined;
+  if (!raw) return null;
+  const value = parseCollectionCellValue(parseRawCell(targetColumn!, raw), targetColumn!.logicalType);
+  return typeof value === "number" && Number.isFinite(value) ? (Object.is(value, -0) ? 0 : value) : null;
 }
 
-export function executeLookupAdd(input: {
+export function executeRollupAdd(input: {
   readonly vaultPath?: string;
-  readonly request: CollectionAddLookupColumnRequest;
+  readonly request: CollectionAddRollupColumnRequest;
   readonly isVaultActive: () => boolean;
   readonly readSnapshot: (binding: BundleBinding, tableId: string) => CollectionSnapshot | undefined;
   readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
-}): CollectionAddLookupColumnResult {
-  const request = CollectionAddLookupColumnRequestSchema.parse(input.request);
+}): CollectionAddRollupColumnResult {
+  const request = CollectionAddRollupColumnRequestSchema.parse(input.request);
   const identity = resultIdentity(request);
-  if (!input.vaultPath) return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "not_found" });
+  if (!input.vaultPath) return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "not_found" });
   try {
     const binding = readBundle(input.vaultPath, request.datasetId);
-    if (!binding) return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "not_found" });
-    const mutation = createLookupIdentity(request);
-    const adopted = adoptLookupAdd(binding, request, mutation, input.readSnapshot, input.createOperation);
+    if (!binding) return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "not_found" });
+    const mutation = createRollupIdentity(request);
+    const adopted = adoptRollupAdd(binding, request, mutation, input.readSnapshot, input.createOperation);
     if (adopted) return adopted;
     const snapshot = input.readSnapshot(binding, request.tableId);
-    if (!snapshot) return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "not_found" });
+    if (!snapshot) return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "not_found" });
     if (binding.manifest.activeRevision !== request.expectedRevisionId) {
-      return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+      return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
     }
-    const committed = commitLookupAdd(binding, request, mutation);
+    const committed = commitRollupAdd(binding, request, mutation);
     const operation = input.createOperation(committed.binding, committed.revision);
     writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
-    if (!input.isVaultActive()) return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "not_found" });
+    if (!input.isVaultActive()) return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "not_found" });
     const next = input.readSnapshot(committed.binding, request.tableId);
     if (!next) throw payloadInvalid();
-    return CollectionAddLookupColumnResultSchema.parse({
+    return CollectionAddRollupColumnResultSchema.parse({
       ...identity, status: "committed", columnId: mutation.columnId, operationId: operation.id, snapshot: next
     });
   } catch (caught) {
@@ -129,15 +135,15 @@ export function executeLookupAdd(input: {
     const current = input.vaultPath ? readBundle(input.vaultPath, request.datasetId) : undefined;
     const snapshot = current ? input.readSnapshot(current, request.tableId) : undefined;
     if (snapshot && current?.manifest.activeRevision !== request.expectedRevisionId) {
-      return CollectionAddLookupColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+      return CollectionAddRollupColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
     }
-    return CollectionAddLookupColumnResultSchema.parse({
+    return CollectionAddRollupColumnResultSchema.parse({
       ...identity, status: caught instanceof PigeDomainError ? "ineligible" : "failed"
     });
   }
 }
 
-export function commitLookupUndoOperation(input: {
+export function commitRollupUndoOperation(input: {
   readonly binding: BundleBinding;
   readonly identity: { readonly revisionId: string; readonly operationId: string };
   readonly afterRevisionId: string;
@@ -148,7 +154,7 @@ export function commitLookupUndoOperation(input: {
   const current = requireCurrent(input.binding, input.afterRevisionId);
   const after = readRevisionById(current, input.afterRevisionId);
   const before = readRevisionById(current, input.beforeRevisionId);
-  if (after.change?.kind !== "collection_lookup_add" || after.parentRevisionId !== before.id) throw requestConflict();
+  if (after.change?.kind !== "collection_rollup_add" || after.parentRevisionId !== before.id) throw requestConflict();
   const beforeSchema = DatasetSchemaRecordSchema.parse(readJsonRef(current.bundlePath, before.schema));
   const committed = publishMutation({
     current,
@@ -156,8 +162,9 @@ export function commitLookupUndoOperation(input: {
     tableId: after.change.tableId,
     columnId: after.change.columnId,
     change: {
-      kind: "collection_lookup_add_undo", relationColumnId: after.change.relationColumnId,
-      targetColumnId: after.change.targetColumnId, undoOfOperationId: input.undoOfOperationId
+      kind: "collection_rollup_add_undo", relationColumnId: after.change.relationColumnId,
+      aggregation: after.change.aggregation, ...(after.change.targetColumnId ? { targetColumnId: after.change.targetColumnId } : {}),
+      undoOfOperationId: input.undoOfOperationId
     },
     mutate: (database) => {
       if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'")
@@ -175,32 +182,53 @@ export function commitLookupUndoOperation(input: {
   return { revision: committed.revision, operation };
 }
 
-function commitLookupAdd(binding: BundleBinding, request: CollectionAddLookupColumnRequest,
-  identity: LookupMutationIdentity): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
+export function assertRollupTrashGuards(input: {
+  readonly binding: BundleBinding;
+  readonly tableId: string;
+  readonly columnId: string;
+}): void {
+  const current = requireCurrent(input.binding, input.binding.manifest.activeRevision);
+  const table = current.schema.tables.find((candidate) => candidate.id === input.tableId);
+  if (!table?.columns.some((candidate) => candidate.id === input.columnId)) {
+    throw new PigeDomainError("collection.column_not_found", "The Collection column is unavailable.");
+  }
+  if (current.schema.tables.some((candidate) => candidate.columns.some((column) =>
+    column.rollup?.relationColumnId === input.columnId || column.rollup?.targetColumnId === input.columnId))) {
+    throw new PigeDomainError("collection.rollup_inbound", "The Collection column is required by a rollup.");
+  }
+}
+
+function commitRollupAdd(binding: BundleBinding, request: CollectionAddRollupColumnRequest,
+  identity: RollupMutationIdentity): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
   const current = requireCurrent(binding, request.expectedRevisionId);
   const table = current.schema.tables.find((candidate) => candidate.id === request.tableId);
   const relationColumn = table?.columns.find((candidate) => candidate.id === request.relationColumnId);
   const targetTable = relationColumn?.relation
     ? current.schema.tables.find((candidate) => candidate.id === relationColumn.relation?.targetTableId)
     : undefined;
-  const targetColumn = targetTable?.columns.find((candidate) => candidate.id === request.targetColumnId);
-  if (!table || !relationColumn?.relation || !targetTable || !targetColumn || !isLookupTarget(targetColumn) ||
-      table.columns.length >= MAX_COLLECTION_COLUMNS ||
-      table.columns.some((column) => normalize(column.name) === normalize(request.label))) {
-    throw new PigeDomainError("collection.lookup_ineligible", "The lookup descriptor is ineligible.");
+  const targetColumn = request.targetColumnId
+    ? targetTable?.columns.find((candidate) => candidate.id === request.targetColumnId)
+    : undefined;
+  if (!table || !relationColumn?.relation || !targetTable || table.columns.length >= MAX_COLLECTION_COLUMNS ||
+      table.columns.some((column) => normalize(column.name) === normalize(request.label)) ||
+      (request.aggregation === "sum" && (!targetColumn || !isRollupTarget(targetColumn)))) {
+    throw new PigeDomainError("collection.rollup_ineligible", "The rollup descriptor is ineligible.");
   }
+  const rollup = {
+    kind: "pige_single_rollup" as const, schemaVersion: 1 as const,
+    relationColumnId: relationColumn.id, aggregation: request.aggregation,
+    ...(targetColumn ? { targetColumnId: targetColumn.id } : {})
+  };
   const column: DatasetColumn = {
     id: identity.columnId, name: request.label.trim(), ordinal: table.columns.length,
-    sourceType: LOOKUP_SOURCE_TYPE, sourceTypes: [LOOKUP_SOURCE_TYPE],
-    logicalType: targetColumn.logicalType, nullable: true,
-    lookup: { kind: "pige_single_lookup", schemaVersion: 1,
-      relationColumnId: relationColumn.id, targetColumnId: targetColumn.id },
-    stats: { missing: 0, empty: 0, null: table.rowCount, value: 0 }
+    sourceType: ROLLUP_SOURCE_TYPE, sourceTypes: [ROLLUP_SOURCE_TYPE], logicalType: "number", nullable: true,
+    rollup, stats: { missing: 0, empty: 0, null: table.rowCount, value: 0 }
   };
   return publishMutation({
     current, identity, tableId: table.id, columnId: column.id,
-    change: { kind: "collection_lookup_add", relationColumnId: relationColumn.id, targetColumnId: targetColumn.id },
-    mutate: (database) => addLookupColumn(database, table, column, identity.revisionId),
+    change: { kind: "collection_rollup_add", relationColumnId: relationColumn.id,
+      aggregation: request.aggregation, ...(targetColumn ? { targetColumnId: targetColumn.id } : {}) },
+    mutate: (database) => addRollupColumn(database, table, column, identity.revisionId),
     schema: DatasetSchemaRecordSchema.parse({
       ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString(),
       tables: current.schema.tables.map((candidate) => candidate.id === table.id
@@ -214,10 +242,10 @@ function commitLookupAdd(binding: BundleBinding, request: CollectionAddLookupCol
 
 function publishMutation(input: {
   readonly current: BundleBinding;
-  readonly identity: LookupMutationIdentity;
+  readonly identity: RollupMutationIdentity;
   readonly tableId: string;
   readonly columnId: string;
-  readonly change: Record<string, unknown> & { readonly kind: "collection_lookup_add" | "collection_lookup_add_undo" };
+  readonly change: Record<string, unknown> & { readonly kind: "collection_rollup_add" | "collection_rollup_add_undo" };
   readonly mutate: (database: DatabaseSync) => void;
   readonly sourcePayload?: string;
   readonly sourceRevisionId?: string;
@@ -256,12 +284,12 @@ function publishMutation(input: {
       schema: revision.schema, payload: revision.payload, updatedAt: now
     }));
     const binding = readBundle(input.current.vaultPath, input.current.manifest.datasetId);
-    if (!binding || binding.manifest.activeRevision !== revision.id) throw new PigeDomainError("collection.commit_uncertain", "The lookup commit could not be adopted.");
+    if (!binding || binding.manifest.activeRevision !== revision.id) throw new PigeDomainError("collection.commit_uncertain", "The rollup commit could not be adopted.");
     return { binding, revision };
   } finally { fs.rmSync(stagedRoot, { recursive: true, force: true }); }
 }
 
-function addLookupColumn(database: DatabaseSync, table: BundleBinding["schema"]["tables"][number],
+function addRollupColumn(database: DatabaseSync, table: BundleBinding["schema"]["tables"][number],
   column: DatasetColumn, revisionId: string): void {
   database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)").run(
     column.id, table.id, column.ordinal, column.name, "derived", JSON.stringify(column.sourceTypes), JSON.stringify(column.stats)
@@ -274,25 +302,26 @@ function addLookupColumn(database: DatabaseSync, table: BundleBinding["schema"][
     "VALUES (?, ?, 'null', ?, NULL, NULL, NULL, ?, 'null', NULL, NULL)"
   ].join(" "));
   for (const row of rows) {
-    if (typeof row.row_id !== "string" || insert.run(row.row_id, column.id, LOOKUP_SOURCE_TYPE, LOOKUP_PROJECTION_KIND).changes !== 1) throw payloadInvalid();
+    if (typeof row.row_id !== "string" || insert.run(row.row_id, column.id, ROLLUP_SOURCE_TYPE, ROLLUP_PROJECTION_KIND).changes !== 1) throw payloadInvalid();
   }
   if (database.prepare("UPDATE pige_dataset_tables SET column_count = column_count + 1 WHERE table_id = ? AND column_count = ?")
     .run(table.id, table.columnCount).changes !== 1 ||
     database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId).changes !== 1) throw payloadInvalid();
 }
 
-function adoptLookupAdd(binding: BundleBinding, request: CollectionAddLookupColumnRequest,
-  identity: LookupMutationIdentity,
+function adoptRollupAdd(binding: BundleBinding, request: CollectionAddRollupColumnRequest,
+  identity: RollupMutationIdentity,
   readSnapshot: (binding: BundleBinding, tableId: string) => CollectionSnapshot | undefined,
   createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord
-): CollectionAddLookupColumnResult | undefined {
+): CollectionAddRollupColumnResult | undefined {
   const revisionPath = resolveBundleRelativePath(binding.bundlePath, `revisions/${identity.revisionId}.json`);
   if (!fs.existsSync(revisionPath)) return undefined;
   const revision = DatasetRevisionSchema.parse(readJsonBounded(revisionPath, MAX_COLLECTION_JSON_BYTES));
   if (revision.id !== identity.revisionId || revision.operationId !== identity.operationId ||
-      revision.parentRevisionId !== request.expectedRevisionId || revision.change?.kind !== "collection_lookup_add" ||
+      revision.parentRevisionId !== request.expectedRevisionId || revision.change?.kind !== "collection_rollup_add" ||
       revision.change.tableId !== request.tableId || revision.change.columnId !== identity.columnId ||
-      revision.change.relationColumnId !== request.relationColumnId || revision.change.targetColumnId !== request.targetColumnId) throw requestConflict();
+      revision.change.relationColumnId !== request.relationColumnId || revision.change.aggregation !== request.aggregation ||
+      revision.change.targetColumnId !== request.targetColumnId) throw requestConflict();
   let current = binding;
   if (current.manifest.activeRevision !== revision.id) {
     if (current.manifest.activeRevision !== request.expectedRevisionId) throw requestConflict();
@@ -314,7 +343,7 @@ function adoptLookupAdd(binding: BundleBinding, request: CollectionAddLookupColu
   if (!fs.existsSync(operationPath)) writeJsonExclusive(operationPath, operation);
   const snapshot = readSnapshot(current, request.tableId);
   if (!snapshot) throw requestConflict();
-  return CollectionAddLookupColumnResultSchema.parse({
+  return CollectionAddRollupColumnResultSchema.parse({
     ...resultIdentity(request), status: "committed", columnId: identity.columnId,
     operationId: operation.id, snapshot
   });
@@ -328,19 +357,19 @@ function parseRawCell(column: DatasetColumn, raw: Record<string, unknown>): Omit
     projectionJson: raw.projection_json, formulaJson: raw.formula_json };
 }
 
-function isLookupTarget(column: DatasetColumn): boolean {
+function isRollupTarget(column: DatasetColumn): boolean {
   return !column.calculation && !column.relation && !column.lookup && !column.rollup &&
     ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula")) &&
-    SCALAR_TYPES.has(column.logicalType);
+    (column.logicalType === "integer" || column.logicalType === "number");
 }
 
-function createLookupIdentity(request: CollectionAddLookupColumnRequest): LookupMutationIdentity {
+function createRollupIdentity(request: CollectionAddRollupColumnRequest): RollupMutationIdentity {
   const dateKey = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u.exec(request.expectedRevisionId)?.[1];
   if (!dateKey) throw requestConflict();
   return {
-    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-lookup-add:v1", request.requestId).slice(0, 20)}`,
-    operationId: `op_${dateKey}_${digest("pige:collection-lookup-add-operation:v1", request.requestId).slice(0, 20)}`,
-    columnId: `column_${digest("pige:collection-lookup-column:v1", request.tableId, request.requestId).slice(0, 20)}`
+    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-rollup-add:v1", request.requestId).slice(0, 20)}`,
+    operationId: `op_${dateKey}_${digest("pige:collection-rollup-add-operation:v1", request.requestId).slice(0, 20)}`,
+    columnId: `column_${digest("pige:collection-rollup-column:v1", request.tableId, request.requestId).slice(0, 20)}`
   };
 }
 
@@ -349,10 +378,10 @@ function requireCurrent(binding: BundleBinding, revisionId: string): BundleBindi
   if (!current || current.manifest.activeRevision !== revisionId) throw new PigeDomainError("collection.revision_changed", "The Collection revision changed.");
   return current;
 }
-function resultIdentity(request: CollectionAddLookupColumnRequest) { return {
+function resultIdentity(request: CollectionAddRollupColumnRequest) { return {
   apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
-  datasetId: request.datasetId, tableId: request.tableId,
-  relationColumnId: request.relationColumnId, targetColumnId: request.targetColumnId
+  datasetId: request.datasetId, tableId: request.tableId, relationColumnId: request.relationColumnId,
+  aggregation: request.aggregation, ...(request.targetColumnId ? { targetColumnId: request.targetColumnId } : {})
 }; }
 function normalize(value: string): string { return value.trim().normalize("NFC").toLocaleLowerCase("en-US"); }
 function digest(...parts: readonly string[]): string {
