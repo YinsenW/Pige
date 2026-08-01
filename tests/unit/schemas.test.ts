@@ -3827,6 +3827,12 @@ describe("schemas", () => {
       results: []
     } as const;
     expect(RetrievalSearchResultSchema.parse(result)).toEqual(result);
+    expect(RetrievalSearchResultSchema.parse({
+      ...result,
+      mode: "lexical_sqlite_fts",
+      degraded: true,
+      degradedReason: "local_rag_unavailable"
+    })).toMatchObject({ degraded: true, degradedReason: "local_rag_unavailable" });
     expect(() => RetrievalSearchResultSchema.parse({ ...result, mode: "semantic_only" })).toThrow();
   });
 

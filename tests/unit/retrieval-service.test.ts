@@ -349,6 +349,37 @@ Useful public idea about retrieval.
     expect(result.results[0]?.summary.title).toBe("Indexed Retrieval");
   });
 
+  it("keeps lexical evidence visible when the enabled semantic adapter is degraded", async () => {
+    const { vaultPath, vault } = makeVault();
+    const database = new LocalDatabaseService();
+    writePage(vaultPath, "wiki/degraded-semantic.md", {
+      id: "page_20260709_degraded1",
+      title: "Degraded Semantic Retrieval",
+      body: "Lexical evidence remains usable when the enabled semantic adapter is unavailable."
+    });
+    database.rebuild(vaultPath);
+    const retrieval = new RetrievalService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    }, database, {
+      search: async (_vaultPath, _request, lexical) => ({
+        ...lexical,
+        degraded: true,
+        degradedReason: "local_rag_unavailable"
+      })
+    } as never);
+
+    const result = await retrieval.searchCurrent({
+      scope: { kind: "active_vault", vaultId: vault.vaultId },
+      query: "semantic adapter unavailable"
+    });
+
+    expect(result.mode).toBe("lexical_sqlite_fts");
+    expect(result.degraded).toBe(true);
+    expect(result.degradedReason).toBe("local_rag_unavailable");
+    expect(result.results[0]?.summary.title).toBe("Degraded Semantic Retrieval");
+  });
+
   it("projects SQLite FTS snippets into the renderer character bound", () => {
     const { vaultPath, vault } = makeVault();
     const retrieval = makeIndexedRetrieval(vaultPath, vault);

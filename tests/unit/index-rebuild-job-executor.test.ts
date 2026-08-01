@@ -59,7 +59,7 @@ describe("IndexRebuildJobExecutor", () => {
     });
   });
 
-  it("rebuilds semantic vectors in the same Job and preserves lexical completion on semantic failure", async () => {
+  it("rebuilds semantic vectors in the same Job and retains a retryable degraded Job on adapter failure", async () => {
     const readyFixture = makeQueuedJob("job_20260723_indexsemantic1", "/vault-semantic");
     const failedFixture = makeQueuedJob("job_20260723_indexsemantic2", "/vault-semantic");
     const semanticRebuild = vi.fn()
@@ -81,15 +81,39 @@ describe("IndexRebuildJobExecutor", () => {
     }, { rebuild: semanticRebuild });
 
     await expect(executor.process()).resolves.toMatchObject({ completed: 1, failed: 0 });
-    await expect(executor.process()).resolves.toMatchObject({ completed: 1, failed: 0 });
+    await expect(executor.process()).resolves.toMatchObject({ completed: 0, failed: 1 });
 
     expect(semanticRebuild).toHaveBeenNthCalledWith(1, "/vault-semantic", readyFixture.control.signal);
     expect(semanticRebuild).toHaveBeenNthCalledWith(2, "/vault-semantic", failedFixture.control.signal);
     expect(readyFixture.complete).toHaveBeenCalledWith("completed", expect.stringContaining("2 pages"));
-    expect(failedFixture.complete).toHaveBeenCalledWith(
-      "completed_with_warnings",
-      expect.stringContaining("lexical search is available")
+    expect(failedFixture.complete).not.toHaveBeenCalled();
+    expect(failedFixture.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "rag.semantic_index_failed" }),
+      expect.stringContaining("Lexical search is available")
     );
+  });
+
+  it("keeps an enabled but unavailable embedding adapter retryable instead of reporting success", async () => {
+    const fixture = makeQueuedJob("job_20260723_indexunavailable", "/vault-semantic");
+    const executor = new IndexRebuildJobExecutor({
+      rebuildInWorker: async () => ({
+        rebuiltAt: "2026-07-23T03:00:00.000Z",
+        pageCount: 2,
+        invalidPageCount: 0
+      })
+    }, {
+      bind: () => ({ vaultPath: "/vault-semantic" }),
+      createJob: () => fixture.job,
+      queued: () => [fixture.candidate],
+      appendActivity: vi.fn()
+    }, { rebuild: async () => "unavailable" });
+
+    await expect(executor.process()).resolves.toEqual({ processed: 1, completed: 0, failed: 1 });
+    expect(fixture.fail).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "rag.embedding_runtime_unavailable" }),
+      expect.stringContaining("retry this Job")
+    );
+    expect(fixture.finish).toHaveBeenCalledOnce();
   });
 
   it("keeps a queued job waiting when the local database capability is unavailable", async () => {

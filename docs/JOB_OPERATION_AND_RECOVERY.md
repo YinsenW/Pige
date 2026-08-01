@@ -113,6 +113,11 @@ Required v0.1 job classes:
 | `agent_turn` | unified Home text and bounded preserved attachments | conversation events, answer/source/proposal refs | During model/tool stages | Yes |
 | `retrieval_query` | legacy Home grounded-answer record | conversation event, optional saved page | Yes | Usually yes |
 | `index_rebuild` | FTS/vector/graph rebuild | SQLite/index files | Yes | Yes |
+
+An enabled Local RAG asset makes vector publication part of the `index_rebuild` Job's
+success condition. Embedding-runtime or vector-generation failure keeps lexical search
+available, exposes a degraded result in Home, and leaves the durable Job retryable across
+restart; a disabled optional asset keeps the lexical-only completion path healthy.
 | `backup` | create backup zip | backup archive and manifest | Yes before finalization | Yes |
 | `restore` | preview/apply backup | restored vault, restore report | Preview yes, apply guarded | Only through new preview |
 | `permissioned_skill` | external/Web Skill action | operation/proposal/tool output | Depends on action | Depends on action |

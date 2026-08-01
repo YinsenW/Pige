@@ -33,6 +33,7 @@ interface RegisterLocalSemanticRetrievalIpcOptions {
   readonly enable: (
     request: LocalSemanticRetrievalEnableRequest
   ) => LocalSemanticRetrievalEnableResult | Promise<LocalSemanticRetrievalEnableResult>;
+  readonly onEnabled?: () => void;
   readonly disable: (
     request: LocalSemanticRetrievalDisableRequest
   ) => LocalSemanticRetrievalDisableResult | Promise<LocalSemanticRetrievalDisableResult>;
@@ -97,7 +98,11 @@ export function registerLocalSemanticRetrievalIpc(
     const result = await invokeMutation(parsed, async () =>
       LocalSemanticRetrievalEnableResultSchema.parse(await options.enable(parsed))
     );
-    return LocalSemanticRetrievalEnableResultSchema.parse(result);
+    const parsedResult = LocalSemanticRetrievalEnableResultSchema.parse(result);
+    if (parsedResult.status === "committed" || parsedResult.status === "already_enabled") {
+      options.onEnabled?.();
+    }
+    return parsedResult;
   });
 
   options.ipcMain.handle("retrieval.disableLocalSemanticAsset", async (_event, request: unknown) => {

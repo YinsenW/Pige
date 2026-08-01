@@ -2252,6 +2252,7 @@ const getLocalRagEngineService = (): LocalRagEngineService => {
     localRagEngineService = new LocalRagEngineService({
       database: getLocalDatabaseService(),
       embeddings: getLocalSemanticEmbeddingRuntime(),
+      embeddingAssetEnabled: () => getLocalSemanticRetrievalService().embeddingModelInstalled(),
       reranker: getLocalRerankerRuntime(),
       createVectorPort: (vaultPath) => createPackagedSqliteVectorIndexDriver({
         rootPath: join(vaultPath, ".pige", "indexes", "vectors")
@@ -2267,7 +2268,6 @@ const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
       appDataRoot: app.getPath("userData"),
       onAssetRevoked: () => localSemanticEmbeddingRuntime?.dispose()
     });
-    void localSemanticRetrievalService.recover();
   }
   return localSemanticRetrievalService;
 };
@@ -3200,6 +3200,7 @@ registerLocalSemanticRetrievalIpc({
   status: (request) => getLocalSemanticRetrievalService().status(request),
   install: (request) => getLocalSemanticRetrievalService().install(request),
   enable: (request) => getLocalSemanticRetrievalService().enable(request),
+  onEnabled: scheduleActivityIndexRebuild,
   disable: (request) => getLocalSemanticRetrievalService().disable(request),
   remove: (request) => getLocalSemanticRetrievalService().remove(request)
 });
@@ -3995,6 +3996,7 @@ app.whenReady().then(async () => {
     getLocalRagEngineService(),
     getOcrLanguagePreferenceService()
   );
+  await getLocalSemanticRetrievalService().recover();
   jobStateEventService = new JobStateEventService(
     getVaultService(),
     jobsService,

@@ -35,6 +35,7 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
       revision: 8,
       status: "committed" as const
     })),
+    onEnabled: vi.fn(),
     disable: vi.fn((input: typeof request) => ({
       apiVersion: 1 as const,
       requestId: input.requestId,
@@ -89,8 +90,32 @@ describe("registerLocalSemanticRetrievalIpc", () => {
     }
     expect(callbacks.install).toHaveBeenCalledWith(request);
     expect(callbacks.enable).toHaveBeenCalledWith(request);
+    expect(callbacks.onEnabled).toHaveBeenCalledOnce();
     expect(callbacks.disable).toHaveBeenCalledWith(request);
     expect(callbacks.remove).toHaveBeenCalledWith(request);
+  });
+
+  it("starts the current-vault semantic rebuild only after a settled enable", async () => {
+    const committed = makeHarness();
+    await committed.handlers.get("retrieval.enableLocalSemanticAsset")!(
+      {} as IpcMainInvokeEvent,
+      request
+    );
+    expect(committed.callbacks.onEnabled).toHaveBeenCalledOnce();
+
+    const stale = makeHarness({
+      enable: vi.fn((input: typeof request) => ({
+        apiVersion: 1 as const,
+        requestId: input.requestId,
+        revision: input.expectedRevision,
+        status: "stale" as const
+      }))
+    });
+    await stale.handlers.get("retrieval.enableLocalSemanticAsset")!(
+      {} as IpcMainInvokeEvent,
+      request
+    );
+    expect(stale.callbacks.onEnabled).not.toHaveBeenCalled();
   });
 
   it("rejects malformed requests and strictly parses status results", async () => {
