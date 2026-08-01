@@ -2124,6 +2124,8 @@ describe("desktop shell build contract", () => {
     expect(mainUndoHandler).toContain("getLibraryTagRenameService().redo(request)");
     expect(mainUndoHandler).toContain("getNoteMergeService().redo(request)");
     expect(mainUndoHandler).toContain("getKnowledgeHealthDuplicateTopicService().redo(request)");
+    expect(mainUndoHandler).toContain("getKnowledgeActivityService().redo(request)");
+    expect(mainSource).toContain("getAgentPageUpdateRedoService()");
     expect(mainUndoHandler).toContain('trashResult.status === "not_found"');
     expect(mainSource).toContain("recoverIncompleteUndos()");
     expect(mainSource).toContain("recoverIncompleteRedos()");

@@ -264,6 +264,7 @@ import { LibraryTagRenameService } from "./services/library-tag-rename-service";
 import { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import { LibraryTagsService } from "./services/library-tags-service";
 import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
+import { AgentPageUpdateRedoService } from "./services/agent-page-update-redo-service";
 import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
@@ -475,6 +476,7 @@ let jobCompactionService: JobCompactionService | undefined;
 let jobStateEventService: JobStateEventService | undefined;
 let jobClassExecutorRegistry: JobClassExecutorRegistry | undefined;
 let knowledgeActivityService: KnowledgeActivityService | undefined;
+let agentPageUpdateRedoService: AgentPageUpdateRedoService | undefined;
 let knowledgeHealthService: KnowledgeHealthService | undefined;
 let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService | undefined;
 let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
@@ -2216,11 +2218,15 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
       getNoteMarkdownEditorActivityAdapter(),
       getAgentMemoryService(),
       createNotePageLifecycleActivityPort(),
-      getSourceRefreshService()
+      getSourceRefreshService(),
+      getAgentPageUpdateRedoService()
     );
   }
   return knowledgeActivityService;
 };
+
+const getAgentPageUpdateRedoService = (): AgentPageUpdateRedoService =>
+  agentPageUpdateRedoService ??= new AgentPageUpdateRedoService();
 
 const getManagedCollectionService = (): ManagedCollectionService => {
   if (!managedCollectionService) {
@@ -3452,8 +3458,9 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
   const result = duplicateTopicResult.status === "not_found"
     ? getNoteMarkdownEditorRedoService().redo(request)
     : duplicateTopicResult;
-  if (result.status === "redone" || result.status === "already_redone") scheduleActivityIndexRebuild();
-  return result;
+  const agentResult = result.status === "not_found" ? getKnowledgeActivityService().redo(request) : result;
+  if (agentResult.status === "redone" || agentResult.status === "already_redone") scheduleActivityIndexRebuild();
+  return agentResult;
 });
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle(LIBRARY_BROWSE_CHANNEL, (_event, request: LibraryBrowseRequest) => {
@@ -4077,13 +4084,15 @@ app.whenReady().then(async () => {
   noteMarkdownImportService = new NoteMarkdownImportService(getVaultService(), getNotesService());
   documentParserService = new DocumentParserService();
   sourceRefreshService = undefined;
+  agentPageUpdateRedoService = new AgentPageUpdateRedoService();
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
     createManagedCollectionActivityPort(),
     noteMarkdownEditorActivityAdapter,
     getAgentMemoryService(),
     createNotePageLifecycleActivityPort(),
-    getSourceRefreshService()
+    getSourceRefreshService(),
+    agentPageUpdateRedoService
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {
     snapshot: getAgentCapabilitySnapshot

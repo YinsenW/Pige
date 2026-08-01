@@ -4,6 +4,8 @@ import path from "node:path";
 import type {
   KnowledgeActivityListRequest, KnowledgeActivityListResult,
   KnowledgeActivitySummary,
+  KnowledgeActivityRedoRequest,
+  KnowledgeActivityRedoResult,
   KnowledgeActivityUndoRequest,
   KnowledgeActivityUndoResult,
   VaultSummary
@@ -30,6 +32,7 @@ export interface KnowledgeActivityEditorPort { activitySummary(operation: Operat
 export interface KnowledgeActivityMemoryPort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityPageLifecyclePort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivitySourcePort { activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined; findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined; undo(operation: OperationRecord): KnowledgeActivityUndoResult; recoverIncompleteOperations(): KnowledgeActivityRecoveryResult; }
+export interface KnowledgeActivityAgentRedoPort { activityState(vaultPath: string, operation: OperationRecord, undo: OperationRecord | undefined, operations: readonly OperationRecord[]): Pick<KnowledgeActivitySummary, "canRedo" | "redoUnavailableReason"> | undefined; redo(vaultPath: string, operation: OperationRecord, undo: OperationRecord | undefined, operations: readonly OperationRecord[], expectedRevisionId?: string): KnowledgeActivityRedoResult; recoverIncompleteRedos(vaultPath: string, operations: readonly OperationRecord[]): KnowledgeActivityRecoveryResult; }
 export interface KnowledgeActivityRecoveryResult { readonly recovered: number; readonly failed: number; }
 interface OperationScanResult {
   readonly operations: readonly OperationRecord[];
@@ -56,9 +59,9 @@ const GENERATED_PAGE_PATH = /^wiki\/generated\/\d{4}\/page_\d{8}_[a-z0-9]{8,}\.m
 const OPERATION_ID = /^op_\d{8}_[a-z0-9]{8,}$/u;
 const CONTENT_HASH = /^sha256:[a-f0-9]{64}$/u;
 export class KnowledgeActivityService {
-  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined; readonly #memory: KnowledgeActivityMemoryPort | undefined; readonly #pages: KnowledgeActivityPageLifecyclePort | undefined; readonly #sources: KnowledgeActivitySourcePort | undefined; readonly #history = new KnowledgeActivityHistory();
-  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort, memory?: KnowledgeActivityMemoryPort, pages?: KnowledgeActivityPageLifecyclePort, sources?: KnowledgeActivitySourcePort) {
-    this.#vaults = vaults; this.#collections = collections; this.#editor = editor; this.#memory = memory; this.#pages = pages; this.#sources = sources;
+  readonly #vaults: KnowledgeActivityVaultPort; readonly #collections: KnowledgeActivityCollectionPort | undefined; readonly #editor: KnowledgeActivityEditorPort | undefined; readonly #memory: KnowledgeActivityMemoryPort | undefined; readonly #pages: KnowledgeActivityPageLifecyclePort | undefined; readonly #sources: KnowledgeActivitySourcePort | undefined; readonly #agentRedo: KnowledgeActivityAgentRedoPort | undefined; readonly #history = new KnowledgeActivityHistory();
+  constructor(vaults: KnowledgeActivityVaultPort, collections?: KnowledgeActivityCollectionPort, editor?: KnowledgeActivityEditorPort, memory?: KnowledgeActivityMemoryPort, pages?: KnowledgeActivityPageLifecyclePort, sources?: KnowledgeActivitySourcePort, agentRedo?: KnowledgeActivityAgentRedoPort) {
+    this.#vaults = vaults; this.#collections = collections; this.#editor = editor; this.#memory = memory; this.#pages = pages; this.#sources = sources; this.#agentRedo = agentRedo;
   }
   list(request: KnowledgeActivityListRequest = {}): KnowledgeActivityListResult {
     if (!request || typeof request !== "object") {
@@ -76,9 +79,19 @@ export class KnowledgeActivityService {
         const source = this.#sources?.activitySummary(operation, this.#sources.findUndoOperation(operation, scan.operations)); const page = this.#pages?.activitySummary(operation, this.#pages.findUndoOperation(operation, scan.operations)); const memory = this.#memory?.activitySummary(operation, this.#memory.findUndoOperation(operation, scan.operations)); const editor = this.#editor?.activitySummary(operation, this.#editor.findUndoOperation(operation, scan.operations));
         if (source) return source; if (page) return page; if (memory) return memory; if (editor) return editor;
         if (isCollectionActivityOperation(operation) && this.#collections) return this.#collections.activitySummary(operation, this.#collections.findUndoOperation(operation, scan.operations));
-        return isKnowledgeActivityOperation(operation) ? toActivitySummary(vaultPath, operation, undoByOperationId.get(operation.id)) : undefined;
+        if (!isKnowledgeActivityOperation(operation)) return undefined;
+        const undo = undoByOperationId.get(operation.id); const summary = toActivitySummary(vaultPath, operation, undo);
+        const redo = this.#agentRedo?.activityState(vaultPath, operation, undo, scan.operations);
+        return redo ? { ...summary, ...redo } : summary;
       }
     });
+  }
+  redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    if (!request || typeof request !== "object" || !OPERATION_ID.test(request.operationId)) throw new PigeDomainError("activity.invalid_operation_id", "The Activity operation identity is invalid.");
+    const vaultPath = this.#requireActiveVaultPath(); const scan = readOperationRecords(vaultPath);
+    const operation = scan.operations.find(({ id }) => id === request.operationId);
+    if (!operation || !this.#agentRedo) return { status: "not_found", operationId: request.operationId };
+    return this.#agentRedo.redo(vaultPath, operation, createUndoOperationMap(scan.operations).get(operation.id), scan.operations, request.expectedRevisionId);
   }
   undo(request: KnowledgeActivityUndoRequest): KnowledgeActivityUndoResult | Promise<KnowledgeActivityUndoResult> {
     if (
@@ -168,7 +181,7 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
-    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const memory = this.#memory?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const pages = this.#pages?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const sources = this.#sources?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + collections.recovered + editor.recovered + memory.recovered + pages.recovered + sources.recovered, failed: failed + collections.failed + editor.failed + memory.failed + pages.failed + sources.failed };
+    const agentRedo = this.#agentRedo?.recoverIncompleteRedos(vaultPath, scan.operations) ?? { recovered: 0, failed: 0 }; const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const memory = this.#memory?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const pages = this.#pages?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const sources = this.#sources?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + agentRedo.recovered + collections.recovered + editor.recovered + memory.recovered + pages.recovered + sources.recovered, failed: failed + agentRedo.failed + collections.failed + editor.failed + memory.failed + pages.failed + sources.failed };
   }
   #requireActiveVault(): VaultSummary {
     const activeVault = this.#vaults.current();

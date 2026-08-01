@@ -14,8 +14,13 @@ import {
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
 import {
   createAgentPageUpdateBeforePath,
+  createAgentPageUpdateStagedPath,
   createAgentPageUpdateUndoOperationId
 } from "../../apps/desktop/src/main/services/agent-page-update-service";
+import {
+  AgentPageUpdateRedoService,
+  createAgentPageUpdateRedoOperationId
+} from "../../apps/desktop/src/main/services/agent-page-update-redo-service";
 
 const temporaryRoots: string[] = [];
 
@@ -442,6 +447,102 @@ describe("Knowledge Activity and Undo", () => {
       total: 0,
       activities: []
     });
+  });
+
+  it.each([false, true])("redoes an exact Agent page update after Undo and adopts replay across restart (current note: %s)", (currentNoteAppend) => {
+    const fixture = createUpdateFixture({ currentNoteAppend });
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    const undo = service.undo({ operationId: fixture.operation.id });
+    expect(undo).toMatchObject({ status: "undone" });
+    expect(service.list().activities[0]).toMatchObject({
+      status: "undone",
+      canRedo: true
+    });
+
+    const first = service.redo({
+      operationId: fixture.operation.id,
+      expectedRevisionId: hash(fixture.beforeContent)
+    });
+    expect(first).toMatchObject({
+      status: "redone",
+      operationId: fixture.operation.id,
+      undoOperationId: undo.undoOperationId,
+      revisionId: hash(fixture.afterContent)
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.afterContent);
+    expect(createActivityServiceWithAgentRedo(fixture.vaults).redo({ operationId: fixture.operation.id }))
+      .toMatchObject({ status: "already_redone", redoOperationId: first.redoOperationId });
+    expect(createActivityServiceWithAgentRedo(fixture.vaults).list().activities[0]).toMatchObject({
+      status: "undone",
+      canRedo: false,
+      redoUnavailableReason: "already_redone"
+    });
+  });
+
+  it("keeps an undone Agent update unchanged when the live page drifts before Redo", () => {
+    const fixture = createUpdateFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    const external = `${fixture.beforeContent}\nExternal correction after Undo.\n`;
+    fs.writeFileSync(fixture.pagePath, external, "utf8");
+
+    expect(service.list().activities[0]).toMatchObject({
+      canRedo: false,
+      redoUnavailableReason: "content_changed"
+    });
+    expect(service.redo({ operationId: fixture.operation.id })).toMatchObject({
+      status: "stale",
+      currentRevisionId: hash(external)
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(external);
+    expect(fs.existsSync(operationPath(
+      fixture.vaultPath,
+      createAgentPageUpdateRedoOperationId(fixture.operation.id)
+    ))).toBe(false);
+  });
+
+  it("withholds Agent Redo when its private after-image is tampered", () => {
+    const fixture = createUpdateFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    const undoAfterPath = path.join(
+      fixture.vaultPath,
+      ...createAgentPageUpdateBeforePath(createAgentPageUpdateUndoOperationId(fixture.operation.id)).split("/")
+    );
+    fs.writeFileSync(undoAfterPath, `${fixture.afterContent}\nTampered private marker.\n`, "utf8");
+
+    expect(service.list().activities[0]).toMatchObject({
+      canRedo: false,
+      redoUnavailableReason: "content_changed"
+    });
+    expect(() => service.redo({ operationId: fixture.operation.id })).toThrowError(PigeDomainError);
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.beforeContent);
+  });
+
+  it("recovers one interrupted Agent page Redo after replacement and before Operation commit", () => {
+    const fixture = createUpdateFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    const redoId = createAgentPageUpdateRedoOperationId(fixture.operation.id);
+    const redoBeforePath = path.join(fixture.vaultPath, ...createAgentPageUpdateBeforePath(redoId).split("/"));
+    const redoStagedPath = path.join(fixture.vaultPath, ...createAgentPageUpdateStagedPath(redoId).split("/"));
+    fs.mkdirSync(path.dirname(redoBeforePath), { recursive: true });
+    fs.writeFileSync(redoBeforePath, fixture.beforeContent, { encoding: "utf8", mode: 0o600 });
+    fs.writeFileSync(redoStagedPath, fixture.afterContent, { encoding: "utf8", mode: 0o600 });
+    fs.writeFileSync(fixture.pagePath, fixture.afterContent, { encoding: "utf8", mode: 0o600 });
+
+    const restarted = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 1, failed: 0 });
+    expect(requireOperation(fixture.vaultPath, redoId)).toMatchObject({
+      kind: "update_page",
+      actor: { kind: "user" },
+      sourceRefs: [
+        { kind: "operation", id: fixture.operation.id },
+        { kind: "operation", id: createAgentPageUpdateUndoOperationId(fixture.operation.id) }
+      ]
+    });
+    expect(fs.existsSync(redoStagedPath)).toBe(false);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 0, failed: 0 });
   });
 
   it("recovers an interrupted update Undo from its durable post-update marker", () => {
@@ -1204,6 +1305,18 @@ function requireOperation(vaultPath: string, operationId: string): OperationReco
   const operation = readOperations(vaultPath).find((candidate) => candidate.id === operationId);
   if (!operation) throw new Error(`Expected Operation ${operationId}.`);
   return operation;
+}
+
+function createActivityServiceWithAgentRedo(vaults: KnowledgeActivityVaultPort): KnowledgeActivityService {
+  return new KnowledgeActivityService(
+    vaults,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new AgentPageUpdateRedoService()
+  );
 }
 
 function writeOperation(vaultPath: string, operation: OperationRecord): void {
