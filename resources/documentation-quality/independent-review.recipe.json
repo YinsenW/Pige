@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Individual Agent Memory trash inventory and direct restore now bind exact receipts, Operations, restart recovery, strict IPC and body-free Settings evidence while remaining lifecycle gaps stay explicit.",
+    "scope": "Agent Memory individual-delete and reset-wide trash restore now share exact receipts, Operations, restart recovery, strict IPC and body-free Settings evidence while remaining lifecycle gaps stay explicit.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "9293d916fb378b8a1621b3597a87cb1d8aa44acba9ebdaed5d08b2b6d98646b8"
+    "reviewedSha256": "aa9cdf7fa46098bbd5bcd5d27b8181e9419f2601d971d8354854cf282a715908"
   },
   "reviewers": [
     {

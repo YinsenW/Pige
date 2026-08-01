@@ -112,7 +112,8 @@ import {
   MemoryListRequest,
   MemoryMutationResult,
   MemoryResetRequest,
-  MemorySummary
+  MemorySummary,
+  type MemoryTrashSummary
 } from "@pige/schemas";
 
 const globalKeys = [
@@ -6109,7 +6110,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("lists deleted Memory without bodies and restores it through exact trash authority", async () => {
+  it("lists and restores deleted and reset Memory through exact body-free trash authority", async () => {
     const dom = createDom();
     const summary = memorySummary(4, "active");
     const restoredRecord = {
@@ -6118,7 +6119,7 @@ describe("full UI Settings surface", () => {
       title: "Restored preference",
       body: "Private restored body that is absent from trash inventory."
     } as const;
-    const listTrash = vi.fn(async () => ({
+    let trashState: MemoryTrashSummary = {
       apiVersion: 1 as const,
       activeVaultId: summary.activeVaultId,
       revision: summary.revision,
@@ -6128,17 +6129,28 @@ describe("full UI Settings surface", () => {
         kind: "preference" as const,
         title: restoredRecord.title,
         trashedAt: "2026-08-02T01:00:00.000Z"
+      }],
+      resets: [{
+        trashOperationId: "op_20260802_memoryresetui",
+        itemCount: 2,
+        trashedAt: "2026-08-02T00:30:00.000Z"
       }]
-    }));
-    const restoreTrash = vi.fn(async (request) => ({
-      apiVersion: 1 as const,
-      requestId: request.requestId,
-      activeVaultId: request.activeVaultId,
-      status: "committed" as const,
-      operationId: "op_20260802_memoryrestoreui",
-      summary: { ...summary, revision: 5, records: [...summary.records, restoredRecord] },
-      trash: { apiVersion: 1 as const, activeVaultId: summary.activeVaultId, revision: 5, records: [] }
-    }));
+    };
+    const listTrash = vi.fn(async () => trashState);
+    const restoreTrash = vi.fn(async (request) => {
+      const reset = request.memoryId === undefined;
+      trashState = { ...trashState, revision: reset ? 6 : 5,
+        records: reset ? trashState.records : [], resets: reset ? [] : trashState.resets };
+      return {
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        status: "committed" as const,
+        operationId: "op_20260802_memoryrestoreui",
+        summary: { ...summary, revision: trashState.revision, records: [...summary.records, restoredRecord] },
+        trash: trashState
+      };
+    });
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: { memory: {
@@ -6166,6 +6178,17 @@ describe("full UI Settings surface", () => {
     }));
     expect(dom.window.document.body.textContent).toContain(restoredRecord.body);
     expect(dom.window.document.body.textContent).toContain("The memory was restored.");
+
+    await act(async () => {
+      buttonNamed(dom.window.document, "Restore reset").click();
+      await settle(dom);
+    });
+    expect(restoreTrash).toHaveBeenLastCalledWith(expect.objectContaining({
+      activeVaultId: summary.activeVaultId,
+      trashOperationId: "op_20260802_memoryresetui",
+      expectedRevision: 5
+    }));
+    expect(restoreTrash.mock.calls.at(-1)?.[0]).not.toHaveProperty("memoryId");
 
     await act(async () => root.unmount());
     dom.window.close();

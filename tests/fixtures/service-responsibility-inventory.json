@@ -3,7 +3,7 @@
   "baseline": "f76a9e7469741fc945ac7acd48258183aa821844",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 307,
-  "baselineLines": 130148,
+  "baselineLines": 130165,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -30,7 +30,7 @@
       ["agent-context-pack.ts", 261, "ar"],
       ["assistant-answer-note-service.ts", 317, "ard"],
       ["agent-memory-lifecycle.ts", 695, "rd"],
-      ["agent-memory-trash-service.ts", 193, "rd"],
+      ["agent-memory-trash-service.ts", 210, "rd"],
       ["agent-page-create-redo-service.ts", 284, "rd"],
       ["agent-page-update-redo-service.ts", 280, "rd"],
       ["agent-page-update-service.ts", 1556, "rdf"],

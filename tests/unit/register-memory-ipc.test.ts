@@ -44,7 +44,8 @@ const trashSummary = {
     kind: "preference",
     title: "Concise replies",
     trashedAt: "2026-07-27T10:02:00.000Z"
-  }]
+  }],
+  resets: []
 } as const;
 
 function makeHarness(overrides: {
@@ -78,7 +79,7 @@ function makeHarness(overrides: {
     status: "committed" as const,
     operationId: "op_20260727_memoryrestore",
     summary,
-    trash: { ...trashSummary, records: [] }
+    trash: { ...trashSummary, records: [], resets: [] }
   }));
   const exportMemory = vi.fn(overrides.exportMemory ?? ((_binding, request) => ({
     apiVersion: 1,

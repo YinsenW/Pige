@@ -5472,17 +5472,17 @@ Date: 2026-08-02
 
 Decision:
 
-Expose individually deleted vault-scoped Agent Memory through a body-free Settings trash inventory and restore it only through the exact durable delete Operation and existing Memory Undo owner.
+Expose individually deleted or reset vault-scoped Agent Memory through a body-free Settings trash inventory and restore it only through the exact durable Operation and existing Memory Undo owner.
 
 Rationale:
 
-Memory deletion was already trash-first, reversible and restart-safe through Activity, but users could not discover or restore a deleted item directly from the Memory surface. A narrow projection of stable identity, kind, title and deletion time closes that workflow without projecting private Memory bodies, provenance, paths or receipt internals.
+Memory deletion and reset were already trash-first, reversible and restart-safe through Activity, but users could not discover or restore them directly from the Memory surface. A narrow projection of stable identity plus single-delete title/kind/time or reset count/time closes that workflow without projecting private Memory bodies, provenance, paths or receipt internals.
 
 Consequences:
 
 - Main rereads and validates the exact delete receipt, Operation and restore chain before minting restore authority.
 - Restore is registry-revision fenced, preserves unrelated Memory records and converges through the existing `restore_memory` Operation across restart.
-- Reset-wide direct restore, remaining durable classes, compaction, cleanup, migration and permanent-delete confirmation remain open; PIGE-VAULT-004 and E9.04 stay partial.
+- Remaining durable classes, compaction, cleanup, migration and permanent-delete confirmation remain open; PIGE-VAULT-004 and E9.04 stay partial.
 
 References:
 

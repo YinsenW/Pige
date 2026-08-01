@@ -5558,6 +5558,11 @@ describe("schemas", () => {
         kind: "preference",
         title: "Concise replies",
         trashedAt: "2026-07-27T10:02:00.000Z"
+      }],
+      resets: [{
+        trashOperationId: "op_20260727_memoryreset01",
+        itemCount: 3,
+        trashedAt: "2026-07-27T10:03:00.000Z"
       }]
     });
     expect(JSON.stringify(trash)).not.toMatch(/body|path|provenance/u);
@@ -5576,6 +5581,13 @@ describe("schemas", () => {
     })).toMatchObject({ status: "committed", trash: { records: [] } });
     expect(() => MemoryTrashRestoreRequestSchema.parse({ ...restoreRequest, receiptPath: ".pige/trash/memory/private.json" }))
       .toThrow();
+    expect(MemoryTrashRestoreRequestSchema.parse({
+      apiVersion: 1,
+      requestId: restoreRequest.requestId,
+      activeVaultId: restoreRequest.activeVaultId,
+      expectedRevision: restoreRequest.expectedRevision,
+      trashOperationId: trash.resets[0]!.trashOperationId
+    })).not.toHaveProperty("memoryId");
 
     expect(MemoryExportRequestSchema.parse(resetRequest)).toEqual(resetRequest);
     for (const status of ["exported", "cancelled", "stale", "failed"] as const) {

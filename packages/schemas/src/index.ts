@@ -4160,11 +4160,17 @@ export const MemoryTrashRecordSummarySchema = z.object({
   title: z.string().trim().min(1).max(120),
   trashedAt: z.string().datetime({ offset: true })
 }).strict();
+export const MemoryTrashResetSummarySchema = z.object({
+  trashOperationId: OperationIdSchema,
+  itemCount: z.number().int().positive().max(1_000),
+  trashedAt: z.string().datetime({ offset: true })
+}).strict();
 export const MemoryTrashSummarySchema = z.object({
   apiVersion: z.literal(1),
   activeVaultId: VaultIdSchema,
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-  records: z.array(MemoryTrashRecordSummarySchema).max(1_000)
+  records: z.array(MemoryTrashRecordSummarySchema).max(1_000),
+  resets: z.array(MemoryTrashResetSummarySchema).max(1_000)
 }).strict();
 export const MemoryTrashListRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -4174,7 +4180,7 @@ export const MemoryTrashRestoreRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: MemoryRequestIdSchema,
   activeVaultId: VaultIdSchema,
-  memoryId: MemoryRecordIdSchema,
+  memoryId: MemoryRecordIdSchema.optional(),
   trashOperationId: OperationIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
 }).strict();
@@ -13146,6 +13152,7 @@ export type MemorySummary = z.infer<typeof MemorySummarySchema>;
 export type MemoryListRequest = z.infer<typeof MemoryListRequestSchema>;
 export type MemoryRequestId = z.infer<typeof MemoryRequestIdSchema>;
 export type MemoryTrashRecordSummary = z.infer<typeof MemoryTrashRecordSummarySchema>;
+export type MemoryTrashResetSummary = z.infer<typeof MemoryTrashResetSummarySchema>;
 export type MemoryTrashSummary = z.infer<typeof MemoryTrashSummarySchema>;
 export type MemoryTrashListRequest = z.infer<typeof MemoryTrashListRequestSchema>;
 export type MemoryTrashRestoreRequest = z.infer<typeof MemoryTrashRestoreRequestSchema>;
