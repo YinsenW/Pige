@@ -7,35 +7,48 @@ import type {
   RetrievalSearchResultItem,
 } from "@pige/contracts";
 
-export type LibraryFamily = "all" | "notes" | "sources" | "topics" | "tags";
-export type LibraryResultGroup = "notes" | "sources" | "topics";
+export type LibraryFamily = "all" | "notes" | "sources" | "topics" | "concepts" | "entities" | "claims" | "questions" | "tags";
+export type LibraryResultGroup = Exclude<LibraryFamily, "all" | "tags">;
 export type LibrarySearchState =
   | { readonly kind: "idle" }
   | { readonly kind: "loading"; readonly query: string; readonly family: LibraryFamily }
   | { readonly kind: "result"; readonly query: string; readonly family: LibraryFamily; readonly result: RetrievalSearchResult }
   | { readonly kind: "error"; readonly query: string; readonly family: LibraryFamily };
 
-export const LIBRARY_FAMILIES: readonly LibraryFamily[] = ["all", "notes", "sources", "topics", "tags"];
-export const LIBRARY_RESULT_GROUPS: readonly LibraryResultGroup[] = ["notes", "sources", "topics"];
-const LIBRARY_TOPIC_PAGE_TYPES = ["topic", "concept", "entity", "claim", "question"] as const;
+export const LIBRARY_FAMILIES: readonly LibraryFamily[] = [
+  "all", "notes", "sources", "topics", "concepts", "entities", "claims", "questions", "tags"
+];
+export const LIBRARY_RESULT_GROUPS: readonly LibraryResultGroup[] = [
+  "notes", "sources", "topics", "concepts", "entities", "claims", "questions"
+];
 
 export function libraryFamilyPageTypes(family: LibraryFamily): RetrievalSearchRequest["pageTypes"] | undefined {
   if (family === "notes") return ["note"];
   if (family === "sources") return ["source"];
-  if (family === "topics") return LIBRARY_TOPIC_PAGE_TYPES;
+  if (family === "topics") return ["topic"];
+  if (family === "concepts") return ["concept"];
+  if (family === "entities") return ["entity"];
+  if (family === "claims") return ["claim"];
+  if (family === "questions") return ["question"];
   return undefined;
 }
 
 function libraryResultGroup(page: LibraryPageSummary): LibraryResultGroup {
   if (page.pageType === "source") return "sources";
   if (page.pageType === "note") return "notes";
-  return "topics";
+  if (page.pageType === "topic") return "topics";
+  if (page.pageType === "concept") return "concepts";
+  if (page.pageType === "entity") return "entities";
+  if (page.pageType === "claim") return "claims";
+  return "questions";
 }
 
 export function groupLibrarySearchItems(
   items: readonly RetrievalSearchResultItem[]
 ): Record<LibraryResultGroup, readonly RetrievalSearchResultItem[]> {
-  const groups: Record<LibraryResultGroup, RetrievalSearchResultItem[]> = { notes: [], sources: [], topics: [] };
+  const groups: Record<LibraryResultGroup, RetrievalSearchResultItem[]> = {
+    notes: [], sources: [], topics: [], concepts: [], entities: [], claims: [], questions: []
+  };
   for (const item of items) groups[libraryResultGroup(item.summary)].push(item);
   return groups;
 }
