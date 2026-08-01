@@ -643,6 +643,129 @@ describe("Agent-selected ingest retrieval tool", () => {
       .some((item) => item.summary.pageId === UPDATE_PAGE_ID)).toBe(false);
   });
 
+  it("stages a lower-confidence relationship for review, applies it once, and keeps exact Undo", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    writeLinkTargetPage(fixture.vaultPath);
+    const fromPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const beforeFrom = fs.readFileSync(fromPath, "utf8");
+    const proposals = new ProposalService(fixture.vaultPort);
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_link_review");
+      await invokeTool(request, "pige_search_knowledge", { query: "connect managed knowledge" }, "search_link_review");
+      await request.beforeModelTurn?.();
+      await invokeTool(request, "pige_link_knowledge_notes", {
+        ...existingNoteLinkInput(),
+        confidence: "medium"
+      }, "link_review");
+      return runtimeResult(request, ["pige_inspect_source", "pige_search_knowledge", "pige_link_knowledge_notes"]);
+    });
+    const retrieval = new RecordingRetrievalPort(
+      fixture,
+      (request) => makeLinkSearchResult(fixture, request.query)
+    );
+    const agentIngest = new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval,
+      {
+        findForJob: (vaultPath, jobId) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal recovery escaped the active vault.");
+          return proposals.findForJob(jobId);
+        },
+        stage: (vaultPath, request) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal staging escaped the active vault.");
+          return proposals.stage(request);
+        }
+      }
+    );
+    const jobs = new JobsService(fixture.vaultPort, agentIngest);
+    const capture = submitText(fixture, "This source suggests, but does not conclusively prove, the note relationship.");
+    expect(jobs.processQueuedCaptures({ jobIds: [capture.jobId] }).completed).toBe(1);
+    const parent = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+
+    await jobs.processQueuedAgentIngest({ jobIds: [parent.id] });
+    expect(readJob(fixture.vaultPath, parent.id).error).toBeUndefined();
+    const proposalSummary = requireValue(proposals.list().proposals[0]);
+    const proposal = proposals.get({ proposalId: proposalSummary.id }).proposal;
+    expect(proposal.jobId).toBe(parent.id);
+    expect(readJob(fixture.vaultPath, parent.id)).toMatchObject({
+      state: "awaiting_review",
+      proposalIds: [proposal.id]
+    });
+    expect(proposal).toMatchObject({
+      state: "ready",
+      trustLevel: "review_required",
+      proposedOperations: [{ kind: "update", path: UPDATE_PAGE_PATH }]
+    });
+    expect(fs.readFileSync(fromPath, "utf8")).toBe(beforeFrom);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page")).toEqual([]);
+
+    const decision = await jobs.approveProposal(proposals, {
+      proposalId: proposal.id,
+      reason: "The suggested link is useful and grounded."
+    });
+    expect(decision.status).toBe("applied");
+    expect(fs.readFileSync(fromPath, "utf8")).toContain(`](#wiki:${encodeURIComponent(LINK_TARGET_PAGE_ID)})`);
+    const operation = requireValue(readOperations(fixture.vaultPath).find((candidate) =>
+      candidate.kind === "update_page" && candidate.jobId === parent.id
+    ));
+    expect(readJob(fixture.vaultPath, parent.id)).toMatchObject({
+      state: "completed",
+      operationIds: expect.arrayContaining([operation.id])
+    });
+    const activity = new KnowledgeActivityService(fixture.vaultPort);
+    expect(activity.undo({ operationId: operation.id }).status).toBe("undone");
+    expect(fs.readFileSync(fromPath, "utf8")).toBe(beforeFrom);
+  });
+
+  it("rejects a suggested relationship without changing either note or creating an Operation", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    writeLinkTargetPage(fixture.vaultPath);
+    const fromPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const toPath = path.join(fixture.vaultPath, ...LINK_TARGET_PAGE_PATH.split("/"));
+    const beforeFrom = fs.readFileSync(fromPath, "utf8");
+    const beforeTo = fs.readFileSync(toPath, "utf8");
+    const proposals = new ProposalService(fixture.vaultPort);
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_link_reject");
+      await invokeTool(request, "pige_search_knowledge", { query: "connect managed knowledge" }, "search_link_reject");
+      await request.beforeModelTurn?.();
+      await invokeTool(request, "pige_link_knowledge_notes", {
+        ...existingNoteLinkInput(), confidence: "low"
+      }, "link_reject");
+      return runtimeResult(request, ["pige_inspect_source", "pige_search_knowledge", "pige_link_knowledge_notes"]);
+    });
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeLinkSearchResult(fixture, request.query));
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(
+      modelPort(), runtime, undefined, undefined, undefined, retrieval, {
+        findForJob: (vaultPath, jobId) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal recovery escaped the active vault.");
+          return proposals.findForJob(jobId);
+        },
+        stage: (vaultPath, request) => {
+          if (vaultPath !== fixture.vaultPath) throw new Error("Proposal staging escaped the active vault.");
+          return proposals.stage(request);
+        }
+      }
+    ));
+    const capture = submitText(fixture, "This source weakly suggests a possible relationship for human review.");
+    expect(jobs.processQueuedCaptures({ jobIds: [capture.jobId] }).completed).toBe(1);
+    const parent = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    expect((await jobs.processQueuedAgentIngest({ jobIds: [parent.id] })).completed).toBe(1);
+    const proposalId = requireValue(proposals.list().proposals[0]).id;
+
+    expect(jobs.rejectProposal(proposals, { proposalId, reason: "Do not add this link." }).status).toBe("rejected");
+    expect(readJob(fixture.vaultPath, parent.id).state).toBe("completed_with_warnings");
+    expect(fs.readFileSync(fromPath, "utf8")).toBe(beforeFrom);
+    expect(fs.readFileSync(toPath, "utf8")).toBe(beforeTo);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page")).toEqual([]);
+  });
+
   it("recovers a page-first note link with the exact destination revision and no duplicate Operation", () => {
     const fixture = makeVault();
     writeUpdateTargetPage(fixture.vaultPath);
