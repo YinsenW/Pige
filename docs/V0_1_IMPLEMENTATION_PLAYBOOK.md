@@ -571,9 +571,10 @@ Build:
 - [B7.02 -> E7.01] Bounded escaped exceptional preview; unified conflict diff remains open.
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; autonomous eligibility and generic operations remain open.
 - [B7.04 -> E7.01] Hash-bound create/update/tag/link recovery plus `trash_page` or inverse `update_page`; other mutations open.
-- [B7.05 -> E7.02] Explicit "remember this" flow with provenance.
+- [B7.05 -> E7.02] Explicit and exact authored preference/correction/workflow memory with private provenance.
 - [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
-- [B7.07 -> E7.05] Secret scanning before memory persistence.
+- [B7.07 -> E7.05] Secret and authority-change guards before autonomous vault-memory persistence;
+  durable `create_memory` Activity/Undo and restart adoption close the reversible effect.
 - [B7.08 -> E7.03] Bounded vault history reopens exact timelines; packaged proof remains.
 - [B7.09 -> E7.04] Implemented deterministic 90-day compaction for settled successful
   Job detail with exact reference retention, `compact_job` attribution, CAS drift

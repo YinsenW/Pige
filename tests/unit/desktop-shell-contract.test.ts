@@ -2074,6 +2074,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain('| "rename_collection_column"');
     expect(contractsSource).toContain('| "trash_collection_column"');
     expect(contractsSource).toContain('| "trash_collection_row"');
+    expect(contractsSource).toContain('| "create_memory"');
     expect(contractsSource).toContain('| "update_memory"');
     expect(contractsSource).toContain('| "trash_memory"');
     expect(contractsSource).toContain('| "restore_memory"');
@@ -2085,6 +2086,8 @@ describe("desktop shell build contract", () => {
     expect(activityPanelSource).toContain('"activity.updatedPage"');
     expect(activityPanelSource).toContain('activity.kind === "rename_page"');
     expect(activityPanelSource).toContain('"activity.renamedPage"');
+    expect(activityPanelSource).toContain('activity.kind === "create_memory"');
+    expect(activityPanelSource).toContain('"activity.createdMemory"');
     expect(activityPanelSource).toContain('"activity.createdPage"');
     expect(rendererSource).toContain('onUndo={undoActivity}');
     expect(undoHandler).toContain('window.pige.activity.list({ limit: 20 })');

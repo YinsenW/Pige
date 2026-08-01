@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentMemoryService } from "../../apps/desktop/src/main/services/agent-memory-service";
+import {
+  createMemoryOperationId,
+  createMemoryRequestId
+} from "../../apps/desktop/src/main/services/agent-memory-lifecycle";
 import type { OperationRecord } from "@pige/schemas";
 
 const roots: string[] = [];
@@ -45,11 +49,11 @@ describe("AgentMemoryService", () => {
     fs.rmSync(atomPath);
     expect(service.rememberPreference(rememberRequest).id).toBe(record.id);
     expect(fs.existsSync(atomPath)).toBe(true);
-    expect(service.rememberPreference({
+    expect(() => service.rememberPreference({
       ...rememberRequest,
       title: "Different retry title",
       body: "api_key=sk-retried-secret-value-123456789"
-    }).id).toBe(record.id);
+    })).toThrowError(expect.objectContaining({ code: "memory.secret_blocked" }));
     expect(service.list(vaultPath, "vault_20260727_memorytest").records).toHaveLength(1);
 
     const stale = service.disable(vaultPath, {
@@ -87,6 +91,64 @@ describe("AgentMemoryService", () => {
 
     expect(service.list(vaultPath, "vault_20260727_memorytest").records).toEqual([]);
     expect(fs.existsSync(path.join(vaultPath, ".pige/memory/registry.json"))).toBe(false);
+  });
+
+  it("records an authored autonomous memory as create_memory and removes it through exact Activity Undo", () => {
+    const vaultPath = createVault();
+    const sourceEventId = "evt_20260727_autonomousmemory";
+    const service = new AgentMemoryService({ now: fixedClock(), activeVaultPath: () => vaultPath });
+    const request = {
+      vaultPath,
+      activeVaultId: VAULT_ID,
+      kind: "correction",
+      title: "The weekly review happens on Friday.",
+      body: "The weekly review happens on Friday.",
+      provenanceKind: "authored_user_statement",
+      actorKind: "pige_agent",
+      modelProfileId: "model_default",
+      sourceConversationId: "conv_20260727_autonomousmemory",
+      sourceEventId,
+      parentJobId: "job_20260727_autonomousmemory"
+    } as const;
+    const record = service.rememberPreference(request);
+    const operationId = createMemoryOperationId(
+      createMemoryRequestId(sourceEventId),
+      "2026-07-27T12:00:00.000Z"
+    );
+    const operation = readOperation(vaultPath, operationId);
+    expect(operation).toMatchObject({
+      kind: "create_memory",
+      actor: { kind: "pige_agent" },
+      jobId: "job_20260727_autonomousmemory",
+      modelProfileId: "model_default",
+      targetRefs: [{ kind: "memory", id: record.id }],
+      reversible: "yes"
+    });
+    expect(service.activitySummary(operation)).toMatchObject({
+      kind: "create_memory",
+      target: { kind: "memory", memoryId: record.id },
+      canUndo: true
+    });
+
+    const atomPath = path.join(vaultPath, ".pige/memory/atoms", `${record.id}.md`);
+    fs.rmSync(findOperationPath(vaultPath, operationId));
+    fs.rmSync(atomPath);
+    expect(service.rememberPreference(request)).toEqual(record);
+    expect(fs.readFileSync(atomPath, "utf8")).toContain("weekly review happens on Friday");
+    expect(readOperation(vaultPath, operationId)).toMatchObject({ kind: "create_memory" });
+
+    const undone = service.undo(readOperation(vaultPath, operationId), "1");
+    expect(undone).toMatchObject({ status: "undone", revisionId: "2" });
+    expect(service.list(vaultPath, VAULT_ID)).toMatchObject({ revision: 2, records: [] });
+    expect(fs.existsSync(atomPath)).toBe(false);
+    const inverse = readOperation(vaultPath, undone.undoOperationId!);
+    expect(inverse).toMatchObject({
+      kind: "trash_memory",
+      actor: { kind: "user" },
+      sourceRefs: [{ kind: "operation", id: operationId }]
+    });
+    expect(service.findUndoOperation(operation, [operation, inverse])).toEqual(inverse);
+    expect(service.activitySummary(operation, inverse)).toMatchObject({ status: "undone", canUndo: false });
   });
 
   it("rejects mismatched event provenance and ignores a stale fixed temporary file", () => {

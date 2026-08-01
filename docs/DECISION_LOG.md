@@ -4573,6 +4573,37 @@ References:
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 
+### D-20260801-Autonomous-Vault-Memory
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Pige may autonomously persist one exact current-user substring as a vault-scoped preference,
+correction or reusable workflow lesson. Host validation binds the authored turn, Job,
+conversation event and model, then secret-scans and rejects authority-changing content before effect.
+
+Rationale:
+
+Vault Memory should improve from direct user statements without treating source/model/tool text as
+authority or turning Memory into hidden policy. Exact authored evidence and one durable reversible
+effect keep that growth inspectable and user-controlled.
+
+Consequences:
+
+- One turn may create at most one bound atom through `pige_remember_authored_memory`.
+- The effect owns a restart-adoptable receipt, `create_memory` Operation and exact Activity Undo.
+- Sensitive or authority-changing memory requires explicit Settings intervention and cannot alter
+  permissions, confirmation behavior or Agent Runtime Policy Context.
+- Global memory and optional semantic recall remain deferred.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

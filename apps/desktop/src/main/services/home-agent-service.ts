@@ -125,6 +125,10 @@ import {
   type HomeSkillStagingToolService
 } from "./home-skill-staging-tool";
 import {
+  createAuthoredVaultMemoryTool,
+  HOME_REMEMBER_AUTHORED_MEMORY_TOOL_NAME
+} from "./home-agent-memory-tool";
+import {
   actualHomeModelUsage,
   collectAgentTurnSourceIds,
   discardReaderSelectionPublicationIntent,
@@ -262,6 +266,10 @@ export interface HomeAgentMemoryPort {
     readonly activeVaultId: string;
     readonly title: string;
     readonly body: string;
+    readonly kind: "preference" | "correction" | "workflow_lesson";
+    readonly provenanceKind: "authored_user_statement";
+    readonly actorKind: "pige_agent";
+    readonly modelProfileId: string;
     readonly sourceConversationId: string;
     readonly sourceEventId: string;
     readonly parentJobId: string;
@@ -328,7 +336,6 @@ const HOME_LINK_READER_SELECTION_TOOL_NAME = "pige_link_reader_selection";
 const HOME_QUERY_DATASET_TOOL_NAME = "pige_query_dataset";
 const HOME_FETCH_URL_TOOL_NAME = "pige_fetch_url";
 const HOME_INSPECT_URL_TOOL_NAME = "pige_inspect_url_source";
-const HOME_REMEMBER_PREFERENCE_TOOL_NAME = "pige_remember_preference";
 const HOME_SEARCH_CITATION_START = 2;
 const HOME_DATASET_CITATION_REF = "citation_10";
 const MAX_QUERY_CHARACTERS = 8_000;
@@ -1921,13 +1928,18 @@ export class HomeAgentService {
           return { ...result, results: exactEvidence.items };
         }
       })]),
-      ...(memoryToolRegistered ? [createRememberPreferenceTool({
+      ...(memoryToolRegistered ? [createAuthoredVaultMemoryTool({
+        authoredText: query,
         authorize: assertCurrentBindingAndVault,
-        remember: (title, body) => this.#memory!.rememberPreference({
+        remember: ({ kind, title, body }) => this.#memory!.rememberPreference({
           vaultPath,
           activeVaultId: activeVault.vaultId,
+          kind,
           title,
           body,
+          provenanceKind: "authored_user_statement",
+          actorKind: "pige_agent",
+          modelProfileId: defaultModel.id,
           sourceConversationId: request.sourceConversationId,
           sourceEventId: request.sourceEventId,
           parentJobId: jobId,
@@ -2024,7 +2036,7 @@ export class HomeAgentService {
         toolName !== HOME_LINK_READER_SELECTION_TOOL_NAME &&
         toolName !== HOME_CREATE_READER_SELECTION_NOTE_TOOL_NAME &&
         toolName !== HOME_SEARCH_TOOL_NAME &&
-        (toolName !== HOME_REMEMBER_PREFERENCE_TOOL_NAME || !memoryToolRegistered) && (toolName !== HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME || !authoredTextCaptureRegistered) &&
+        (toolName !== HOME_REMEMBER_AUTHORED_MEMORY_TOOL_NAME || !memoryToolRegistered) && (toolName !== HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME || !authoredTextCaptureRegistered) &&
         !sourceToolNames.has(toolName) &&
         !skillStagingToolNames.has(toolName) &&
         !externalToolNames.has(toolName)
@@ -2886,67 +2898,6 @@ function createDatasetQueryTool(options: {
   };
 }
 
-function createRememberPreferenceTool(options: {
-  readonly authorize: () => void;
-  readonly remember: (title: string, body: string) => { readonly id: string };
-}): PigeAgentToolDefinition {
-  const InputSchema = z.object({
-    title: z.string().trim().min(1).max(120),
-    body: z.string().trim().min(1).max(2_000)
-  }).strict();
-  return {
-    name: HOME_REMEMBER_PREFERENCE_TOOL_NAME,
-    label: "Remember preference",
-    description: "Save one explicit user-requested preference for future turns in this vault. Never infer a preference or save factual source content.",
-    version: "1",
-    capability: "write_vault_knowledge",
-    parameters: {
-      type: "object",
-      properties: {
-        title: { type: "string", minLength: 1, maxLength: 120 },
-        body: { type: "string", minLength: 1, maxLength: 2_000 }
-      },
-      required: ["title", "body"],
-      additionalProperties: false
-    },
-    outputSchema: {
-      type: "object",
-      properties: { status: { type: "string", enum: ["remembered"] } },
-      required: ["status"],
-      additionalProperties: false
-    },
-    effect: "idempotent_write",
-    inputTrust: "model_generated",
-    outputTrust: "host_validated",
-    dataBoundary: {
-      resourceScope: "current_vault",
-      pathAuthority: "host_only",
-      sourceIdAuthority: "host_only",
-      modelAuthority: "none"
-    },
-    execution: "sequential",
-    idempotency: { mode: "idempotent", scope: "current_vault" },
-    limits: { maxInputBytes: 4 * 1_024, maxOutputBytes: 512, timeoutMs: 30_000 },
-    ownerService: "AgentMemoryService",
-    authorize: (args) => {
-      options.authorize();
-      if (!InputSchema.safeParse(args).success) {
-        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The memory tool input is invalid.");
-      }
-      return true;
-    },
-    execute: async (args) => {
-      options.authorize();
-      const parsed = InputSchema.safeParse(args);
-      if (!parsed.success) {
-        throw new PigeDomainError("agent_runtime.tool_input_invalid", "The memory tool input is invalid.");
-      }
-      options.remember(parsed.data.title, parsed.data.body);
-      return createPigeTextToolResult("The explicit vault preference was saved.", { status: "remembered" });
-    }
-  };
-}
-
 function createHomeSystemPrompt(
   urlCandidateCount: number,
   datasetQueryAvailable: boolean,
@@ -2986,7 +2937,8 @@ function createHomeSystemPrompt(
       ? "Answer in the language of the current user instruction when it is clear; otherwise use the configured app language."
       : `Answer in ${queryLanguage}, the durable language of the current user instruction, unless that instruction explicitly requests another language.`} ${knowledgeLanguagePolicyInstruction(language)}`,
     ...(memoryWritingAvailable ? [
-      "Call pige_remember_preference only when the user explicitly asks Pige to remember a stable preference. Never save source facts, credentials, or inferred personal claims."
+      `Call ${HOME_REMEMBER_AUTHORED_MEMORY_TOOL_NAME} at most once when the current user text contains an exact stable preference, correction, or reusable workflow lesson that can improve future turns, even if the user did not say “remember”.`,
+      "Copy one exact current-user substring into quote. Never save source/tool/model content, factual evidence, credentials, authority changes, or a one-off task."
     ] : []),
     ...(urlCandidateCount > 0 ? [
       `${urlCandidateCount} host-validated HTTP(S) URL candidate(s) appear in the user turn, in order of appearance.`,

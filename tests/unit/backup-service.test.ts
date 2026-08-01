@@ -16,7 +16,7 @@ import {
   type RestoreCoreApplyInput,
   type RestoreCorePreviewResult
 } from "../../apps/desktop/src/main/services/backup-service";
-import { createMemoryEventId, createMemoryId } from "../../apps/desktop/src/main/services/agent-memory-lifecycle";
+import { createMemoryEventId, createMemoryId, createMemoryRequestId } from "../../apps/desktop/src/main/services/agent-memory-lifecycle";
 import { AgentMemoryService } from "../../apps/desktop/src/main/services/agent-memory-service";
 import {
   PIGE_DURABLE_ROOTS,
@@ -379,12 +379,15 @@ describe("backup restore service", () => {
       registryRevision: 6,
       eventCount: 2,
       recordCount: 2,
-      lifecycleReceiptCount: 2,
+      lifecycleReceiptCount: 5,
       restoreIntentCount: 0,
-      operationCount: 2
+      operationCount: 5
     });
     expect([...archive.entries.keys()]).toEqual(expect.arrayContaining([
       "vault/.pige/memory/registry.json",
+      `vault/.pige/memory/creates/${createMemoryRequestId("evt_20260714_backupfirst0001")}.json`,
+      `vault/.pige/memory/creates/${createMemoryRequestId("evt_20260714_backupsecond0001")}.json`,
+      `vault/.pige/memory/creates/${createMemoryRequestId("evt_20260714_backupthird0001")}.json`,
       "vault/.pige/memory/edits/memory_request_backupedit000001.json",
       "vault/.pige/trash/memory/memory_request_backupdelete0001.json"
     ]));

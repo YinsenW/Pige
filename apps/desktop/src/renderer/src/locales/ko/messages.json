@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "컬렉션 조회 필드 업데이트됨",
   "activity.addedCollectionRollup": "컬렉션 롤업 필드 추가됨",
   "activity.updatedCollectionRollup": "컬렉션 롤업 필드 업데이트됨",
+  "activity.createdMemory": "메모리 저장됨",
   "activity.updatedMemory": "메모리 업데이트됨",
   "activity.trashedMemory": "메모리를 휴지통으로 이동함",
   "activity.restoredMemory": "메모리 복원됨",

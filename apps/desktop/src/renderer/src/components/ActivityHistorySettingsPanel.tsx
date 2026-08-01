@@ -183,6 +183,8 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.updatedPage"
                 : activity.kind === "rename_page"
                   ? "activity.renamedPage"
+                : activity.kind === "create_memory"
+                  ? "activity.createdMemory"
                 : activity.kind === "update_memory"
                   ? "activity.updatedMemory"
                 : activity.kind === "trash_memory"

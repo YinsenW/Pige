@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "Collection lookup field updated",
   "activity.addedCollectionRollup": "Collection rollup field added",
   "activity.updatedCollectionRollup": "Collection rollup field updated",
+  "activity.createdMemory": "Memory saved",
   "activity.updatedMemory": "Memory updated",
   "activity.trashedMemory": "Memory moved to trash",
   "activity.restoredMemory": "Memory restored",

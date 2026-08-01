@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "Nachschlagefeld der Sammlung aktualisiert",
   "activity.addedCollectionRollup": "Rollup-Feld der Sammlung hinzugefügt",
   "activity.updatedCollectionRollup": "Rollup-Feld der Sammlung aktualisiert",
+  "activity.createdMemory": "Erinnerung gespeichert",
   "activity.updatedMemory": "Erinnerung aktualisiert",
   "activity.trashedMemory": "Erinnerung in den Papierkorb verschoben",
   "activity.restoredMemory": "Erinnerung wiederhergestellt",
