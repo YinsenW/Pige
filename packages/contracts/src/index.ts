@@ -1683,6 +1683,7 @@ export interface KnowledgeActivitySummary {
     | "restore_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
+    | "restore_collection_revision"
     | "trash_dataset"
     | "restore_dataset"
     | "purge_dataset"

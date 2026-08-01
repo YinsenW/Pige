@@ -1377,7 +1377,7 @@ describe("schemas", () => {
   });
 
   it("keeps Collection revision history bounded, pathless, and forward-only", () => {
-    const base = { apiVersion: 1 as const, requestId: "collection_request_historyschema01",
+    const base = { apiVersion: 1 as const, requestId: "collection_request_historyschema0001",
       activeVaultId: "vault_20260802_history", datasetId: "dataset_20260802_historyabcdef",
       expectedCurrentRevisionId: "dataset_rev_20260802_currentabcdef" };
     expect(CollectionListRevisionHistoryRequestSchema.parse({ ...base, limit: 25 })).toMatchObject({ limit: 25 });
@@ -1391,11 +1391,11 @@ describe("schemas", () => {
     expect(() => CollectionListRevisionHistoryResultSchema.parse({ ...base, status: "ready",
       currentRevisionId: base.expectedCurrentRevisionId, revisions: [], hasMore: false, nextCursor: cursor }))
       .toThrow("agree with hasMore");
-    const open = { ...base, requestId: "collection_request_historyschema02",
+    const open = { ...base, requestId: "collection_request_historyschema0002",
       revisionId: "dataset_rev_20260802_historyabcdef", tableId: "table_historyabcdef" };
     expect(CollectionOpenRevisionHistoryRequestSchema.parse(open)).toEqual(open);
     expect(CollectionOpenRevisionHistoryResultSchema.parse({ ...open, status: "not_found" })).toMatchObject({ status: "not_found" });
-    const restore = { ...open, requestId: "collection_request_historyschema03",
+    const restore = { ...open, requestId: "collection_request_historyschema0003",
       confirmation: "restore_as_new_revision" as const };
     expect(CollectionRestoreRevisionHistoryRequestSchema.parse(restore)).toEqual(restore);
     expect(CollectionRestoreRevisionHistoryResultSchema.parse({ ...restore, status: "ineligible" })).toMatchObject({ status: "ineligible" });

@@ -6,7 +6,7 @@ import { registerManagedCollectionHistoryIpc } from "../../apps/desktop/src/main
 
 type Handler = (event: IpcMainInvokeEvent, input: unknown) => unknown;
 const activeVaultId = "vault_20260727_collection";
-const base = { apiVersion: 1 as const, requestId: "collection_request_historyipc0001",
+const base = { apiVersion: 1 as const, requestId: "collection_request_historyipc000001",
   activeVaultId, datasetId: "dataset_20260727_abcdefghijkl",
   expectedCurrentRevisionId: "dataset_rev_20260727_abcdefghijkl" };
 
@@ -24,10 +24,10 @@ describe("registerManagedCollectionHistoryIpc", () => {
     expect(await handlers.get("collections.listRevisionHistory")!(event, { ...base, limit: 25 }))
       .toMatchObject({ status: "ready", currentRevisionId: base.expectedCurrentRevisionId });
     expect(await handlers.get("collections.openRevisionHistory")!(event, { ...base,
-      requestId: "collection_request_historyipc0002", revisionId: base.expectedCurrentRevisionId,
+      requestId: "collection_request_historyipc000002", revisionId: base.expectedCurrentRevisionId,
       tableId: "table_abcdefghijkl" })).toMatchObject({ status: "not_found" });
     expect(await handlers.get("collections.restoreRevisionHistory")!(event, { ...base,
-      requestId: "collection_request_historyipc0003", revisionId: "dataset_rev_20260727_bcdefghijklm",
+      requestId: "collection_request_historyipc000003", revisionId: "dataset_rev_20260727_bcdefghijklm",
       tableId: "table_abcdefghijkl", confirmation: "restore_as_new_revision" })).toMatchObject({ status: "not_found" });
     expect(list).toHaveBeenCalledOnce(); expect(open).toHaveBeenCalledOnce(); expect(restore).toHaveBeenCalledOnce();
 
