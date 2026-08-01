@@ -11257,6 +11257,8 @@ export const JobRecordSchema = z.object({
   conversationEventId: ConversationEventIdSchema.optional(),
   policyContextId: z.string().min(1).optional(),
   policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
+  contextPackId: z.string().regex(/^context_[a-f0-9]{16}$/).optional(),
+  contextPackHash: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
   inputRefs: z.array(JobRefSchema).optional(),
   outputRefs: z.array(JobRefSchema).optional(),
   permissionRequestIds: z.array(PermissionRequestIdSchema).max(32).refine(

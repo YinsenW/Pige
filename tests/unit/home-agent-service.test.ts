@@ -665,7 +665,12 @@ describe("Home Pi Agent service", () => {
     const jobs = new JobsService(fixture.vaults);
     const remembered: Array<Record<string, unknown>> = [];
     const memory = {
-      recall: () => [{ title: "Concise summaries", body: "Prefer concise summaries." }],
+      recall: () => [{
+        id: "memory_20260727_existingpref01",
+        title: "Concise summaries",
+        body: "Prefer concise summaries.",
+        updatedAt: "2026-07-27T00:00:00.000Z"
+      }],
       rememberPreference: (request: Record<string, unknown>) => {
         remembered.push(request);
         return { id: "memory_20260727_abcdefabcdefabcd" };
@@ -673,10 +678,12 @@ describe("Home Pi Agent service", () => {
     };
     let observedSystemPrompt = "";
     let observedUserPrompt = "";
+    let observedContextPack: PiAgentRunRequest["contextPack"];
     const runtime = {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
         observedSystemPrompt = request.systemPrompt;
         observedUserPrompt = request.userPrompt;
+        observedContextPack = request.contextPack;
         await request.beforeModelTurn?.();
         const tool = request.tools.find((candidate) => candidate.name === "pige_remember_authored_memory");
         if (!tool) throw new Error("Missing explicit memory tool.");
@@ -744,6 +751,15 @@ describe("Home Pi Agent service", () => {
     expect(observedUserPrompt).toContain("lower-authority memory context");
     expect(observedUserPrompt).toContain("Prefer concise summaries.");
     expect(observedUserPrompt).toContain("Current user instruction follows and overrides");
+    expect(observedContextPack?.memoryRefs).toEqual([
+      expect.objectContaining({ id: "memory_20260727_existingpref01", trust: "memory" })
+    ]);
+    expect(JSON.stringify(observedContextPack)).not.toContain("Prefer concise summaries.");
+    expect(jobs.readAgentTurnJob(outcome.jobId)).toMatchObject({
+      inputRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "memory", id: "memory_20260727_existingpref01", role: "agent_context_memory" })
+      ])
+    });
   });
 
   it("fails closed when vault memory is disabled by runtime policy", async () => {
@@ -1752,9 +1768,15 @@ describe("Home Pi Agent service", () => {
       state: "completed",
       privacy: { usedCloudModel: true, usedNetwork: true, usedShell: false, accessedExternalFiles: false }
     });
-    expect(jobs[0]?.inputRefs).toEqual([
-      expect.objectContaining({ kind: "conversation", role: "agent_turn_user_event", checksum: expect.stringMatching(/^sha256:/u) })
-    ]);
+    expect(jobs[0]).toMatchObject({
+      contextPackId: expect.stringMatching(/^context_[a-f0-9]{16}$/u),
+      contextPackHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
+    });
+    expect(jobs[0]?.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "conversation", role: "agent_turn_user_event", checksum: expect.stringMatching(/^sha256:/u) }),
+      expect.objectContaining({ kind: "tool", role: "agent_context_pack", id: jobs[0]?.contextPackId }),
+      expect.objectContaining({ kind: "conversation", role: "agent_context_conversation" })
+    ]));
     expect(operations).toEqual([]);
     const durableAudit = JSON.stringify({ jobs, operations });
     expect(durableAudit).not.toContain("When is the launch?");
@@ -3895,7 +3917,7 @@ describe("Home Pi Agent service", () => {
       new JobsService(fixture.vaults),
       runtime,
       undefined,
-      conversations
+      new AgentTurnConversationStore()
     );
     const result = await restarted.submitTurn({
       schemaVersion: 1,
@@ -3911,6 +3933,19 @@ describe("Home Pi Agent service", () => {
     expect(requests[0]?.history).toHaveLength(16);
     expect(requests[0]?.history[0]?.text).toContain("Earlier conversation context compacted by Pige");
     expect(requests[0]?.history.at(-1)?.text).toBe("Durable assistant turn 17.");
+    expect(requests[0]?.contextPack).toMatchObject({
+      workflow: "query",
+      retrievalScope: { kind: "vault", vaultId: fixture.vault.vaultId },
+      conversationRefs: [expect.objectContaining({ id: conversationId, trust: "vault_knowledge" })],
+      omitted: [expect.objectContaining({ reason: "conversation_compacted", count: expect.any(Number) })]
+    });
+    expect(requests[0]?.contextPack?.omitted[0]?.count).toBeGreaterThan(0);
+    expect(new JobsService(fixture.vaults).readAgentTurnJob(result.jobId)).toMatchObject({
+      contextPackId: requests[0]?.contextPack?.contextPackId,
+      inputRefs: expect.arrayContaining([
+        expect.objectContaining({ kind: "conversation", id: conversationId, role: "agent_context_conversation" })
+      ])
+    });
   });
 
   it("rejects a stale follow-up tail before creating a Job or invoking Pi", async () => {
@@ -5793,34 +5828,48 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(runtimeCalls).toBe(1);
   });
 
-  it("binds a current note and one preserved attachment into the same Pi evidence turn", async () => {
+  it("binds a current note and two preserved attachments into one restart-safe Pi context pack", async () => {
     const fixture = makeFixture();
     const models = makeModels();
     let observedPrompt = "";
     let observedTools: readonly string[] = [];
+    let observedContextPack: PiAgentRunRequest["contextPack"];
     const runtime = {
       run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
         observedPrompt = request.systemPrompt;
         observedTools = request.tools.map((tool) => tool.name);
+        observedContextPack = request.contextPack;
         return new PiAgentRuntimeAdapter({ fauxResponses: [
           { kind: "tool_call", toolName: "pige_read_current_note", args: {} },
+          { kind: "tool_call", toolName: "pige_list_attachments", args: {} },
+          { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_1" } },
           { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
-          { kind: "text", text: "The note and attachment were inspected together. [citation_1] [citation_11]" }
+          { kind: "tool_call", toolName: "pige_select_attachment", args: { attachmentRef: "attachment_2" } },
+          { kind: "tool_call", toolName: "pige_inspect_source", args: {} },
+          { kind: "text", text: "The note and both attachments were inspected together. [citation_1] [citation_11] [citation_12]" }
         ] }).run(request);
       }
     };
-    const jobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
-    const service = new HomeAgentService(
+    const initialJobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
+    const initialService = new HomeAgentService(
       fixture.vaults,
       models,
       makeRetrievalPort(fixture.vault.vaultId),
-      jobs,
+      initialJobs,
       runtime
     );
-    const sourcePath = path.join(path.dirname(fixture.vaultPath), "mixed-current-note.txt");
-    fs.writeFileSync(sourcePath, "The attachment adds one exact supporting fact.\n", "utf8");
+    const sourcePaths = ["first", "second"].map((label) => {
+      const sourcePath = path.join(path.dirname(fixture.vaultPath), `mixed-current-note-${label}.txt`);
+      fs.writeFileSync(sourcePath, `The ${label} attachment adds one exact supporting fact.\n`, "utf8");
+      return sourcePath;
+    });
+    const inputChecksums = sourcePaths.map((sourcePath) =>
+      `sha256:${createHash("sha256").update(fs.readFileSync(sourcePath)).digest("hex")}`
+    );
+    const attachmentSetHash = `sha256:${createHash("sha256")
+      .update(JSON.stringify(inputChecksums), "utf8").digest("hex")}`;
     const request = {
-      text: "Mix this note with an attachment.",
+      text: "Mix this note with both attachments.",
       inputKind: "file_picker",
       scope: { kind: "current_note", pageId: HOME_PAGE_ID },
       locale: "en",
@@ -5828,25 +5877,63 @@ SYNTHETIC_DISTRACTOR_BODY
     } as const;
     expect(AgentSubmitTurnRequestSchema.safeParse(request).success).toBe(true);
     expect(AgentSubmitTurnRequestSchema.safeParse({ ...request, inputKind: "file_drop" }).success).toBe(false);
-    const prepared = service.prepareSourceTurn(request);
+    const prepared = initialService.prepareSourceTurn(request, {
+      count: 2,
+      attachmentSetHash,
+      inputChecksums
+    });
     expect(prepared.request).toMatchObject({ scope: request.scope });
-    expect(jobs.readAgentTurnJob(prepared.jobId)?.inputRefs).toEqual(expect.arrayContaining([
+    expect(initialJobs.readAgentTurnJob(prepared.jobId)?.inputRefs).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "page", id: HOME_PAGE_ID, role: "agent_turn_current_note_scope" }),
-      expect.objectContaining({ kind: "source", id: prepared.sourceId, role: "agent_turn_source" })
+      expect.objectContaining({ kind: "source", id: prepared.sourceIds[0], role: "agent_turn_source" }),
+      expect.objectContaining({ kind: "source", id: prepared.sourceIds[1], role: "agent_turn_source" })
     ]));
-    await new CaptureService(fixture.vaults).preserveFilesForAgentTurn({
-      filePaths: [sourcePath], inputKind: "file_picker", userIntent: request.text, locale: "en"
-    }, { jobId: prepared.jobId, sourceId: prepared.sourceId });
+    const capture = new CaptureService(fixture.vaults);
+    for (const [ordinal, sourcePath] of sourcePaths.entries()) {
+      await capture.preserveFilesForAgentTurn({
+        filePaths: [sourcePath], inputKind: "file_picker", userIntent: request.text, locale: "en"
+      }, {
+        jobId: prepared.jobId,
+        sourceId: prepared.sourceIds[ordinal]!,
+        inputChecksum: inputChecksums[ordinal]!,
+        ordinal,
+        snapshotOrdinal: ordinal,
+        attachmentSetHash
+      });
+    }
 
-    const outcome = await service.submitPreparedSourceTurn(prepared);
+    const restartedJobs = new JobsService(fixture.vaults, new AgentIngestService(models, runtime));
+    const restartedService = new HomeAgentService(
+      fixture.vaults,
+      models,
+      makeRetrievalPort(fixture.vault.vaultId),
+      restartedJobs,
+      runtime
+    );
+
+    const outcome = await restartedService.submitPreparedSourceTurn(prepared);
 
     expect(outcome).toMatchObject({
       state: "completed",
       jobId: prepared.jobId,
-      answer: { citations: [{ refId: "citation_1" }, { refId: "citation_11" }] }
+      answer: { citations: [{ refId: "citation_1" }, { refId: "citation_11" }, { refId: "citation_12" }] }
     });
-    expect(observedPrompt).toContain("mixed current-note request with 1 Host-bound attachment");
-    expect(observedTools).toEqual(expect.arrayContaining(["pige_read_current_note", "pige_inspect_source"]));
+    expect(observedPrompt).toContain("mixed current-note request with 2 Host-bound attachment");
+    expect(observedTools).toEqual(expect.arrayContaining([
+      "pige_read_current_note", "pige_list_attachments", "pige_select_attachment", "pige_inspect_source"
+    ]));
+    expect(observedContextPack).toMatchObject({
+      workflow: "note_agent",
+      evidenceRefs: [
+        expect.objectContaining({ pageId: HOME_PAGE_ID, citationRefs: ["citation_1"] }),
+        expect.objectContaining({ sourceId: prepared.sourceIds[0], citationRefs: ["citation_11"] }),
+        expect.objectContaining({ sourceId: prepared.sourceIds[1], citationRefs: ["citation_12"] })
+      ]
+    });
+    expect(restartedJobs.readAgentTurnJob(prepared.jobId)).toMatchObject({
+      contextPackId: observedContextPack?.contextPackId,
+      contextPackHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
+    });
   });
 
   it("rejects duplicate current-note page identities before Pi", async () => {
