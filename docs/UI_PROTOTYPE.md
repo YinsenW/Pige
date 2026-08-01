@@ -713,7 +713,10 @@ for display-only changes and clearing them for a table change. Pige-owned lookup
 switch relation and count/numeric sum while derived cells stay read-only. Main owns eligibility and
 stale keeps drafts. Pige-owned views edit their optional
 filter/sort definition or rename/trash explicitly; trashing the active view returns to All Rows and
-Activity offers exact forward Undo. Broader data and proof stay open.
+Activity offers exact forward Undo. Collection History progressively discloses a bounded newest-first
+revision list, opens one mutation-disabled historical table preview, and restores only after an inline
+explicit confirmation. Restore creates a new current revision; stale state keeps the visible history
+and returns focus to the triggering control. Broader data and proof stay open.
 
 ## 9. Sources View
 

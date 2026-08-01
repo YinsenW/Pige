@@ -616,7 +616,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `rename_dataset`, `trash_dataset`, `restore_dataset`, `purge_dataset`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation`, `add_collection_lookup`, `update_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `rename_collection_table`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
+- `create_dataset_revision`, `rename_dataset`, `trash_dataset`, `restore_dataset`, `purge_dataset`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation`, `add_collection_lookup`, `update_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `rename_collection_table`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`, `restore_collection_revision`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`, `purge_page`.
 - `trash_conversation`, `restore_conversation`, `purge_conversation`.
 - `update_index`.

@@ -5684,6 +5684,38 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260802-Managed-Collection-Revision-History
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Managed Collection history is the bounded integrity-bound parent chain reachable from the current
+Dataset manifest. Opening history is read-only. Restoring one reachable revision copies its exact
+schema and payload into a new immutable forward revision and reversible Operation; neither restore nor
+Undo rewrites an existing revision or Source evidence.
+
+Rationale:
+
+Users need to inspect and recover prior structured knowledge without turning the renderer into a
+filesystem authority or making revision history mutable. Forward-only publication preserves provenance,
+CAS currentness and restart recovery while reusing the existing Dataset Bundle and Activity owners.
+
+Consequences:
+
+- History cursors bind Vault, Dataset, current revision and exclusive boundary; drift fails closed.
+- Historical previews disable every mutation and disclose no path, checksum or Source body.
+- Restore and Undo publish manifest-last forward revisions and adopt interrupted Operations once.
+- `PIGE-VAULT-007` and `PIGE-DATA-003` remain partial for broader tombstone, backup, concurrency and platform coverage.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

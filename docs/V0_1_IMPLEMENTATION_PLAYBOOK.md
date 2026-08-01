@@ -641,7 +641,10 @@ Build:
   rollup definitions use distinct Activity/Undo. Numeric lookup/rollup values feed formulas and propagate
   through relation retarget, target scalar edit, descriptor update, exact Undo, and restart. Target-table
   changes clear old row links; dependent lookup/rollup definitions block relation-definition edits.
-  Relation/lookup breadth, broader schema, scale/platform and exceptions stay open.
+  Saved-view definitions and stable table display names are editable through exact CAS/Activity/Undo.
+  Bounded immutable revision history supports read-only preview and explicit forward-only restore with
+  restart-safe Undo. Relation/lookup breadth, complete backup/restore, concurrency, broader schema,
+  scale/platform and exceptions stay open.
 
 Deferred from this phase:
 
