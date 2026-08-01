@@ -1,6 +1,6 @@
 {
   "apiVersion": 1,
-  "baseline": "f8fa312f253bb78fd9a97eaf76c061adfdb99c4e",
+  "baseline": "d65754f8ed98764015c0e50bc4669be7268f7316",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 282,
   "baselineLines": 125404,

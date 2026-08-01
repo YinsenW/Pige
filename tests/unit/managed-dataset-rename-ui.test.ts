@@ -16,7 +16,7 @@ describe("ManagedDatasetRenameAction", () => {
         { currentRevisionId: request.expectedRevisionId, title: "Records" }) }) as never);
     const onCommitted = vi.fn();
     const harness = await mount(onRename, onCommitted);
-    button(harness.container, "Rename dataset").click(); await flush(harness.dom);
+    await act(async () => { button(harness.container, "Rename dataset").click(); await flush(harness.dom); });
     const input = harness.container.querySelector("input")!;
     await act(async () => { input.value = "Research records"; input.dispatchEvent(new harness.dom.window.Event("input", { bubbles: true })); });
     await act(async () => { button(harness.container, "Rename dataset", 1).click(); await flush(harness.dom); });
@@ -41,6 +41,9 @@ async function mount(onRename: (...args: any[]) => any, onCommitted: () => void)
     crypto: { configurable: true, value: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" } },
     requestAnimationFrame: { configurable: true, value: (callback: FrameRequestCallback) => { callback(0); return 1; } } });
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  Object.defineProperties(dom.window.HTMLElement.prototype, {
+    attachEvent: { configurable: true, value: () => undefined }, detachEvent: { configurable: true, value: () => undefined }
+  });
   const container = dom.window.document.querySelector("#root") as HTMLElement;
   const root = createRoot(container);
   await act(async () => root.render(createElement(ManagedDatasetRenameAction, { activeVaultId: "vault_20260801_datasettitle",
