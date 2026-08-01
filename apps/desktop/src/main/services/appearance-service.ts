@@ -49,6 +49,16 @@ export class AppearanceService {
     return this.#current;
   }
 
+  reloadFromStore(): AppearanceSettingsSummary {
+    const appearance = this.#settings.getAppearanceSettings();
+    this.#applyThemeSource(appearance.themePreference);
+    const next = this.#project(appearance);
+    const changed = !sameSummary(this.#current, next);
+    this.#current = next;
+    if (changed) this.#publish(next);
+    return next;
+  }
+
   setLocale(request: SetLocaleRequest): AppearanceSettingsSummary {
     if (!PIGE_AVAILABLE_LOCALES.includes(request.locale)) {
       throw new Error("Unsupported locale.");

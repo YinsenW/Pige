@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 317,
-  "baselineLines": 133187,
+  "baselineFileCount": 318,
+  "baselineLines": 133377,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -201,6 +201,7 @@
       ["local-database-service.ts", 1284, "rd"],
       ["local-semantic-retrieval-asset-store.ts", 255, "rd"],
       ["local-settings.ts", 351, "d"],
+      ["settings-profile-transfer-service.ts", 190, "prd"],
       ["local-tool-lifecycle-store.ts", 696, "rd"],
       ["managed-collection-discovery.ts", 281, "rf"],
       ["managed-collection-column-storage.ts", 644, "rdf"],
@@ -350,7 +351,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 317,
+    "serviceOwnerCount": 318,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

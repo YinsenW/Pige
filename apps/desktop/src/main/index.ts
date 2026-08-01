@@ -198,6 +198,7 @@ import { registerConversationHistoryIpc } from "./register-conversation-history-
 import { registerVaultMetadataIpc } from "./register-vault-metadata-ipc";
 import { registerVaultRecentIpc } from "./register-vault-recent-ipc";
 import { registerPigePolicyIpc } from "./register-pige-policy-ipc";
+import { registerSettingsProfileIpc } from "./register-settings-profile-ipc";
 import {
   AgentIngestService,
   type AgentIngestProposalPort,
@@ -216,6 +217,7 @@ import {
 import { AgentTurnDraftPublisher } from "./services/agent-turn-draft-publisher";
 import { AppearanceService } from "./services/appearance-service";
 import { StartupDestinationService } from "./services/startup-destination-service";
+import { SettingsProfileTransferService } from "./services/settings-profile-transfer-service";
 import { BackupCoordinatorService } from "./services/backup-coordinator-service";
 import { BackupRestoreService } from "./services/backup-service";
 import { BackupMemoryPreferenceService } from "./services/backup-memory-preference-service";
@@ -490,6 +492,7 @@ let currentNoteAppendService: CurrentNoteAppendService | undefined;
 let currentNoteReplaceService: CurrentNoteReplaceService | undefined;
 let appearanceService: AppearanceService | undefined;
 let startupDestinationService: StartupDestinationService | undefined;
+let settingsProfileTransferService: SettingsProfileTransferService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let toolchainRepairService: ToolchainRepairService | undefined;
@@ -1119,6 +1122,14 @@ const getAppearanceService = (): AppearanceService => {
 const getStartupDestinationService = (): StartupDestinationService => {
   startupDestinationService ??= new StartupDestinationService(getLocalSettingsStore());
   return startupDestinationService;
+};
+const getSettingsProfileTransferService = (): SettingsProfileTransferService => {
+  settingsProfileTransferService ??= new SettingsProfileTransferService({
+    settings: getLocalSettingsStore(),
+    fallbackLocale: getAppearanceService().summary().locale,
+    onApplied: () => { getAppearanceService().reloadFromStore(); }
+  });
+  return settingsProfileTransferService;
 };
 
 const getUpdateService = (): UpdateService => {
@@ -4047,6 +4058,17 @@ ipcMain.handle("settings.setStartupDestination", (_event, request: SetStartupDes
     getStartupDestinationService().set(SetStartupDestinationRequestSchema.parse(request))
   )
 );
+registerSettingsProfileIpc({
+  ipcMain,
+  getWindow: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return window && mainWindows.has(window) ? window : undefined;
+  },
+  showSaveDialog: (window, options) => dialog.showSaveDialog(window, options),
+  showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
+  showMessageBox: (window, options) => dialog.showMessageBox(window, options),
+  getService: getSettingsProfileTransferService
+});
 ipcMain.handle("settings.registry", () => getSettingsRegistry());
 ipcMain.handle("updates.summary", () => UpdateSummarySchema.parse(getUpdateService().summary()));
 ipcMain.handle("updates.check", async (_event, request: UpdateCheckRequest) =>

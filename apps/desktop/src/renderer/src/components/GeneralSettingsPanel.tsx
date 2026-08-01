@@ -4,12 +4,18 @@ import type {
   StartupDestinationMutationResult,
   StartupDestinationSummary
 } from "@pige/contracts";
+import { SettingsProfileTransferPanel, type SettingsProfileTransferApi } from "./SettingsProfileTransferPanel";
 type StartupDestination = StartupDestinationSummary["destination"];
 
 export interface StartupDestinationApi {
   readonly load: () => Promise<StartupDestinationSummary>;
   readonly set: (request: SetStartupDestinationRequest) => Promise<StartupDestinationMutationResult>;
 }
+const settingsProfileTransferApi: SettingsProfileTransferApi = {
+  exportProfile: (request) => window.pige.settings.exportProfile(request),
+  previewImport: (request) => window.pige.settings.previewProfileImport(request),
+  applyImport: (request) => window.pige.settings.applyProfileImport(request)
+};
 
 export function GeneralSettingsPanel(props: {
   readonly alwaysOnTop: boolean | null;
@@ -150,6 +156,8 @@ export function GeneralSettingsPanel(props: {
           </div>
         </div>
       </section>
+
+      <SettingsProfileTransferPanel api={settingsProfileTransferApi} t={props.t} />
 
       <section className="settings-section" aria-labelledby="settings-general-pige-title">
         <h2 className="settings-section-title" id="settings-general-pige-title">
