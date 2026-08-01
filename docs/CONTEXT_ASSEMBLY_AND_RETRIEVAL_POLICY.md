@@ -237,7 +237,7 @@ Exact token numbers should be configured per model profile and tested with reali
 
 ## 8. Context Pack Contract
 
-The Agent Orchestrator should build a serializable context pack before prompt rendering.
+The Agent Orchestrator builds a serializable context pack before prompt rendering.
 
 ```ts
 type AgentContextPack = {
@@ -288,6 +288,21 @@ Rules:
 - If a model call fails or is retried, retry should reuse or explicitly rebuild the context pack and record which happened.
 - The initial Agent turn may have no evidence or retrieval metadata; those fields appear
   only after Pi selects retrieval.
+
+Current Home and Note Agent ownership:
+
+- Main materializes one schema-validated, reference-only Context Pack for every Home or
+  current-note turn before Pi runs. The durable Job records the exact pack ID/hash plus
+  conversation and memory refs, never the recalled memory body, prompt, or conversation body.
+- Current-note evidence keeps `citation_1`; a restarted mixed turn binds up to eight exact
+  attachment refs, with the six cited attachment slots using `citation_11` through
+  `citation_16`. Additional bounded attachments remain inspectable and carry an explicit
+  citation-capacity warning instead of invented citation authority.
+- Vault memory is capped at eight lower-authority refs. Compacted history contributes a
+  bounded conversation snapshot ref and an omitted-message count. Policy, Job, evidence,
+  memory, conversation, and attachment-set drift fail closed before the next model turn.
+- Mobile, Web, and remote Agent Context Packs remain deferred with their runtimes; they are
+  not a v0.1 local-desktop acceptance dependency.
 
 Current `capture_ingest` bridge:
 

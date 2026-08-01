@@ -90,6 +90,8 @@ const FACT_KEYS = new Set([
   "warnings",
   "policyContextId",
   "policyHash",
+  "contextPackId",
+  "contextPackHash",
   "activeVaultId",
   "privacy",
   "agentKnowledgeOutcome",
@@ -108,6 +110,8 @@ export interface JobExecutionFactsPatch {
   readonly warnings?: readonly PigeWarning[];
   readonly policyContextId?: string;
   readonly policyHash?: string;
+  readonly contextPackId?: string;
+  readonly contextPackHash?: string;
   readonly activeVaultId?: string;
   readonly privacy?: JobPrivacy;
   readonly agentKnowledgeOutcome?: AgentKnowledgeOutcomeSummary;
@@ -1061,6 +1065,8 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
     ...(facts.warnings ? { warnings: mergeValues(job.warnings, facts.warnings) } : {}),
     ...(facts.policyContextId ? { policyContextId: facts.policyContextId } : {}),
     ...(facts.policyHash ? { policyHash: facts.policyHash } : {}),
+    ...(facts.contextPackId ? { contextPackId: facts.contextPackId } : {}),
+    ...(facts.contextPackHash ? { contextPackHash: facts.contextPackHash } : {}),
     ...(facts.activeVaultId ? { activeVaultId: facts.activeVaultId } : {}),
     ...(facts.privacy ? { privacy: mergePrivacy(job.privacy, facts.privacy) } : {}),
     ...(facts.agentKnowledgeOutcome ? { agentKnowledgeOutcome: facts.agentKnowledgeOutcome } : {}),

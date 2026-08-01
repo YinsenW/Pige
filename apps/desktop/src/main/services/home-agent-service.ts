@@ -180,6 +180,7 @@ import type {
   ResumeJobInput
 } from "./job-execution-coordinator";
 import { observedLanguageFact } from "./durable-language";
+import { bindHomeAgentContextPack, contextPackJobFacts, type AgentContextPackMemory, type BoundHomeAgentContextPack } from "./agent-context-pack";
 
 export const AgentSubmitTurnRequestSchema = CanonicalAgentSubmitTurnRequestSchema;
 
@@ -263,10 +264,7 @@ export interface HomeAgentExternalWebSkillPort {
 }
 
 export interface HomeAgentMemoryPort {
-  recall(vaultPath: string, limit?: number): readonly {
-    readonly title: string;
-    readonly body: string;
-  }[];
+  recall(vaultPath: string, limit?: number): readonly AgentContextPackMemory[];
   rememberPreference(request: {
     readonly vaultPath: string;
     readonly activeVaultId: string;
@@ -1390,7 +1388,7 @@ export class HomeAgentService {
     let datasetResult: DatasetQueryExecutionResult | undefined;
     let approvedDatasetEvidenceHash: string | undefined;
     const externalToolEvidence: HomeExternalToolEvidence[] = [];
-
+    let contextPackBinding: BoundHomeAgentContextPack | undefined;
     const readBoundCurrentNote = (): CurrentNoteEvidenceBinding => {
       if (!currentNoteScope || !currentNoteRef?.checksum) {
         throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The current-note scope is unavailable.");
@@ -1500,6 +1498,7 @@ export class HomeAgentService {
           throw new PigeDomainError("agent_runtime.link_target_changed", "The selected link target changed.");
         }
       }
+      contextPackBinding?.assertCurrent(this.#jobs.readAgentTurnJob(jobId) ?? session.current);
     };
     const assertCurrentNotePublicationCurrent = async (): Promise<void> => {
       if (!currentNoteToolUsed) return;
@@ -1635,7 +1634,10 @@ export class HomeAgentService {
     const memoryEnabled = policy.memory.vaultMemoryEnabled && this.#memory !== undefined;
     const memoryToolRegistered = memoryEnabled && !currentNoteScope &&
       request.authoredTaskIntent === "explicit_user_task";
-    const recalledMemories = memoryEnabled ? this.#memory!.recall(vaultPath, 4) : [];
+    const recalledMemories = memoryEnabled ? this.#memory!.recall(vaultPath, 8) : [];
+    contextPackBinding = bindHomeAgentContextPack({ activeVaultId: activeVault.vaultId, job: session.current, conversationId: request.sourceConversationId, userEventId: request.sourceEventId,
+      policyContextId: policy.policyContextId, policyHash: policy.policyHash, history, memories: recalledMemories });
+    session.current = this.#jobs.patchAgentTurnJob(session.current, contextPackJobFacts(contextPackBinding));
     const capturedAuthoredTextSourceIds = new Set<string>(); const authoredTextCaptureTool = this.#authoredTextCapture?.toolForTurn({
       enabled: !currentNoteScope && request.inputKind === "typed_text" && request.authoredTaskIntent === "explicit_user_task",
       request: { vaultPath, activeVaultId: activeVault.vaultId, conversationId: request.sourceConversationId,
@@ -2026,6 +2028,7 @@ export class HomeAgentService {
         ),
         userPrompt: createHomeUserPrompt(query, recalledMemories),
         history,
+        contextPack: contextPackBinding.pack,
         tools,
         ...(signal ? { signal } : {}),
         beforeModelTurn: async () => {

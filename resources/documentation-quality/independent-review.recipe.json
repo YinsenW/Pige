@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T17:37:00.000Z",
+  "reviewedAt": "2026-08-01T17:42:27.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-JOB-005 and PIGE-MEM-001 repeated restart-safe Agent Memory Activity Undo/Redo.",
+    "scope": "Reference-only Home/current-note Context Packs close mixed attachment, memory, compaction and restart acceptance for PIGE-CONTEXT-001/002.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "7a3642bbd811860b436f6454de349c549b38ed6047623f1f274e29bfdc5599ab"
+    "reviewedSha256": "d94080e9cfa524285508f14c83467abb7dec8bfd1d917040e40c8e28adba7754"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-memory-redo-review",
-      "task": "Review repeated Agent Memory Activity Undo/Redo and restart adoption",
+      "reviewerId": "agent-context-pack-review",
+      "task": "Review bounded local Agent Context Pack ownership and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews Memory, Operation and acceptance contracts; Development supplies separate registry, receipt, Activity-chain and restart evidence."
+      "independence": "Planning reviews Context Pack contracts and acceptance; Development supplies a separate bounded pack owner and Home integration evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-memory-redo-review",
+      "reviewerId": "agent-context-pack-review",
       "blockerCount": 0,
-      "summary": "Existing Activity UI invokes one Main Redo chain; every Redo forward Operation remains undoable and repeatable without another renderer workflow."
+      "summary": "Home and current-note turns reuse existing user surfaces while Main alone owns the reference pack and never projects prompt or body authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-memory-redo-review",
+      "reviewerId": "agent-context-pack-review",
       "blockerCount": 0,
-      "summary": "Memory, Job/Operation, playbook and decision owners agree on exact receipt-bound repeated Undo/Redo and fail-closed drift."
+      "summary": "Policy, Job, Context Pack, citation, memory and conversation contracts agree on one bounded reference-only pre-model authority set."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-memory-redo-review",
+      "reviewerId": "agent-context-pack-review",
       "blockerCount": 0,
-      "summary": "PIGE-JOB-005 and PIGE-MEM-001 gain direct repeated Memory Activity and restart-adoption evidence without changing their already verified status."
+      "summary": "PIGE-CONTEXT-001/002 and E6.03 are backed by mixed attachment, memory, compaction, restart and body-absence evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-memory-redo-review",
+      "reviewerId": "agent-context-pack-review",
       "blockerCount": 0,
-      "summary": "Pure lifecycle helpers own chain validation while AgentMemoryService stays below its architecture ceiling and retains registry authority."
+      "summary": "One bounded Context Pack owner isolates schema, hashing and durable refs while the frozen Home owner retains turn orchestration."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-memory-redo-review",
+      "reviewerId": "agent-context-pack-review",
       "blockerCount": 0,
-      "summary": "Existing Memory, Job/Operation, playbook, decision, acceptance and review owners contain the completed lifecycle without a new document."
+      "summary": "Existing context, playbook, decision, acceptance, semantic-claim and responsibility owners contain the delta without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-memory-service.test.ts tests/unit/knowledge-activity-service.test.ts tests/unit/desktop-shell-contract.test.ts --pool=threads --maxWorkers=1",
+      "command": "npx vitest run tests/unit/agent-context-pack.test.ts tests/unit/home-agent-service.test.ts tests/unit/job-execution-coordinator.test.ts tests/unit/schemas.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "All 134 focused Memory lifecycle, Activity and Main boundary tests pass, including repeated Undo/Redo and second-cycle restart adoption."
+      "evidence": "Focused Context Pack, Home, Job and schema tests cover mixed evidence, body absence, compaction, memory and restart."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The Memory redo candidate compiles and builds while AgentMemoryService remains below its architecture ceiling."
+      "evidence": "The candidate compiles and builds with the bounded Context Pack owner recorded inside protected architecture boundaries."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:traceability && npm run verify:documentation-quality",
       "status": "passed",
-      "evidence": "Memory, Operation, playbook, decision, acceptance and semantic claims agree on the repeated-cycle contract."
+      "evidence": "Context policy, playbook, decision, acceptance, semantic-claim and responsibility owners agree on the verified local pack lifecycle."
     }
   ],
   "coordination": {
-    "taskId": "agent-memory-redo-bind-20260802",
-    "taskTitle": "Bind repeated Agent Memory Activity Undo/Redo",
+    "taskId": "agent-context-pack-bind-20260802",
+    "taskTitle": "Bind bounded local Agent Context Packs and current acceptance",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Memory registries, receipts, restore intents and Operations remain readable; current receipts gain deterministic forward Redo chains without migration.",
-    "acknowledgement": "Planning binds direct repeated Memory Activity evidence while keeping PIGE-JOB-005 and PIGE-MEM-001 verified."
+    "compatibility": "Existing prompts, retrieval tools, renderer contracts and durable content owners remain unchanged; the pack records only safe refs and hashes.",
+    "acknowledgement": "Planning records complete v0.1 local Context Pack coverage and promotes PIGE-CONTEXT-001/002 without claiming deferred remote runtimes."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

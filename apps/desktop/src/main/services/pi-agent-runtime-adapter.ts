@@ -19,6 +19,7 @@ import {
   toPiTool,
   type PigeAgentToolDefinition
 } from "./pi-agent-tool-boundary";
+import { AgentContextPackSchema, type AgentContextPack } from "./agent-context-pack";
 import type { ModelProviderRuntimeConfig } from "./model-provider-registry";
 
 export type { PiFauxResponse } from "./pi-agent-provider-binding";
@@ -49,6 +50,7 @@ export interface PiAgentRunRequest {
   readonly systemPrompt: string;
   readonly userPrompt: string;
   readonly history?: readonly PiAgentHistoryMessage[];
+  readonly contextPack?: AgentContextPack;
   readonly tools: readonly PigeAgentToolDefinition[];
   readonly beforeModelTurn?: () => void | Promise<void>;
   readonly limits?: PiAgentRunLimits;
@@ -89,6 +91,7 @@ export class PiAgentRuntimeAdapter {
 
   async run(request: PiAgentRunRequest): Promise<PiAgentRunResult> {
     if (request.signal?.aborted) throw createAbortError();
+    if (request.contextPack) AgentContextPackSchema.parse(request.contextPack);
     const tools = request.tools;
     assertPigeAgentToolDescriptors(tools);
     const budget = new PiAgentRunBudget(request.limits);

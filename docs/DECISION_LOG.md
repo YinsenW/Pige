@@ -5263,6 +5263,42 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Reference-Only-Home-Context-Pack
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Home and current-note Agent turns materialize one bounded, schema-validated Context Pack
+before Pi runs. The durable Job stores only the exact pack identity/hash and safe policy,
+conversation, memory and evidence refs. Memory, prompt, conversation and source bodies stay
+inside their existing transient owners and are not duplicated into the pack or Job.
+
+Rationale:
+
+The local desktop Agent already assembled the right evidence and lower-authority memory, but
+without one explicit pack identity retry, restart and mid-turn currentness could not prove
+they used the same bounded authority set. A reference-only pack closes that gap without
+creating another durable content store or exposing renderer authority.
+
+Consequences:
+
+- Current-note evidence keeps `citation_1`; up to six attachment refs receive the existing
+  `citation_11` through `citation_16` slots and further bounded attachments are explicitly
+  uncited rather than assigned invented authority.
+- The pack binds at most eight recalled memory refs and one bounded conversation snapshot;
+  compaction records only the omitted-message count.
+- Policy, Job, evidence, memory and conversation drift fail closed before another model turn.
+- Mobile, Web and remote Agent Context Packs remain deferred with those runtimes and do not
+  gate the v0.1 local-desktop Context requirements.
+
+References:
+
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
