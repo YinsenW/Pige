@@ -69,17 +69,25 @@ describe("Knowledge Tree renderer", () => {
     const moreActions = buttonNamed(mount.container, "More Knowledge Tree actions");
     expect(moreActions.dataset.knowledgeAction).toBe("more");
     await click(dom, moreActions);
-    expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
-      .toBe("This Knowledge Tree action is not available.");
+    expect(moreActions.getAttribute("aria-expanded")).toBe("true");
+    expect(mount.container.querySelector('#knowledge-tree-more-menu[role="menu"]')).not.toBeNull();
+    const backOneBranch = buttonNamed(mount.container, "Back one branch");
+    expect(dom.window.document.activeElement).toBe(backOneBranch);
+    await click(dom, backOneBranch);
+    expect(treeItemNamed(mount.container, "Personal knowledge").getAttribute("aria-selected")).toBe("true");
+    expect(mount.container.textContent).toContain("Branch contents");
+    const browseRoot = buttonNamed(mount.container, "Browse branch");
+    expect(browseRoot.dataset.knowledgeAction).toBe("browse-branch");
+    await click(dom, browseRoot);
+    expect(rootNode.getAttribute("aria-selected")).toBe("true");
+    expect(buttonNamed(mount.container, "Browse branch: Local RAG")).toBeTruthy();
+    expect(buttonNamed(mount.container, "Browse branch: Ranking note")).toBeTruthy();
     expect(opened).toEqual([]);
 
     const personalKnowledge = treeItemNamed(mount.container, "Personal knowledge");
     await click(dom, personalKnowledge);
-    const openUnavailableTopic = buttonNamed(mount.container, "Open");
-    expect(openUnavailableTopic.dataset.knowledgeAction).toBe("open-topic");
-    await click(dom, openUnavailableTopic);
-    expect(mount.container.querySelector("#knowledge-map-status")?.textContent)
-      .toBe("This Knowledge Tree action is not available.");
+    await click(dom, buttonNamed(mount.container, "Browse branch: Local-first"));
+    expect(rootNode.getAttribute("aria-selected")).toBe("true");
     expect(opened).toEqual([]);
 
     const topicNode = treeItemNamed(mount.container, "Local RAG");
@@ -95,6 +103,16 @@ describe("Knowledge Tree renderer", () => {
     expect(conceptNode.classList.contains("density-1")).toBe(true);
     await click(dom, conceptNode);
     expect(conceptNode.getAttribute("aria-selected")).toBe("true");
+    await click(dom, moreActions);
+    expect(buttonNamed(mount.container, "Back one branch")).toBeTruthy();
+    expect(buttonNamed(mount.container, "Go to tree root")).toBeTruthy();
+    await keyDown(dom, mount.container.querySelector("#knowledge-tree-more-menu")!, "Escape");
+    expect(moreActions.getAttribute("aria-expanded")).toBe("false");
+    expect(dom.window.document.activeElement).toBe(moreActions);
+    await click(dom, moreActions);
+    await click(dom, buttonNamed(mount.container, "Go to tree root"));
+    expect(personalKnowledge.getAttribute("aria-selected")).toBe("true");
+    await click(dom, conceptNode);
     const openConcept = buttonNamed(mount.container, "Open");
     expect(openConcept.dataset.knowledgeOpenKey).toBe("root-0-child-0-child-0-node");
     await click(dom, openConcept);
@@ -139,8 +157,10 @@ describe("Knowledge Tree renderer", () => {
     const personalRoot = treeItemNamed(mount.container, "Personal knowledge");
     expect(personalRoot.getAttribute("aria-selected")).toBe("true");
     expect(personalRoot.getAttribute("tabindex")).toBe("0");
-    await click(dom, filter);
+    await click(dom, moreActions);
+    await click(dom, buttonNamed(mount.container, "Show all branches"));
     expect(filter.getAttribute("aria-pressed")).toBe("false");
+    expect(personalRoot.getAttribute("aria-selected")).toBe("true");
 
     const treeItems = Array.from(mount.container.querySelectorAll<SVGGElement>('[role="treeitem"]'));
     expect(treeItems.filter((item) => item.getAttribute("tabindex") === "0")).toHaveLength(1);
@@ -249,7 +269,8 @@ describe("Knowledge Tree renderer", () => {
     const sourceOnly = treeItemNamed(mount.container, "Source evidence");
     await click(dom, sourceOnly);
     expect(requests).toHaveLength(4);
-    expect(buttonNamed(mount.container, "Open").dataset.knowledgeAction).toBe("open-topic");
+    expect(mount.container.querySelector('[data-knowledge-action="open-topic"]')).toBeNull();
+    expect(mount.container.textContent).toContain("No child branches yet.");
     await unmount(dom, mount.root);
   });
 
