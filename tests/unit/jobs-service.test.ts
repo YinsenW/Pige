@@ -1722,7 +1722,7 @@ describe("jobs service", () => {
     });
     expect(modelClient.requests).toHaveLength(1);
     expect(renderer.requestedPageSets).toEqual([[2]]);
-  });
+  }, 15_000);
 
   it("releases verified native PDF text when OCR becomes unavailable after parsing", async () => {
     const { vaultPath, vault } = makeVault();

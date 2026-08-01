@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   AppearanceSettingsSummary,
+  BackupCreateResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
   BackupReconnectDestinationRequest,
@@ -660,6 +661,52 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("reports backup external-dependency completeness without exposing dependency identity", async () => {
+    const dom = createDom();
+    const preview = bothModesPreview();
+    if (preview.status !== "ready") throw new Error("Expected a ready fixture.");
+    const harness = createHarness(readyOnboarding(), preview);
+    harness.backupCreateResult = {
+      status: "created",
+      manifest: {
+        ...preview.manifest,
+        fileCount: 17,
+        externalDependencyCount: 3,
+        includedExternalDependencyCount: 1,
+        missingRequiredExternalDependencyCount: 2,
+        externalDependenciesComplete: false
+      }
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await openVaultSettings(dom, container);
+    await click(dom, button(container, "Create Backup"));
+    await waitFor(dom, () => container.textContent?.includes(
+      "Backup created, but 2 required external items are missing. Reconnect them before restore."
+    ) === true);
+    expect(container.textContent).not.toContain("root_");
+    expect(container.textContent).not.toContain("/private/");
+
+    harness.backupCreateResult = {
+      status: "created",
+      manifest: {
+        ...preview.manifest,
+        fileCount: 19,
+        externalDependencyCount: 2,
+        includedExternalDependencyCount: 2,
+        missingRequiredExternalDependencyCount: 0,
+        externalDependenciesComplete: true
+      }
+    };
+    await click(dom, button(container, "Create Backup"));
+    await waitFor(dom, () => container.textContent?.includes(
+      "Backup complete: 19 files; 2 of 2 external items included."
+    ) === true);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("uses the approved maintenance cards, previews reset, restores focus, and keeps failures body-free", async () => {
     const dom = createDom();
     const harness = createHarness(readyOnboarding(), bothModesPreview());
@@ -1218,6 +1265,7 @@ interface RestoreHarness {
   readonly openRecentRequests: OpenRecentVaultRequest[];
   readonly migrationRequests: VaultMigrationApplyRequest[];
   readonly preview: RestorePreviewResult;
+  backupCreateResult: BackupCreateResult;
   readonly applyRequests: RestoreApplyRequest[];
   readonly cancelRestoreRequests: RestoreCancelRequest[];
   jobs: JobSummary[];
@@ -1258,6 +1306,7 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     openRecentRequests: [],
     migrationRequests: [],
     preview,
+    backupCreateResult: { status: "canceled" },
     applyRequests: [],
     cancelRestoreRequests: [],
     jobs: [],
@@ -1364,6 +1413,20 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
     },
     settings: {
       appearance: () => harness.appearance(),
+      pigePolicy: async () => ({
+        apiVersion: 1 as const,
+        activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_restore_ui",
+        revision: `pigepolicyrev_${"c".repeat(64)}`,
+        markdown: "# PIGE\n\nFixture policy.",
+        requiredSections: ["Goals", "Scope", "Style", "Sources", "Privacy", "Safety", "Tools", "Review"],
+        canEdit: true as const
+      }),
+      updatePigePolicy: async (request: { readonly requestId: string; readonly activeVaultId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        activeVaultId: request.activeVaultId,
+        status: "failed" as const
+      }),
       startupDestination: async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 0 }),
       setStartupDestination: async (request) => ({
         status: "committed" as const,
@@ -1429,10 +1492,36 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
           secrets: false
         }
       }),
+      conversationPreferenceStatus: async () => ({
+        apiVersion: 1 as const,
+        activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_restore_ui",
+        revision: `backupconversationrev_${"a".repeat(64)}`,
+        includeConversations: true,
+        canUpdate: true
+      }),
+      setConversationPreference: async (request: { readonly activeVaultId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: "backupconversationpreferencereq_fixture",
+        activeVaultId: request.activeVaultId,
+        status: "failed" as const
+      }),
+      trashPreferenceStatus: async () => ({
+        apiVersion: 1 as const,
+        activeVaultId: harness.onboarding.activeVault?.vaultId ?? "vault_restore_ui",
+        revision: `backuptrashrev_${"b".repeat(64)}`,
+        includeTrash: true,
+        canUpdate: true
+      }),
+      setTrashPreference: async (request: { readonly activeVaultId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: "backuptrashpreferencereq_fixture",
+        activeVaultId: request.activeVaultId,
+        status: "failed" as const
+      }),
       previewRestore: async () => harness.preview,
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
       cancelRestore: (request: RestoreCancelRequest) => harness.cancelRestore(request),
-      create: async () => ({ status: "canceled" }),
+      create: async () => harness.backupCreateResult,
       reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
         harness.reconnectDependency(request),
       reconnectDestination: (request: BackupReconnectDestinationRequest) => harness.reconnectDestination(request),
@@ -1445,6 +1534,19 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
     },
     speech: {
       onAssetInstallEvent: () => () => undefined
+    },
+    localCapabilities: {
+      dictationLanguagePreference: async (request: { readonly requestId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        status: "ready" as const,
+        summary: {
+          apiVersion: 1 as const,
+          revision: 0,
+          preference: { mode: "automatic" as const },
+          appliesTo: "new_speech_sessions" as const
+        }
+      })
     },
     agent: {
       runtimeStatus: async () => null,
@@ -1485,7 +1587,8 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
         harness.cancelJobIds.push(jobId);
         harness.jobs = [];
         return { status: "cancelled" } as const;
-      }
+      },
+      onChanged: () => () => undefined
     },
     proposals: {
       list: async () => ({
@@ -1721,6 +1824,10 @@ function readyPreview(
       sourceCount: 1,
       conversationCount: 1,
       memoryCount: 1,
+      externalDependencyCount: 0,
+      includedExternalDependencyCount: 0,
+      missingRequiredExternalDependencyCount: 0,
+      externalDependenciesComplete: true,
       includesSecrets: false,
       includes: {
         markdownKnowledge: true,

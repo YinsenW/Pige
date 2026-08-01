@@ -701,6 +701,11 @@ reverifies and publishes the real 25-source and 10,000-page/100,000-chunk report
 remain partial until the next protected release publishes a passed report. E9.01–03/E9.12
 retain their residual gates.
 
+B9.01/B9.02 versioned export is verified: publication validates the archive and manifest,
+links one durable Backup Job/Operation, and reports renderer-safe external-dependency
+completeness without exposing identity or path. E9.01 remains partial only through the
+separate default-inclusion and default-exclusion requirements.
+
 B9.09/E9.05 are verified: Knowledge Health deterministically reports all four required
 issue classes, and exact eligible broken-link, orphan-parent, duplicate-topic and
 unsourced-claim repairs commit through reversible Operations/Undo while drift and broader

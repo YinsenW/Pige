@@ -2140,6 +2140,10 @@ export interface BackupManifestSummary {
   readonly sourceCount: number;
   readonly conversationCount: number;
   readonly memoryCount: number;
+  readonly externalDependencyCount: number;
+  readonly includedExternalDependencyCount: number;
+  readonly missingRequiredExternalDependencyCount: number;
+  readonly externalDependenciesComplete: boolean;
   readonly includesSecrets: false;
   readonly includes: BackupRestoreStatus["defaultIncludes"];
 }

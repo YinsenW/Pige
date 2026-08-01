@@ -89,6 +89,8 @@
   "backup.cancelRequested": "Arrêt sécurisé de la sauvegarde...",
   "backup.create": "Créer une sauvegarde",
   "backup.created": "Sauvegarde créée. Fichiers",
+  "backup.createdComplete": "Sauvegarde complète : {files} fichiers ; {included} élément(s) externe(s) sur {total} inclus.",
+  "backup.createdIncomplete": "Sauvegarde créée, mais {missing} élément(s) externe(s) requis manque(nt). Reconnectez-les avant la restauration.",
   "backup.createdAt": "Créée le",
   "backup.conversations": "Conversations",
   "backup.contents": "Contenu de la sauvegarde",

@@ -1562,6 +1562,17 @@ async function invokeCollectionTrashRow(
 }
 
 function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupManifestSummary {
+  const completenessCounts = [
+    manifest.externalDependencyCount,
+    manifest.includedExternalDependencyCount,
+    manifest.missingRequiredExternalDependencyCount
+  ];
+  if (
+    completenessCounts.some((count) => !Number.isSafeInteger(count) || count < 0) ||
+    manifest.includedExternalDependencyCount > manifest.externalDependencyCount ||
+    manifest.missingRequiredExternalDependencyCount > manifest.externalDependencyCount ||
+    manifest.externalDependenciesComplete !== (manifest.missingRequiredExternalDependencyCount === 0)
+  ) throw new Error("Invalid backup completeness response.");
   return {
     formatVersion: manifest.formatVersion,
     format: manifest.format,
@@ -1576,6 +1587,10 @@ function projectBackupManifestSummary(manifest: BackupManifestSummary): BackupMa
     sourceCount: manifest.sourceCount,
     conversationCount: manifest.conversationCount,
     memoryCount: manifest.memoryCount,
+    externalDependencyCount: manifest.externalDependencyCount,
+    includedExternalDependencyCount: manifest.includedExternalDependencyCount,
+    missingRequiredExternalDependencyCount: manifest.missingRequiredExternalDependencyCount,
+    externalDependenciesComplete: manifest.externalDependenciesComplete,
     includesSecrets: false,
     includes: {
       markdownKnowledge: manifest.includes.markdownKnowledge,

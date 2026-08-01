@@ -49,10 +49,12 @@ describe("PDF OCR artifact service", () => {
     );
     const stagedRecord = readSourceRecord(setup.sourceRecordPath);
     const parserMetadataId = setup.sourceRecord.artifacts.find((artifact) => artifact.kind === "metadata")?.id;
+    const sourceDate = setup.sourceRecord.id.split("_")[1]!;
+    const renderedPagesRoot = `artifacts/rendered-pages/${sourceDate.slice(0, 4)}/${sourceDate.slice(4, 6)}`;
 
     expect(staging.pages.map((page) => page.artifactPath)).toEqual([
-      `artifacts/rendered-pages/2026/07/${setup.sourceRecord.id}/page-0001.png`,
-      `artifacts/rendered-pages/2026/07/${setup.sourceRecord.id}/page-0002.png`
+      `${renderedPagesRoot}/${setup.sourceRecord.id}/page-0001.png`,
+      `${renderedPagesRoot}/${setup.sourceRecord.id}/page-0002.png`
     ]);
     expect(stagedRecord.artifacts.filter((artifact) => artifact.kind === "rendered_page")).toHaveLength(2);
     expect(stagedRecord.artifacts.some((artifact) => artifact.id === parserMetadataId)).toBe(true);
@@ -562,6 +564,7 @@ function seedExplicitPdfParseJob(vaultPath: string, parentJobId: string, sourceI
     message: "Explicit parser-substrate fixture queued."
   });
   const childPath = path.join(vaultPath, ".pige", "jobs", "2026", "07", `${jobId}.json`);
+  fs.mkdirSync(path.dirname(childPath), { recursive: true });
   fs.writeFileSync(childPath, `${JSON.stringify(child, null, 2)}\n`, "utf8");
   fs.writeFileSync(parentPath, `${JSON.stringify(JobRecordSchema.parse({
     ...parent,

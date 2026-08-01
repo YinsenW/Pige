@@ -2407,20 +2407,20 @@ class BorrowedArchiveReader extends RandomAccessReader {
 }
 
 function toManifestSummary(manifest: BackupManifest): BackupManifestSummary {
+  const externalDependencyCount = manifest.externalDependencies.length;
+  const includedExternalDependencyCount = manifest.externalDependencies.filter(
+    (dependency) => typeof dependency !== "string" && dependency.included).length;
+  const missingRequiredExternalDependencyCount = manifest.externalDependencies.filter(
+    (dependency) => typeof dependency === "string" || (dependency.requiredForCompleteRestore && !dependency.included)).length;
   return {
-    format: manifest.format,
-    formatVersion: manifest.formatVersion,
-    appVersion: manifest.appVersion,
-    vaultId: manifest.vaultId,
-    vaultName: manifest.vaultName,
-    vaultSchemaVersion: manifest.vaultSchemaVersion,
-    createdAt: manifest.createdAt,
-    fileCount: manifest.fileCount,
-    totalBytes: manifest.totalBytes,
-    noteCount: manifest.noteCount,
-    sourceCount: manifest.sourceCount,
-    conversationCount: manifest.conversationCount,
-    memoryCount: manifest.memoryCount,
+    format: manifest.format, formatVersion: manifest.formatVersion,
+    appVersion: manifest.appVersion, createdAt: manifest.createdAt,
+    vaultId: manifest.vaultId, vaultName: manifest.vaultName, vaultSchemaVersion: manifest.vaultSchemaVersion,
+    fileCount: manifest.fileCount, totalBytes: manifest.totalBytes,
+    noteCount: manifest.noteCount, sourceCount: manifest.sourceCount,
+    conversationCount: manifest.conversationCount, memoryCount: manifest.memoryCount,
+    externalDependencyCount, includedExternalDependencyCount, missingRequiredExternalDependencyCount,
+    externalDependenciesComplete: missingRequiredExternalDependencyCount === 0,
     includesSecrets: false,
     includes: manifest.includes
   };

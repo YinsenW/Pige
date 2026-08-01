@@ -650,7 +650,14 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   const createBackup = async (): Promise<void> => runBackupAction(async () => {
     const result = await window.pige.backup.create();
     if (result.status === "created" && result.manifest) {
-      setBackupNotice(`${props.t("backup.created")}: ${result.manifest.fileCount}`);
+      const messageKey = result.manifest.externalDependenciesComplete
+        ? "backup.createdComplete"
+        : "backup.createdIncomplete";
+      setBackupNotice(props.t(messageKey)
+        .replace("{files}", String(result.manifest.fileCount))
+        .replace("{included}", String(result.manifest.includedExternalDependencyCount))
+        .replace("{total}", String(result.manifest.externalDependencyCount))
+        .replace("{missing}", String(result.manifest.missingRequiredExternalDependencyCount)));
       await props.onRefresh();
     }
   });

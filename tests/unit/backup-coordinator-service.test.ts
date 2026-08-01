@@ -1093,6 +1093,10 @@ function summary(identity: CoreIdentity, vaultId: string) {
     sourceCount: 1,
     conversationCount: 1,
     memoryCount: 1,
+    externalDependencyCount: 0,
+    includedExternalDependencyCount: 0,
+    missingRequiredExternalDependencyCount: 0,
+    externalDependenciesComplete: true,
     includesSecrets: false as const,
     includes: {
       markdownKnowledge: true,

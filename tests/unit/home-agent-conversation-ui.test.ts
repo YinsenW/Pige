@@ -39,6 +39,7 @@ import type {
   JobsListRequest,
   JobSummary,
   KnowledgeActivitySummary,
+  LibraryBrowseRequest,
   LibraryListResult,
   LibraryRelatedResult,
   ModelProviderSettingsSummary,
@@ -61,6 +62,7 @@ import type {
   NoteEditorOpenResult,
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
+  NoteOpenSearchMatchRequest,
   NoteRenderResult,
   NoteMergeRequest,
   NoteMergeResult,
@@ -4231,7 +4233,13 @@ describe("Home durable Agent conversation UI", () => {
         activeVaultId: request.activeVaultId,
         status: "ready",
         currentConversationId: current.conversationId,
-        conversations: [],
+        conversations: [{
+          conversationId: current.conversationId,
+          updatedAt: "2026-07-12T08:00:01.000Z",
+          safePreview: "What should I remember?",
+          tailEventId: current.tailEventId,
+          latestTurnState: "completed"
+        }],
         hasMore: false
       };
     };
@@ -7458,6 +7466,20 @@ function makePigeApi(harness: ConversationHarness): object {
       }
     },
     library: {
+      browse: async (request: LibraryBrowseRequest) => {
+        const list = testLibraryList();
+        return {
+          ...request,
+          status: "ready" as const,
+          snapshotId: `library_browse_snapshot_${"a".repeat(64)}`,
+          scannedAt: list.scannedAt,
+          total: list.total,
+          invalidPageCount: list.invalidPageCount,
+          pages: [...list.pages].sort((left, right) => (
+            right.updatedAt.localeCompare(left.updatedAt) || left.pageId.localeCompare(right.pageId)
+          ))
+        };
+      },
       list: async () => testLibraryList(),
       related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
     },
@@ -7470,6 +7492,17 @@ function makePigeApi(harness: ConversationHarness): object {
       render: async ({ pageId }: { readonly pageId: string }) => {
         harness.noteRenderRequests.push(pageId);
         return harness.renderNote(pageId);
+      },
+      openSearchMatch: async (request: NoteOpenSearchMatchRequest) => {
+        harness.noteRenderRequests.push(request.pageId);
+        return {
+          apiVersion: request.apiVersion,
+          requestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          pageId: request.pageId,
+          status: "ready" as const,
+          render: await harness.renderNote(request.pageId)
+        };
       },
       resolveInlineReference: async (request: NoteResolveInlineReferenceRequest) => {
         harness.inlineReferenceRequests.push(request);

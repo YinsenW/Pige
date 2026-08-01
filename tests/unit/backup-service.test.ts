@@ -1028,7 +1028,7 @@ describe("backup restore service", () => {
       }
     };
 
-    await service.createBackup(vaultPath, backupPath, "0.1.0-test", identity);
+    const created = await service.createBackup(vaultPath, backupPath, "0.1.0-test", identity);
     await expect(service.createBackup(vaultPath, backupPath, "0.1.0-test", {
       ...identity,
       expectedManifestChecksum: manifestChecksum,
@@ -1050,6 +1050,12 @@ describe("backup restore service", () => {
       included: true,
       requiredForCompleteRestore: false
     }]);
+    expect(created.manifest).toMatchObject({
+      externalDependencyCount: 1,
+      includedExternalDependencyCount: 1,
+      missingRequiredExternalDependencyCount: 0,
+      externalDependenciesComplete: true
+    });
     expect(archive.entries.get(`vault/${mapping!.archivePath}`)).toEqual(externalBody);
     expect(archive.manifestText).not.toContain(root);
     expect(archive.manifestText).not.toContain(externalRelativePath);
@@ -1118,7 +1124,9 @@ describe("backup restore service", () => {
       updatedAt: "2026-07-14T00:00:00.000Z"
     });
 
-    await new BackupRestoreService().createBackup(referenced.vaultPath, referencedBackup, "0.1.0-test");
+    const referencedCreated = await new BackupRestoreService().createBackup(
+      referenced.vaultPath, referencedBackup, "0.1.0-test"
+    );
     const referencedArchive = await readGeneratedBackup(referencedBackup);
     expect(referencedArchive.manifest.externalDependencies).toEqual([{
       kind: "external_original",
@@ -1126,6 +1134,12 @@ describe("backup restore service", () => {
       included: false,
       requiredForCompleteRestore: false
     }]);
+    expect(referencedCreated.manifest).toMatchObject({
+      externalDependencyCount: 1,
+      includedExternalDependencyCount: 0,
+      missingRequiredExternalDependencyCount: 0,
+      externalDependenciesComplete: true
+    });
     expect(referencedArchive.manifestText).not.toContain("/Users/private");
     expect(referencedArchive.manifestText).not.toContain("financial-report.pdf");
 
@@ -1160,7 +1174,7 @@ describe("backup restore service", () => {
     expect(fs.existsSync(managedBackup)).toBe(false);
     expect(listBackupStagingFiles(managedBackup)).toEqual([]);
 
-    await new BackupRestoreService().createBackup(
+    const incompleteCreated = await new BackupRestoreService().createBackup(
       managed.vaultPath,
       managedBackup,
       "0.1.0-test",
@@ -1174,6 +1188,12 @@ describe("backup restore service", () => {
       requiredForCompleteRestore: true
     });
     expect(incompleteArchive.manifest.externalManagedCopies).toBeUndefined();
+    expect(incompleteCreated.manifest).toMatchObject({
+      externalDependencyCount: 1,
+      includedExternalDependencyCount: 0,
+      missingRequiredExternalDependencyCount: 1,
+      externalDependenciesComplete: false
+    });
     expect(incompleteArchive.manifest.files.some((file) => file.path.endsWith(
       "/src_20260714_externalmanaged01.json"
     ) || file.path === ".pige/source-records/src_20260714_externalmanaged01.json")).toBe(true);

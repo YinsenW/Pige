@@ -1064,6 +1064,9 @@ Rules:
   active Backup work, and returns `updated | stale | blocked` with authoritative status.
 - `backup.create` uses a trusted main-process save dialog, persists one durable Backup Job
   before scan, and returns only after cancellation or exact terminal completion.
+- Its `BackupManifestSummary` reports total, included and missing-required external-dependency
+  counts plus a derived completeness boolean. Preload rejects inconsistent counts; the summary
+  never exposes dependency IDs, paths, names, checksums or archive entries.
 - Missing/rebound roots return body-free `backup.dependency_waiting`; no path is exposed.
 - Reconnect accepts four fields and fences the exact active-vault eligible Job before the
   chooser. Private `dependencyId` is `rootId` for `vault_binding`, or `sourceId` for
