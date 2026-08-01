@@ -50,7 +50,7 @@ export function KnowledgeHealthReadyResult(props: {
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
-  readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
+  readonly onChooseOrphanParent: (issue: RepairableOrphan, trigger: HTMLButtonElement) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly onChooseClaimSource: (issue: RepairableUnsourcedClaim, trigger: HTMLButtonElement) => void;
   readonly repairState: KnowledgeHealthRepairState;
@@ -131,7 +131,7 @@ function KnowledgeHealthIssueRow(props: {
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
   readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
-  readonly onChooseOrphanParent: (issue: RepairableOrphan) => void;
+  readonly onChooseOrphanParent: (issue: RepairableOrphan, trigger: HTMLButtonElement) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly onChooseClaimSource: (
     issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "unsourced_claim" }> & {
@@ -216,7 +216,7 @@ function KnowledgeHealthIssueRow(props: {
         <>
           {" · "}
           <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
-            onClick={() => props.onChooseOrphanParent(repairableOrphan)}>
+            onClick={(event) => props.onChooseOrphanParent(repairableOrphan, event.currentTarget)}>
             {props.t("maintenance.knowledgeHealth.chooseOrphanParent")}
           </button>
         </>

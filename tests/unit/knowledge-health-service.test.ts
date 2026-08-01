@@ -12,6 +12,8 @@ import {
   NoteMarkdownEditorService,
   type NoteMarkdownEditorActivityPort
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
+import { NoteMarkdownEditorRedoService } from
+  "../../apps/desktop/src/main/services/note-markdown-editor-redo-service";
 
 const request = {
   apiVersion: 1,
@@ -363,6 +365,18 @@ describe("KnowledgeHealthService", () => {
     rebuilt.rebuild(fixture.vaultPath);
     expect(rebuilt.knowledgeHealth(fixture.vaultPath)?.issues.some((issue) =>
       issue.kind === "orphan_page" && issue.page.pageId === fixture.orphanPageId)).toBe(true);
+
+    const redone = new NoteMarkdownEditorRedoService(fixture.vaults).redo({
+      operationId: operation.id,
+      expectedRevisionId: operation.before?.id
+    });
+    expect(redone).toMatchObject({ status: "redone" });
+    expect(fs.readFileSync(fixture.parentPagePath, "utf8")).toContain(
+      `](#wiki:${fixture.orphanPageId})`
+    );
+    rebuilt.rebuild(fixture.vaultPath);
+    expect(rebuilt.knowledgeHealth(fixture.vaultPath)?.issues.some((issue) =>
+      issue.kind === "orphan_page" && issue.page.pageId === fixture.orphanPageId)).toBe(false);
   });
 
   it("fails closed for target/parent drift and report-epoch replay without mutating either page", () => {

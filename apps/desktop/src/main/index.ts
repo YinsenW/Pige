@@ -2865,7 +2865,14 @@ registerKnowledgeHealthIpc({
     getKnowledgeHealthService().searchOrphanParents(vaultPath, request),
   repairKnowledgeHealthOrphan: (vaultPath, request) => {
     const result = getKnowledgeHealthService().repairOrphan(vaultPath, request);
-    if (result.status === "committed") scheduleActivityIndexRebuild();
+    if (result.status === "committed") {
+      try {
+        getLocalDatabaseService().rebuild(vaultPath);
+      } catch {
+        // The durable repair remains committed; the scheduled rebuild adopts it.
+      }
+      scheduleActivityIndexRebuild();
+    }
     return result;
   },
   repairKnowledgeHealthDuplicateTopic: (vaultPath, request) => {
