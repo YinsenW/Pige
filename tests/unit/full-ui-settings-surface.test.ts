@@ -2735,7 +2735,7 @@ describe("full UI Settings surface", () => {
     const installed: SkillRegistrySummary["skills"][number] = {
       id: "installed-external", name: "Installed external", version: "1.0.0",
       description: "Uses reviewed external capabilities.", scope: "machine_local", enabled: false,
-      trust: "user_confirmed", canEnable: false, canUninstall: false, canExport: false, canUpdate: false,
+      trust: "user_confirmed", canEnable: false, canUninstall: true, canExport: true, canUpdate: false,
       ...disclosure
     };
     const staged = {
@@ -2780,6 +2780,8 @@ describe("full UI Settings surface", () => {
       staged.files[0].sha256, "External workflow", "Local only", "Network", "Protected credential",
       "read_current_source", "external_network", "use_brokered_credential"]) expect(review.textContent).toContain(value);
     expect(installedRow.textContent).toContain("Disabled");
+    expect(buttonNamed(installedRow, "Export: Installed external")).toBeTruthy();
+    expect(buttonNamed(installedRow, "Uninstall: Installed external")).toBeTruthy();
     await act(async () => { buttonNamed(page, "Install Skill").click(); await settle(dom); await settle(dom); });
     expect(installStaged).toHaveBeenCalledWith(expect.objectContaining({
       stagingId: staged.stagingId, manifestSha256: staged.manifestSha256,
@@ -2800,7 +2802,7 @@ describe("full UI Settings surface", () => {
       kind: "external_web" as const, enabled: false, trust: "user_confirmed" as const,
       capabilities: ["read_current_source", "external_network"] as const,
       dataBoundaries: ["local", "network"] as const, canEnable: true,
-      canUninstall: false, canExport: false, canUpdate: false, source: "https" as const,
+      canUninstall: true, canExport: true, canUpdate: false, source: "https" as const,
       sourceUrl: "https://example.com/supported/SKILL.md" as const, runtime,
       manifestSha256: `sha256:${"a".repeat(64)}` as const,
       bundleSha256: `sha256:${"b".repeat(64)}` as const,

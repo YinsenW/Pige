@@ -3377,7 +3377,7 @@ export const SkillRestorableSummarySchema = z.object({
   skillId: SkillIdSchema,
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(80),
-  kind: z.literal("pure"),
+  kind: z.enum(["pure", "external_web"]),
   scope: z.enum(["machine_local", "vault"]),
   uninstalledAt: z.string().datetime({ offset: true }),
   canRestore: z.literal(true)
@@ -3411,15 +3411,17 @@ export const SkillSummarySchema = z.object({
 }).strict().superRefine((skill, context) => {
   const userManaged = ["machine_local", "vault"].includes(skill.scope) && skill.trust === "user_confirmed";
   const pureLifecycle = userManaged && skill.kind === "pure";
+  const inertExternalLifecycle = userManaged && skill.scope === "machine_local" && skill.kind === "external_web";
+  const managedLifecycle = pureLifecycle || inertExternalLifecycle;
   const externalRuntime = skill.scope === "machine_local" && userManaged && skill.kind === "external_web" &&
     hasSupportedExternalWebRuntime(skill.capabilities, skill.runtime);
   if (skill.canEnable && ((!pureLifecycle && !externalRuntime) || skill.enabled)) {
     context.addIssue({ code: "custom", path: ["canEnable"], message: "Skill enable eligibility is invalid." });
   }
-  if (skill.canUninstall && !pureLifecycle) {
+  if (skill.canUninstall && !managedLifecycle) {
     context.addIssue({ code: "custom", path: ["canUninstall"], message: "Skill uninstall eligibility is invalid." });
   }
-  if (skill.canExport && !pureLifecycle) {
+  if (skill.canExport && !managedLifecycle) {
     context.addIssue({ code: "custom", path: ["canExport"], message: "Skill export eligibility is invalid." });
   }
   const externalSourceUpdate = userManaged && skill.kind === "external_web" && skill.source === "https" && skill.sourceUrl !== undefined &&

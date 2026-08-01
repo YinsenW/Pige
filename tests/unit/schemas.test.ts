@@ -6752,8 +6752,8 @@ describe("schemas", () => {
       capabilities,
       dataBoundaries,
       canEnable: false,
-      canUninstall: false,
-      canExport: false,
+      canUninstall: true,
+      canExport: true,
       canUpdate: true,
       source: "https",
       sourceUrl,
@@ -6878,8 +6878,7 @@ describe("schemas", () => {
     for (const invalid of [
       { ...installed, runtime: undefined },
       { ...installed, enabled: true },
-      { ...installed, canUninstall: true },
-      { ...installed, canExport: true }
+      { ...installed, scope: "vault" }
     ]) {
       expect(() => SkillSummarySchema.parse(invalid)).toThrow();
     }
