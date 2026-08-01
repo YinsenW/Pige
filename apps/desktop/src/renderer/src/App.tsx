@@ -3726,7 +3726,7 @@ export function LibraryPanel(props: {
           returnFocusRef={editorOpenerRef}
           onSave={props.onSaveNoteEditor}
           onReload={props.onReloadNoteEditor}
-          onCommitted={(result) => {
+          onCommitted={(result) => { if (result.render.summary.pageId !== props.selectedNote?.summary.pageId || result.render.summary.pageType !== props.selectedNote.summary.pageType) return;
             editorOpenSequence.current += 1;
             setEditorReady(null);
             onNoteEditorCommitted(result);
@@ -6736,7 +6736,7 @@ function HomeComposer(props: {
               returnFocusRef={editorOpenerRef}
               onSave={props.onSaveNoteEditor}
               onReload={props.onReloadNoteEditor}
-              onCommitted={(result) => {
+              onCommitted={(result) => { if (result.render.summary.pageId !== selectedNote.summary.pageId || result.render.summary.pageType !== selectedNote.summary.pageType) return;
                 editorOpenSequence.current += 1;
                 setEditorReady(null);
                 setSelectedNote(result.render);
@@ -7394,7 +7394,7 @@ function readerNoteMergeLabels(t: (key: string) => string) {
 }
 
 function isNoteEditorEligible(note: NoteRenderResult): boolean {
-  return (note.summary.pageType === "note" || note.summary.pageType === "source") && note.summary.status !== "archived";
+  return note.summary.status !== "archived" && ["note", "source", "claim", "question", "concept", "entity"].includes(note.summary.pageType);
 }
 
 function isRelatableKnowledgePage(note: NoteRenderResult): boolean {
