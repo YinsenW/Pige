@@ -5333,6 +5333,40 @@ References:
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Vault-Only-Is-A-Typed-Pi-Search-Scope
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Home local search accepts an explicit `optional | vault_only` scope selected by Pi from
+the current authored instruction. Main requires a real current citation only for
+`vault_only`; an empty or uncited result becomes the localized insufficient-evidence
+answer. Optional retrieval remains non-blocking, including in an empty vault.
+
+Rationale:
+
+Classifying semantic intent in Host code would duplicate Pi orchestration and create a
+fragile language heuristic, while treating every search as mandatory grounding breaks
+ordinary questions. A typed tool argument preserves Pi ownership and gives Main one exact
+enforcement fact without trusting final prose.
+
+Consequences:
+
+- Reader-link search cannot request `vault_only` authority.
+- Unknown search scopes fail at the tool boundary before retrieval.
+- Main never substitutes general knowledge after a declared vault-only search lacks a
+  valid citation, and it does not issue a second Provider repair turn.
+- Existing empty tool input remains compatible and means `optional`.
+
+References:
+
+- `docs/PRD.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

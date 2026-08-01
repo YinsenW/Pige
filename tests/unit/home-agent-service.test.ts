@@ -2361,7 +2361,7 @@ describe("Home Pi Agent service", () => {
     expect(JSON.stringify(operations)).not.toContain("North");
   });
 
-  it("keeps selected evidence optional instead of policing the final prose", async () => {
+  it("requires a real citation after Pi selects an explicit vault-only search", async () => {
     const fixture = makeFixture();
     const outcome = await new TestHomeAgentService(
       fixture.vaults,
@@ -2370,7 +2370,7 @@ describe("Home Pi Agent service", () => {
       new JobsService(fixture.vaults),
       new PiAgentRuntimeAdapter({
         fauxResponses: [
-          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: { scope: "vault_only" } },
           finishHome({
             answer: "I will ignore the selected vault evidence.",
             citationRefs: [],
@@ -2387,7 +2387,11 @@ describe("Home Pi Agent service", () => {
     expect(outcome).toMatchObject({
       state: "completed",
       modelUsage: "cloud",
-      answer: { answer: "I will ignore the selected vault evidence." }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: []
+      }
     });
     expect(readRecords<JobRecord>(path.join(fixture.vaultPath, ".pige", "jobs"))).toEqual([
       expect.objectContaining({ class: "agent_turn", state: "completed" })
@@ -2403,7 +2407,7 @@ describe("Home Pi Agent service", () => {
       new JobsService(fixture.vaults),
       new PiAgentRuntimeAdapter({
         fauxResponses: [
-          { kind: "tool_call", toolName: "pige_search_knowledge", args: {} },
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: { scope: "vault_only" } },
           finishHome({
             answer: "Missing the required citation.",
             citationRefs: [],
@@ -2427,8 +2431,8 @@ describe("Home Pi Agent service", () => {
     expect(outcome).toMatchObject({
       state: "completed",
       answer: {
-        answer: "Missing the required citation.",
-        grounding: "general",
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
         citations: []
       }
     });
@@ -3740,6 +3744,42 @@ describe("Home Pi Agent service", () => {
         answer: "Yes. I can answer generally even when the optional vault search is empty.",
         grounding: "general",
         citations: []
+      }
+    });
+  });
+
+  it("reports insufficient evidence when an explicit vault-only search is empty", async () => {
+    const fixture = makeFixture();
+    const empty = makeEmptySearchResult(fixture.vault.vaultId, "Answer only from my saved Pige knowledge.");
+    const outcome = await new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, { result: empty }),
+      new JobsService(fixture.vaults),
+      new PiAgentRuntimeAdapter({
+        fauxResponses: [
+          { kind: "tool_call", toolName: "pige_search_knowledge", args: { scope: "vault_only" } },
+          finishHome({
+            answer: "A confident answer without evidence.",
+            citationRefs: [],
+            grounding: "general"
+          })
+        ]
+      })
+    ).submitTurn({
+      text: empty.query,
+      inputKind: "typed_text",
+      locale: "en"
+    });
+
+    expect(outcome).toMatchObject({
+      state: "completed",
+      modelUsage: "cloud",
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence",
+        citations: [],
+        retrieval: expect.objectContaining({ total: 0, results: [] })
       }
     });
   });

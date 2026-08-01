@@ -1050,17 +1050,6 @@ function writeConfinedVaultFileAtomic(vaultPath: string, filePath: string, value
   }
 }
 
-async function checksumFileWithSize(sourcePath: string): Promise<{ checksum: `sha256:${string}`; size: number }> {
-  const hash = createHash("sha256");
-  let size = 0;
-  for await (const chunk of fs.createReadStream(sourcePath, { highWaterMark: 1024 * 1024 })) {
-    const buffer = chunk as Buffer;
-    size += buffer.byteLength;
-    hash.update(buffer);
-  }
-  return { checksum: `sha256:${hash.digest("hex")}`, size };
-}
-
 function vaultRelativePath(...segments: string[]): string {
   return segments.join("/");
 }

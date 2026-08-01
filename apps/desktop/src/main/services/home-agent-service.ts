@@ -119,6 +119,11 @@ import type {
 import { HomeAgentEvidenceLedger } from "./home-agent-evidence-ledger";
 import { validateHomeGroundedAnswer } from "./home-grounded-answer-validator";
 import {
+  createHomeVaultSearchTool,
+  HOME_SEARCH_TOOL_NAME,
+  projectHomeVaultSearchResult
+} from "./home-vault-search-tool";
+import {
   createCurrentNoteReplaceTool,
   hasExplicitCurrentNoteReplaceIntent,
   hasHomeCurrentNotePublicationRef,
@@ -332,7 +337,6 @@ export function scheduleAcceptedAgentTurn(execute: () => Promise<unknown>): void
   });
 }
 
-const HOME_SEARCH_TOOL_NAME = "pige_search_knowledge";
 const HOME_READ_CURRENT_NOTE_TOOL_NAME = "pige_read_current_note";
 const HOME_APPEND_CURRENT_NOTE_TOOL_NAME = "pige_append_current_note";
 const HOME_REPLACE_READER_SELECTION_TOOL_NAME = "pige_replace_reader_selection";
@@ -1367,6 +1371,7 @@ export class HomeAgentService {
       }
     }
     let searchResult: RetrievalSearchResult | undefined;
+    let vaultOnlySearchSelected = false;
     let currentNoteEvidence: CurrentNoteEvidenceBinding | undefined;
     let currentNoteToolUsed = false;
     let currentNoteAppendPublication: HomeAgentCurrentNoteAppendPublication | undefined;
@@ -1915,8 +1920,9 @@ export class HomeAgentService {
           );
           return proposal;
         }
-      })] : []), ...(readerSelectionLink && readerSelectionMutations ? [createSearchTool({
+      })] : []), ...(readerSelectionLink && readerSelectionMutations ? [createHomeVaultSearchTool({
         authorize: assertCurrentBindingAndVault,
+        allowVaultOnly: false,
         search: async () => {
           searchToolUsed = true;
           const result = await this.#retrieval.search({
@@ -1932,7 +1938,8 @@ export class HomeAgentService {
           evidenceLedger.record("local_search", modelTurnSequence);
           await authorizeCurrentModelTurn();
           return { ...result, results: exactEvidence.items };
-        }
+        },
+        projectResult: projectHomeSearchToolResult
       }), createReaderSelectionLinkTool({
         authorize: assertCurrentBindingAndVault,
         select: (targetRef) => {
@@ -1959,9 +1966,11 @@ export class HomeAgentService {
           }
           readerSelectionLinkTarget = nextTarget;
         }
-      })] : [])] : sourceSession ? [] : [createSearchTool({
+      })] : [])] : sourceSession ? [] : [createHomeVaultSearchTool({
         authorize: assertCurrentBindingAndVault,
-        search: async () => {
+        allowVaultOnly: true,
+        search: async (scope) => {
+          vaultOnlySearchSelected ||= scope === "vault_only";
           searchToolUsed = true;
           const result = await this.#retrieval.search({
             scope: { kind: "active_vault", vaultId: activeVault.vaultId },
@@ -1979,7 +1988,8 @@ export class HomeAgentService {
           evidenceLedger.record("local_search", modelTurnSequence);
           await authorizeCurrentModelTurn();
           return { ...result, results: exactEvidence.items };
-        }
+        },
+        projectResult: projectHomeSearchToolResult
       })]),
       ...(memoryToolRegistered ? [createAuthoredVaultMemoryTool({
         authoredText: query,
@@ -2114,7 +2124,7 @@ export class HomeAgentService {
     const groundedAnswer = validateHomeGroundedAnswer({
       assistantText: runtimeResult.assistantText,
       availableCitations,
-      groundingRequired: datasetResult !== undefined || urlEvidenceInspected || sourceSession !== undefined ||
+      groundingRequired: vaultOnlySearchSelected || datasetResult !== undefined || urlEvidenceInspected || sourceSession !== undefined ||
         (currentNoteEvidence !== undefined && readerSelectionTransform === undefined && readerSelectionLink === undefined &&
           readerSelectionCreateNote === undefined && !currentNoteReplaceRegistered &&
           !runtimeResult.invokedTools.some((toolName) => toolName === HOME_APPEND_CURRENT_NOTE_TOOL_NAME)),
@@ -2492,58 +2502,6 @@ function createInspectFetchedUrlTool(options: {
           pageId: evidence.pageId,
           evidenceCharacters: Array.from(evidence.extractedText).length,
           warningCount: evidence.warnings.length
-        });
-    }
-  };
-}
-
-function createSearchTool(options: {
-  readonly authorize: () => void;
-  readonly search: () => RetrievalSearchResult | Promise<RetrievalSearchResult>;
-}): PigeAgentToolDefinition {
-  return {
-    name: HOME_SEARCH_TOOL_NAME,
-    label: "Search local knowledge",
-    description: "Optionally search the active Pige vault for bounded evidence relevant to the current user turn.",
-    version: "1",
-    capability: "read_current_vault_knowledge",
-    parameters: { type: "object", properties: {}, additionalProperties: false },
-    outputSchema: {
-      type: "object",
-      properties: {
-        status: { type: "string" },
-        evidence: { type: "array" },
-        total: { type: "number" },
-        degraded: { type: "boolean" }
-      },
-      required: ["status", "evidence", "total", "degraded"],
-      additionalProperties: false
-    },
-    effect: "read_only",
-    inputTrust: "model_generated",
-    outputTrust: "untrusted_source",
-    dataBoundary: {
-      resourceScope: "current_vault",
-      pathAuthority: "host_only",
-      sourceIdAuthority: "host_only",
-      modelAuthority: "none"
-    },
-    execution: "parallel_read_only",
-    idempotency: { mode: "idempotent", scope: "current_vault" },
-    limits: { maxInputBytes: 1_024, maxOutputBytes: 64 * 1_024, timeoutMs: 30_000 },
-    ownerService: "HomeAgentService",
-    authorize: () => {
-      options.authorize();
-      return true;
-    },
-    execute: async () => {
-      options.authorize();
-      const result = await options.search();
-      const context = buildHomeQueryContextPack(result);
-      return createPigeTextToolResult(createUntrustedEvidenceEnvelope(result), {
-          resultCount: context.selectedEvidence.length,
-          invalidPageCount: result.invalidPageCount,
-          degraded: result.degraded
         });
     }
   };
@@ -2986,6 +2944,10 @@ function createHomeSystemPrompt(
       : sourceCount === 1
         ? "This turn includes one Host-bound preserved source. Inspect it with the registered current-source tools, choose any needed parse/OCR/Dataset/retrieval or knowledge action yourself, and finish with ordinary assistant prose."
       : "You may answer ordinary questions directly without a tool, including when the vault is empty.",
+    ...(!currentNoteScoped && !readerSelectionLink && sourceCount === 0 ? [
+      `When the user explicitly requires an answer only from saved Pige knowledge, call ${HOME_SEARCH_TOOL_NAME} with scope="vault_only" and cite returned evidence; if none is returned, do not substitute general knowledge.`,
+      `For every other local search, call ${HOME_SEARCH_TOOL_NAME} with scope="optional"; optional empty or irrelevant results never block ordinary assistant prose.`
+    ] : []),
     ...(currentNoteAppendAvailable ? [
       `Call ${HOME_APPEND_CURRENT_NOTE_TOOL_NAME} only when the user explicitly asks to append grounded Markdown to this exact current note, and only after ${HOME_READ_CURRENT_NOTE_TOOL_NAME} succeeded.`,
       "Pass exactly evidenceRefs=[\"citation_1\"]; ordinary final prose never writes note bytes."
@@ -3108,6 +3070,14 @@ function createUntrustedEvidenceEnvelope(
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
   return `${UNTRUSTED_EVIDENCE_START}\n${serialized}\n${UNTRUSTED_EVIDENCE_END}`;
+}
+
+function projectHomeSearchToolResult(result: RetrievalSearchResult): PigeAgentToolResult {
+  return projectHomeVaultSearchResult(
+    result,
+    createUntrustedEvidenceEnvelope(result),
+    buildHomeQueryContextPack(result).selectedEvidence.length
+  );
 }
 
 function buildHomeSearchSelectedEvidence(searchResult: RetrievalSearchResult) {
