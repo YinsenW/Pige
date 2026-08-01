@@ -10,6 +10,7 @@ import type {
   AddManualModelRequest,
   AgentConversationRequest,
   AgentConversationHistoryListRequest,
+  AgentSaveAnswerAsNoteRequest,
   ConversationRestoreRequest,
   ConversationTrashListRequest,
   ConversationTrashRequest,
@@ -70,6 +71,9 @@ import {
   AgentConversationResultSchema,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL,
+  AgentSaveAnswerAsNoteRequestSchema,
+  AgentSaveAnswerAsNoteResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
   ConversationTrashListRequestSchema,
@@ -258,6 +262,7 @@ import { ManagedCollectionService } from "./services/managed-collection-service"
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
+import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
 import { AgentConversationExportService } from "./services/agent-conversation-export-service";
 import { ConversationTrashService } from "./services/conversation-trash-service";
 import {
@@ -456,6 +461,7 @@ let notesService: NotesService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteTrashRedoService: NoteTrashRedoService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
+let assistantAnswerNoteService: AssistantAnswerNoteService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
@@ -1808,6 +1814,10 @@ const getConversationTrashService = (): ConversationTrashService => {
   conversationTrashService ??= new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   return conversationTrashService;
 };
+const getAssistantAnswerNoteService = (): AssistantAnswerNoteService => {
+  assistantAnswerNoteService ??= new AssistantAnswerNoteService(getVaultService(), homeConversationHistory);
+  return assistantAnswerNoteService;
+};
 const getNoteArchiveService = (): NoteArchiveService => {
   noteArchiveService ??= new NoteArchiveService(getNotesService(), getNoteMarkdownEditorService());
   return noteArchiveService;
@@ -2722,6 +2732,11 @@ ipcMain.handle("agent.conversationHistory", (_event, request: AgentConversationH
     getHomeAgentService().conversationHistory(parsedRequest)
   );
 });
+ipcMain.handle(AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL, (_event, request: AgentSaveAnswerAsNoteRequest) =>
+  AgentSaveAnswerAsNoteResultSchema.parse(
+    getAssistantAnswerNoteService().save(AgentSaveAnswerAsNoteRequestSchema.parse(request))
+  )
+);
 ipcMain.handle("agent.trashConversation", (_event, request: ConversationTrashRequest) => {
   const parsedRequest = ConversationTrashRequestSchema.parse(request);
   return ConversationTrashResultSchema.parse(getConversationTrashService().trash(parsedRequest));
@@ -3739,6 +3754,7 @@ app.whenReady().then(async () => {
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
   noteTrashRedoService = new NoteTrashRedoService(getVaultService());
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
+  assistantAnswerNoteService = new AssistantAnswerNoteService(getVaultService(), homeConversationHistory);
   noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
   questionStateService = new QuestionStateService(
     getNotesService(),

@@ -685,6 +685,25 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("bridges saved-answer note creation through one strict identity-only renderer request", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const schemaBlock = schemasSource.slice(
+      schemasSource.indexOf("export const AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL"),
+      schemasSource.indexOf("export const AgentConversationTitleSchema")
+    );
+    expect(contractsSource).toContain("readonly saveAnswerAsNote: (");
+    expect(preloadSource).toContain("AgentSaveAnswerAsNoteRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ipcRenderer.invoke(AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL, parsedRequest)");
+    expect(mainSource).toContain("ipcMain.handle(AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL");
+    expect(mainSource).toContain("getAssistantAnswerNoteService().save(");
+    for (const privateField of ["body:", "answer:", "title:", "path:", "contentHash:", "sourceRefs:"]) {
+      expect(schemaBlock).not.toContain(privateField);
+    }
+  });
+
   it("keeps conversation trash and restore behind strict main/preload contracts", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

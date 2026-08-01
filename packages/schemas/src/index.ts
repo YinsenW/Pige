@@ -9279,6 +9279,29 @@ export const AgentConversationSetTitleResultSchema = z.discriminatedUnion("statu
   AgentConversationTitleMutationIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
   AgentConversationTitleMutationIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
+
+export const AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL = "agent.saveAnswerAsNote" as const;
+export const AgentSaveAnswerAsNoteRequestIdSchema = z.string()
+  .regex(/^answersavereq_[a-z0-9]{16,64}$/u);
+export const AgentSaveAnswerAsNoteRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: AgentSaveAnswerAsNoteRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  conversationId: ConversationIdSchema,
+  assistantEventId: ConversationEventIdSchema
+}).strict();
+const AgentSaveAnswerAsNoteResultIdentitySchema = AgentSaveAnswerAsNoteRequestSchema;
+export const AgentSaveAnswerAsNoteResultSchema = z.discriminatedUnion("status", [
+  AgentSaveAnswerAsNoteResultIdentitySchema.extend({
+    status: z.literal("saved"),
+    pageId: PageIdSchema,
+    operationId: OperationIdSchema,
+    title: z.string().min(1).max(120)
+  }).strict(),
+  AgentSaveAnswerAsNoteResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  AgentSaveAnswerAsNoteResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  AgentSaveAnswerAsNoteResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 export const AgentConversationMetadataManifestSchema = z.object({
   schemaVersion: z.literal(1),
   revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
@@ -11034,6 +11057,9 @@ export type ConversationRestoreResult = z.output<typeof ConversationRestoreResul
 export type AgentConversationTitle = z.output<typeof AgentConversationTitleSchema>;
 export type AgentConversationSetTitleRequest = z.input<typeof AgentConversationSetTitleRequestSchema>;
 export type AgentConversationSetTitleResult = z.output<typeof AgentConversationSetTitleResultSchema>;
+export type AgentSaveAnswerAsNoteRequestId = z.output<typeof AgentSaveAnswerAsNoteRequestIdSchema>;
+export type AgentSaveAnswerAsNoteRequest = z.input<typeof AgentSaveAnswerAsNoteRequestSchema>;
+export type AgentSaveAnswerAsNoteResult = z.output<typeof AgentSaveAnswerAsNoteResultSchema>;
 export type AgentConversationMetadataManifest = z.output<typeof AgentConversationMetadataManifestSchema>;
 export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
 export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;

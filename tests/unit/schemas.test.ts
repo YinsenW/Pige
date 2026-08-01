@@ -6,6 +6,8 @@ import {
   AGENT_CONVERSATION_TITLE_MAX_CODE_POINTS,
   AgentConversationHistoryListRequestSchema,
   AgentConversationHistoryListResultSchema,
+  AgentSaveAnswerAsNoteRequestSchema,
+  AgentSaveAnswerAsNoteResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
   ConversationTrashListResultSchema,
@@ -626,6 +628,35 @@ describe("schemas", () => {
       query,
       status: "failed"
     })).toEqual({ apiVersion: 1, activeVaultId: request.activeVaultId, query, status: "failed" });
+  });
+
+  it("keeps saved-answer note authority bound to one durable assistant event identity", () => {
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "answersavereq_20260801schema0001",
+      activeVaultId: "vault_20260801_savedanswer01",
+      conversationId: "conv_20260801_savedanswer01",
+      assistantEventId: "evt_20260801_savedanswer01"
+    };
+    expect(AgentSaveAnswerAsNoteRequestSchema.parse(request)).toEqual(request);
+    for (const privateField of ["body", "answer", "title", "path", "contentHash", "sourceRefs"]) {
+      expect(() => AgentSaveAnswerAsNoteRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
+    }
+    expect(AgentSaveAnswerAsNoteResultSchema.parse({
+      ...request,
+      status: "saved",
+      pageId: "page_20260801_savedanswer01",
+      operationId: "op_20260801_savedanswer01",
+      title: "Saved answer"
+    })).toMatchObject({ status: "saved", title: "Saved answer" });
+    for (const status of ["stale", "not_found", "failed"] as const) {
+      expect(AgentSaveAnswerAsNoteResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
+      expect(() => AgentSaveAnswerAsNoteResultSchema.parse({
+        ...request,
+        status,
+        pageId: "page_20260801_privateanswer01"
+      })).toThrow();
+    }
   });
 
   it("fences current-note append review and completion projections to exact states", () => {

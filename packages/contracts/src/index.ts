@@ -17,6 +17,8 @@ import type {
   ConversationTrashSummary,
   AgentConversationSetTitleRequest,
   AgentConversationSetTitleResult,
+  AgentSaveAnswerAsNoteRequest,
+  AgentSaveAnswerAsNoteResult,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -480,6 +482,8 @@ export type {
   ConversationTrashSummary,
   AgentConversationSetTitleRequest,
   AgentConversationSetTitleResult,
+  AgentSaveAnswerAsNoteRequest,
+  AgentSaveAnswerAsNoteResult,
   AgentStagedItem,
   AgentStagedLargePasteItem,
   AgentStagedItemRejectionReason,
@@ -2173,6 +2177,9 @@ export interface PigeDesktopApi {
     readonly setConversationTitle: (
       request: AgentConversationSetTitleRequest
     ) => Promise<AgentConversationSetTitleResult>;
+    readonly saveAnswerAsNote: (
+      request: AgentSaveAnswerAsNoteRequest
+    ) => Promise<AgentSaveAnswerAsNoteResult>;
     readonly currentNoteAppendProposal: (
       request: CurrentNoteAppendProposalGetRequest
     ) => Promise<CurrentNoteAppendProposalGetResult>;

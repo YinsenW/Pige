@@ -17,6 +17,8 @@ import type {
   ConversationTrashResult,
   AgentConversationSetTitleRequest,
   AgentConversationSetTitleResult,
+  AgentSaveAnswerAsNoteRequest,
+  AgentSaveAnswerAsNoteResult,
   AgentSubmitTurnRequest,
   AgentSubmitTurnIpcResult,
   AgentTurnDraftEvent,
@@ -393,6 +395,9 @@ import {
   ConversationTrashResultSchema,
   AgentConversationSetTitleRequestSchema,
   AgentConversationSetTitleResultSchema,
+  AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL,
+  AgentSaveAnswerAsNoteRequestSchema,
+  AgentSaveAnswerAsNoteResultSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnIpcResultSchema,
   CurrentNoteAppendProposalDecisionRequestSchema,
@@ -1639,6 +1644,23 @@ const api: PigeDesktopApi = {
       if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
         result.conversationId !== parsedRequest.conversationId) {
         throw new Error("Invalid conversation title response identity.");
+      }
+      return result;
+    },
+    saveAnswerAsNote: async (
+      request: AgentSaveAnswerAsNoteRequest
+    ): Promise<AgentSaveAnswerAsNoteResult> => {
+      const parsedRequest = AgentSaveAnswerAsNoteRequestSchema.parse(request);
+      const result = AgentSaveAnswerAsNoteResultSchema.parse(
+        await ipcRenderer.invoke(AGENT_SAVE_ANSWER_AS_NOTE_CHANNEL, parsedRequest) as unknown
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.conversationId !== parsedRequest.conversationId ||
+        result.assistantEventId !== parsedRequest.assistantEventId
+      ) {
+        throw new Error("Invalid saved-answer response identity.");
       }
       return result;
     },
