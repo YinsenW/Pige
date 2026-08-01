@@ -40,6 +40,7 @@ import {
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
+  COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL,
   COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL,
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   COLLECTION_LIST_CHANNEL,
@@ -57,6 +58,8 @@ import {
   CollectionUpdateRollupColumnRequestSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
+  CollectionUpdateRelationColumnRequestSchema,
+  CollectionUpdateRelationColumnResultSchema,
   CollectionRelationCellValueSchema,
   CollectionUpdateFormulaColumnRequestSchema,
   CollectionUpdateFormulaColumnResultSchema,
@@ -2342,6 +2345,7 @@ describe("schemas", () => {
 
     expect(COLLECTION_ADD_RELATION_COLUMN_CHANNEL).toBe("collections.addRelationColumn");
     expect(COLLECTION_EDIT_RELATION_CELL_CHANNEL).toBe("collections.editRelationCell");
+    expect(COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL).toBe("collections.updateRelationColumn");
     expect(DatasetPigeRelationSchema.parse(relation)).toEqual(relation);
     expect(DatasetPigeRelationCellSchema.parse({
       kind: "pige_relation_target",
@@ -2470,6 +2474,7 @@ describe("schemas", () => {
       canEditFormula: false,
       canUseAsRelationDisplay: false,
       canEditRelation: true,
+      canEditRelationDefinition: true,
       hasInboundRelationDescriptors: false,
       relation
     } as const;
@@ -2594,6 +2599,20 @@ describe("schemas", () => {
       expect(CollectionEditRelationCellResultSchema.parse({ ...editIdentity, status }).status)
         .toBe(status);
     }
+    const updateRequest = {
+      apiVersion: 1, requestId: "collection_request_relationupdate01",
+      activeVaultId: addRequest.activeVaultId, datasetId, tableId: sourceTableId,
+      expectedRevisionId: sourceSnapshot.revisionId, columnId: relationColumnId,
+      targetTableId, targetDisplayColumnId
+    } as const;
+    expect(CollectionUpdateRelationColumnRequestSchema.parse(updateRequest)).toEqual(updateRequest);
+    expect(CollectionUpdateRelationColumnResultSchema.parse({
+      apiVersion: 1, requestId: updateRequest.requestId, activeVaultId: updateRequest.activeVaultId,
+      datasetId, tableId: sourceTableId, columnId: relationColumnId, targetTableId,
+      targetDisplayColumnId, status: "committed", operationId: "op_20260729_relationupdate1",
+      snapshot: sourceSnapshot
+    }).status).toBe("committed");
+    expect(() => CollectionUpdateRelationColumnRequestSchema.parse({ ...updateRequest, rawSql: "select 1" })).toThrow();
     expect(() => CollectionEditRelationCellRequestSchema.parse({
       ...editRequest,
       targetTableId,
@@ -2716,9 +2735,19 @@ describe("schemas", () => {
       operationId: "op_20260729_relationundo1",
       change: { kind: "collection_relation_cell_edit_undo", tableId: sourceTableId, rowId: editRequest.rowId, columnId: relationColumnId, targetTableId, targetRowId: null, undoOfOperationId: "op_20260729_relationedit1" }
     }).change?.kind).toBe("collection_relation_cell_edit_undo");
-    for (const kind of ["add_collection_relation", "update_collection_relation_cell"] as const) {
+    expect(DatasetRevisionSchema.parse({
+      ...revisionBase,
+      id: "dataset_rev_20260729_relation000006",
+      parentRevisionId: sourceSnapshot.revisionId,
+      payload: { ...revisionBase.payload, path: "data/revisions/dataset_rev_20260729_relation000006.sqlite" },
+      operationId: "op_20260729_relationupdate1",
+      change: { kind: "collection_relation_update", tableId: sourceTableId, columnId: relationColumnId,
+        targetTableId, targetDisplayColumnId }
+    }).change?.kind).toBe("collection_relation_update");
+    for (const kind of ["add_collection_relation", "update_collection_relation_cell", "update_collection_relation"] as const) {
       expect(OperationRecordSchema.parse({
-        id: kind === "add_collection_relation" ? "op_20260729_relationadd01" : "op_20260729_relationedit1",
+        id: kind === "add_collection_relation" ? "op_20260729_relationadd01" :
+          kind === "update_collection_relation" ? "op_20260729_relationupdate1" : "op_20260729_relationedit1",
         schemaVersion: 1,
         createdAt: "2026-07-29T00:00:00.000Z",
         actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },

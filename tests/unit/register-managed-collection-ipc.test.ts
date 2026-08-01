@@ -99,6 +99,14 @@ const editRelationRequest = {
   columnId: "column_relationabcdef",
   targetRowId: "row_targetabcdefgh"
 } as const;
+const updateRelationRequest = {
+  ...openRequest,
+  requestId: "collection_request_relationupdateipc",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
+  columnId: "column_relationabcdef",
+  targetTableId: "table_targetabcdefgh",
+  targetDisplayColumnId: "column_targetcountabc"
+} as const;
 const renameColumnRequest = {
   ...openRequest,
   requestId: "collection_request_renameabcdefghij",
@@ -167,6 +175,7 @@ function makeHarness(options: {
   readonly addRollupCollectionColumn?: (request: typeof addRollupRequest) => unknown;
   readonly updateRollupCollectionColumn?: (request: typeof updateRollupRequest) => unknown;
   readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
+  readonly updateRelationCollectionColumn?: (request: typeof updateRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
   readonly updateCollectionView?: (request: typeof updateViewRequest) => unknown;
@@ -278,6 +287,12 @@ function makeHarness(options: {
     datasetId: request.datasetId, tableId: request.tableId, rowId: request.rowId,
     columnId: request.columnId, targetRowId: request.targetRowId, status: "not_found"
   })));
+  const updateRelationCollectionColumn = vi.fn(options.updateRelationCollectionColumn ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+    targetTableId: request.targetTableId, targetDisplayColumnId: request.targetDisplayColumnId,
+    status: "not_found"
+  })));
   const trashCollectionRow = vi.fn(options.trashCollectionRow ?? ((request) => ({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
@@ -346,6 +361,7 @@ function makeHarness(options: {
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
+    updateRelationCollectionColumn,
     renameCollectionColumn,
     createCollectionView,
     updateCollectionView,
@@ -370,6 +386,7 @@ function makeHarness(options: {
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
+    updateRelationCollectionColumn,
     renameCollectionColumn,
     createCollectionView,
     updateCollectionView,
@@ -394,6 +411,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateFormulaColumn",
       "collections.addRelationColumn",
       "collections.editRelationCell",
+      "collections.updateRelationColumn",
       "collections.addLookupColumn",
       "collections.addRollupColumn",
       "collections.updateLookupColumn",
@@ -573,8 +591,12 @@ describe("registerManagedCollectionIpc", () => {
     await expect(accepted.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
     )).resolves.toMatchObject({ status: "not_found", targetRowId: editRelationRequest.targetRowId });
+    await expect(accepted.handlers.get("collections.updateRelationColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateRelationRequest
+    )).resolves.toMatchObject({ status: "not_found", targetDisplayColumnId: updateRelationRequest.targetDisplayColumnId });
     expect(accepted.addRelationCollectionColumn).toHaveBeenCalledWith(addRelationRequest);
     expect(accepted.editRelationCollectionCell).toHaveBeenCalledWith(editRelationRequest);
+    expect(accepted.updateRelationCollectionColumn).toHaveBeenCalledWith(updateRelationRequest);
 
     const untrusted = makeHarness({ isTrustedSender: () => false });
     await expect(untrusted.handlers.get("collections.addRelationColumn")!(
@@ -583,8 +605,12 @@ describe("registerManagedCollectionIpc", () => {
     await expect(untrusted.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
     )).resolves.toMatchObject({ status: "failed" });
+    await expect(untrusted.handlers.get("collections.updateRelationColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateRelationRequest
+    )).resolves.toMatchObject({ status: "failed" });
     expect(untrusted.addRelationCollectionColumn).not.toHaveBeenCalled();
     expect(untrusted.editRelationCollectionCell).not.toHaveBeenCalled();
+    expect(untrusted.updateRelationCollectionColumn).not.toHaveBeenCalled();
 
     const mismatched = makeHarness({
       editRelationCollectionCell: (request) => ({
@@ -596,6 +622,14 @@ describe("registerManagedCollectionIpc", () => {
     });
     await expect(mismatched.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
+    )).rejects.toThrow("response identity did not match");
+    const mismatchedUpdate = makeHarness({ updateRelationCollectionColumn: (request) => ({
+      apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+      targetTableId: request.targetTableId, targetDisplayColumnId: "column_otherdisplayabc", status: "not_found"
+    }) });
+    await expect(mismatchedUpdate.handlers.get("collections.updateRelationColumn")!(
+      { sender: {} } as IpcMainInvokeEvent, updateRelationRequest
     )).rejects.toThrow("response identity did not match");
   });
 

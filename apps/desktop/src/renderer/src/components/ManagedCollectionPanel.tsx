@@ -142,7 +142,7 @@ export function ManagedCollectionPanel(props: {
   const [columnFocusRequest, setColumnFocusRequest] = useState<string | null>(null);
   const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
   const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
-  const [relationEditRequest, setRelationEditRequest] = useState<{ readonly rowId: string; readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
+  const [relationEditRequest, setRelationEditRequest] = useState<{ readonly kind: "cell" | "definition"; readonly rowId?: string; readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
   const [visibleRows, setVisibleRows] = useState<CollectionSnapshot["rows"]>(props.snapshot.rows);
   const [nextRowCursor, setNextRowCursor] = useState(props.nextRowCursor);
   const [rowsLoading, setRowsLoading] = useState(false);
@@ -801,6 +801,7 @@ export function ManagedCollectionPanel(props: {
               onRenameColumn={props.onRenameColumn}
               onTrashColumn={props.onTrashColumn}
               onEditFormulaColumn={(columnId) => setFormulaEditRequest({ columnId, ownerKey, revisionId: props.snapshot.revisionId })}
+              onEditRelationColumn={(columnId) => setRelationEditRequest({ kind: "definition", columnId, ownerKey, revisionId: props.snapshot.revisionId })}
               onAdoptSnapshot={props.onAdoptSnapshot}
               onBusyChange={(active) => {
                 columnActionsActiveRef.current = active;
@@ -875,7 +876,7 @@ export function ManagedCollectionPanel(props: {
                           onClick={() => {
                             if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
                             setNotice(null);
-                            setRelationEditRequest({ ...identity, ownerKey, revisionId: props.snapshot.revisionId });
+                            setRelationEditRequest({ kind: "cell", ...identity, ownerKey, revisionId: props.snapshot.revisionId });
                           }}
                         >
                           {formatCollectionCellValue(cellValue) || props.t("collection.relationEmpty")}

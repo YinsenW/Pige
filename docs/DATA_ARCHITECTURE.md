@@ -89,7 +89,9 @@ Formula/relation/lookup/rollup descriptors are schema truth, including empty tab
 same-table numeric scalar, numeric lookup/rollup, or Pige numeric formula columns only when the bounded
 dependency graph remains acyclic; Main evaluates the stable topological order and recomputes the
 transitive downstream closure. A relation binds one same-Dataset
-table/scalar label and stores row IDs; its scalar lookup stays derived/read-only. Lookup definitions
+table/scalar label and stores row IDs; changing only its display field preserves row IDs, while changing
+the target table clears every prior target before publication. A relation definition is ineligible while
+a lookup/rollup depends on it; its scalar lookup stays derived/read-only. Lookup definitions
 can switch the current relation/scalar target while target edits reproject it; null/dangling resolves null.
 A single-relation rollup derives count or numeric sum; both derived definitions are editable without
 making their cells writable. Relation retarget, referenced scalar edit and lookup/rollup definition update

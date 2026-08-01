@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "이 테이블에는 관련 행의 레이블로 사용할 수 있는 필드가 없습니다.",
   "collection.relation_added": "관계 필드가 새 리비전으로 추가되었습니다.",
   "collection.relation_saved": "관련 행이 새 리비전으로 저장되었습니다.",
+  "collection.relation_definition_saved": "관계 설정이 새 리비전으로 저장되었습니다.",
   "collection.relation_stale": "컬렉션이 변경되었습니다. 관계 선택은 최신 리비전에 맞춰 유지됩니다.",
   "collection.relation_not_found": "이 컬렉션 또는 관련 행을 더 이상 사용할 수 없습니다. 선택은 유지됩니다.",
   "collection.relation_ineligible": "이 관계는 더 이상 변경할 수 없습니다. 선택은 유지됩니다.",

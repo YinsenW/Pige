@@ -6,6 +6,8 @@ import { PigeDomainError } from "@pige/domain";
 import {
   CollectionAddRelationColumnRequestSchema,
   CollectionAddRelationColumnResultSchema,
+  CollectionUpdateRelationColumnRequestSchema,
+  CollectionUpdateRelationColumnResultSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
   CollectionRelationDisplayLabelSchema,
@@ -21,6 +23,8 @@ import {
   type CollectionEditRelationCellResult,
   type CollectionRelationCellValue,
   type CollectionSnapshot,
+  type CollectionUpdateRelationColumnRequest,
+  type CollectionUpdateRelationColumnResult,
   type DatasetColumn,
   type DatasetPigeRelationCell,
   type DatasetRevision,
@@ -79,6 +83,14 @@ export function createRelationEditIdentity(request: CollectionEditRelationCellRe
   };
 }
 
+export function createRelationUpdateIdentity(request: CollectionUpdateRelationColumnRequest): RelationMutationIdentity {
+  const dateKey = revisionDateKey(request.expectedRevisionId);
+  return {
+    revisionId: `dataset_rev_${dateKey}_${digest("pige:collection-relation-update:v1", request.requestId).slice(0, 20)}`,
+    operationId: `op_${dateKey}_${digest("pige:collection-relation-update-operation:v1", request.requestId).slice(0, 20)}`
+  };
+}
+
 export function projectRelationColumns(
   columns: readonly DatasetColumn[],
   allColumns: readonly DatasetColumn[],
@@ -87,6 +99,10 @@ export function projectRelationColumns(
   const inboundDisplay = new Set(allColumns.flatMap((column) => column.relation
     ? [column.relation.targetDisplayColumnId]
     : []));
+  const derivedRelationSources = new Set(allColumns.flatMap((column) => [
+    ...(column.lookup ? [column.lookup.relationColumnId] : []),
+    ...(column.rollup ? [column.rollup.relationColumnId] : [])
+  ]));
   return base.map((summary) => {
     const column = columns.find((candidate) => candidate.id === summary.columnId);
     if (!column) throw payloadInvalid();
@@ -99,6 +115,7 @@ export function projectRelationColumns(
       canTrash: summary.canTrash && !inboundDisplay.has(column.id),
       canUseAsFormulaOperand: summary.canUseAsFormulaOperand && !relation,
       canUseAsRelationDisplay: scalar,
+      canEditRelationDefinition: relation?.kind === "pige_single_relation" && !derivedRelationSources.has(column.id),
       canEditRelation: relation?.kind === "pige_single_relation",
       hasInboundRelationDescriptors: inboundDisplay.has(column.id),
       ...(relation ? { relation } : {})
@@ -284,13 +301,55 @@ export function executeRelationEdit(input: {
   }
 }
 
+export function executeRelationUpdate(input: {
+  readonly vaultPath?: string;
+  readonly request: CollectionUpdateRelationColumnRequest;
+  readonly isVaultActive: () => boolean;
+  readonly readSnapshot: (binding: BundleBinding, tableId: string) => CollectionSnapshot | undefined;
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}): CollectionUpdateRelationColumnResult {
+  const request = CollectionUpdateRelationColumnRequestSchema.parse(input.request);
+  const identity = updateResultIdentity(request);
+  if (!input.vaultPath) return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "not_found" });
+  try {
+    const binding = readBundle(input.vaultPath, request.datasetId);
+    if (!binding) return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "not_found" });
+    const mutation = createRelationUpdateIdentity(request);
+    const adopted = adoptRelationUpdate({ binding, request, identity: mutation,
+      readSnapshot: input.readSnapshot, createOperation: input.createOperation });
+    if (adopted) return adopted;
+    const snapshot = input.readSnapshot(binding, request.tableId);
+    if (!snapshot) return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "not_found" });
+    if (binding.manifest.activeRevision !== request.expectedRevisionId) {
+      return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+    }
+    const committed = commitRelationUpdate(binding, request, mutation);
+    const operation = input.createOperation(committed.binding, committed.revision);
+    writeJsonExclusive(operationPathFor(committed.binding.vaultPath, operation.id), operation);
+    if (!input.isVaultActive()) return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "not_found" });
+    const next = input.readSnapshot(committed.binding, request.tableId);
+    if (!next) throw payloadInvalid();
+    return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "committed", operationId: operation.id, snapshot: next });
+  } catch (caught) {
+    if (caught instanceof PigeDomainError && caught.code === "collection.request_conflict") throw caught;
+    const current = input.vaultPath ? readBundle(input.vaultPath, request.datasetId) : undefined;
+    const snapshot = current ? input.readSnapshot(current, request.tableId) : undefined;
+    if (snapshot && current?.manifest.activeRevision !== request.expectedRevisionId) {
+      return CollectionUpdateRelationColumnResultSchema.parse({ ...identity, status: "stale", snapshot });
+    }
+    return CollectionUpdateRelationColumnResultSchema.parse({
+      ...identity, status: caught instanceof PigeDomainError ? "ineligible" : "failed"
+    });
+  }
+}
+
 export function commitRelationUndo(input: {
   readonly binding: BundleBinding;
   readonly identity: RelationMutationIdentity;
   readonly afterRevisionId: string;
   readonly beforeRevisionId: string;
   readonly undoOfOperationId: string;
-  readonly kind: "collection_relation_add" | "collection_relation_cell_edit";
+  readonly kind: "collection_relation_add" | "collection_relation_update" | "collection_relation_cell_edit";
 }): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
   const current = requireCurrent(input.binding, input.afterRevisionId);
   const after = readRevisionById(current, input.afterRevisionId);
@@ -306,6 +365,15 @@ export function commitRelationUndo(input: {
       targetDisplayColumnId: after.change.targetDisplayColumnId,
       undoOfOperationId: input.undoOfOperationId
     }
+    : after.change.kind === "collection_relation_update"
+      ? {
+        kind: "collection_relation_update_undo" as const,
+        targetTableId: beforeSchema.tables.find((candidate) => candidate.id === tableId)
+          ?.columns.find((candidate) => candidate.id === columnId)?.relation?.targetTableId ?? after.change.targetTableId,
+        targetDisplayColumnId: beforeSchema.tables.find((candidate) => candidate.id === tableId)
+          ?.columns.find((candidate) => candidate.id === columnId)?.relation?.targetDisplayColumnId ?? after.change.targetDisplayColumnId,
+        undoOfOperationId: input.undoOfOperationId
+      }
     : {
       kind: "collection_relation_cell_edit_undo" as const,
       targetTableId: after.change.targetTableId,
@@ -440,6 +508,46 @@ function commitRelationEdit(
   });
 }
 
+function commitRelationUpdate(
+  binding: BundleBinding,
+  request: CollectionUpdateRelationColumnRequest,
+  identity: RelationMutationIdentity
+): { readonly binding: BundleBinding; readonly revision: DatasetRevision } {
+  const current = requireCurrent(binding, request.expectedRevisionId);
+  const table = current.schema.tables.find((candidate) => candidate.id === request.tableId);
+  const column = table?.columns.find((candidate) => candidate.id === request.columnId);
+  const relation = column?.relation;
+  const targetTable = current.schema.tables.find((candidate) => candidate.id === request.targetTableId);
+  const display = targetTable?.columns.find((candidate) => candidate.id === request.targetDisplayColumnId);
+  const dependent = current.schema.tables.some((candidate) => candidate.columns.some((entry) =>
+    entry.lookup?.relationColumnId === request.columnId || entry.rollup?.relationColumnId === request.columnId));
+  if (!table || !column || relation?.kind !== "pige_single_relation" || !targetTable || !display ||
+      !isRelationDisplayColumn(display) || dependent ||
+      (relation.targetTableId === targetTable.id && relation.targetDisplayColumnId === display.id)) {
+    throw new PigeDomainError("collection.relation_ineligible", "The relation descriptor is ineligible.");
+  }
+  const clearTargets = relation.targetTableId !== targetTable.id;
+  const nextStats = clearTargets
+    ? { missing: 0, empty: 0, null: table.rowCount, value: 0 }
+    : column.stats;
+  const descriptor = { kind: "pige_single_relation" as const, schemaVersion: 1 as const,
+    targetTableId: targetTable.id, targetDisplayColumnId: display.id };
+  return publishMutation({
+    current, identity, tableId: table.id, columnId: column.id,
+    change: { kind: "collection_relation_update", targetTableId: targetTable.id, targetDisplayColumnId: display.id },
+    mutate: (database) => updateRelationDescriptorPayload(database, current, column, clearTargets, identity.revisionId),
+    schema: DatasetSchemaRecordSchema.parse({
+      ...current.schema, revisionId: identity.revisionId, createdAt: new Date().toISOString(),
+      tables: current.schema.tables.map((candidate) => candidate.id === table.id
+        ? { ...candidate, columns: candidate.columns.map((entry) => entry.id === column.id
+          ? { ...entry, relation: descriptor, ...(nextStats ? { stats: nextStats } : {}) }
+          : entry) }
+        : candidate)
+    }),
+    stats: current.revision.stats
+  });
+}
+
 function publishMutation(input: {
   readonly current: BundleBinding;
   readonly identity: RelationMutationIdentity;
@@ -449,6 +557,8 @@ function publishMutation(input: {
   readonly change: Record<string, unknown> & { readonly kind:
     | "collection_relation_add"
     | "collection_relation_add_undo"
+    | "collection_relation_update"
+    | "collection_relation_update_undo"
     | "collection_relation_cell_edit"
     | "collection_relation_cell_edit_undo" };
   readonly mutate: (database: DatabaseSync) => void;
@@ -568,6 +678,23 @@ function editRelationCell(database: DatabaseSync, current: BundleBinding, column
   }
 }
 
+function updateRelationDescriptorPayload(database: DatabaseSync, current: BundleBinding, column: DatasetColumn,
+  clearTargets: boolean, revisionId: string): void {
+  validateRelationSourceColumn(database, current.schema,
+    current.schema.tables.find((table) => table.columns.some((candidate) => candidate.id === column.id))?.id ?? "", column.id);
+  if (clearTargets) {
+    const changed = database.prepare([
+      "UPDATE pige_dataset_cells SET state = 'null', source_type = ?, lexical_raw = NULL, lexical_text = NULL, quoted = NULL,",
+      "projection_kind = ?, projection_json = 'null', formula_json = NULL, source_style_json = NULL WHERE column_id = ?"
+    ].join(" ")).run(RELATION_SOURCE_TYPE, RELATION_PROJECTION_KIND, column.id);
+    const table = current.schema.tables.find((candidate) => candidate.columns.some((entry) => entry.id === column.id));
+    if (!table || changed.changes !== table.rowCount || database.prepare("UPDATE pige_dataset_columns SET stats_json = ? WHERE column_id = ?")
+      .run(JSON.stringify({ missing: 0, empty: 0, null: table.rowCount, value: 0 }), column.id).changes !== 1) throw payloadInvalid();
+  }
+  if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'")
+    .run(revisionId).changes !== 1) throw payloadInvalid();
+}
+
 function adoptRelationAdd(input: {
   readonly binding: BundleBinding; readonly request: CollectionAddRelationColumnRequest; readonly identity: RelationMutationIdentity;
   readonly readSnapshot: (binding: BundleBinding, tableId: string) => CollectionSnapshot | undefined;
@@ -605,8 +732,29 @@ function adoptRelationEdit(input: {
   return CollectionEditRelationCellResultSchema.parse({ ...editResultIdentity(input.request), status: "committed", operationId: adopted.operation.id, snapshot });
 }
 
+function adoptRelationUpdate(input: {
+  readonly binding: BundleBinding; readonly request: CollectionUpdateRelationColumnRequest; readonly identity: RelationMutationIdentity;
+  readonly readSnapshot: (binding: BundleBinding, tableId: string) => CollectionSnapshot | undefined;
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}): CollectionUpdateRelationColumnResult | undefined {
+  const adopted = adoptRevision(input.binding, input.request.expectedRevisionId, input.identity,
+    "collection_relation_update", input.createOperation);
+  if (!adopted) return undefined;
+  const change = adopted.revision.change;
+  if (change?.kind !== "collection_relation_update" || change.tableId !== input.request.tableId ||
+      change.columnId !== input.request.columnId || change.targetTableId !== input.request.targetTableId ||
+      change.targetDisplayColumnId !== input.request.targetDisplayColumnId) throw requestConflict();
+  const snapshot = input.readSnapshot(adopted.binding, input.request.tableId);
+  if (!snapshot) throw requestConflict();
+  const descriptor = snapshot.columns.find((candidate) => candidate.columnId === input.request.columnId)?.relation;
+  if (descriptor?.targetTableId !== input.request.targetTableId ||
+      descriptor.targetDisplayColumnId !== input.request.targetDisplayColumnId) throw requestConflict();
+  return CollectionUpdateRelationColumnResultSchema.parse({ ...updateResultIdentity(input.request),
+    status: "committed", operationId: adopted.operation.id, snapshot });
+}
+
 function adoptRevision(binding: BundleBinding, expectedRevisionId: string, identity: RelationMutationIdentity,
-  kind: "collection_relation_add" | "collection_relation_cell_edit",
+  kind: "collection_relation_add" | "collection_relation_update" | "collection_relation_cell_edit",
   createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord
 ): { readonly binding: BundleBinding; readonly revision: DatasetRevision; readonly operation: OperationRecord } | undefined {
   const revisionPath = resolveBundleRelativePath(binding.bundlePath, `revisions/${identity.revisionId}.json`);
@@ -696,6 +844,11 @@ function editResultIdentity(request: CollectionEditRelationCellRequest) { return
   apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
   datasetId: request.datasetId, tableId: request.tableId, rowId: request.rowId,
   columnId: request.columnId, targetRowId: request.targetRowId
+}; }
+function updateResultIdentity(request: CollectionUpdateRelationColumnRequest) { return {
+  apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+  datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+  targetTableId: request.targetTableId, targetDisplayColumnId: request.targetDisplayColumnId
 }; }
 function normalize(value: string): string { return value.trim().normalize("NFC").toLocaleLowerCase("en-US"); }
 function revisionDateKey(revisionId: string): string {

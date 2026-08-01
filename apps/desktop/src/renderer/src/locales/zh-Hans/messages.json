@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "此表格没有可用于标识关联行的字段。",
   "collection.relation_added": "已将关联字段添加为新修订版本。",
   "collection.relation_saved": "已将关联行保存为新修订版本。",
+  "collection.relation_definition_saved": "关联设置已保存为新修订版本。",
   "collection.relation_stale": "集合已发生变化；你的关联选择已针对最新修订版本保留。",
   "collection.relation_not_found": "此集合或关联行已不可用，你的选择已保留。",
   "collection.relation_ineligible": "此关联已无法更改，你的选择已保留。",

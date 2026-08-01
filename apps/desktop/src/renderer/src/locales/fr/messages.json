@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "Cette table n’a aucun champ permettant d’identifier les lignes liées.",
   "collection.relation_added": "Champ de relation ajouté dans une nouvelle révision.",
   "collection.relation_saved": "Ligne liée enregistrée dans une nouvelle révision.",
+  "collection.relation_definition_saved": "Paramètres de relation enregistrés dans une nouvelle révision.",
   "collection.relation_stale": "La collection a changé. Votre sélection de relation est conservée sur la dernière révision.",
   "collection.relation_not_found": "Cette collection ou cette ligne liée n’est plus disponible. Votre sélection est conservée.",
   "collection.relation_ineligible": "Cette relation ne peut plus être modifiée. Votre sélection est conservée.",

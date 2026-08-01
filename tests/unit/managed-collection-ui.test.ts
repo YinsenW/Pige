@@ -20,6 +20,8 @@ import type {
   CollectionUpdateRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
+  CollectionUpdateRelationColumnRequest,
+  CollectionUpdateRelationColumnResult,
   CollectionListResult,
   CollectionOpenRequest,
   CollectionOpenResult,
@@ -572,6 +574,56 @@ describe("ManagedCollectionPanel", () => {
 
     await act(async () => root.unmount());
     dom.window.close();
+  });
+
+  it("edits one relation definition and returns focus to the exact column", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const base = relationSourceSnapshot("dataset_rev_20260729_relationedit01", false);
+    const initial = withRelationColumn(base, relationAddRequest(base), null, null, base.revisionId);
+    const targetBase = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    const target: CollectionSnapshot = { ...targetBase, columns: [...targetBase.columns, {
+      columnId: "column_relationcode01", label: "Company code", logicalType: "string",
+      canRename: true, canTrash: false, canUseAsFormulaOperand: false, canEditFormula: false,
+      canUseAsRelationDisplay: true, canEditRelation: false, hasInboundRelationDescriptors: false
+    }], rows: targetBase.rows.map((row) => ({ ...row, cells: [...row.cells,
+      { columnId: "column_relationcode01", value: "ACME", editable: true }] })) };
+    const requests: CollectionUpdateRelationColumnRequest[] = [];
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: { collections: {
+      list: async (): Promise<CollectionListResult> => relationCatalog(initial),
+      open: async (request: CollectionOpenRequest): Promise<CollectionOpenResult> => ({
+        ...openIdentity(request), status: "ready", snapshot: target
+      }),
+      updateRelationColumn: async (request: CollectionUpdateRelationColumnRequest): Promise<CollectionUpdateRelationColumnResult> => {
+        requests.push(request);
+        return { apiVersion: 1, requestId: request.requestId, activeVaultId: request.activeVaultId,
+          datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
+          targetTableId: request.targetTableId, targetDisplayColumnId: request.targetDisplayColumnId, status: "committed",
+          operationId: "op_20260729_relationdefinition1", snapshot: {
+            ...initial, revisionId: "dataset_rev_20260729_relationedit02",
+            columns: initial.columns.map((column) => column.columnId === request.columnId ? {
+              ...column, relation: { kind: "pige_single_relation" as const, schemaVersion: 1 as const,
+                targetTableId: request.targetTableId, targetDisplayColumnId: request.targetDisplayColumnId }
+            } : column)
+          } };
+      }
+    } } });
+    await act(async () => { root.render(createElement(RelationCollectionHarness, { initialSnapshot: initial })); await settle(dom); });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit relation: Company")); await settle(dom);
+    expect(requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-table")).value)
+      .toBe(target.tableId);
+    await selectValue(dom, requireElement(container.querySelector<HTMLSelectElement>("#collection-relation-display")),
+      "column_relationcode01");
+    await click(dom, buttonNamed(container, "Save"));
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ columnId: "column_relationlink01", targetTableId: target.tableId,
+      targetDisplayColumnId: "column_relationcode01", expectedRevisionId: initial.revisionId });
+    expect(container.textContent).toContain("Relation settings saved as a new revision.");
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector('[data-collection-column-id="column_relationlink01"]')
+    );
+    await act(async () => root.unmount()); dom.window.close();
   });
 
   it("adds one relation-backed scalar lookup and renders its projected value read-only", async () => {
@@ -2710,6 +2762,7 @@ function withRelationColumn(
       canEditFormula: false,
       canUseAsRelationDisplay: false,
       canEditRelation: true,
+      canEditRelationDefinition: true,
       hasInboundRelationDescriptors: false,
       relation: {
         kind: "pige_single_relation",

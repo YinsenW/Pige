@@ -4016,6 +4016,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-29
+Revised: 2026-08-01
 
 Decision:
 
@@ -4031,7 +4032,8 @@ Consequences:
 
 - Formulas use numeric scalar, numeric lookup/rollup or Pige-formula inputs, reject direct/indirect cycles
   before effect, and recompute in stable topological order after source-cell, relation or descriptor changes;
-  single relations store same-Dataset row IDs. Lookups follow one
+  single relations store same-Dataset row IDs; display-field changes preserve those IDs, target-table
+  changes clear them, and dependent lookup/rollup definitions block relation retarget. Lookups follow one
   relation to a scalar target, and rollups derive count or numeric sum from one relation. Lookup and
   rollup definitions are revision-editable while their cells remain derived/read-only. Guards and
   Activity own atomic Undo.

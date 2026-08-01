@@ -571,7 +571,8 @@ Dataset boundary:
 - Checksum-bound previews use <=50 rows/64 KiB; cursors bind vault/catalog/revision/view/boundary.
   Drift is stale; citation keys yield only Main-derived read-only highlights.
 - Formula/relation/lookup/rollup writes bind revision, IDs and eligibility; relations store same-Dataset row
-  IDs/labels, while lookups and rollups stay derived. Lookup definition updates accept one current
+  IDs/labels. `collections.updateRelationColumn` preserves targets for a display-field change, clears them
+  for a target-table change, and rejects definitions with dependent lookup/rollup columns. Lookup definition updates accept one current
   relation and scalar target; rollup updates accept count or numeric-sum. Existing formula add/update
   accepts current numeric scalar, numeric lookup/rollup or acyclic Pige-formula operands. Main rejects
   direct/indirect cycles and recomputes downstream formulas in stable topological order after base-cell edit,
