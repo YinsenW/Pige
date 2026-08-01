@@ -43,6 +43,10 @@ export function isTaxonomyKnowledgePage(
   return pageType === "note" || Boolean(status === "active" && pageType &&
     RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType as TaxonomyKnowledgePageType));
 }
+export function isLifecycleKnowledgePage(pageType: string | undefined, status: string | undefined): boolean {
+  return Boolean((status === "active" || status === "archived") && pageType &&
+    RENAMABLE_ACTIVE_KNOWLEDGE_PAGE_TYPES.has(pageType as TaxonomyKnowledgePageType));
+}
 
 export function resolveGeneratedNoteReveal(request: NoteRevealGeneratedRequest, input: {
   readonly vaultId: string | undefined; readonly vaultPath: string | undefined;

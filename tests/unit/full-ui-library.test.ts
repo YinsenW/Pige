@@ -65,6 +65,7 @@ import {
 import { NoteReader } from "../../apps/desktop/src/renderer/src/components/NoteReader";
 import {
   ReaderDocumentActions,
+  submitReaderNoteArchive,
   submitReaderNoteRestore,
 } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
@@ -310,6 +311,30 @@ describe("full UI Library", () => {
     expect(requests).toHaveLength(2);
     expect(adopted).toEqual([active]);
     await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("retains the current typed Reader when archive or restore returns a different page type", async () => {
+    const dom = createDom();
+    const revision = `noteeditrev_${"d".repeat(32)}`;
+    const activeClaim: NoteRenderResult = {
+      ...readerNote(), summary: { ...readerNote().summary, pageType: "claim", status: "active" },
+      archiveEligibility: { canArchive: true, revision }
+    };
+    const archivedClaim: NoteRenderResult = {
+      ...activeClaim, summary: { ...activeClaim.summary, status: "archived" },
+      archiveEligibility: { canArchive: false, revision }, restoreEligibility: { canRestore: true, revision }
+    };
+    const wrongArchived = { ...archivedClaim, summary: { ...archivedClaim.summary, pageType: "question" as const } };
+    const wrongActive = { ...activeClaim, summary: { ...activeClaim.summary, pageType: "question" as const } };
+    expect(await submitReaderNoteArchive({
+      note: activeClaim, activeVaultId: "vault_1",
+      submit: async (request) => ({ ...request, status: "committed", operationId: "op_archive_type_drift", render: wrongArchived })
+    })).toEqual({ status: "retained" });
+    expect(await submitReaderNoteRestore({
+      note: archivedClaim, activeVaultId: "vault_1",
+      submit: async (request) => ({ ...request, status: "committed", operationId: "op_restore_type_drift", render: wrongActive })
+    })).toEqual({ status: "retained" });
     dom.window.close();
   });
 

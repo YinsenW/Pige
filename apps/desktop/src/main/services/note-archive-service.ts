@@ -9,8 +9,9 @@ import type {
 import { parsePigeFrontmatter } from "@pige/markdown";
 import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import type { NotesService } from "./notes-service";
+import { isLifecycleKnowledgePage } from "./reader-generated-note-reveal-service";
 
-type NoteArchiveTargetPort = Pick<NotesService, "resolveTrashTarget" | "render">;
+type NoteArchiveTargetPort = Pick<NotesService, "resolveLifecycleTarget" | "render">;
 type NoteArchiveEditorPort = Pick<NoteMarkdownEditorService, "open" | "save">;
 
 export class NoteArchiveService {
@@ -25,7 +26,7 @@ export class NoteArchiveService {
   }
 
   async archive(ownerId: string, request: NoteArchiveCurrentRequest): Promise<NoteArchiveCurrentResult> {
-    const target = this.#targets.resolveTrashTarget(ownerId, {
+    const target = this.#targets.resolveLifecycleTarget(ownerId, {
       activeVaultId: request.activeVaultId,
       pageId: request.currentPageId,
       renderContextId: request.renderContextId,
@@ -58,7 +59,7 @@ export class NoteArchiveService {
     if (
       !render.renderContextId ||
       render.summary.pageId !== request.currentPageId ||
-      render.summary.pageType !== "note" ||
+      render.summary.pageType !== target.pageType ||
       render.summary.status !== "archived" ||
       render.archiveEligibility?.canArchive === true
     ) return closedResult(request, "failed");
@@ -66,7 +67,7 @@ export class NoteArchiveService {
   }
 
   async restore(ownerId: string, request: NoteRestoreArchivedRequest): Promise<NoteRestoreArchivedResult> {
-    const target = this.#targets.resolveTrashTarget(ownerId, {
+    const target = this.#targets.resolveLifecycleTarget(ownerId, {
       activeVaultId: request.activeVaultId,
       pageId: request.currentPageId,
       renderContextId: request.renderContextId,
@@ -103,7 +104,7 @@ export class NoteArchiveService {
     if (
       !render.renderContextId ||
       render.summary.pageId !== request.currentPageId ||
-      render.summary.pageType !== "note" ||
+      render.summary.pageType !== target.pageType ||
       render.summary.status !== "active" ||
       render.archiveEligibility?.canArchive !== true ||
       render.restoreEligibility?.canRestore === true
@@ -137,7 +138,8 @@ function markdownWithStatus(
   updatedAt: string
 ): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== currentStatus) return undefined;
+  if (!isLifecycleKnowledgePage(parsed?.frontmatter.type, parsed?.frontmatter.status) ||
+    parsed?.frontmatter.status !== currentStatus) return undefined;
   const statusMatches = [...parsed.raw.matchAll(/^status:[^\r\n]*$/gmu)];
   const updatedMatches = [...parsed.raw.matchAll(/^updated_at:[^\r\n]*$/gmu)];
   const rawStart = markdown.indexOf(parsed.raw);

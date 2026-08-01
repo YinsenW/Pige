@@ -1884,7 +1884,10 @@ const getAssistantAnswerNoteService = (): AssistantAnswerNoteService => {
   return assistantAnswerNoteService;
 };
 const getNoteArchiveService = (): NoteArchiveService => {
-  noteArchiveService ??= new NoteArchiveService(getNotesService(), getNoteMarkdownEditorService());
+  noteArchiveService ??= new NoteArchiveService(getNotesService(), new NoteMarkdownEditorService(
+    getVaultService(), getNoteMarkdownEditorActivityAdapter(),
+    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
+  ));
   return noteArchiveService;
 };
 const getQuestionStateService = (): QuestionStateService => {
@@ -3910,7 +3913,10 @@ app.whenReady().then(async () => {
   noteTrashRedoService = new NoteTrashRedoService(getVaultService());
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   assistantAnswerNoteService = new AssistantAnswerNoteService(getVaultService(), homeConversationHistory);
-  noteArchiveService = new NoteArchiveService(getNotesService(), noteMarkdownEditorService);
+  noteArchiveService = new NoteArchiveService(getNotesService(), new NoteMarkdownEditorService(
+    getVaultService(), noteMarkdownEditorActivityAdapter,
+    { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true }
+  ));
   questionStateService = new QuestionStateService(
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
