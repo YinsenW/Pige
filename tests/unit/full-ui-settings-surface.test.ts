@@ -4593,11 +4593,17 @@ describe("full UI Settings surface", () => {
         diagnosticsHealth: {
           status: "degraded", checkedAt: "2026-08-01T01:02:00.000Z", localOnly: true,
           recentErrorCount: 0, checks: [], crashRecovery: {
+            recoveryId: `crashrecovery_${"a".repeat(32)}`,
             status: "needs_attention", detectedAt: "2026-08-01T01:00:00.000Z",
             completedAt: "2026-08-01T01:01:00.000Z", capturesPreserved: 2,
             jobsRecovered: 3, jobsNeedRetry: 1, proposalsRecovered: 1, proposalsAwaitingReview: 2,
             sourcesNeedRepair: 0, indexRebuildRunning: false
-          }
+          }, crashRecoveryHistory: [{
+            recoveryId: `crashrecovery_${"a".repeat(32)}`, status: "needs_attention",
+            detectedAt: "2026-08-01T01:00:00.000Z", completedAt: "2026-08-01T01:01:00.000Z",
+            capturesPreserved: 2, jobsRecovered: 3, jobsNeedRetry: 1, proposalsRecovered: 1,
+            proposalsAwaitingReview: 2, sourcesNeedRepair: 0, indexRebuildRunning: false
+          }]
         },
         onRefreshDiagnostics: async () => undefined,
         onSupportBundlePreviewChange: vi.fn(), t
@@ -4610,6 +4616,8 @@ describe("full UI Settings surface", () => {
     expect(recovery.textContent).toContain("Jobs resumed 3");
     expect(recovery.textContent).toContain("Jobs needing retry 1");
     expect(recovery.textContent).not.toContain("job_");
+    expect(dom.window.document.querySelector("[data-crash-recovery-history]")?.textContent)
+      .toContain("Recent startup recoveries");
     await act(async () => root.unmount());
     dom.window.close();
   });

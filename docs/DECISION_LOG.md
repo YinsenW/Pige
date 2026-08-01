@@ -1054,6 +1054,35 @@ References:
 
 - `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`
 
+### D-20260801-Correlated-Startup-Recovery-History
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Each abnormal-startup recovery mints one opaque machine-local recovery ID. The started
+and completed diagnostic events share that ID, while Settings and support export expose
+only the ten most recent completed pathless summaries.
+
+Rationale:
+
+A latest-only summary cannot connect the beginning and outcome of repeated recoveries or
+show whether a problem is recurring. A bounded local history supplies useful recovery
+evidence without telemetry, content duplication, paths, or unbounded storage.
+
+Consequences:
+
+- Clean launches do not create recovery history.
+- Clear diagnostics removes the completed recovery history but never Vault data.
+- Recovery history remains machine-local and is never uploaded automatically.
+
+References:
+
+- `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+
 ### D-20260801-Low-Confidence-OCR-Summary-Policy
 
 Status: Accepted

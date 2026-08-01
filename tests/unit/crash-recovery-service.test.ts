@@ -24,7 +24,9 @@ describe("crash recovery service", () => {
       status: "needs_attention", capturesPreserved: 2, jobsRecovered: 3,
       jobsNeedRetry: 1, proposalsRecovered: 1, proposalsAwaitingReview: 2, sourcesNeedRepair: 0
     });
+    expect(summary?.recoveryId).toMatch(/^crashrecovery_[a-f0-9]{32}$/u);
     expect(new CrashRecoveryService(root).summary()).toEqual(summary);
+    expect(new CrashRecoveryService(root).history()).toEqual([summary]);
     expect(DiagnosticsHealthSchema.parse({
       status: "degraded", checkedAt: "2026-08-01T01:02:00.000Z", localOnly: true,
       recentErrorCount: 0, checks: [], crashRecovery: summary
@@ -56,12 +58,29 @@ describe("crash recovery service", () => {
     recovery.beginSession();
     recovery.observe({ jobsRecovered: 1 });
     recovery.complete();
-    const diagnostics = new DiagnosticsService(root, { crashRecoverySummary: () => recovery.summary() });
+    const diagnostics = new DiagnosticsService(root, {
+      crashRecoverySummary: () => recovery.summary(), crashRecoveryHistory: () => recovery.history()
+    });
     const payload = JSON.parse(diagnostics.createSupportBundlePayload(diagnostics.previewSupportBundle())) as {
-      diagnosticsHealth: { crashRecovery?: CrashRecoverySummary };
+      diagnosticsHealth: { crashRecovery?: CrashRecoverySummary; crashRecoveryHistory?: CrashRecoverySummary[] };
     };
     expect(payload.diagnosticsHealth.crashRecovery).toMatchObject({ status: "recovered", jobsRecovered: 1 });
+    expect(payload.diagnosticsHealth.crashRecoveryHistory).toHaveLength(1);
     expect(JSON.stringify(payload.diagnosticsHealth.crashRecovery)).not.toContain(root);
+  });
+
+  it("retains only the ten most recent completed recoveries", () => {
+    const root = makeRoot();
+    for (let index = 0; index < 12; index += 1) {
+      new CrashRecoveryService(root).beginSession();
+      const recovery = new CrashRecoveryService(root, () => new Date(Date.UTC(2026, 7, 1, 2, index)));
+      recovery.beginSession();
+      recovery.complete();
+      recovery.markClean();
+    }
+    const history = new CrashRecoveryService(root).history();
+    expect(history).toHaveLength(10);
+    expect(history.map((entry) => entry.completedAt)).toEqual([...history.map((entry) => entry.completedAt)].sort());
   });
 
   it("fails visibly on a malformed prior marker and clears only the completed summary", () => {

@@ -2246,6 +2246,8 @@
   "system.crashRecovery.proposals": "Révisions récupérées",
   "system.crashRecovery.awaitingReview": "Révisions en attente",
   "system.crashRecovery.sources": "Sources à réparer",
+  "system.crashRecovery.history": "Récupérations de démarrage récentes",
+  "system.crashRecovery.historySummary": "Afficher les récupérations",
   "pigePolicy.title": "Politique Agent du coffre",
   "pigePolicy.description": "Consultez et modifiez PIGE.md, les instructions validées qui guident l’entretien de ce coffre.",
   "pigePolicy.edit": "Modifier la politique",

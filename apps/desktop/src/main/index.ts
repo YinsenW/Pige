@@ -2231,7 +2231,8 @@ const getLocalRerankerService = (): LocalRerankerService => {
 const getDiagnosticsService = (): DiagnosticsService => {
   if (!diagnosticsService) {
     diagnosticsService = new DiagnosticsService(app.getPath("userData"), {
-      crashRecoverySummary: () => getCrashRecoveryService().summary()
+      crashRecoverySummary: () => getCrashRecoveryService().summary(),
+      crashRecoveryHistory: () => getCrashRecoveryService().history()
     });
   }
   return diagnosticsService;
@@ -2671,7 +2672,8 @@ const resumeBackgroundJobs = async (): Promise<void> => {
     code: "crash_recovery.completed",
     message: completed.status === "needs_attention"
       ? "Startup recovery completed with items that still need attention."
-      : "Startup recovery completed."
+      : "Startup recovery completed.",
+    redactedDetails: { correlationId: completed.recoveryId }
   });
 };
 
@@ -3899,12 +3901,14 @@ app.whenReady().then(async () => {
     getOcrLanguagePreferenceService()
   );
   diagnosticsService = new DiagnosticsService(app.getPath("userData"), {
-    crashRecoverySummary: () => getCrashRecoveryService().summary()
+    crashRecoverySummary: () => getCrashRecoveryService().summary(),
+    crashRecoveryHistory: () => getCrashRecoveryService().history()
   });
   crashRecoveryService = new CrashRecoveryService(app.getPath("userData"));
   const priorCrash = crashRecoveryService.beginSession();
   if (priorCrash?.status === "recovering") diagnosticsService.recordEvent({
-    level: "warning", code: "crash_recovery.started", message: "Pige is checking durable work after an abnormal exit."
+    level: "warning", code: "crash_recovery.started", message: "Pige is checking durable work after an abnormal exit.",
+    redactedDetails: { correlationId: priorCrash.recoveryId }
   });
   getDiagnosticsLifecycleService();
   const restoreRecovery = await getRestoreCoordinatorService().recoverInterrupted();

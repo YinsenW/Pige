@@ -2246,6 +2246,8 @@
   "system.crashRecovery.proposals": "Wiederhergestellte Prüfungen",
   "system.crashRecovery.awaitingReview": "Ausstehende Prüfungen",
   "system.crashRecovery.sources": "Quellen zur Reparatur",
+  "system.crashRecovery.history": "Letzte Startwiederherstellungen",
+  "system.crashRecovery.historySummary": "Wiederherstellungen anzeigen",
   "pigePolicy.title": "Agent-Richtlinie des Vaults",
   "pigePolicy.description": "PIGE.md prüfen und bearbeiten – die validierten Anweisungen zur Pflege dieses Vaults.",
   "pigePolicy.edit": "Richtlinie bearbeiten",

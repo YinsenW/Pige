@@ -4442,6 +4442,19 @@ export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
   .regex(/^supportpreview_[a-f0-9]{32,64}$/u);
+export const CrashRecoverySummarySchema = z.object({
+  recoveryId: z.string().regex(/^crashrecovery_[a-f0-9]{32}$/u),
+  status: z.enum(["recovering", "recovered", "needs_attention"]),
+  detectedAt: z.string().datetime({ offset: true }),
+  completedAt: z.string().datetime({ offset: true }).optional(),
+  capturesPreserved: z.number().int().nonnegative().max(1_000_000),
+  jobsRecovered: z.number().int().nonnegative().max(1_000_000),
+  jobsNeedRetry: z.number().int().nonnegative().max(1_000_000),
+  proposalsRecovered: z.number().int().nonnegative().max(1_000_000),
+  proposalsAwaitingReview: z.number().int().nonnegative().max(1_000_000),
+  sourcesNeedRepair: z.number().int().nonnegative().max(1_000_000),
+  indexRebuildRunning: z.boolean()
+}).strict();
 export const DiagnosticsHealthSchema = z.object({
   status: z.enum(["ok", "degraded"]),
   checkedAt: z.string().datetime({ offset: true }),
@@ -4452,18 +4465,11 @@ export const DiagnosticsHealthSchema = z.object({
     status: z.enum(["ok", "warning", "error"]),
     message: z.string().min(1).max(240)
   }).strict()).max(32),
-  crashRecovery: z.object({
-    status: z.enum(["recovering", "recovered", "needs_attention"]),
-    detectedAt: z.string().datetime({ offset: true }),
-    completedAt: z.string().datetime({ offset: true }).optional(),
-    capturesPreserved: z.number().int().nonnegative().max(1_000_000),
-    jobsRecovered: z.number().int().nonnegative().max(1_000_000),
-    jobsNeedRetry: z.number().int().nonnegative().max(1_000_000),
-    proposalsRecovered: z.number().int().nonnegative().max(1_000_000),
-    proposalsAwaitingReview: z.number().int().nonnegative().max(1_000_000),
-    sourcesNeedRepair: z.number().int().nonnegative().max(1_000_000),
-    indexRebuildRunning: z.boolean()
-  }).strict().optional()
+  crashRecovery: CrashRecoverySummarySchema.optional(),
+  crashRecoveryHistory: z.array(CrashRecoverySummarySchema.extend({
+    status: z.enum(["recovered", "needs_attention"]),
+    completedAt: z.string().datetime({ offset: true })
+  }).strict()).max(10).optional()
 }).strict();
 export const DiagnosticsSupportBundleJobSummarySchema = z.object({
   jobId: JobIdSchema,

@@ -796,7 +796,8 @@ Settings rules:
 Current shell: Home + Knowledge Tree are primary; Library sits below; Settings opens via
 vault/profile; Models is only a Settings/Home repair target. Vault owns storage/Backup/
 Restore; Index & Maintenance owns index plus pathless diagnostics health, support-export
-progress/Cancel/Retry and trash-first clear. Real surfaces include Home,
+progress/Cancel/Retry, a progressively disclosed ten-item startup-recovery history, and
+trash-first clear. Real surfaces include Home,
 Library/Reader, Knowledge Tree, Models, Vault, Backup/Restore, maintenance, current-note
 Agent, Reader copy/Link, composer processing, compact Activity/Undo, locale/window pin and
 current-action prompts. Settings framing and Reader related context remain partial.

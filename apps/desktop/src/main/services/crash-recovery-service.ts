@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export interface CrashRecoverySummary {
+  readonly recoveryId: `crashrecovery_${string}`;
   readonly status: "recovering" | "recovered" | "needs_attention";
   readonly detectedAt: string;
   readonly completedAt?: string;
@@ -41,6 +42,7 @@ export class CrashRecoveryService {
   readonly #root: string;
   readonly #markerPath: string;
   readonly #summaryPath: string;
+  readonly #historyPath: string;
   readonly #now: () => Date;
   #summary: CrashRecoverySummary | undefined;
 
@@ -48,6 +50,7 @@ export class CrashRecoveryService {
     this.#root = path.join(userDataPath, "diagnostics", "crash-recovery");
     this.#markerPath = path.join(this.#root, "active-session.json");
     this.#summaryPath = path.join(this.#root, "latest-summary.json");
+    this.#historyPath = path.join(this.#root, "history.json");
     this.#now = now;
   }
 
@@ -59,6 +62,7 @@ export class CrashRecoveryService {
     const startedAt = this.#nowIso();
     if (previous || markerPresent) {
       this.#summary = {
+        recoveryId: `crashrecovery_${randomUUID().replaceAll("-", "")}`,
         status: "recovering",
         detectedAt: startedAt,
         capturesPreserved: 0,
@@ -105,11 +109,16 @@ export class CrashRecoveryService {
       completedAt: this.#nowIso()
     };
     this.#writeSummary();
+    writeHistory(this.#historyPath, [...readHistory(this.#historyPath), this.#summary].slice(-10));
     return this.#summary;
   }
 
   summary(): CrashRecoverySummary | undefined {
     return this.#summary ?? readSummary(this.#summaryPath);
+  }
+
+  history(): readonly CrashRecoverySummary[] {
+    return readHistory(this.#historyPath);
   }
 
   markClean(): void {
@@ -118,6 +127,7 @@ export class CrashRecoveryService {
 
   clearSummary(): void {
     fs.rmSync(this.#summaryPath, { force: true });
+    fs.rmSync(this.#historyPath, { force: true });
     this.#summary = undefined;
   }
 
@@ -146,13 +156,34 @@ function readMarker(filePath: string): SessionMarker | undefined {
 
 function readSummary(filePath: string): CrashRecoverySummary | undefined {
   const value = readJson(filePath);
-  if (!isRecord(value) || value.schemaVersion !== 1 || !["recovering", "recovered", "needs_attention"].includes(String(value.status)) ||
+  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecoveryId(value.recoveryId) || !["recovering", "recovered", "needs_attention"].includes(String(value.status)) ||
     !isDate(value.detectedAt) || (value.completedAt !== undefined && !isDate(value.completedAt)) ||
     !validCount(value.capturesPreserved) || !validCount(value.jobsRecovered) || !validCount(value.jobsNeedRetry) ||
     !validCount(value.proposalsRecovered) || !validCount(value.proposalsAwaitingReview) ||
     !validCount(value.sourcesNeedRepair) || typeof value.indexRebuildRunning !== "boolean") return undefined;
   const { schemaVersion: _schemaVersion, ...summary } = value as unknown as StoredSummary;
   return summary;
+}
+
+function readHistory(filePath: string): CrashRecoverySummary[] {
+  const value = readJson(filePath);
+  if (!isRecord(value) || value.schemaVersion !== 1 || !Array.isArray(value.recoveries) || value.recoveries.length > 10) return [];
+  const recoveries = value.recoveries.map((entry) => validateStoredSummary(entry)).filter((entry): entry is CrashRecoverySummary => entry !== undefined);
+  return recoveries.length === value.recoveries.length ? recoveries : [];
+}
+
+function validateStoredSummary(value: unknown): CrashRecoverySummary | undefined {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecoveryId(value.recoveryId) ||
+    !["recovered", "needs_attention"].includes(String(value.status)) || !isDate(value.detectedAt) || !isDate(value.completedAt) ||
+    !validCount(value.capturesPreserved) || !validCount(value.jobsRecovered) || !validCount(value.jobsNeedRetry) ||
+    !validCount(value.proposalsRecovered) || !validCount(value.proposalsAwaitingReview) ||
+    !validCount(value.sourcesNeedRepair) || typeof value.indexRebuildRunning !== "boolean") return undefined;
+  const { schemaVersion: _schemaVersion, ...summary } = value as unknown as StoredSummary;
+  return summary;
+}
+
+function writeHistory(filePath: string, recoveries: readonly CrashRecoverySummary[]): void {
+  writeJsonAtomic(filePath, { schemaVersion: 1, recoveries: recoveries.map((summary) => ({ schemaVersion: 1, ...summary })) });
 }
 
 function readJson(filePath: string): unknown {
@@ -182,3 +213,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 function isDate(value: unknown): value is string { return typeof value === "string" && Number.isFinite(Date.parse(value)); }
 function validCount(value: unknown): value is number { return Number.isInteger(value) && Number(value) >= 0 && Number(value) <= MAX_COUNT; }
+function isRecoveryId(value: unknown): value is `crashrecovery_${string}` {
+  return typeof value === "string" && /^crashrecovery_[a-f0-9]{32}$/u.test(value);
+}
