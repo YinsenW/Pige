@@ -118,7 +118,14 @@ export const NoteInlineReferenceTargetSchema = z.discriminatedUnion("kind", [
     kind: z.literal("source"),
     sourceId: SourceIdSchema,
     pageId: PageIdSchema,
-    locator: CitationLocatorSchema.max(256).optional()
+    locator: CitationLocatorSchema.max(256).optional(),
+    preview: z.object({
+      locator: CitationLocatorSchema.max(256),
+      artifactKind: z.enum(["extracted_text", "ocr", "managed_source"]),
+      excerpt: z.string().min(1).max(1200)
+        .refine((value) => !UnsafeInlineReferenceCharacterSchema.test(value)),
+      truncated: z.boolean()
+    }).strict().optional()
   }).strict()
 ]);
 export const NoteResolveInlineReferenceResultSchema = z.discriminatedUnion("status", [

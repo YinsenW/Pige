@@ -1392,6 +1392,7 @@
   "note.refreshSource.confirm": "Quelle aktualisieren",
   "note.readerLinkUnavailable": "Verknüpfte Notizen und Quellen können vorübergehend nicht geöffnet werden. Es wurde nichts geändert.",
   "note.sources": "Quellen",
+  "note.citationPreview": "Zitierte Quellenstelle",
   "noteAgent.hide": "Notiz-Chat ausblenden",
   "noteAgent.modelUnavailable": "Modell nicht verfügbar",
   "noteAgent.placeholder": "Zur aktuellen Notiz fragen …",

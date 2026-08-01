@@ -98,7 +98,9 @@ import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components
 import { createReaderKnowledgePageTargetLoader } from "./reader-knowledge-page-targets";
 import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
+import { resolveAndOpenInlineReference } from "./reader-inline-reference-navigation";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
+import { ReaderSourceCitationPreview, type ReaderSourceCitationPreviewValue } from "./components/ReaderSourceCitationPreview";
 import {
   NoteMarkdownEditor,
   type NoteMarkdownEditorLabels,
@@ -509,6 +511,10 @@ export function App(): React.JSX.Element {
     readonly pageId: string;
     readonly renderContextId: string;
     readonly segmentId: string;
+  } | null>(null);
+  const [selectedNoteCitationPreview, setSelectedNoteCitationPreview] = useState<{
+    readonly pageId: string;
+    readonly preview: NonNullable<ReaderSourceCitationPreviewValue>;
   } | null>(null);
   const [selectedNoteVaultId, setSelectedNoteVaultId] = useState<string | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
@@ -1348,7 +1354,8 @@ export function App(): React.JSX.Element {
     pageId: string,
     reportError = true,
     requiredPageType?: NoteRenderResult["summary"]["pageType"],
-    searchQuery?: string
+    searchQuery?: string,
+    citationPreview?: NonNullable<ReaderSourceCitationPreviewValue>
   ): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
@@ -1399,6 +1406,7 @@ export function App(): React.JSX.Element {
       ) return false;
       setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
+      setSelectedNoteCitationPreview(citationPreview ? { pageId, preview: citationPreview } : null);
       setSelectedNoteSearchFocus(
         searchResult?.focusSegmentId && note.renderContextId
           ? { pageId, renderContextId: note.renderContextId, segmentId: searchResult.focusSegmentId }
@@ -1757,7 +1765,7 @@ export function App(): React.JSX.Element {
         selectedNoteRef.current?.summary.pageId === pageId &&
         selectedNoteRef.current?.renderContextId === renderContextId
       ),
-      (targetPageId) => openNoteTarget(targetPageId, false)
+      (targetPageId, preview) => openNoteTarget(targetPageId, false, undefined, undefined, preview)
     );
   };
 
@@ -2779,6 +2787,9 @@ export function App(): React.JSX.Element {
             onReaderSelectionTransform={revealReaderSelectionTransform}
             onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
             selectedNote={selectedNote}
+            {...(selectedNoteCitationPreview && selectedNoteCitationPreview.pageId === selectedNote?.summary.pageId
+              ? { citationPreview: selectedNoteCitationPreview.preview }
+              : {})}
             {...(selectedNoteSearchFocus?.segmentId
               ? { searchFocusSegmentId: selectedNoteSearchFocus.segmentId }
               : {})}
@@ -2857,6 +2868,9 @@ export function App(): React.JSX.Element {
               onReaderSelectionTransform={revealReaderSelectionTransform}
               onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
               selectedNote={selectedNote}
+              {...(selectedNoteCitationPreview && selectedNoteCitationPreview.pageId === selectedNote?.summary.pageId
+                ? { citationPreview: selectedNoteCitationPreview.preview }
+                : {})}
               {...(selectedNoteSearchFocus?.segmentId
                 ? { searchFocusSegmentId: selectedNoteSearchFocus.segmentId }
                 : {})}
@@ -3436,6 +3450,7 @@ export function LibraryPanel(props: {
   readonly onTrashDataset?: (request: CollectionTrashDatasetRequest) => Promise<CollectionTrashDatasetResult>;
   readonly selectedNote: NoteRenderResult | null;
   readonly searchFocusSegmentId?: string;
+  readonly citationPreview?: NonNullable<ReaderSourceCitationPreviewValue>;
   readonly selectedNoteRelated: NoteRelatedState;
   readonly noteLoadingPageId: string | null;
   readonly error: string | null;
@@ -3846,6 +3861,7 @@ export function LibraryPanel(props: {
             </p>
           ) : <DevelopmentStatus notice={props.developmentNotice} t={props.t} />
         )}
+        {props.citationPreview ? <ReaderSourceCitationPreview preview={props.citationPreview} t={props.t} /> : null}
         <NoteReader
           note={props.selectedNote}
           {...(props.searchFocusSegmentId ? { focusSegmentId: props.searchFocusSegmentId } : {})}
@@ -4714,6 +4730,7 @@ function HomeComposer(props: {
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
   const [selectedNoteFocusSegmentId, setSelectedNoteFocusSegmentId] = useState<string | null>(null);
+  const [selectedNoteCitationPreview, setSelectedNoteCitationPreview] = useState<NonNullable<ReaderSourceCitationPreviewValue> | null>(null);
   const [editorReady, setEditorReady] = useState<NoteMarkdownEditorReady | null>(null);
   const [editorOpenState, setEditorOpenState] = useState<"idle" | "opening" | "failed">("idle");
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
@@ -6097,7 +6114,8 @@ function HomeComposer(props: {
   const openResultTarget = async (
     pageId: string,
     reportError = true,
-    searchQuery?: string
+    searchQuery?: string,
+    citationPreview?: NonNullable<ReaderSourceCitationPreviewValue>
   ): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
@@ -6126,6 +6144,7 @@ function HomeComposer(props: {
       ) return false;
       setSelectedNote(note);
       setSelectedNoteFocusSegmentId(searchResult?.focusSegmentId ?? null);
+      setSelectedNoteCitationPreview(citationPreview ?? null);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
       return true;
     } catch {
@@ -6365,7 +6384,7 @@ function HomeComposer(props: {
         selectedNoteRef.current?.summary.pageId === pageId &&
         selectedNoteRef.current?.renderContextId === renderContextId
       ),
-      (targetPageId) => openResultTarget(targetPageId, false)
+      (targetPageId, preview) => openResultTarget(targetPageId, false, undefined, preview)
     );
   };
 
@@ -6822,6 +6841,9 @@ function HomeComposer(props: {
                 <p className="reader-action-status copy_failed" role="status" aria-live="polite">
                   {props.t("note.editor.failed")}
                 </p>
+              ) : null}
+              {selectedNoteCitationPreview ? (
+                <ReaderSourceCitationPreview preview={selectedNoteCitationPreview} t={props.t} />
               ) : null}
               <NoteReader
                 note={selectedNote}
@@ -7536,26 +7558,6 @@ function collectionTrashIdentityMatches(
     result.datasetId === request.datasetId &&
     result.tableId === request.tableId &&
     result.rowId === request.rowId;
-}
-
-async function resolveAndOpenInlineReference(
-  request: NoteResolveInlineReferenceRequest,
-  isCurrent: () => boolean,
-  openPage: (pageId: string) => Promise<boolean>
-): Promise<ReaderInlineReferenceActivation> {
-  try {
-    const result = await window.pige.notes.resolveInlineReference(request);
-    if (!isCurrent()) return "stale";
-    if (result.requestId !== request.requestId) return "failed";
-    if (result.status !== "resolved") return result.status;
-    if (!await openPage(result.target.pageId)) return "failed";
-    window.requestAnimationFrame(() => {
-      document.querySelector<HTMLElement>(".note-reader")?.focus({ preventScroll: true });
-    });
-    return result.target.kind === "source" ? "opened_source" : "opened_page";
-  } catch {
-    return isCurrent() ? "failed" : "stale";
-  }
 }
 
 function createSpeechRequestId(): string {

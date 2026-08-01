@@ -54,6 +54,13 @@ export interface EvidencePack {
   readonly warnings: readonly string[];
 }
 
+export interface EvidenceCitationPreview {
+  readonly locator: string;
+  readonly artifactKind: EvidenceArtifactKind;
+  readonly excerpt: string;
+  readonly truncated: boolean;
+}
+
 export interface EvidenceAssemblyOptions {
   readonly maxCharacters?: number;
   readonly maxFragments?: number;
@@ -124,6 +131,30 @@ export class EvidenceAssemblyService {
       characterCount: bounded.fragments.reduce((total, fragment) => total + fragment.text.length, 0),
       truncated: bounded.truncated || warnings.some((warning) => warning.startsWith("evidence_text_read_truncated:")),
       warnings: Array.from(new Set(warnings))
+    };
+  }
+
+  async previewCitation(
+    vaultPath: string,
+    sourceRecord: SourceRecord,
+    locator: string
+  ): Promise<EvidenceCitationPreview | undefined> {
+    const pack = await this.assemble(vaultPath, sourceRecord, {
+      maxCharacters: EVIDENCE_FILE_READ_LIMIT_BYTES,
+      maxFragments: 256,
+      maxReadBytesPerFile: EVIDENCE_FILE_READ_LIMIT_BYTES
+    });
+    const matches = pack.fragments.filter((fragment) => fragment.citationLocator === locator);
+    if (matches.length !== 1) return undefined;
+    const fragment = matches[0]!;
+    const normalizedText = fragment.text.replace(/\s+/gu, " ").trim();
+    const excerpt = truncateAtCodePoint(normalizedText, 1200);
+    if (!excerpt) return undefined;
+    return {
+      locator,
+      artifactKind: fragment.artifactKind,
+      excerpt,
+      truncated: pack.truncated || excerpt.length < normalizedText.length
     };
   }
 }

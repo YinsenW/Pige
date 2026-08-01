@@ -5069,6 +5069,18 @@ dd {
 }
 
 .reader-sources h2 { margin: 0 0 10px; }
+.reader-source-citation-preview {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-subtle);
+  outline: none;
+}
+.reader-source-citation-preview > span { color: var(--text-secondary); font-size: 12px; }
+.reader-source-citation-preview > p { margin: 0; line-height: 1.55; }
+.reader-source-citation-preview:focus-visible { box-shadow: 0 0 0 2px var(--focus); }
 .reader-source-list { display: grid; gap: 6px; }
 
 .reader-source {

@@ -1392,6 +1392,7 @@
   "note.refreshSource.confirm": "刷新来源",
   "note.readerLinkUnavailable": "暂时无法打开关联笔记或来源，未做任何更改。",
   "note.sources": "来源",
+  "note.citationPreview": "引用的来源段落",
   "noteAgent.hide": "隐藏笔记对话",
   "noteAgent.modelUnavailable": "模型不可用",
   "noteAgent.placeholder": "针对当前笔记提问…",

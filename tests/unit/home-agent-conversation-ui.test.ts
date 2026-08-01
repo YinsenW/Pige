@@ -1432,6 +1432,50 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("opens a source citation with the exact Main-projected passage focused", async () => {
+    const dom = createDom(840);
+    const harness = createHarness(undefined);
+    harness.sidebarOpen = true;
+    harness.windowLayoutWidth = 840;
+    harness.windowLayoutAvailableWidth = 1600;
+    const sourceId = "src_20260715_link2222";
+    const targetPageId = "page_20260715_note0002";
+    harness.renderNote = async (pageId) => pageId === "page_20260715_note0001"
+      ? { ...testRenderedNote(pageId), html: `<p><a href="#source:${sourceId}#p2">Cited passage</a></p>` }
+      : testRenderedNote(pageId);
+    harness.resolveInlineReference = async (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      status: "resolved",
+      target: {
+        kind: "source",
+        sourceId,
+        pageId: targetPageId,
+        locator: "p2",
+        preview: {
+          locator: "p2",
+          artifactKind: "extracted_text",
+          excerpt: "The exact cited second-page passage.",
+          truncated: false
+        }
+      }
+    });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    await waitFor(dom, () => container.querySelector(".library-sidebar-tree .library-tree-disclosure") !== null);
+    await openLibraryNote(dom, container, "Note A");
+
+    await clickElement(dom, requireElement(container.querySelector<HTMLAnchorElement>(`a[href="#source:${sourceId}#p2"]`)));
+    await waitFor(dom, () => container.querySelector(".reader-source-citation-preview") !== null);
+    const preview = requireElement(container.querySelector<HTMLElement>(".reader-source-citation-preview"));
+    expect(preview.dataset.citationLocator).toBe("p2");
+    expect(preview.textContent).toContain("The exact cited second-page passage.");
+    expect(dom.window.document.activeElement).toBe(preview);
+    expect(harness.noteRenderRequests).toEqual(["page_20260715_note0001", targetPageId]);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("uses the same typed resolver owner from a Home retrieval Reader", async () => {
     const dom = createDom(720);
     const harness = createHarness(undefined);

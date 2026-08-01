@@ -8,6 +8,7 @@ import { PigeDomainError } from "@pige/domain";
 import { LocalDatabaseService } from "../../apps/desktop/src/main/services/local-database-service";
 import { NoteMarkdownEditorService } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
+import { ReaderSourceCitationService } from "../../apps/desktop/src/main/services/reader-source-citation-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 
 const tempRoots: string[] = [];
@@ -84,7 +85,13 @@ function writeSourceRecord(input: {
   readonly pagePath?: string;
   readonly kind?: "text" | "image_file";
   readonly displayName?: string;
-  readonly artifacts?: readonly { readonly id: string; readonly kind: "ocr" | "extracted_text"; readonly path: string }[];
+  readonly artifacts?: readonly {
+    readonly id: string;
+    readonly kind: "ocr" | "extracted_text" | "metadata";
+    readonly path: string;
+    readonly checksum?: string;
+    readonly size?: number;
+  }[];
 }): void {
   const recordPath = sourceRecordPath(input.vaultPath, input.sourceId);
   fs.mkdirSync(path.dirname(recordPath), { recursive: true });
@@ -971,6 +978,63 @@ status: "active"
         locator: "utf8_bytes:10:24"
       }
     });
+  });
+
+  it("opens a locator only with its exact verified artifact preview", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_preview1234";
+    const href = `#source:${sourceId}#p2`;
+    const text = "Exact second-page evidence.";
+    const textPath = ".pige/artifacts/preview.txt";
+    const metadataPath = ".pige/artifacts/preview.json";
+    const textChecksum = sha256(text);
+    const metadata = JSON.stringify({
+      schemaVersion: 1,
+      artifactId: "art_preview_metadata",
+      sourceId,
+      kind: "pdf_parse_metadata",
+      extractedTextChecksum: textChecksum,
+      units: [{ locator: "page:2", characterStart: 0, characterEnd: text.length }]
+    });
+    for (const [relativePath, value] of [[textPath, text], [metadataPath, metadata]] as const) {
+      const target = path.join(vaultPath, relativePath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, value, "utf8");
+    }
+    writePage({ vaultPath, fileName: "current.md", pageId: "page_20260709_current1234", title: "Current", body: `[source](${href})\n\n[missing](#source:${sourceId}#p3)` });
+    writePage({ vaultPath, fileName: "source.md", pageId: "page_20260709_preview1234", title: "Source", pageType: "source", sourceIds: [sourceId] });
+    writeSourceRecord({
+      vaultPath, sourceId, pageId: "page_20260709_preview1234", pagePath: "sources/source.md",
+      artifacts: [
+        { id: "art_preview_text", kind: "extracted_text", path: textPath, checksum: textChecksum, size: Buffer.byteLength(text) },
+        { id: "art_preview_metadata", kind: "metadata", path: metadataPath, checksum: sha256(metadata), size: Buffer.byteLength(metadata) }
+      ]
+    });
+    const notes = makeIndexedNotes(vaultPath, vault);
+    const citations = new ReaderSourceCitationService({
+      current: () => vault,
+      activeVaultPath: () => vaultPath
+    }, notes);
+    const rendered = await notes.render({ pageId: "page_20260709_current1234" }, OWNER_ID);
+    const request = {
+      apiVersion: 1 as const, requestId: REQUEST_ID, activeVaultId: vault.vaultId,
+      currentPageId: "page_20260709_current1234", renderContextId: rendered.renderContextId!, href
+    };
+
+    await expect(citations.resolve(OWNER_ID, request)).resolves.toEqual({
+      apiVersion: 1,
+      requestId: REQUEST_ID,
+      status: "resolved",
+      target: {
+        kind: "source", sourceId, pageId: "page_20260709_preview1234", locator: "p2",
+        preview: { locator: "p2", artifactKind: "extracted_text", excerpt: text, truncated: false }
+      }
+    });
+    await expect(citations.resolve(OWNER_ID, {
+      ...request,
+      requestId: `${REQUEST_ID}missing`,
+      href: `#source:${sourceId}#p3`
+    })).resolves.toEqual({ apiVersion: 1, requestId: `${REQUEST_ID}missing`, status: "not_found" });
   });
 
   it("opens a saved-source row only through the rendered page and durable source owners", async () => {

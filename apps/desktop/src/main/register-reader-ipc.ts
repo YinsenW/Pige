@@ -206,6 +206,7 @@ import type { ReaderSelectionCreateNoteActionService } from "./services/reader-s
 import type { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
 import type { ReaderGeneratedNoteRevealService } from "./services/reader-generated-note-reveal-service";
 import type { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
+import type { ReaderSourceCitationService } from "./services/reader-source-citation-service";
 import type { SourceRefreshService } from "./services/source-refresh-service";
 import type { NoteTrashService } from "./services/note-trash-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
@@ -229,6 +230,7 @@ import type { TopicParentService } from "./services/topic-parent-service";
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
   readonly getNotesService: () => NotesService;
+  readonly getReaderSourceCitationService?: () => ReaderSourceCitationService;
   readonly getReaderSelectionActionService: () => ReaderSelectionActionService;
   readonly getReaderSelectionProposalService: () => ReaderSelectionProposalService;
   readonly getReaderSelectionCreateNoteService: () => ReaderSelectionCreateNoteActionService;
@@ -859,7 +861,7 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       ? NoteUnlinkRelationResultSchema.parse(result)
       : NoteUnlinkRelationResultSchema.parse({ ...parsed, status: "stale" });
   });
-  options.ipcMain.handle("notes.resolveInlineReference", (
+  options.ipcMain.handle("notes.resolveInlineReference", async (
     event,
     request: NoteResolveInlineReferenceRequest
   ) => {
@@ -868,7 +870,9 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     return NoteResolveInlineReferenceResultSchema.parse(
       ownerId === undefined
         ? { apiVersion: 1, requestId: parsed.requestId, status: "stale", scope: "render_context" }
-        : options.getNotesService().resolveInlineReference(ownerId, parsed)
+        : options.getReaderSourceCitationService
+          ? await options.getReaderSourceCitationService().resolve(ownerId, parsed)
+          : options.getNotesService().resolveInlineReference(ownerId, parsed)
     );
   });
   options.ipcMain.handle("notes.openSourceReference", (

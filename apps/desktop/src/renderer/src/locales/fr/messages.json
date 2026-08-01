@@ -1392,6 +1392,7 @@
   "note.refreshSource.confirm": "Actualiser la source",
   "note.readerLinkUnavailable": "L’ouverture des notes et sources liées est temporairement indisponible. Rien n’a été modifié.",
   "note.sources": "Sources",
+  "note.citationPreview": "Passage source cité",
   "noteAgent.hide": "Masquer la conversation de la note",
   "noteAgent.modelUnavailable": "Modèle indisponible",
   "noteAgent.placeholder": "Poser une question sur la note…",
