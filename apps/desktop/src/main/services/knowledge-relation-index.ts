@@ -1,19 +1,118 @@
 import { createHash } from "node:crypto";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
-import { createPigeTagKey } from "@pige/markdown";
+import {
+  createPigeTagKey,
+  extractPigeMarkdownCitationRefs,
+  extractPigeMarkdownLinkRefs
+} from "@pige/markdown";
 import {
   createAmbiguityAwarePageLookup,
   normalizeLocalReference
 } from "./local-database-knowledge-health";
 import type { MarkdownPageRecord } from "./markdown-page-index";
+import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+
+export const KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID = "004_knowledge_relation_sources";
 
 export type DurableKnowledgeRelationType =
-  | "has_topic" | "links_to" | "mentions_entity" | "related_to" | "contradicts" | "answers" | "broader_than";
+  | "has_topic" | "links_to" | "cites_source" | "derived_from" | "mentions_entity"
+  | "related_to" | "contradicts" | "answers" | "broader_than";
 
 export interface KnowledgeTreeEntityInput {
   readonly entityId: string;
   readonly pageId?: string;
   readonly name: string;
+}
+
+export function migrateKnowledgeRelationIndex(db: DatabaseSync): void {
+  if (db.prepare("SELECT id FROM schema_migrations WHERE id = ?").all(KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID).length) return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const columns = db.prepare("PRAGMA table_info(relation_edges)").all();
+    if (!columns.some((column) => column.name === "to_source_id")) {
+      db.exec("ALTER TABLE relation_edges ADD COLUMN to_source_id TEXT");
+    }
+    db.prepare("INSERT INTO schema_migrations(id, applied_at) VALUES (?, ?)")
+      .run(KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (caught) {
+    db.exec("ROLLBACK");
+    throw caught;
+  }
+}
+
+export function indexPageDurableBodyRelations(
+  db: DatabaseSync,
+  vaultPath: string,
+  page: MarkdownPageRecord,
+  markdown: string,
+  resolvePageId: (target: string) => string | undefined
+): void {
+  const insertSource = db.prepare(`
+    INSERT INTO sources(source_id, page_id, display_name, canonical_url, checksum, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(source_id) DO UPDATE SET
+      page_id = excluded.page_id, display_name = excluded.display_name,
+      canonical_url = excluded.canonical_url, checksum = excluded.checksum,
+      created_at = excluded.created_at, updated_at = excluded.updated_at
+  `);
+  const insertCitation = db.prepare(`
+    INSERT OR IGNORE INTO citations(citation_id, page_id, source_id, locator) VALUES (?, ?, ?, ?)
+  `);
+  const insertSourceRelation = db.prepare(`
+    INSERT OR IGNORE INTO relation_edges(
+      edge_id, from_page_id, to_page_id, to_source_id, relation_type, evidence_json
+    ) VALUES (?, ?, NULL, ?, ?, ?)
+  `);
+  const insertPageRelation = db.prepare(`
+    INSERT OR IGNORE INTO relation_edges(edge_id, from_page_id, to_page_id, relation_type, evidence_json)
+    VALUES (?, ?, ?, 'related_to', ?)
+  `);
+  const citations = extractPigeMarkdownCitationRefs(markdown);
+  const sourceIds = new Set([...page.summary.sourceIds, ...citations.map((citation) => citation.sourceId)]);
+  const validSources = new Set<string>();
+  for (const sourceId of sourceIds) {
+    const source = readCurrentSourceRecordSnapshot(vaultPath, sourceId)?.record;
+    if (!source) continue;
+    validSources.add(sourceId);
+    insertSource.run(
+      sourceId,
+      source.knowledgePageId ?? null,
+      source.original?.displayName ?? null,
+      source.kind === "url" ? source.original?.uri ?? null : null,
+      source.managedCopy?.checksum ?? source.original?.checksum ?? null,
+      source.createdAt,
+      source.updatedAt
+    );
+    if (page.summary.sourceIds.includes(sourceId)) {
+      insertSourceEdge(insertSourceRelation, "derived_from", page.summary.pageId, sourceId, {
+        source: "frontmatter", field: "source_ids", target: sourceId
+      });
+    }
+  }
+  for (const citation of citations) {
+    if (!validSources.has(citation.sourceId)) continue;
+    const locator = citation.locator ?? null;
+    insertCitation.run(
+      `citation_${stableHash(`${page.summary.pageId}:${citation.sourceId}:${locator ?? ""}`).slice(0, 24)}`,
+      page.summary.pageId,
+      citation.sourceId,
+      locator
+    );
+    insertSourceEdge(insertSourceRelation, "cites_source", page.summary.pageId, citation.sourceId, {
+      source: "citation", target: citation.sourceId, ...(citation.locator ? { locator: citation.locator } : {})
+    });
+  }
+  for (const link of extractManagedRelatedLinks(markdown)) {
+    const targetPageId = resolvePageId(link.target);
+    if (!targetPageId || targetPageId === page.summary.pageId) continue;
+    insertPageRelation.run(
+      `edge_${stableHash(`related_to:${page.summary.pageId}:${targetPageId}:managed:${link.target}`).slice(0, 24)}`,
+      page.summary.pageId,
+      targetPageId,
+      JSON.stringify([{ source: "managed_section", target: link.target, label: link.label }])
+    );
+  }
 }
 
 export function indexPageKnowledgeRelations(db: DatabaseSync, pages: readonly MarkdownPageRecord[]): void {
@@ -135,6 +234,46 @@ function insertEdge(
     relationType,
     JSON.stringify([{ source: "frontmatter", field, target }])
   );
+}
+
+function insertSourceEdge(
+  statement: { run(...params: SQLInputValue[]): unknown },
+  relationType: "cites_source" | "derived_from",
+  fromPageId: string,
+  toSourceId: string,
+  evidence: Readonly<Record<string, string>>
+): void {
+  statement.run(
+    `edge_${stableHash(`${relationType}:${fromPageId}:${toSourceId}:${JSON.stringify(evidence)}`).slice(0, 24)}`,
+    fromPageId,
+    toSourceId,
+    relationType,
+    JSON.stringify([evidence])
+  );
+}
+
+function extractManagedRelatedLinks(markdown: string): ReturnType<typeof extractPigeMarkdownLinkRefs> {
+  const blocks: string[] = [];
+  let active: string[] | undefined;
+  for (const line of markdown.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    const startsRelated =
+      /^<!-- pige:managed:start agent-link [^\r\n]+ -->$/u.test(trimmed) ||
+      /^<!-- pige:managed section="related" [^\r\n]*-->$/u.test(trimmed);
+    if (startsRelated) {
+      if (active) return [];
+      active = [];
+      continue;
+    }
+    if (trimmed === "<!-- pige:managed:end -->" || trimmed === "<!-- /pige:managed -->") {
+      if (active) blocks.push(active.join("\n"));
+      active = undefined;
+      continue;
+    }
+    active?.push(line);
+  }
+  if (active) return [];
+  return blocks.flatMap((block) => [...extractPigeMarkdownLinkRefs(block)]);
 }
 
 function stableHash(value: string): string {

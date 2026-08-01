@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractPigeMarkdownLinkRefs, renderPigeMarkdownToHtml } from "@pige/markdown";
+import {
+  extractPigeMarkdownCitationRefs,
+  extractPigeMarkdownLinkRefs,
+  renderPigeMarkdownToHtml
+} from "@pige/markdown";
 
 describe("Pige Markdown renderer", () => {
   it("renders Markdown body while hiding frontmatter", async () => {
@@ -182,6 +186,24 @@ status: "active"
       { kind: "wiki_link", target: "Local First", label: "local-first" },
       { kind: "markdown_link", target: "../wiki/topic.md#details", label: "Topic" },
       { kind: "markdown_link", target: "Rendered", label: "Rendered" }
+    ]);
+  });
+
+  it("extracts strict durable source citations while ignoring frontmatter, code, and link targets", () => {
+    expect(extractPigeMarkdownCitationRefs(`---
+source_ids: ["src_20260709_frontmatter1"]
+---
+
+Grounded [source:src_20260709_abcd1234#p3] and [source:src_20260709_efgh5678].
+\`[source:src_20260709_inlinecode]\`
+\`\`\`
+[source:src_20260709_blockcode]
+\`\`\`
+[ordinary](source:src_20260709_linkonly)
+[source:src_20260709_short]
+`)).toEqual([
+      { sourceId: "src_20260709_abcd1234", locator: "p3" },
+      { sourceId: "src_20260709_efgh5678" }
     ]);
   });
 });
