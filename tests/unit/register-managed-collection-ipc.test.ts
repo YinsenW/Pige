@@ -435,6 +435,8 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateView",
       "collections.trashView",
       "collections.trashDataset",
+      "collections.listDatasetTrash",
+      "collections.restoreDataset",
       "collections.renameDataset",
       "collections.trashColumn",
       "collections.trashRow"

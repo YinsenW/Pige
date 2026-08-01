@@ -60,7 +60,7 @@ import {
   type AgentMemoryFocusRequest,
 } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
-import { ManagedDatasetTrashAction } from "./components/ManagedDatasetTrashAction"; import { ManagedDatasetRenameAction } from "./components/ManagedDatasetRenameAction";
+import { ManagedDatasetTrashAction } from "./components/ManagedDatasetTrashAction"; import { ManagedDatasetRenameAction } from "./components/ManagedDatasetRenameAction"; import { ManagedDatasetTrashRestorePanel } from "./components/ManagedDatasetTrashRestorePanel";
 import { renameCollectionView, trashCollectionView, updateCollectionView } from "./collection-view-lifecycle";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
@@ -3958,8 +3958,7 @@ export function LibraryPanel(props: {
                         <small>{props.t("collection.open")}</small>
                       </button>
                     ))}
-                    {props.onTrashDataset && props.activeVaultId ? <ManagedDatasetTrashAction activeVaultId={props.activeVaultId}
-                      dataset={dataset} onTrash={props.onTrashDataset} onCommitted={() => undefined} t={props.t} /> : null}
+                    {props.onTrashDataset && props.activeVaultId ? <ManagedDatasetTrashAction activeVaultId={props.activeVaultId} dataset={dataset} onTrash={props.onTrashDataset} onCommitted={() => undefined} t={props.t} /> : null}
                     {props.activeVaultId ? <ManagedDatasetRenameAction activeVaultId={props.activeVaultId} dataset={dataset} onRename={window.pige.collections.renameDataset} onCommitted={() => void props.onRefreshCollectionCatalog?.()} t={props.t} /> : null}
                   </section>
                 ))}
@@ -3975,6 +3974,7 @@ export function LibraryPanel(props: {
                 ) : null}
               </>
             )}
+            {props.activeVaultId ? <ManagedDatasetTrashRestorePanel activeVaultId={props.activeVaultId} onRestored={() => void props.onRefreshCollectionCatalog?.()} t={props.t} /> : null}
           </section>
         ) : null}
         <label className="library-search-field">
