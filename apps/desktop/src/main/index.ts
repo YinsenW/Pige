@@ -366,6 +366,7 @@ import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { SourceRefreshService } from "./services/source-refresh-service";
+import { WebSourceRefreshService } from "./services/web-source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
 import { VaultStorageRelocationService } from "./services/vault-storage-relocation-service";
@@ -1481,7 +1482,8 @@ const getSourceRefreshService = (): SourceRefreshService => {
     getVaultService(),
     getDocumentParserService(),
     undefined,
-    getOcrService()
+    getOcrService(),
+    new WebSourceRefreshService(getVaultService())
   );
   return sourceRefreshService;
 };
