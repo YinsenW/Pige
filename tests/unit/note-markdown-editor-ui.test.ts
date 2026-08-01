@@ -27,6 +27,10 @@ const revision3 = `noteeditrev_${"3".repeat(32)}`;
 const labels = {
   title: "Edit Markdown",
   field: "Markdown source",
+  source: "Edit",
+  preview: "Preview",
+  previewLoading: "Preparing preview…",
+  previewFailed: "The preview could not be rendered.",
   save: "Save",
   saving: "Saving…",
   cancel: "Cancel",
@@ -69,6 +73,52 @@ afterEach(() => {
 });
 
 describe("NoteMarkdownEditor", () => {
+  it("renders the exact unsaved draft through the sanitized Reader pipeline without saving it", async () => {
+    const saveRequests: NoteEditorSaveRequest[] = [];
+    const harness = await renderEditor({
+      onSave: async (request) => {
+        saveRequests.push(request);
+        return committedResult(request, revision2, context2);
+      }
+    });
+    const markdown = [
+      "---",
+      'id: "page_20260709_abcd1234"',
+      "schema_version: 1",
+      "title: Hidden frontmatter title",
+      "type: note",
+      "created_at: 2026-07-27T00:00:00.000Z",
+      "updated_at: 2026-07-27T00:00:00.000Z",
+      "status: active",
+      "---",
+      "# Unsaved preview",
+      "",
+      "| A | B |",
+      "| - | - |",
+      "| 1 | 2 |",
+      "",
+      "[External](https://example.com/private)",
+      "",
+      "<script>window.previewWasUnsafe = true</script>"
+    ].join("\n");
+    await inputText(harness.dom, harness.textarea(), markdown);
+    await click(harness.dom, harness.button("Preview"));
+    const preview = await waitForElement<HTMLElement>(
+      harness.dom,
+      () => harness.container.querySelector("[data-note-markdown-draft-preview]")
+    );
+    expect(preview.querySelector("h1")?.textContent).toBe("Unsaved preview");
+    expect(preview.querySelectorAll("table")).toHaveLength(1);
+    expect(preview.textContent).not.toContain("Hidden frontmatter title");
+    expect(preview.querySelector("script")).toBeNull();
+    expect(preview.querySelector("a")?.hasAttribute("href")).toBe(false);
+    expect(saveRequests).toHaveLength(0);
+    await click(harness.dom, harness.button("Edit"));
+    expect(harness.textarea().value).toBe(markdown);
+    expect(harness.dom.window.document.activeElement).toBe(harness.textarea());
+    await harness.close();
+  });
+
   it("saves exact Markdown against the immutable gesture-time identity and ignores IME shortcuts", async () => {
     const requests: NoteEditorSaveRequest[] = [];
     const committed: NoteMarkdownEditorCommitted[] = [];
@@ -394,7 +444,7 @@ function committedResult(
 }
 
 function createDom(): JSDOM {
-  const dom = new JSDOM('<!doctype html><html><body><button id="opener">Edit</button><div id="root"></div></body></html>', {
+  const dom = new JSDOM('<!doctype html><html><body><button id="opener">Open editor</button><div id="root"></div></body></html>', {
     url: "http://localhost/", pretendToBeVisual: true
   });
   for (const key of globalKeys) {
@@ -437,7 +487,18 @@ async function clickWithoutSettling(dom: JSDOM, target: HTMLButtonElement): Prom
   await act(async () => { target.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
 }
 
-async function settle(dom: JSDOM): Promise<void> { await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0)); }
+async function settle(dom: JSDOM, delay = 0): Promise<void> {
+  await new Promise<void>((resolve) => dom.window.setTimeout(resolve, delay));
+}
+
+async function waitForElement<T extends Element>(dom: JSDOM, read: () => T | null): Promise<T> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const value = read();
+    if (value) return value;
+    await act(async () => settle(dom, 10));
+  }
+  throw new Error("Timed out waiting for rendered preview.");
+}
 
 function buttonNamed(container: ParentNode, name: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find((candidate) => candidate.textContent?.trim() === name || candidate.getAttribute("aria-label") === name);

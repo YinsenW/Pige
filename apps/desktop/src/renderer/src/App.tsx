@@ -7449,10 +7449,8 @@ function failedNoteEditorOpenResult(request: NoteEditorOpenRequest): NoteEditorO
 
 function noteMarkdownEditorLabels(t: (key: string) => string): NoteMarkdownEditorLabels {
   return {
-    title: t("note.editor.title"),
-    field: t("note.editor.field"),
-    save: t("note.editor.save"),
-    saving: t("note.editor.saving"),
+    title: t("note.editor.title"), field: t("note.editor.field"), source: t("note.editor.source"), preview: t("note.editor.preview"),
+    previewLoading: t("note.editor.previewLoading"), previewFailed: t("note.editor.previewFailed"), save: t("note.editor.save"), saving: t("note.editor.saving"),
     cancel: t("note.editor.cancel"),
     review: t("note.editor.review"),
     reviewing: t("note.editor.reviewing"),

@@ -592,6 +592,9 @@ Editing mode:
 - Eligible notes offer plain-Markdown Edit, merge, trash and bounded history; source/rich text stays
   read-only. Save validates Markdown identity/links/citations and adopts Main's render; stale keeps
   draft, Reload and focus, while Cmd/Ctrl+Enter excludes IME.
+- Edit and Preview switch between the exact unsaved draft and the shared sanitized Reader pipeline
+  without saving. Preview hides frontmatter, disables link navigation, reports bounded loading or
+  render failure, and returning to Edit preserves the draft and restores editor focus.
 - Active notes, claims, questions, concepts, entities and topics expose the same bounded History and
   Archive actions. Historical preview is read-only; explicit revision restore or archived-page
   restore adopts Main's authoritative same-type Reader and remains Activity/Undo recoverable.

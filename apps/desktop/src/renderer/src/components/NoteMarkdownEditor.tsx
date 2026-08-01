@@ -19,6 +19,10 @@ export type NoteMarkdownEditorCommitted = Extract<NoteEditorSaveResult, { status
 export type NoteMarkdownEditorLabels = Readonly<{
   title: string;
   field: string;
+  source: string;
+  preview: string;
+  previewLoading: string;
+  previewFailed: string;
   save: string;
   saving: string;
   cancel: string;
@@ -55,6 +59,21 @@ type Notice =
   | "mergeReady"
   | NoteEditorInvalidReason;
 
+type RenderedDraft = Readonly<{
+  source: string;
+  html: string | null;
+}>;
+
+let markdownRendererPromise: Promise<(
+  markdown: string
+) => Promise<{ readonly html: string }>> | undefined;
+
+function renderDraftMarkdown(markdown: string): Promise<{ readonly html: string }> {
+  markdownRendererPromise ??= import("@pige/markdown")
+    .then(({ renderPigeMarkdownToHtml }) => renderPigeMarkdownToHtml);
+  return markdownRendererPromise.then((renderMarkdown) => renderMarkdown(markdown));
+}
+
 export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.Element {
   const propIdentityKey = editorIdentityKey(props.ready);
   const renderedIdentityKeyRef = useRef(propIdentityKey);
@@ -64,6 +83,8 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   const [conflictReview, setConflictReview] = useState<NoteMarkdownEditorReady | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [pending, setPending] = useState<"save" | "review" | null>(null);
+  const [mode, setMode] = useState<"source" | "preview">("source");
+  const [renderedDraft, setRenderedDraft] = useState<RenderedDraft | null>(null);
   const requestSequenceRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const currentFileRef = useRef<HTMLTextAreaElement>(null);
@@ -76,8 +97,27 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     setConflictReview(null);
     setNotice(null);
     setPending(null);
+    setMode("source");
+    setRenderedDraft(null);
     focusEditorAfterReviewRef.current = false;
   }, [propIdentityKey]);
+
+  useEffect(() => {
+    if (mode !== "preview" || conflictReview) return;
+    let current = true;
+    const source = draft;
+    setRenderedDraft(null);
+    void renderDraftMarkdown(source)
+      .then(({ html }) => {
+        if (current) setRenderedDraft({ source, html });
+      })
+      .catch(() => {
+        if (current) setRenderedDraft({ source, html: null });
+      });
+    return () => {
+      current = false;
+    };
+  }, [conflictReview, draft, mode, propIdentityKey]);
 
   useEffect(() => {
     if (conflictReview) {
@@ -162,6 +202,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
         return;
       }
       setConflictReview(result);
+      setMode("source");
       setNotice(null);
     } catch {
       if (requestIsCurrent(sequence, expectedPropIdentityKey)) setNotice("failed");
@@ -185,6 +226,12 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     focusEditorAfterReviewRef.current = true;
     setConflictReview(null);
     setNotice("mergeReady");
+  };
+
+  const showSource = (): void => {
+    if (pending || conflictReview) return;
+    setMode("source");
+    window.requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
   };
 
   const cancel = (): void => {
@@ -226,22 +273,70 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
         }}
         onKeyDown={handleKeyDown}
       >
-        <label htmlFor="note-markdown-editor-input">
-          {conflictReview ? props.labels.draft : props.labels.field}
-        </label>
-        <textarea
-          ref={textareaRef}
-          id="note-markdown-editor-input"
-          value={draft}
-          rows={18}
-          disabled={pending !== null}
-          autoFocus
-          spellCheck
-          onChange={(event) => {
-            setDraft(event.currentTarget.value);
-            setNotice(null);
-          }}
-        />
+        {!conflictReview ? (
+          <div className="settings-actions" role="group" aria-label={props.labels.field}>
+            <button
+              type="button"
+              aria-pressed={mode === "source"}
+              className={mode === "source" ? "primary" : "settings-button"}
+              disabled={pending !== null}
+              onClick={showSource}
+            >
+              {props.labels.source}
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "preview"}
+              className={mode === "preview" ? "primary" : "settings-button"}
+              disabled={pending !== null}
+              onClick={() => setMode("preview")}
+            >
+              {props.labels.preview}
+            </button>
+          </div>
+        ) : null}
+        {mode === "source" || conflictReview ? (
+          <div>
+            <label htmlFor="note-markdown-editor-input">
+              {conflictReview ? props.labels.draft : props.labels.field}
+            </label>
+            <textarea
+              ref={textareaRef}
+              id="note-markdown-editor-input"
+              value={draft}
+              rows={18}
+              disabled={pending !== null}
+              autoFocus
+              spellCheck
+              onChange={(event) => {
+                setDraft(event.currentTarget.value);
+                setNotice(null);
+              }}
+            />
+          </div>
+        ) : (
+          <section
+            id="note-markdown-editor-preview-panel"
+            aria-label={props.labels.preview}
+            aria-busy={renderedDraft === null ? "true" : undefined}
+          >
+            <h2 className="visually-hidden">{props.labels.preview}</h2>
+            {renderedDraft === null ? (
+              <p role="status">{props.labels.previewLoading}</p>
+            ) : renderedDraft.source !== draft || renderedDraft.html === null ? (
+              <p role="alert">{props.labels.previewFailed}</p>
+            ) : (
+              <div
+                className="reader-markdown"
+                data-note-markdown-draft-preview
+                onClick={(event) => {
+                  if ((event.target as HTMLElement | null)?.closest("a")) event.preventDefault();
+                }}
+                dangerouslySetInnerHTML={{ __html: renderedDraft.html }}
+              />
+            )}
+          </section>
+        )}
         {conflictReview ? (
           <section
             className="settings-card"
