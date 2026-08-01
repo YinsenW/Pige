@@ -1526,6 +1526,33 @@ describe("desktop shell build contract", () => {
     expect(registrarSource).not.toContain("url:");
   });
 
+  it("strictly exposes the optional local reranker lifecycle without private asset authority", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const registrarSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-local-reranker-ipc.ts"),
+      "utf8"
+    );
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const channels = [
+      "retrieval.localRerankerStatus",
+      "retrieval.installLocalReranker",
+      "retrieval.enableLocalReranker",
+      "retrieval.disableLocalReranker",
+      "retrieval.removeLocalReranker"
+    ];
+
+    expect(mainSource).toContain("registerLocalRerankerIpc({");
+    for (const channel of channels) {
+      expect(registrarSource).toContain(`options.ipcMain.handle("${channel}"`);
+      expect(preloadSource).toContain(`"${channel}"`);
+    }
+    expect(registrarSource).toContain("LocalRerankerStatusRequestSchema.parse(request)");
+    expect(registrarSource).toContain("LocalRerankerStatusSchema.parse(await options.status(parsed))");
+    for (const privateField of ["path:", "sha256:", "url:"]) {
+      expect(registrarSource).not.toContain(privateField);
+    }
+  });
+
   it("exposes one canonical high-risk confirmation with strict query, event, and resolve parsing", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

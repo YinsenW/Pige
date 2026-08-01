@@ -223,6 +223,7 @@ import {
 export { AgentMemorySettingsPanel } from "./components/AgentMemorySettingsPanel";
 export { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 export { LocalSemanticRetrievalSettingsPanel } from "./components/LocalSemanticRetrievalSettingsPanel";
+export { LocalRerankerSettingsPanel } from "./components/LocalRerankerSettingsPanel";
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
@@ -3050,6 +3051,7 @@ export function App(): React.JSX.Element {
               ocrLanguagePreferenceApi={window.pige.localCapabilities}
               paddleOcrApi={window.pige.localCapabilities}
               semanticRetrievalApi={window.pige.retrieval}
+              rerankerApi={window.pige.retrieval}
               toolchainHealth={toolchainHealth}
               speechAvailability={speechAvailability}
               speechAvailabilityLoading={speechAvailabilityLoading}

@@ -148,6 +148,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
 | Local embedding model lifecycle | Local Capabilities | `derived_status` plus machine asset | Local RAG Asset Service | OS app data | No | `permission_and_confirmation` | Exact Install Job; Enable/Disable CAS; Remove owned bytes; every non-ready state keeps lexical retrieval |
+| Local reranker model lifecycle | Local Capabilities | `derived_status` plus machine asset | Local Reranker Service | OS app data | No | `permission_and_confirmation` | Exact Install Job; Enable/Disable CAS; Remove owned bytes; every non-ready or slow state keeps the existing retrieval result order |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
 | Speech input availability | Local Capabilities | `derived_status` | Speech Service | None | No | `os_permission` on start | Re-probe per language; not persisted |
@@ -218,6 +219,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Memory backup inclusion | `memory.includeMemoryInBackup` | No | Backup Service | Next backup |
 | Exceptional intervention compatibility | `confirmation.*` | Yes | Agent Orchestrator, Change Proposal Service | New jobs |
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
+| Local reranker model status | `retrieval.rerankerAvailable` | Maybe | Local RAG Engine | New retrieval calls after one bounded successful runtime admission |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
 | Speech input availability | `localCapabilities.speechInputAvailable` | No for Agent | Speech Service | Per session; machine-local dictation language resolves the exact new-session tag |
 | Vault-scoped Skill enablement | Tool availability and capability scope | Yes, scoped | Skill Registry Service | New Agent runs |

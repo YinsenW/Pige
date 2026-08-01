@@ -126,6 +126,16 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  LocalRerankerDisableRequest,
+  LocalRerankerDisableResult,
+  LocalRerankerEnableRequest,
+  LocalRerankerEnableResult,
+  LocalRerankerInstallRequest,
+  LocalRerankerInstallResult,
+  LocalRerankerRemoveRequest,
+  LocalRerankerRemoveResult,
+  LocalRerankerStatus,
+  LocalRerankerStatusRequest,
   OcrLanguagePreferenceRequest,
   OcrLanguagePreferenceResult,
   SetOcrLanguagePreferenceRequest,
@@ -579,6 +589,16 @@ import {
   SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
   SetDictationLanguagePreferenceRequestSchema,
   SetDictationLanguagePreferenceResultSchema,
+  LocalRerankerDisableRequestSchema,
+  LocalRerankerDisableResultSchema,
+  LocalRerankerEnableRequestSchema,
+  LocalRerankerEnableResultSchema,
+  LocalRerankerInstallRequestSchema,
+  LocalRerankerInstallResultSchema,
+  LocalRerankerRemoveRequestSchema,
+  LocalRerankerRemoveResultSchema,
+  LocalRerankerStatusRequestSchema,
+  LocalRerankerStatusSchema,
   OCR_LANGUAGE_PREFERENCE_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
@@ -2358,7 +2378,27 @@ const api: PigeDesktopApi = {
           "retrieval.removeLocalSemanticAsset",
           LocalSemanticRetrievalRemoveRequestSchema.parse(request)
         )
-      )
+      ),
+    localRerankerStatus: async (request: LocalRerankerStatusRequest): Promise<LocalRerankerStatus> =>
+      LocalRerankerStatusSchema.parse(await ipcRenderer.invoke(
+        "retrieval.localRerankerStatus", LocalRerankerStatusRequestSchema.parse(request)
+      )),
+    installLocalReranker: async (request: LocalRerankerInstallRequest): Promise<LocalRerankerInstallResult> =>
+      LocalRerankerInstallResultSchema.parse(await ipcRenderer.invoke(
+        "retrieval.installLocalReranker", LocalRerankerInstallRequestSchema.parse(request)
+      )),
+    enableLocalReranker: async (request: LocalRerankerEnableRequest): Promise<LocalRerankerEnableResult> =>
+      LocalRerankerEnableResultSchema.parse(await ipcRenderer.invoke(
+        "retrieval.enableLocalReranker", LocalRerankerEnableRequestSchema.parse(request)
+      )),
+    disableLocalReranker: async (request: LocalRerankerDisableRequest): Promise<LocalRerankerDisableResult> =>
+      LocalRerankerDisableResultSchema.parse(await ipcRenderer.invoke(
+        "retrieval.disableLocalReranker", LocalRerankerDisableRequestSchema.parse(request)
+      )),
+    removeLocalReranker: async (request: LocalRerankerRemoveRequest): Promise<LocalRerankerRemoveResult> =>
+      LocalRerankerRemoveResultSchema.parse(await ipcRenderer.invoke(
+        "retrieval.removeLocalReranker", LocalRerankerRemoveRequestSchema.parse(request)
+      ))
   },
   vault: {
     current: async (): Promise<VaultSummary | undefined> =>

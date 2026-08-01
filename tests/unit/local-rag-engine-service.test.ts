@@ -105,6 +105,54 @@ describe("LocalRagEngineService", () => {
       query: lexical.query
     }, lexical)).resolves.toBe(lexical);
   });
+
+  it("reranks bounded local candidates and preserves the hybrid fallback on runtime failure", async () => {
+    let fail = false;
+    const lexical = lexicalResult();
+    lexical.results.push({
+      summary: chunk(2).summary,
+      score: 0.5,
+      snippets: ["second candidate"],
+      matchReasons: ["body"]
+    });
+    const rerank = vi.fn(async () => {
+      if (fail) throw new Error("runtime unavailable");
+      return [0.1, 0.9];
+    });
+    const engine = new LocalRagEngineService({
+      database: {
+        chunkIndexStatus: () => STATUS,
+        semanticChunkBatch: () => undefined,
+        semanticChunksById: () => undefined
+      },
+      embeddings: {
+        available: async () => false,
+        availableNow: () => false,
+        embedQuery: async () => normalizedVector(),
+        embedDocuments: async () => []
+      },
+      reranker: { available: async () => true, availableNow: () => true, rerank },
+      createVectorPort: () => { throw new Error("not used"); }
+    });
+    const request = {
+      scope: { kind: "active_vault" as const, vaultId: lexical.activeVaultId },
+      query: lexical.query,
+      limit: 8
+    };
+
+    const reranked = await engine.search("/vault", request, lexical);
+    expect(reranked.results.map(({ summary }) => summary.pageId)).toEqual([
+      "page_20260727_0000000000000002",
+      "page_20260727_0000000000000001"
+    ]);
+    expect(rerank).toHaveBeenCalledWith("semantic passage", [
+      "Semantic page 1\nExact semantic passage 1",
+      "Semantic page 2\nsecond candidate"
+    ]);
+
+    fail = true;
+    await expect(engine.search("/vault", request, lexical)).resolves.toBe(lexical);
+  });
 });
 
 function chunk(index: number): LocalDatabaseSemanticChunk {

@@ -13,6 +13,7 @@ import type {
   LocalDatabaseService
 } from "./local-database-service";
 import type { LocalSemanticEmbeddingRuntime } from "./local-semantic-embedding-runtime";
+import type { LocalRerankerRuntime } from "./local-reranker-runtime";
 import {
   SQLITE_VECTOR_DIMENSION,
   type SqliteVectorIndexMetadata,
@@ -34,6 +35,7 @@ export interface LocalRagEngineServiceOptions {
     LocalSemanticEmbeddingRuntime,
     "available" | "availableNow" | "embedQuery" | "embedDocuments"
   >;
+  readonly reranker?: Pick<LocalRerankerRuntime, "available" | "availableNow" | "rerank">;
   readonly createVectorPort: (vaultPath: string) => LocalRagVectorPort | Promise<LocalRagVectorPort>;
 }
 
@@ -56,12 +58,14 @@ export interface LocalRagVectorPort {
 export class LocalRagEngineService {
   readonly #database: LocalRagEngineServiceOptions["database"];
   readonly #embeddings: LocalRagEngineServiceOptions["embeddings"];
+  readonly #reranker: LocalRagEngineServiceOptions["reranker"];
   readonly #createVectorPort: LocalRagEngineServiceOptions["createVectorPort"];
   readonly #readyGenerations = new Map<string, string>();
 
   constructor(options: LocalRagEngineServiceOptions) {
     this.#database = options.database;
     this.#embeddings = options.embeddings;
+    this.#reranker = options.reranker;
     this.#createVectorPort = options.createVectorPort;
   }
 
@@ -116,40 +120,40 @@ export class LocalRagEngineService {
   ): Promise<RetrievalSearchResult> {
     try {
       const status = this.#database.chunkIndexStatus(vaultPath);
-      if (!status || !await this.#embeddings.available()) return lexical;
+      if (!status || !await this.#embeddings.available()) return this.#rerank(request, lexical);
       const vectors = await this.#createVectorPort(vaultPath);
       const metadata = vectorMetadata(status);
-      if (vectors.readCurrent(metadata).status !== "ready") return lexical;
+      if (vectors.readCurrent(metadata).status !== "ready") return this.#rerank(request, lexical);
       const queryVector = await this.#embeddings.embedQuery(request.query);
       const vectorResult = vectors.search({
         metadata,
         queryVector: Array.from(queryVector),
         k: VECTOR_CANDIDATE_LIMIT
       });
-      if (vectorResult.status !== "ready" || vectorResult.matches.length === 0) return lexical;
+      if (vectorResult.status !== "ready" || vectorResult.matches.length === 0) return this.#rerank(request, lexical);
       const selected = this.#database.semanticChunksById(vaultPath, {
         expectedGeneration: status.indexGeneration,
         chunkIds: vectorResult.matches.map(({ chunkId }) => chunkId)
       });
-      if (!selected || selected.indexGeneration !== status.indexGeneration) return lexical;
+      if (!selected || selected.indexGeneration !== status.indexGeneration) return this.#rerank(request, lexical);
       const chunks = new Map(selected.chunks.map((chunk) => [chunk.chunkId, chunk]));
       const semantic: LocalDatabaseSemanticChunk[] = [];
       const seenPages = new Set<string>();
       for (const match of vectorResult.matches) {
         const chunk = chunks.get(match.chunkId);
-        if (!chunk) return lexical;
+        if (!chunk) return this.#rerank(request, lexical);
         if (!seenPages.has(chunk.summary.pageId)) {
           seenPages.add(chunk.summary.pageId);
           semantic.push(chunk);
         }
       }
       const current = this.#database.chunkIndexStatus(vaultPath);
-      if (!current || current.indexGeneration !== status.indexGeneration) return lexical;
+      if (!current || current.indexGeneration !== status.indexGeneration) return this.#rerank(request, lexical);
       this.#readyGenerations.set(vaultPath, status.indexGeneration);
-      return fuseResults(lexical, semantic, request.limit);
+      return this.#rerank(request, fuseResults(lexical, semantic, request.limit));
     } catch {
       this.#readyGenerations.delete(vaultPath);
-      return lexical;
+      return this.#rerank(request, lexical);
     }
   }
 
@@ -172,6 +176,28 @@ export class LocalRagEngineService {
     const status = this.#database.chunkIndexStatus(vaultPath);
     return Boolean(status) && this.#embeddings.availableNow() &&
       this.#readyGenerations.get(vaultPath) === status?.indexGeneration;
+  }
+
+  rerankerAvailableNow(): boolean {
+    return this.#reranker?.availableNow() ?? false;
+  }
+
+  async #rerank(request: RetrievalSearchRequest, result: RetrievalSearchResult): Promise<RetrievalSearchResult> {
+    const reranker = this.#reranker;
+    if (!reranker || result.results.length < 2) return result;
+    try {
+      if (!await reranker.available()) return result;
+      const candidates = result.results.slice(0, 12);
+      const scores = await reranker.rerank(
+        request.query,
+        candidates.map((item) => [item.summary.title, ...item.snippets].join("\n"))
+      );
+      const reranked = candidates.map((item, index) => ({ ...item, score: Number(scores[index]!.toFixed(8)) }))
+        .sort((left, right) => right.score - left.score || left.summary.pageId.localeCompare(right.summary.pageId));
+      return { ...result, results: [...reranked, ...result.results.slice(candidates.length)] };
+    } catch {
+      return result;
+    }
   }
 }
 

@@ -35,6 +35,7 @@ import {
   LocalSemanticRetrievalSettingsPanel,
   type LocalSemanticRetrievalApi
 } from "./LocalSemanticRetrievalSettingsPanel";
+import { LocalRerankerSettingsPanel, type LocalRerankerApi } from "./LocalRerankerSettingsPanel";
 
 type Translate = (key: string) => string;
 type PaddleOcrReadState = "loading" | "ready" | "failed";
@@ -85,6 +86,7 @@ export interface LocalCapabilitiesSettingsPanelProps {
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
+  readonly rerankerApi: LocalRerankerApi;
   readonly toolchainHealth: ToolchainHealth | null;
   readonly speechAvailability?: SpeechAvailabilityResult | null;
   readonly speechAvailabilityLoading?: boolean;
@@ -887,6 +889,14 @@ export function LocalCapabilitiesSettingsPanel(
       </section>
 
       <LocalSemanticRetrievalSettingsPanel api={props.semanticRetrievalApi} t={props.t} />
+      <section className="settings-section" aria-labelledby="capabilities-reranker-title">
+        <h2 className="settings-section-title" id="capabilities-reranker-title">
+          {props.t("capabilities.localReranking")}
+        </h2>
+        <div className="settings-card">
+          <LocalRerankerSettingsPanel api={props.rerankerApi} t={props.t} />
+        </div>
+      </section>
 
       <section className="settings-section" aria-labelledby="capabilities-input-title">
         <h2 className="settings-section-title" id="capabilities-input-title">
