@@ -1596,6 +1596,81 @@ describe("ManagedCollectionService", () => {
     })).resolves.toMatchObject({ status: "failed" });
   });
 
+  it("updates a relation descriptor with CAS, restart adoption, dependency guards, and forward Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionService(port);
+    const initial = required(readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId));
+    const table = required(initial.schema.tables[0]);
+    const nameColumn = required(table.columns.find((column) => column.logicalType === "string"));
+    const countColumn = required(table.columns.find((column) => column.logicalType === "integer"));
+    const [targetRowId, sourceRowId] = readRowIds(initial.payloadPath);
+    if (!targetRowId || !sourceRowId) throw new Error("Missing relation update rows");
+    const relation = await service.addRelationColumn({
+      apiVersion: 1, requestId: "collection_request_relationupdateadd", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: initial.revision.id,
+      label: "Owner", targetTableId: table.id, targetDisplayColumnId: nameColumn.id
+    });
+    if (relation.status !== "committed") throw new Error("Relation update fixture was not created");
+    expect(relation.snapshot.columns.find((column) => column.columnId === relation.columnId))
+      .toMatchObject({ canEditRelationDefinition: true });
+    const linked = await service.editRelationCell({
+      apiVersion: 1, requestId: "collection_request_relationupdatelink", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: relation.snapshot.revisionId,
+      rowId: sourceRowId, columnId: relation.columnId, targetRowId
+    });
+    if (linked.status !== "committed") throw new Error("Relation update fixture was not linked");
+    const updated = await service.updateRelationColumn({
+      apiVersion: 1, requestId: "collection_request_relationupdate001", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: linked.snapshot.revisionId,
+      columnId: relation.columnId, targetTableId: table.id, targetDisplayColumnId: countColumn.id
+    });
+    if (updated.status !== "committed") throw new Error("Relation descriptor did not update");
+    expect(updated.snapshot.columns.find((column) => column.columnId === relation.columnId)).toMatchObject({
+      relation: { kind: "pige_single_relation", targetTableId: table.id, targetDisplayColumnId: countColumn.id }
+    });
+    expect(updated.snapshot.rows.find((row) => row.rowId === sourceRowId)?.cells
+      .find((cell) => cell.columnId === relation.columnId)?.value)
+      .toEqual({ kind: "relation", targetRowId, displayLabel: "3" });
+    await expect(service.updateRelationColumn({
+      apiVersion: 1, requestId: "collection_request_relationupdatenoop", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: updated.snapshot.revisionId,
+      columnId: relation.columnId, targetTableId: table.id, targetDisplayColumnId: countColumn.id
+    })).resolves.toMatchObject({ status: "ineligible" });
+    const restarted = new ManagedCollectionService(port);
+    const activity = new KnowledgeActivityService(port, restarted);
+    const entry = required(activity.list({ limit: 30 }).activities.find((candidate) =>
+      candidate.kind === "update_collection_relation" && candidate.target.revisionId === updated.snapshot.revisionId));
+    const undone = await activity.undo({ operationId: entry.operationId, expectedRevisionId: updated.snapshot.revisionId });
+    if (undone.status !== "undone") throw new Error("Relation descriptor Undo did not commit");
+    const restored = await restarted.open({
+      apiVersion: 1, requestId: "collection_request_relationupdateundo", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id
+    });
+    if (restored.status !== "ready") throw new Error("Relation descriptor Undo did not reopen");
+    expect(restored.snapshot.columns.find((column) => column.columnId === relation.columnId)).toMatchObject({
+      relation: { targetTableId: table.id, targetDisplayColumnId: nameColumn.id },
+      canEditRelationDefinition: true
+    });
+    expect(restored.snapshot.rows.find((row) => row.rowId === sourceRowId)?.cells
+      .find((cell) => cell.columnId === relation.columnId)?.value)
+      .toEqual({ kind: "relation", targetRowId, displayLabel: "Ada" });
+    const lookup = await restarted.addLookupColumn({
+      apiVersion: 1, requestId: "collection_request_relationguardlookup", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: restored.snapshot.revisionId,
+      label: "Owner count", relationColumnId: relation.columnId, targetColumnId: countColumn.id
+    });
+    if (lookup.status !== "committed") throw new Error("Relation dependency guard fixture was not created");
+    expect(lookup.snapshot.columns.find((column) => column.columnId === relation.columnId))
+      .toMatchObject({ canEditRelationDefinition: false });
+    await expect(restarted.updateRelationColumn({
+      apiVersion: 1, requestId: "collection_request_relationblocked01", activeVaultId: vault.vaultId,
+      datasetId: initial.manifest.datasetId, tableId: table.id, expectedRevisionId: lookup.snapshot.revisionId,
+      columnId: relation.columnId, targetTableId: table.id, targetDisplayColumnId: countColumn.id
+    })).resolves.toMatchObject({ status: "ineligible" });
+  });
+
   it("creates count and sum rollups, recomputes from current relation data, and undoes forward", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);

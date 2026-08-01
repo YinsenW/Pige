@@ -2386,11 +2386,15 @@ describe("desktop shell build contract", () => {
     );
     expect(preloadSource).toContain("addRelationColumn: invokeCollectionAddRelationColumn");
     expect(preloadSource).toContain("editRelationCell: invokeCollectionEditRelationCell");
+    expect(preloadSource).toContain("updateRelationColumn: invokeCollectionUpdateRelationColumn");
     expect(mainSource).toContain(
       "addRelationCollectionColumn: (request) => getManagedCollectionService().addRelationColumn(request)"
     );
     expect(mainSource).toContain(
       "editRelationCollectionCell: (request) => getManagedCollectionService().editRelationCell(request)"
+    );
+    expect(mainSource).toContain(
+      "updateRelationCollectionColumn: (request) => getManagedCollectionService().updateRelationColumn(request)"
     );
     expect(contractsSource).toContain("readonly updateFormulaColumn:");
     expect(contractsSource).toContain("CollectionUpdateFormulaColumnRequest");
@@ -2401,12 +2405,18 @@ describe("desktop shell build contract", () => {
     expect(schemasSource).toContain(
       'COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell"'
     );
+    expect(schemasSource).toContain(
+      'COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL = "collections.updateRelationColumn"'
+    );
     expect(contractsSource).toContain("readonly addRelationColumn:");
     expect(contractsSource).toContain("CollectionAddRelationColumnRequest");
     expect(contractsSource).toContain("Promise<CollectionAddRelationColumnResult>");
     expect(contractsSource).toContain("readonly editRelationCell:");
     expect(contractsSource).toContain("CollectionEditRelationCellRequest");
     expect(contractsSource).toContain("Promise<CollectionEditRelationCellResult>");
+    expect(contractsSource).toContain("readonly updateRelationColumn:");
+    expect(contractsSource).toContain("CollectionUpdateRelationColumnRequest");
+    expect(contractsSource).toContain("Promise<CollectionUpdateRelationColumnResult>");
     expect(contractsSource).not.toContain("listRelationTargets");
     expect(contractsSource).toContain("readonly renameColumn:");
     expect(contractsSource).toContain("CollectionRenameColumnRequest");

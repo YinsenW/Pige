@@ -836,6 +836,7 @@ export function projectCollectionFormulaColumns(
       canUseAsFormulaOperand,
       canEditFormula: pigeFormula && isBuilderRepresentable(calculation.expression),
       canUseAsRelationDisplay: false,
+      canEditRelationDefinition: false,
       canEditRelation: false,
       canUseAsLookupTarget: false,
       canUseAsRollupTarget: false,

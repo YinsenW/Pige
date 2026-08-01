@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "このテーブルには関連する行のラベルに使えるフィールドがありません。",
   "collection.relation_added": "リレーションフィールドを新しいリビジョンとして追加しました。",
   "collection.relation_saved": "関連する行を新しいリビジョンとして保存しました。",
+  "collection.relation_definition_saved": "リレーション設定を新しいリビジョンとして保存しました。",
   "collection.relation_stale": "コレクションが変更されました。リレーションの選択は最新リビジョンに対して保持されています。",
   "collection.relation_not_found": "このコレクションまたは関連する行は利用できません。選択は保持されています。",
   "collection.relation_ineligible": "このリレーションは変更できません。選択は保持されています。",

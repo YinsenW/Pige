@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "Diese Tabelle enthält kein Feld zur Benennung verknüpfter Zeilen.",
   "collection.relation_added": "Beziehungsfeld als neue Revision hinzugefügt.",
   "collection.relation_saved": "Verknüpfte Zeile als neue Revision gespeichert.",
+  "collection.relation_definition_saved": "Beziehungseinstellungen als neue Revision gespeichert.",
   "collection.relation_stale": "Die Collection wurde geändert. Deine Beziehungsauswahl bleibt für die neueste Revision erhalten.",
   "collection.relation_not_found": "Diese Collection oder verknüpfte Zeile ist nicht mehr verfügbar. Deine Auswahl bleibt erhalten.",
   "collection.relation_ineligible": "Diese Beziehung kann nicht mehr geändert werden. Deine Auswahl bleibt erhalten.",

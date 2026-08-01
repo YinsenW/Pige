@@ -4,7 +4,8 @@ import type {
   CollectionEditRelationCellRequest,
   CollectionOpenRequest,
   CollectionOpenResult,
-  CollectionSnapshot
+  CollectionSnapshot,
+  CollectionUpdateRelationColumnRequest
 } from "@pige/schemas";
 import { formatCollectionCellValue } from "./ManagedCollectionScalarCellEditor";
 
@@ -23,17 +24,27 @@ type RelationDraft =
       readonly columnId: string;
       readonly originalTargetRowId: string | null;
       readonly targetRowId: string | null;
+    }
+  | {
+      readonly mode: "definition";
+      readonly expectedRevisionId: string;
+      readonly columnId: string;
+      readonly originalTargetTableId: string;
+      readonly originalTargetDisplayColumnId: string;
+      readonly targetTableId: string;
+      readonly targetDisplayColumnId: string;
     };
 
 type TargetTable = { readonly tableId: string; readonly tableName: string };
-type RelationNotice = "added" | "saved" | "stale" | "not_found" | "ineligible" | "failed";
+type RelationNotice = "added" | "saved" | "definition_saved" | "stale" | "not_found" | "ineligible" | "failed";
 
 export function ManagedCollectionRelationDialog(props: {
   readonly activeVaultId: string;
   readonly snapshot: CollectionSnapshot;
   readonly blocked: boolean;
   readonly requestedEdit: {
-    readonly rowId: string;
+    readonly kind: "cell" | "definition";
+    readonly rowId?: string;
     readonly columnId: string;
     readonly ownerKey: string;
     readonly revisionId: string;
@@ -146,12 +157,44 @@ export function ManagedCollectionRelationDialog(props: {
     void loadTargetPage(column.relation.targetTableId, undefined, true);
   };
 
+  const beginDefinitionEdit = (columnId: string): void => {
+    if (props.blocked || activeRequestRef.current !== null) return;
+    const column = props.snapshot.columns.find((candidate) => candidate.columnId === columnId);
+    if (!column?.canEditRelationDefinition || !column.relation) return;
+    setDraft({
+      mode: "definition",
+      expectedRevisionId: props.snapshot.revisionId,
+      columnId,
+      originalTargetTableId: column.relation.targetTableId,
+      originalTargetDisplayColumnId: column.relation.targetDisplayColumnId,
+      targetTableId: column.relation.targetTableId,
+      targetDisplayColumnId: column.relation.targetDisplayColumnId
+    });
+    setNotice(null);
+    setNoticeMode("definition");
+    setTargetTables([{ tableId: props.snapshot.tableId, tableName: props.snapshot.tableName }]);
+    if (column.relation.targetTableId === props.snapshot.tableId) {
+      adoptTargetSnapshot(props.snapshot, undefined, true);
+      void loadCurrentDatasetTables();
+    } else {
+      setTargetTables((current) => [...current, {
+        tableId: column.relation!.targetTableId,
+        tableName: column.relation!.targetTableId
+      }]);
+      void loadTargetPage(column.relation.targetTableId, undefined, true)
+        .then(() => void loadCurrentDatasetTables());
+    }
+    props.onActiveChange(true);
+    pendingDraftFocusRef.current = true;
+  };
+
   useEffect(() => {
     const request = props.requestedEdit;
     if (!request) return;
     props.onEditRequestHandled();
     if (request.ownerKey !== ownerKey || request.revisionId !== props.snapshot.revisionId) return;
-    beginEdit(request.rowId, request.columnId);
+    if (request.kind === "definition") beginDefinitionEdit(request.columnId);
+    else if (request.rowId) beginEdit(request.rowId, request.columnId);
   }, [props.requestedEdit]);
 
   const cancelDraft = (): void => {
@@ -169,11 +212,12 @@ export function ManagedCollectionRelationDialog(props: {
     setBrowseFailed(false);
     props.onActiveChange(false);
     if (current?.mode === "edit") props.onFocusCell(current.rowId, current.columnId);
+    else if (current?.mode === "definition") props.onFocusColumn(current.columnId);
     else pendingTriggerFocusRef.current = true;
   };
 
   const chooseTargetTable = (targetTableId: string): void => {
-    if (!draft || draft.mode !== "add" || browsing || busy || targetTableId === draft.targetTableId) return;
+    if (!draft || draft.mode === "edit" || browsing || busy || targetTableId === draft.targetTableId) return;
     setDraft({ ...draft, targetTableId, targetDisplayColumnId: "" });
     setTargetSnapshot(null);
     setTargetRows([]);
@@ -199,23 +243,31 @@ export function ManagedCollectionRelationDialog(props: {
       tableId: props.snapshot.tableId,
       expectedRevisionId: draft.expectedRevisionId
     };
-    const request: CollectionAddRelationColumnRequest | CollectionEditRelationCellRequest = draft.mode === "add"
+    const request: CollectionAddRelationColumnRequest | CollectionEditRelationCellRequest | CollectionUpdateRelationColumnRequest = draft.mode === "add"
       ? {
           ...identity,
           label: draft.label.trim(),
           targetTableId: draft.targetTableId,
           targetDisplayColumnId: draft.targetDisplayColumnId
         }
-      : {
+      : draft.mode === "edit" ? {
           ...identity,
           rowId: draft.rowId,
           columnId: draft.columnId,
           targetRowId: draft.targetRowId
+        } : {
+          ...identity,
+          columnId: draft.columnId,
+          targetTableId: draft.targetTableId,
+          targetDisplayColumnId: draft.targetDisplayColumnId
         };
-    if (("label" in request &&
-          (!props.snapshot.canAddRelationColumn || !request.label || !request.targetDisplayColumnId)) ||
-        (!("label" in request) &&
-          (!relationEditStillEligible(request) || draft.mode !== "edit" || draft.targetRowId === draft.originalTargetRowId))) {
+    if ((draft.mode === "add" &&
+          (!props.snapshot.canAddRelationColumn || !draft.label.trim() || !draft.targetDisplayColumnId)) ||
+        (draft.mode === "edit" &&
+          (!relationEditStillEligible(draft) || draft.targetRowId === draft.originalTargetRowId)) ||
+        (draft.mode === "definition" && (!relationDefinitionStillEligible(draft.columnId) ||
+          !draft.targetDisplayColumnId || (draft.targetTableId === draft.originalTargetTableId &&
+            draft.targetDisplayColumnId === draft.originalTargetDisplayColumnId)))) {
       activeRequestRef.current = null;
       return;
     }
@@ -223,28 +275,31 @@ export function ManagedCollectionRelationDialog(props: {
     setBusy(true);
     setNotice(null);
     try {
-      const result = "label" in request
-        ? await window.pige.collections.addRelationColumn(request)
-        : await window.pige.collections.editRelationCell(request);
+      const result = draft.mode === "add"
+        ? await window.pige.collections.addRelationColumn(request as CollectionAddRelationColumnRequest)
+        : draft.mode === "edit"
+          ? await window.pige.collections.editRelationCell(request as CollectionEditRelationCellRequest)
+          : await window.pige.collections.updateRelationColumn(request as CollectionUpdateRelationColumnRequest);
       if (!isCurrent(sequence, expectedOwnerKey, request.expectedRevisionId) || !identityMatches(request, result)) return;
       if ((result.status === "committed" || result.status === "stale") &&
           !props.onAdoptSnapshot(result.snapshot, request.expectedRevisionId)) return;
       if (result.status === "committed") {
         setDraft(null);
-        setNotice("label" in request ? "added" : "saved");
+        setNotice(draft.mode === "add" ? "added" : draft.mode === "definition" ? "definition_saved" : "saved");
         props.onActiveChange(false);
-        if ("label" in request && "columnId" in result && !("rowId" in result)) props.onFocusColumn(result.columnId);
-        else if ("rowId" in result) props.onFocusCell(result.rowId, result.columnId);
+        if (draft.mode === "edit" && "rowId" in result) props.onFocusCell(result.rowId, result.columnId);
+        else if ("columnId" in result) props.onFocusColumn(result.columnId);
         return;
       }
       if (result.status === "stale") {
-        setDraft((current) => current ? {
-          ...current,
-          expectedRevisionId: result.snapshot.revisionId,
-          ...(current.mode === "edit" ? {
-            originalTargetRowId: relationTargetInSnapshot(result.snapshot, current.rowId, current.columnId)
-          } : {})
-        } : current);
+        setDraft((current) => {
+          if (!current) return current;
+          if (current.mode === "edit") return { ...current, expectedRevisionId: result.snapshot.revisionId,
+            originalTargetRowId: relationTargetInSnapshot(result.snapshot, current.rowId, current.columnId) };
+          if (current.mode === "definition") return { ...current, expectedRevisionId: result.snapshot.revisionId,
+            ...relationDefinitionFromSnapshot(result.snapshot, current) };
+          return { ...current, expectedRevisionId: result.snapshot.revisionId };
+        });
       }
       setNotice(result.status);
       pendingDraftFocusRef.current = true;
@@ -264,9 +319,14 @@ export function ManagedCollectionRelationDialog(props: {
     !!targetSnapshot?.columns.some((column) =>
       column.columnId === draft.targetDisplayColumnId && column.canUseAsRelationDisplay
     );
+  const definitionValid = draft?.mode === "definition" && relationDefinitionStillEligible(draft.columnId) &&
+    !!targetSnapshot?.columns.some((column) =>
+      column.columnId === draft.targetDisplayColumnId && column.canUseAsRelationDisplay
+    ) && (draft.targetTableId !== draft.originalTargetTableId ||
+      draft.targetDisplayColumnId !== draft.originalTargetDisplayColumnId);
   if (!draft && !props.snapshot.canAddRelationColumn && !notice) return null;
   return (
-    <section className="settings-card settings-row tall" aria-label={props.t((draft?.mode ?? noticeMode) === "edit" ? "collection.relationEditor" : "collection.relationBuilder")}>
+    <section className="settings-card settings-row tall" aria-label={props.t(relationDialogLabel(draft?.mode ?? noticeMode))}>
       {!draft ? props.snapshot.canAddRelationColumn ? (
         <div className="settings-row-control">
           <button ref={triggerRef} type="button" className="settings-button" disabled={props.blocked || busy} onClick={beginAdd}>
@@ -275,17 +335,17 @@ export function ManagedCollectionRelationDialog(props: {
         </div>
       ) : null : (
         <form
-          aria-label={props.t(draft.mode === "edit" ? "collection.relationEditor" : "collection.relationBuilder")}
+          aria-label={props.t(relationDialogLabel(draft.mode))}
           onSubmit={(event) => { event.preventDefault(); void submit(); }}
           onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelDraft(); } }}
         >
-          {draft.mode === "add" ? (
+          {draft.mode !== "edit" ? (
             <>
-              <div className="settings-row-copy">
+              {draft.mode === "add" ? <div className="settings-row-copy">
                 <label htmlFor="collection-relation-name"><strong>{props.t("collection.fieldName")}</strong></label>
                 <input ref={nameRef} id="collection-relation-name" className="settings-input" value={draft.label} maxLength={120} disabled={busy} onChange={(event) => { setDraft({ ...draft, label: event.target.value }); setNotice(null); }} />
-              </div>
-              <div className="settings-row-copy">
+              </div> : null}
+              <div ref={targetListRef} tabIndex={-1} className="settings-row-copy">
                 <label htmlFor="collection-relation-table"><strong>{props.t("collection.relationTargetTable")}</strong></label>
                 <select id="collection-relation-table" className="settings-input" value={draft.targetTableId} disabled={busy || browsing} onChange={(event) => chooseTargetTable(event.target.value)}>
                   {targetTables.map((table) => <option key={table.tableId} value={table.tableId}>{table.tableName}</option>)}
@@ -319,12 +379,12 @@ export function ManagedCollectionRelationDialog(props: {
           {browsing ? <p className="muted" role="status">{props.t("collection.relationLoading")}</p> : null}
           {browseFailed ? <p className="settings-inline-status error" role="status">{props.t("collection.relationLoadFailed")}</p> : null}
           <div className="settings-row-control">
-            <button type="submit" className="settings-button primary" disabled={busy || browsing || props.blocked || (draft.mode === "add" ? !addValid : !relationEditStillEligible(draft) || draft.targetRowId === draft.originalTargetRowId)}>{props.t(busy ? "collection.saving" : "collection.save")}</button>
+            <button type="submit" className="settings-button primary" disabled={busy || browsing || props.blocked || (draft.mode === "add" ? !addValid : draft.mode === "definition" ? !definitionValid : !relationEditStillEligible(draft) || draft.targetRowId === draft.originalTargetRowId)}>{props.t(busy ? "collection.saving" : "collection.save")}</button>
             <button type="button" className="settings-button" disabled={busy} onClick={cancelDraft}>{props.t("collection.cancel")}</button>
           </div>
         </form>
       )}
-      {notice ? <p className={`settings-inline-status ${notice === "added" || notice === "saved" ? "success" : "error"}`} role="status">{props.t(`collection.relation_${notice}`)}</p> : null}
+      {notice ? <p className={`settings-inline-status ${notice === "added" || notice === "saved" || notice === "definition_saved" ? "success" : "error"}`} role="status">{props.t(`collection.relation_${notice}`)}</p> : null}
     </section>
   );
 
@@ -405,7 +465,7 @@ export function ManagedCollectionRelationDialog(props: {
     setTargetRows((current) => replace ? snapshot.rows : mergeRows(current, snapshot.rows));
     setNextRowCursor(cursor);
     setDraft((current) => {
-      if (!current || current.mode !== "add" || current.targetTableId !== snapshot.tableId) return current;
+      if (!current || current.mode === "edit" || current.targetTableId !== snapshot.tableId) return current;
       const eligible = snapshot.columns.filter((column) => column.canUseAsRelationDisplay);
       return eligible.some((column) => column.columnId === current.targetDisplayColumnId)
         ? current
@@ -416,6 +476,11 @@ export function ManagedCollectionRelationDialog(props: {
   function relationEditStillEligible(identity: Pick<CollectionEditRelationCellRequest, "rowId" | "columnId">): boolean {
     const column = props.snapshot.columns.find((candidate) => candidate.columnId === identity.columnId);
     return !!column?.canEditRelation && !!column.relation && props.snapshot.rows.some((row) => row.rowId === identity.rowId);
+  }
+
+  function relationDefinitionStillEligible(columnId: string): boolean {
+    const column = props.snapshot.columns.find((candidate) => candidate.columnId === columnId);
+    return !!column?.canEditRelationDefinition && !!column.relation;
   }
 
   function isCurrent(sequence: number, expectedOwnerKey: string, expectedRevisionId?: string): boolean {
@@ -433,6 +498,22 @@ function relationTargetInSnapshot(snapshot: CollectionSnapshot, rowId: string, c
   return typeof value === "object" && value?.kind === "relation" ? value.targetRowId : null;
 }
 
+function relationDefinitionFromSnapshot(
+  snapshot: CollectionSnapshot,
+  draft: Extract<RelationDraft, { readonly mode: "definition" }>
+): Partial<Extract<RelationDraft, { readonly mode: "definition" }>> {
+  const relation = snapshot.columns.find((column) => column.columnId === draft.columnId)?.relation;
+  return relation ? {
+    originalTargetTableId: relation.targetTableId,
+    originalTargetDisplayColumnId: relation.targetDisplayColumnId
+  } : {};
+}
+
+function relationDialogLabel(mode: RelationDraft["mode"]): string {
+  return mode === "add" ? "collection.relationBuilder" :
+    mode === "definition" ? "collection.editRelation" : "collection.relationEditor";
+}
+
 function mergeRows(current: CollectionSnapshot["rows"], incoming: CollectionSnapshot["rows"]): CollectionSnapshot["rows"] {
   const seen = new Set(current.map((row) => row.rowId));
   return [...current, ...incoming.filter((row) => !seen.has(row.rowId))];
@@ -443,14 +524,19 @@ function targetPageIdentity(snapshot: CollectionSnapshot): string {
 }
 
 function identityMatches(
-  request: CollectionAddRelationColumnRequest | CollectionEditRelationCellRequest,
-  result: Awaited<ReturnType<typeof window.pige.collections.addRelationColumn>> | Awaited<ReturnType<typeof window.pige.collections.editRelationCell>>
+  request: CollectionAddRelationColumnRequest | CollectionEditRelationCellRequest | CollectionUpdateRelationColumnRequest,
+  result: Awaited<ReturnType<typeof window.pige.collections.addRelationColumn>> |
+    Awaited<ReturnType<typeof window.pige.collections.editRelationCell>> |
+    Awaited<ReturnType<typeof window.pige.collections.updateRelationColumn>>
 ): boolean {
   return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
     result.datasetId === request.datasetId && result.tableId === request.tableId &&
     ("label" in request
       ? "targetTableId" in result && result.targetTableId === request.targetTableId && result.targetDisplayColumnId === request.targetDisplayColumnId
-      : "rowId" in result && result.rowId === request.rowId && result.columnId === request.columnId && result.targetRowId === request.targetRowId);
+      : "rowId" in request
+        ? "rowId" in result && result.rowId === request.rowId && result.columnId === request.columnId && result.targetRowId === request.targetRowId
+        : "columnId" in result && result.columnId === request.columnId && "targetTableId" in result &&
+          result.targetTableId === request.targetTableId && result.targetDisplayColumnId === request.targetDisplayColumnId);
 }
 
 function openIdentityMatches(request: CollectionOpenRequest, result: CollectionOpenResult): boolean {

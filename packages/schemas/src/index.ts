@@ -1276,6 +1276,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_column",
     "update_collection_formula",
     "add_collection_relation",
+    "update_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
     "update_collection_lookup",
@@ -6464,6 +6465,21 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_relation_update"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetDisplayColumnId: ColumnIdSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_relation_update_undo"),
+      tableId: TableIdSchema,
+      columnId: ColumnIdSchema,
+      targetTableId: TableIdSchema,
+      targetDisplayColumnId: ColumnIdSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_relation_cell_edit"),
       tableId: TableIdSchema,
       rowId: RowIdSchema,
@@ -7009,6 +7025,7 @@ export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as co
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
+export const COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL = "collections.updateRelationColumn" as const;
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
 export const COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL = "collections.updateLookupColumn" as const;
@@ -7098,6 +7115,7 @@ export const CollectionColumnSummarySchema = z.object({
   canUseAsFormulaOperand: z.boolean(),
   canEditFormula: z.boolean(),
   canUseAsRelationDisplay: z.boolean().default(false),
+  canEditRelationDefinition: z.boolean().default(false),
   canEditRelation: z.boolean().default(false),
   canUseAsLookupTarget: z.boolean().default(false),
   canEditLookup: z.boolean().default(false),
@@ -7147,6 +7165,13 @@ export const CollectionColumnSummarySchema = z.object({
       code: "custom",
       path: ["canEditRelation"],
       message: "Only current Pige relation columns may expose relation-cell edit authority."
+    });
+  }
+  if (column.canEditRelationDefinition && column.relation?.kind !== "pige_single_relation") {
+    context.addIssue({
+      code: "custom",
+      path: ["canEditRelationDefinition"],
+      message: "Only current unreferenced Pige relation columns may expose descriptor edit authority."
     });
   }
   if (column.canEditRollup !== (column.rollup?.kind === "pige_single_rollup")) {
@@ -7432,6 +7457,13 @@ export const CollectionSnapshotSchema = z.object({
     context.addIssue({ code: "custom", path: ["canAddRollupColumn"], message: "Rollup creation requires a current relation field." });
   }
   for (const [index, column] of snapshot.columns.entries()) {
+    if (column.canEditRelationDefinition && snapshot.columns.some((candidate) =>
+      candidate.lookup?.relationColumnId === column.columnId || candidate.rollup?.relationColumnId === column.columnId)) {
+      context.addIssue({
+        code: "custom", path: ["columns", index, "canEditRelationDefinition"],
+        message: "Relations referenced by derived fields cannot expose descriptor edit authority."
+      });
+    }
     if (!column.lookup) continue;
     const relationColumn = columnsById.get(column.lookup.relationColumnId);
     if (!relationColumn?.relation || relationColumn.canTrash) {
@@ -7742,6 +7774,19 @@ export const CollectionAddRelationColumnRequestSchema = z.object({
   tableId: DatasetQueryTableIdSchema,
   expectedRevisionId: DatasetQueryRevisionIdSchema,
   label: CollectionNewColumnLabelSchema,
+  targetTableId: DatasetQueryTableIdSchema,
+  targetDisplayColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+/** Replaces the target table/display descriptor of one current Pige relation. */
+export const CollectionUpdateRelationColumnRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  columnId: DatasetQueryColumnIdSchema,
   targetTableId: DatasetQueryTableIdSchema,
   targetDisplayColumnId: DatasetQueryColumnIdSchema
 }).strict();
@@ -8093,6 +8138,34 @@ export const CollectionAddRelationColumnResultSchema = z.discriminatedUnion("sta
       path: ["columnId"],
       message: "Committed relation columns must project the exact descriptor."
     });
+  }
+});
+
+const CollectionUpdateRelationColumnResultIdentitySchema = CollectionResultIdentitySchema.extend({
+  columnId: DatasetQueryColumnIdSchema,
+  targetTableId: DatasetQueryTableIdSchema,
+  targetDisplayColumnId: DatasetQueryColumnIdSchema
+}).strict();
+
+export const CollectionUpdateRelationColumnResultSchema = z.discriminatedUnion("status", [
+  CollectionUpdateRelationColumnResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateRelationColumnResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionUpdateRelationColumnResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionUpdateRelationColumnResultIdentitySchema.extend({ status: z.literal("ineligible") }).strict(),
+  CollectionUpdateRelationColumnResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed" && result.status !== "stale") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection relation-update snapshots must match the request identity." });
+  }
+  if (result.status !== "committed") return;
+  const descriptor = result.snapshot.columns.find((candidate) => candidate.columnId === result.columnId)?.relation;
+  if (descriptor?.targetTableId !== result.targetTableId || descriptor.targetDisplayColumnId !== result.targetDisplayColumnId) {
+    context.addIssue({ code: "custom", path: ["columnId"], message: "Committed relation updates must project the exact descriptor." });
   }
 });
 
@@ -11023,6 +11096,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_column",
     "update_collection_formula",
     "add_collection_relation",
+    "update_collection_relation",
     "update_collection_relation_cell",
     "add_collection_lookup",
     "update_collection_lookup",
@@ -11636,6 +11710,8 @@ export type CollectionUpdateFormulaColumnRequest = z.infer<typeof CollectionUpda
 export type CollectionUpdateFormulaColumnResult = z.infer<typeof CollectionUpdateFormulaColumnResultSchema>;
 export type CollectionAddRelationColumnRequest = z.infer<typeof CollectionAddRelationColumnRequestSchema>;
 export type CollectionAddRelationColumnResult = z.infer<typeof CollectionAddRelationColumnResultSchema>;
+export type CollectionUpdateRelationColumnRequest = z.infer<typeof CollectionUpdateRelationColumnRequestSchema>;
+export type CollectionUpdateRelationColumnResult = z.infer<typeof CollectionUpdateRelationColumnResultSchema>;
 export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRelationCellRequestSchema>;
 export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
 export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLookupColumnRequestSchema>;

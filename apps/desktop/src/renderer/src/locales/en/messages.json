@@ -1705,6 +1705,7 @@
   "collection.relationNoDisplayField": "This table has no field that can label related rows.",
   "collection.relation_added": "Relation field added as a new revision.",
   "collection.relation_saved": "Related row saved as a new revision.",
+  "collection.relation_definition_saved": "Relation settings saved as a new revision.",
   "collection.relation_stale": "The collection changed. Your relation selection is preserved against the latest revision.",
   "collection.relation_not_found": "This collection or related row is no longer available. Your selection is preserved.",
   "collection.relation_ineligible": "This relation can no longer be changed. Your selection is preserved.",
