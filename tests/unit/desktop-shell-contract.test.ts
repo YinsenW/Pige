@@ -617,6 +617,19 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("enginePreference: () => getOcrEnginePreferenceService().preference()");
   });
 
+  it("bridges a bounded Main-owned OCR image test without renderer path authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    expect(contractsSource).toContain("readonly testOcrImage: (");
+    expect(contractsSource).toContain("request: OcrImageTestRequest");
+    expect(preloadSource).toContain("OCR_IMAGE_TEST_CHANNEL");
+    expect(preloadSource).toContain("OcrImageTestRequestSchema.parse(request)");
+    expect(mainSource).toContain("getOcrImageTestService().run(request, inputPath)");
+    expect(preloadSource.slice(preloadSource.indexOf("testOcrImage: async"), preloadSource.indexOf("dictationLanguagePreference: async")))
+      .not.toMatch(/path|body|file/u);
+  });
+
   it("bridges Pi package lifecycle and freezes the local curated catalog contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

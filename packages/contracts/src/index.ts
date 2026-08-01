@@ -202,6 +202,8 @@ import type {
   SetOcrLanguagePreferenceResult,
   OcrEnginePreferenceRequest,
   OcrEnginePreferenceResult,
+  OcrImageTestRequest,
+  OcrImageTestResult,
   SetOcrEnginePreferenceRequest,
   SetOcrEnginePreferenceResult,
   PaddleOcrCatalogComponent,
@@ -857,6 +859,8 @@ export type {
   OcrEnginePreferenceRequestId,
   OcrEnginePreferenceResult,
   OcrEnginePreferenceSummary,
+  OcrImageTestRequest,
+  OcrImageTestResult,
   SetOcrEnginePreferenceRequest,
   SetOcrEnginePreferenceResult,
   DictationLanguagePreference,
@@ -2508,6 +2512,9 @@ export interface PigeDesktopApi {
     readonly setOcrEnginePreference: (
       request: SetOcrEnginePreferenceRequest
     ) => Promise<SetOcrEnginePreferenceResult>;
+    readonly testOcrImage: (
+      request: OcrImageTestRequest
+    ) => Promise<OcrImageTestResult>;
     readonly dictationLanguagePreference: (
       request: DictationLanguagePreferenceRequest
     ) => Promise<DictationLanguagePreferenceResult>;

@@ -40,6 +40,7 @@ import {
   OcrEnginePreferenceControl,
   type OcrEnginePreferenceApi
 } from "./OcrEnginePreferenceControl";
+import { OcrImageTestControl, type OcrImageTestApi } from "./OcrImageTestControl";
 export type { OcrEnginePreferenceApi } from "./OcrEnginePreferenceControl";
 
 type Translate = (key: string) => string;
@@ -90,6 +91,7 @@ export interface LocalCapabilitiesSettingsPanelProps {
   ) => void;
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly ocrEnginePreferenceApi?: OcrEnginePreferenceApi;
+  readonly ocrImageTestApi?: OcrImageTestApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
   readonly rerankerApi: LocalRerankerApi;
@@ -917,6 +919,7 @@ export function LocalCapabilitiesSettingsPanel(
           {props.ocrLanguagePreferenceApi ? (
             <OcrLanguagePreferenceControl api={props.ocrLanguagePreferenceApi} t={props.t} />
           ) : null}
+          {props.ocrImageTestApi ? <OcrImageTestControl api={props.ocrImageTestApi} t={props.t} /> : null}
           {props.dictationLanguagePreferenceApi ? (
             <DictationLanguagePreferenceControl
               api={props.dictationLanguagePreferenceApi}

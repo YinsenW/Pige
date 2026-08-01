@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "11f16e060cb2e9d5921bfa19652a098947969d55",
+  "baseline": "f6b57858b5a8ed9fd75dddab7f81b7b1443ba0d7",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 263,
-  "baselineLines": 121454,
+  "baselineFileCount": 264,
+  "baselineLines": 121517,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -75,6 +75,7 @@
       ["paddle-ocr-bundle-materializer.ts", 642, "prd"],
       ["pige-policy-service.ts", 431, "rd"],
       ["paddle-ocr-lifecycle-service.ts", 673, "jprd"],
+      ["ocr-image-test-service.ts", 63, ""],
       ["vault-migration-service.ts", 400, "jrd"],
       ["model-egress-content.ts", 77, "pf"],
       ["model-runtime-binding.ts", 113, "ap"],
@@ -296,7 +297,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 263,
+    "serviceOwnerCount": 264,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

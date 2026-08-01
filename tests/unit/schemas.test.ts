@@ -216,6 +216,8 @@ import {
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
   OcrLanguagePreferenceSummarySchema,
+  OcrImageTestRequestSchema,
+  OcrImageTestResultSchema,
   PADDLE_OCR_ENGINE_ID,
   PaddleOcrDisableRequestSchema,
   PaddleOcrDisableResultSchema,
@@ -5639,6 +5641,35 @@ describe("schemas", () => {
       requestId,
       status: "failed",
       rawError: "private"
+    })).toThrow();
+  });
+
+  it("bounds local OCR image test previews without renderer path authority", () => {
+    const request = OcrImageTestRequestSchema.parse({
+      apiVersion: 1,
+      requestId: "ocrimagetest_20260801abcdef01"
+    });
+    const ready = OcrImageTestResultSchema.parse({
+      ...request,
+      status: "ready",
+      preview: {
+        adapterId: "macos_vision_ocr",
+        engine: "macos_vision_document",
+        engineVersion: "1",
+        text: "Pige OCR",
+        truncated: false,
+        blockCount: 1,
+        confidence: 0.95,
+        languageHints: ["en-US"],
+        warnings: []
+      }
+    });
+    expect(ready).toMatchObject({ status: "ready", preview: { text: "Pige OCR" } });
+    expect(() => OcrImageTestRequestSchema.parse({ ...request, path: "/private/image.png" })).toThrow();
+    expect(() => OcrImageTestResultSchema.parse({ ...request, status: "failed", error: "/private" })).toThrow();
+    expect(() => OcrImageTestResultSchema.parse({
+      ...ready,
+      preview: { ...(ready.status === "ready" ? ready.preview : {}), text: "x".repeat(4_097) }
     })).toThrow();
   });
 

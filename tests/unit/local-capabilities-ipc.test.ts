@@ -73,6 +73,23 @@ const disabledSummary = {
 function makeHarness(overrides: Record<string, unknown> = {}) {
   const handlers = new Map<string, IpcHandler>();
   const callbacks = {
+    getWindow: vi.fn(() => ({}) as never),
+    showOpenDialog: vi.fn(async () => ({ canceled: false, filePaths: ["/private/test.png"] })),
+    testOcrImage: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "ready" as const,
+      preview: {
+        adapterId: "macos_vision_ocr" as const,
+        engine: "macos_vision_document" as const,
+        engineVersion: "1",
+        text: "Pige OCR",
+        truncated: false,
+        blockCount: 1,
+        languageHints: ["en-US"],
+        warnings: []
+      }
+    })),
     dictationLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
       apiVersion: 1 as const,
       requestId: input.requestId,
@@ -217,6 +234,7 @@ describe("registerLocalCapabilitiesIpc", () => {
       "setOcrLanguagePreference",
       "ocrEnginePreference",
       "setOcrEnginePreference",
+      "testOcrImage",
       "paddleOcrSummary",
       "installPaddleOcr",
       "enablePaddleOcr",
@@ -237,6 +255,7 @@ describe("registerLocalCapabilitiesIpc", () => {
       "localCapabilities.ocrLanguagePreference",
       "localCapabilities.ocrEnginePreference",
       "localCapabilities.setOcrEnginePreference",
+      "localCapabilities.testOcrImage",
       "localCapabilities.setOcrLanguagePreference",
       "localCapabilities.paddleOcrSummary",
       "localCapabilities.installPaddleOcr",
@@ -289,6 +308,12 @@ describe("registerLocalCapabilitiesIpc", () => {
       .resolves.toMatchObject({ status: "committed", summary: { preference: "paddleocr_local" } });
     expect(callbacks.ocrEnginePreference).toHaveBeenCalledWith(engineRead);
     expect(callbacks.setOcrEnginePreference).toHaveBeenCalledWith(engineSet);
+
+    const imageTest = { apiVersion: 1, requestId: "ocrimagetest_abcdefghijklmnop" } as const;
+    await expect(call(handlers, "localCapabilities.testOcrImage", imageTest))
+      .resolves.toMatchObject({ status: "ready", preview: { text: "Pige OCR" } });
+    expect(callbacks.showOpenDialog).toHaveBeenCalled();
+    expect(callbacks.testOcrImage).toHaveBeenCalledWith(imageTest, "/private/test.png");
 
     await expect(call(handlers, "localCapabilities.paddleOcrSummary", { apiVersion: 1 }))
       .resolves.toEqual(notInstalledSummary);
@@ -416,7 +441,9 @@ function call(
   channel: string,
   value?: unknown
 ): Promise<unknown> {
-  return Promise.resolve(handlers.get(channel)!({} as IpcMainInvokeEvent, value));
+  return Promise.resolve(handlers.get(channel)!({
+    sender: { isDestroyed: () => false }
+  } as IpcMainInvokeEvent, value));
 }
 
 function failedResult() {

@@ -6360,6 +6360,14 @@ dd {
 .settings-inline-status:empty { display: none; }
 .settings-inline-status.error { color: var(--danger); }
 
+.ocr-test-preview {
+  max-height: 150px;
+  margin: 6px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .memory-scope-list {
   display: grid;
   gap: 7px;

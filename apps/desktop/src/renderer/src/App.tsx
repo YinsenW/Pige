@@ -3088,6 +3088,7 @@ export function App(): React.JSX.Element {
               dictationLanguagePreferenceApi={window.pige.localCapabilities}
               onDictationLanguagePreferenceChanged={setDictationLanguagePreference}
               ocrLanguagePreferenceApi={window.pige.localCapabilities}
+              ocrImageTestApi={window.pige.localCapabilities}
               paddleOcrApi={window.pige.localCapabilities}
               semanticRetrievalApi={window.pige.retrieval}
               rerankerApi={window.pige.retrieval}
