@@ -12,6 +12,7 @@ import type {
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult, NoteOpenSearchMatchRequest, NoteOpenSearchMatchResult,
   NoteRevealSourceRequest,
+  NoteRevealGeneratedRequest,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   NoteRenderRequest,
@@ -38,6 +39,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+import { isPigeGeneratedFrontmatter, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
@@ -74,35 +76,20 @@ interface FileIdentity {
 }
 
 interface NoteRenderContext {
-  readonly id: string;
-  readonly vaultId: string;
-  readonly vaultPath: string;
-  readonly pageId: string;
-  readonly pageType: NoteDocument["summary"]["pageType"];
-  readonly pagePath: string;
-  readonly absolutePath: string;
-  readonly pageIdentity: FileIdentity;
-  readonly pageContentHash: string;
-  readonly markdown: string;
-  readonly bodyStartOffset: number;
+  readonly id: string; readonly vaultId: string; readonly vaultPath: string;
+  readonly pageId: string; readonly pageType: NoteDocument["summary"]["pageType"]; readonly pagePath: string;
+  readonly absolutePath: string; readonly pageIdentity: FileIdentity; readonly pageContentHash: string;
+  readonly markdown: string; readonly bodyStartOffset: number;
   readonly selectionSegments: ReadonlyMap<string, PigeMarkdownSelectionSegment>;
-  readonly hrefs: ReadonlySet<string>;
-  readonly sourceIds: ReadonlySet<string>;
-  readonly referenceIndexRevision?: string;
-  readonly ownerEpoch: number;
-  readonly expiresAt: number;
+  readonly hrefs: ReadonlySet<string>; readonly sourceIds: ReadonlySet<string>; readonly generatedByPige: boolean;
+  readonly referenceIndexRevision?: string; readonly ownerEpoch: number; readonly expiresAt: number;
 }
 
 interface StableNoteDocument {
-  readonly document: NoteDocument;
-  readonly markdown: string;
-  readonly bodyStartOffset: number;
-  readonly pageContentHash: string;
-  readonly pagePath: string;
-  readonly absolutePath: string;
+  readonly document: NoteDocument; readonly markdown: string; readonly bodyStartOffset: number;
+  readonly pageContentHash: string; readonly pagePath: string; readonly absolutePath: string;
   readonly identity: FileIdentity;
 }
-
 export type NotesSourceRevealResolution =
   | {
       readonly status: "ready";
@@ -187,6 +174,7 @@ export class NotesService {
     }
 
     const hrefs = extractRenderedInternalHrefs(rendered.html), parsedFrontmatter = parsePigeFrontmatter(stable.markdown), frontmatter = parsedFrontmatter?.frontmatter, rawAliases = frontmatter?.aliases ?? [], aliases = rawAliases.filter((alias, index) => alias.length > 0 && alias.length <= 120 && alias === alias.normalize("NFKC").replace(/\s+/gu, " ").trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) && Boolean(normalizeMarkdownPageReferenceKey(alias)) && rawAliases.findIndex((value) => normalizeMarkdownPageReferenceKey(value) === normalizeMarkdownPageReferenceKey(alias)) === index);
+    const generatedByPige = parsedFrontmatter ? isPigeGeneratedFrontmatter(parsedFrontmatter.raw) : false;
     const questionState = parsedFrontmatter && stable.document.summary.pageType === "question" ? readQuestionState(parsedFrontmatter.raw) : undefined, questionAnswers = parsedFrontmatter && stable.document.summary.pageType === "question" ? projectQuestionAnswers(vaultPath, parsedFrontmatter.raw) : undefined, claimContradictions = parsedFrontmatter && stable.document.summary.pageType === "claim" ? projectClaimContradictions(vaultPath, parsedFrontmatter.raw) : undefined, referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
     const renderContextId = ownerId === undefined
       ? undefined
@@ -206,6 +194,7 @@ export class NotesService {
           ),
           hrefs: hrefs ?? new Set<string>(),
           sourceIds: new Set(stable.document.summary.sourceIds),
+          generatedByPige,
           ownerEpoch: ownerEpoch!,
           ...(referenceIndexRevision ? { referenceIndexRevision } : {})
         });
@@ -230,6 +219,9 @@ export class NotesService {
             }
           : {}),
         ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(generatedByPige && stable.document.summary.pageType !== "source"
+          ? { revealGeneratedEligibility: { canReveal: true as const, revision: publicEditorRevision(stable.pageContentHash) } }
+          : {}),
         ...(questionState ? { questionState: { state: questionState, canChange: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(questionAnswers ? { questionAnswers: { items: [...questionAnswers], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(claimContradictions ? { claimContradictions: { items: [...claimContradictions], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
@@ -479,6 +471,13 @@ export class NotesService {
         );
       }
     };
+  }
+  resolveGeneratedReveal(ownerId: string, request: NoteRevealGeneratedRequest): NotesGeneratedRevealResolution {
+    const context = this.#readRenderContext(ownerId, request.renderContextId);
+    return resolveGeneratedNoteReveal(request, { vaultId: this.#vaults.current()?.vaultId,
+      vaultPath: this.#vaults.activeVaultPath(), ownerEpoch: this.#ownerEpochs.get(ownerId), context,
+      publicRevision: publicEditorRevision, isCurrent: (candidate) => this.#matchesCurrentPage(candidate as NoteRenderContext),
+      readContext: () => this.#readRenderContext(ownerId, request.renderContextId) });
   }
   resolveTrashTarget(ownerId: string, input: NotesManagedPageTargetInput): NotesTrashResolution { return this.resolveManagedPageTarget(ownerId, input, "note"); }
   resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question" | "claim"): NotesTrashResolution {
@@ -821,6 +820,7 @@ function publicEditorRevision(privateRevision: string): `noteeditrev_${string}` 
   if (!match) throw new Error("The private editor revision is invalid.");
   return `noteeditrev_${match[1]}`;
 }
+
 
 function extractRenderedInternalHrefs(html: string): ReadonlySet<string> | undefined {
   const hrefs = new Set<string>();

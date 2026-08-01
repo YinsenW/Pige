@@ -1369,4 +1369,43 @@ status: "active"
       scope: "render_context"
     });
   });
+
+  it("projects and revalidates reveal only for the exact current Pige-generated page", async () => {
+    const { vaultPath, vault } = makeVault();
+    const generatedPageId = "page_20260801_generated1";
+    writePage({ vaultPath, fileName: "generated.md", pageId: generatedPageId, title: "Generated",
+      extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+    writePage({ vaultPath, fileName: "imported.md", pageId: "page_20260801_imported01", title: "Imported",
+      extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+    writePage({ vaultPath, fileName: "generated-source.md", pageId: "page_20260801_source001", title: "Source",
+      pageType: "source", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: generatedPageId }, OWNER_ID);
+    expect(rendered.revealGeneratedEligibility).toEqual({
+      canReveal: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    const request = {
+      apiVersion: 1 as const, requestId: "notegeneratedreveal_abcdefghijklmnop",
+      activeVaultId: vault.vaultId, currentPageId: generatedPageId,
+      renderContextId: rendered.renderContextId!, expectedRevision: rendered.revealGeneratedEligibility!.revision
+    };
+    const ready = notes.resolveGeneratedReveal(OWNER_ID, request);
+    expect(ready).toMatchObject({ status: "ready", absolutePath: path.join(vaultPath, "wiki", "generated.md") });
+    expect(ready.status === "ready" && ready.assertCurrent()).toBe(true);
+
+    const imported = await notes.render({ pageId: "page_20260801_imported01" }, OWNER_ID);
+    expect(imported.revealGeneratedEligibility).toBeUndefined();
+    expect(notes.resolveGeneratedReveal(OWNER_ID, {
+      ...request, currentPageId: imported.summary.pageId, renderContextId: imported.renderContextId!,
+      expectedRevision: imported.trashEligibility!.revision
+    })).toEqual({ status: "ineligible" });
+    const source = await notes.render({ pageId: "page_20260801_source001" }, OWNER_ID);
+    expect(source.revealGeneratedEligibility).toBeUndefined();
+
+    const current = await notes.render({ pageId: generatedPageId }, OWNER_ID);
+    const currentRequest = { ...request, renderContextId: current.renderContextId!,
+      expectedRevision: current.revealGeneratedEligibility!.revision };
+    fs.appendFileSync(path.join(vaultPath, "wiki", "generated.md"), "\nchanged\n", "utf8");
+    expect(notes.resolveGeneratedReveal(OWNER_ID, currentRequest)).toEqual({ status: "stale" });
+  });
 });

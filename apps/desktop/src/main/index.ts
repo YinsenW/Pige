@@ -213,6 +213,7 @@ import { CaptureService } from "./services/capture-service";
 import { ManagedCopyRootService } from "./services/managed-copy-root-service";
 import { configureManagedCopyLocatorResolver } from "./services/source-file-access";
 import { ReaderSourceRevealService } from "./services/reader-source-reveal-service";
+import { ReaderGeneratedNoteRevealService } from "./services/reader-generated-note-reveal-service";
 import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
 import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-capture-service";
@@ -1926,6 +1927,11 @@ const getReaderSourceRevealService = (): ReaderSourceRevealService =>
     }
   });
 
+const getReaderGeneratedNoteRevealService = (): ReaderGeneratedNoteRevealService =>
+  new ReaderGeneratedNoteRevealService(getNotesService(), {
+    reveal: (absolutePath) => shell.showItemInFolder(absolutePath)
+  });
+
 const getSourceOriginalReconnectService = (): SourceOriginalReconnectService => {
   sourceOriginalReconnectService ??= new SourceOriginalReconnectService(
     getVaultService(),
@@ -3284,6 +3290,7 @@ registerReaderIpc({
   getReaderSelectionProposalService,
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,
   getReaderSourceRevealService,
+  getReaderGeneratedNoteRevealService,
   getReaderSourceReconnectService,
   getSourceRefreshService,
   getNoteTrashService,

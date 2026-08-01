@@ -828,6 +828,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly resolveInlineReference:");
     expect(contractsSource).toContain("readonly openSourceReference:");
     expect(contractsSource).toContain("readonly revealSource:");
+    expect(contractsSource).toContain("readonly revealGenerated:");
     expect(contractsSource).toContain("readonly trashCurrent:");
     expect(contractsSource).toContain("readonly listTrash:");
     expect(contractsSource).toContain("readonly restoreTrash:");
@@ -842,6 +843,11 @@ describe("desktop shell build contract", () => {
     expect(readerIpcSource).toContain('ipcMain.handle("notes.openSourceReference"');
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(readerIpcSource).toContain("NOTE_REVEAL_GENERATED_CHANNEL");
+    expect(readerIpcSource).toContain("getReaderGeneratedNoteRevealService().reveal(ownerId, parsed)");
+    expect(preloadSource).toContain("NoteRevealGeneratedRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteRevealGeneratedResultSchema.parse(");
+    expect(preloadSource).toContain("NOTE_REVEAL_GENERATED_CHANNEL,");
     expect(readerIpcSource).toContain('ipcMain.handle("notes.openEditor"');
     expect(readerIpcSource).toContain("NoteEditorOpenRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("NoteEditorOpenResultSchema.parse(rawResult)");
