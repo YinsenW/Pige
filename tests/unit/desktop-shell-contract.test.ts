@@ -465,6 +465,29 @@ describe("desktop shell build contract", () => {
       expect(claimSchemas).not.toContain(privateField);
     }
   });
+  it("freezes pathless Claim evidence search and exact mutation authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const readerIpcSource = fs.readFileSync(path.resolve("apps/desktop/src/main/register-reader-ipc.ts"), "utf8");
+    const evidenceSchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL = "notes.searchClaimEvidence"'),
+      schemasSource.indexOf("export const NoteAddTagRequestSchema")
+    );
+    expect(evidenceSchemas).toContain('NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL = "notes.changeClaimEvidence"');
+    expect(evidenceSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(evidenceSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(evidenceSchemas).toContain("expectedSourceUpdatedAt");
+    expect(contractsSource).toContain("readonly searchClaimEvidence: (");
+    expect(contractsSource).toContain("readonly changeClaimEvidence: (");
+    expect(preloadSource).toContain("NoteSearchClaimEvidenceRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeClaimEvidenceResultSchema.parse(");
+    expect(readerIpcSource).toContain("NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL");
+    expect(readerIpcSource).toContain("NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL");
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(evidenceSchemas).not.toContain(privateField);
+    }
+  });
 
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");

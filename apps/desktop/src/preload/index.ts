@@ -206,6 +206,10 @@ import type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteSearchClaimEvidenceRequest,
+  NoteSearchClaimEvidenceResult,
+  NoteChangeClaimEvidenceRequest,
+  NoteChangeClaimEvidenceResult,
   NoteSearchConceptParentsRequest,
   NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest,
@@ -781,6 +785,12 @@ import {
   NoteSearchClaimContradictionsResultSchema,
   NoteChangeClaimContradictionRequestSchema,
   NoteChangeClaimContradictionResultSchema,
+  NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL,
+  NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL,
+  NoteSearchClaimEvidenceRequestSchema,
+  NoteSearchClaimEvidenceResultSchema,
+  NoteChangeClaimEvidenceRequestSchema,
+  NoteChangeClaimEvidenceResultSchema,
   NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL,
   NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
   NoteSearchConceptParentsRequestSchema,
@@ -2464,6 +2474,20 @@ const api: PigeDesktopApi = {
       NoteChangeClaimContradictionResultSchema.parse(await ipcRenderer.invoke(
         NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL,
         NoteChangeClaimContradictionRequestSchema.parse(request)
+      )),
+    searchClaimEvidence: async (
+      request: NoteSearchClaimEvidenceRequest
+    ): Promise<NoteSearchClaimEvidenceResult> =>
+      NoteSearchClaimEvidenceResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL,
+        NoteSearchClaimEvidenceRequestSchema.parse(request)
+      )),
+    changeClaimEvidence: async (
+      request: NoteChangeClaimEvidenceRequest
+    ): Promise<NoteChangeClaimEvidenceResult> =>
+      NoteChangeClaimEvidenceResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL,
+        NoteChangeClaimEvidenceRequestSchema.parse(request)
       )),
     searchConceptParents: async (
       request: NoteSearchConceptParentsRequest

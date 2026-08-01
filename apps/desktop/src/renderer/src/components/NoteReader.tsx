@@ -12,6 +12,7 @@ import type {
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest, NoteChangeClaimContradictionResult,
+  NoteSearchClaimEvidenceRequest, NoteSearchClaimEvidenceResult, NoteChangeClaimEvidenceRequest, NoteChangeClaimEvidenceResult,
   NoteSearchConceptParentsRequest, NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest, NoteChangeConceptParentResult,
   NoteSearchTopicParentsRequest, NoteSearchTopicParentsResult,
@@ -38,11 +39,10 @@ import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
 import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl"; import { ReaderEntityMentions } from "./ReaderEntityMentions";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
-import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
+import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence";
 import { ReaderConceptParents } from "./ReaderConceptParents";
 import { ReaderTopicParents } from "./ReaderTopicParents";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
-
 function readerSelectionEndpoint(
   reader: HTMLElement | null,
   node: Node | null,
@@ -119,6 +119,7 @@ export function NoteReader(props: {
   readonly onChangeClaimContradiction?: (
     request: NoteChangeClaimContradictionRequest
   ) => Promise<NoteChangeClaimContradictionResult>;
+  readonly onSearchClaimEvidence?: (request: NoteSearchClaimEvidenceRequest) => Promise<NoteSearchClaimEvidenceResult>; readonly onChangeClaimEvidence?: (request: NoteChangeClaimEvidenceRequest) => Promise<NoteChangeClaimEvidenceResult>;
   readonly onSearchConceptParents?: (
     request: NoteSearchConceptParentsRequest
   ) => Promise<NoteSearchConceptParentsResult>;
@@ -947,14 +948,12 @@ export function NoteReader(props: {
       {props.activeVaultId && props.onSearchEntityMentions && props.onChangeEntityMention && props.onEntityTypeChanged
         ? <ReaderEntityMentions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchEntityMentions} change={props.onChangeEntityMention} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onSearchClaimContradictions && props.onChangeClaimContradiction && props.onQuestionStateChanged ? (
-        <ReaderClaimContradictions
-          activeVaultId={props.activeVaultId}
-          note={props.note}
-          search={props.onSearchClaimContradictions}
-          change={props.onChangeClaimContradiction}
-          onCommitted={props.onQuestionStateChanged}
-          t={props.t}
-        />
+        <ReaderClaimContradictions activeVaultId={props.activeVaultId} note={props.note}
+          search={props.onSearchClaimContradictions} change={props.onChangeClaimContradiction}
+          onCommitted={props.onQuestionStateChanged} t={props.t} />
+      ) : null}
+      {props.activeVaultId && props.onSearchClaimEvidence && props.onChangeClaimEvidence && props.onQuestionStateChanged ? (
+        <ReaderClaimEvidence activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimEvidence} change={props.onChangeClaimEvidence} onCommitted={props.onQuestionStateChanged} t={props.t} />
       ) : null}
       {props.activeVaultId && props.onSearchConceptParents && props.onChangeConceptParent && props.onQuestionStateChanged ? (
         <ReaderConceptParents activeVaultId={props.activeVaultId} note={props.note}

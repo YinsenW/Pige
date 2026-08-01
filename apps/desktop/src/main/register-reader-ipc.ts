@@ -137,6 +137,12 @@ import {
   NoteSearchClaimContradictionsResultSchema,
   NoteChangeClaimContradictionRequestSchema,
   NoteChangeClaimContradictionResultSchema,
+  NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL,
+  NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL,
+  NoteSearchClaimEvidenceRequestSchema,
+  NoteSearchClaimEvidenceResultSchema,
+  NoteChangeClaimEvidenceRequestSchema,
+  NoteChangeClaimEvidenceResultSchema,
   NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL,
   NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
   NoteSearchConceptParentsRequestSchema,
@@ -223,6 +229,7 @@ import type { EntityTypeService } from "./services/entity-type-service";
 import type { EntityMentionService } from "./services/entity-mention-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
 import type { ClaimContradictionService } from "./services/claim-contradiction-service";
+import type { ClaimEvidenceService } from "./services/claim-evidence-service";
 import type { ConceptParentService } from "./services/concept-parent-service";
 import type { TopicParentService } from "./services/topic-parent-service";
 
@@ -249,6 +256,7 @@ interface RegisterReaderIpcOptions {
   readonly getEntityMentionService: () => EntityMentionService;
   readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getClaimContradictionService: () => ClaimContradictionService;
+  readonly getClaimEvidenceService: () => ClaimEvidenceService;
   readonly getConceptParentService: () => ConceptParentService;
   readonly getTopicParentService: () => TopicParentService;
   readonly getNoteTagService: () => NoteTagService;
@@ -652,6 +660,30 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
     } catch {
       return NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
     }
+  });
+  options.ipcMain.handle(NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSearchClaimEvidenceRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteSearchClaimEvidenceResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try { return NoteSearchClaimEvidenceResultSchema.parse(options.getClaimEvidenceService().search(ownerId, parsed)); }
+    catch { return NoteSearchClaimEvidenceResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeClaimEvidenceRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteChangeClaimEvidenceResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try {
+      const result = NoteChangeClaimEvidenceResultSchema.parse(
+        await options.getClaimEvidenceService().change(ownerId, parsed)
+      );
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result : NoteChangeClaimEvidenceResultSchema.parse({ ...parsed, status: "failed" });
+    } catch { return NoteChangeClaimEvidenceResultSchema.parse({ ...parsed, status: "failed" }); }
   });
   options.ipcMain.handle(NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL, (event, request: unknown) => {
     const parsed = NoteSearchConceptParentsRequestSchema.parse(request);

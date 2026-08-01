@@ -351,6 +351,7 @@ import { EntityTypeService } from "./services/entity-type-service";
 import { EntityMentionService } from "./services/entity-mention-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
+import { ClaimEvidenceService } from "./services/claim-evidence-service";
 import { ConceptParentService } from "./services/concept-parent-service";
 import { TopicParentService } from "./services/topic-parent-service";
 import { NoteTagService } from "./services/note-tag-service";
@@ -514,6 +515,7 @@ let entityTypeService: EntityTypeService | undefined;
 let entityMentionService: EntityMentionService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
+let claimEvidenceService: ClaimEvidenceService | undefined;
 let conceptParentService: ConceptParentService | undefined;
 let topicParentService: TopicParentService | undefined;
 let noteTagService: NoteTagService | undefined;
@@ -1981,6 +1983,14 @@ const getClaimContradictionService = (): ClaimContradictionService => {
     () => getVaultService().activeVaultPath()
   );
   return claimContradictionService;
+};
+const getClaimEvidenceService = (): ClaimEvidenceService => {
+  claimEvidenceService ??= new ClaimEvidenceService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true }),
+    () => getVaultService().activeVaultPath()
+  );
+  return claimEvidenceService;
 };
 const getConceptParentService = (): ConceptParentService => {
   conceptParentService ??= new ConceptParentService(
@@ -3557,6 +3567,7 @@ registerReaderIpc({
   getEntityMentionService,
   getQuestionAnswerService,
   getClaimContradictionService,
+  getClaimEvidenceService,
   getConceptParentService,
   getTopicParentService,
   getNoteTagService,
@@ -4099,6 +4110,11 @@ app.whenReady().then(async () => {
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
       allowClaim: true
     }),
+    () => getVaultService().activeVaultPath()
+  );
+  claimEvidenceService = new ClaimEvidenceService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true }),
     () => getVaultService().activeVaultPath()
   );
   conceptParentService = new ConceptParentService(
