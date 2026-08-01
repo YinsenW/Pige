@@ -6,7 +6,10 @@ import {
   createDatasetQueryPlanHash,
   createDatasetQueryResultHash,
   type DatasetQueryCellState,
+  type DatasetQueryCoreColumn,
+  type DatasetQueryCoreRow,
   type DatasetQueryCoreResult,
+  type DatasetQueryInternalAggregate,
   type DatasetQueryInternalColumn,
   type DatasetQueryInternalFilter,
   type DatasetQueryLimits,
@@ -27,14 +30,30 @@ interface JoinedRow {
   readonly cells: ReadonlyMap<string, QueryCell>;
 }
 
-/** Executes up to two bounded inner joins by Pige-owned single-row relations. */
+type AggregateAccumulator =
+  | { readonly op: "count"; count: number }
+  | { readonly op: "sum" | "avg"; sum: number; count: number; readonly integerInput: boolean }
+  | { readonly op: "min" | "max"; value?: QueryCell };
+
+interface GroupAccumulator {
+  readonly key: string;
+  readonly groupCells: readonly QueryCell[];
+  readonly aggregates: AggregateAccumulator[];
+}
+
+interface AggregateRow {
+  readonly row: DatasetQueryCoreRow;
+  readonly sortValues: ReadonlyMap<string, QueryCell>;
+  readonly tieKey: string;
+}
+
+/** Executes up to three bounded inner joins by Pige-owned single-row relations. */
 export function executeDatasetRelationQuery(
   database: DatabaseSync,
   request: DatasetQueryWorkerRequest
 ): DatasetQueryCoreResult {
   const joins = request.joins;
-  if (!joins || joins.length < 1 || joins.length > 2 ||
-      request.plan.aggregates.length > 0 || request.plan.groupByColumnIds.length > 0) {
+  if (!joins || joins.length < 1 || joins.length > 3) {
     fail("dataset.query.plan_invalid", "The Dataset relation join plan is invalid.");
   }
   validateTargetBindings(database, request);
@@ -89,29 +108,29 @@ export function executeDatasetRelationQuery(
     };
     if (request.plan.filters.every((filter) => matchesFilter(row, filter))) joined.push(row);
   }
-  joined.sort((left, right) => compareRows(left, right, request));
-  const returned = joined.slice(0, request.plan.limit);
+  const aggregateRows = request.plan.aggregates.length > 0
+    ? finalizeGroups(buildGroups(joined, request, columnsById), request, columnsById)
+    : undefined;
+  if (aggregateRows) aggregateRows.sort((left, right) => compareAggregateRows(left, right, request));
+  else joined.sort((left, right) => compareRows(left, right, request));
+  const matchedRowCount = aggregateRows?.length ?? joined.length;
+  const returnedRows = aggregateRows?.slice(0, request.plan.limit);
+  const returned = aggregateRows ? [] : joined.slice(0, request.plan.limit);
   const planHash = createDatasetQueryPlanHash(request);
   const withoutHash: Omit<DatasetQueryCoreResult, "resultHash"> = {
     planHash,
-    columns: request.plan.selectColumnIds.map((columnId) => {
-      const column = columnsById.get(columnId);
-      if (!column) fail("dataset.query.plan_invalid", "A joined projection column is unavailable.");
-      return { key: column.id, label: column.name, logicalType: column.logicalType, sourceColumnId: column.id };
-    }),
-    rows: returned.map((row) => ({
-      rowId: row.rowId,
-      ordinal: row.ordinal,
-      sourceRow: row.sourceRow,
+    columns: createResultColumns(request, columnsById),
+    rows: returnedRows?.map(({ row }) => row) ?? returned.map((row) => ({
+      rowId: row.rowId, ordinal: row.ordinal, sourceRow: row.sourceRow,
       values: request.plan.selectColumnIds.map((columnId) => requireCell(row, columnId).value),
       states: request.plan.selectColumnIds.map((columnId) => requireCell(row, columnId).state)
     })),
     sourceMatchedRowCount: joined.length,
-    matchedRowCount: joined.length,
-    returnedRowCount: returned.length,
-    truncated: joined.length > returned.length,
+    matchedRowCount,
+    returnedRowCount: returnedRows?.length ?? returned.length,
+    truncated: matchedRowCount > (returnedRows?.length ?? returned.length),
     usedColumnIds,
-    returnedRowIds: returned.map(({ rowId }) => rowId),
+    returnedRowIds: aggregateRows ? [] : returned.map(({ rowId }) => rowId),
     ...(joined.length > 0 ? {
       range: {
         startRow: Math.min(...joined.map(({ sourceRow }) => sourceRow)),
@@ -239,8 +258,167 @@ function collectUsedColumnIds(request: DatasetQueryWorkerRequest): string[] {
     ...request.joins!.map(({ relationColumnId }) => relationColumnId),
     ...request.plan.selectColumnIds,
     ...request.plan.filters.map(({ columnId }) => columnId),
+    ...request.plan.groupByColumnIds,
+    ...request.plan.aggregates.flatMap(({ columnId }) => columnId ? [columnId] : []),
     ...request.plan.orderBy.flatMap(({ by }) => by.startsWith("aggregate_") ? [] : [by])
   ])].sort();
+}
+
+function buildGroups(
+  rows: readonly JoinedRow[],
+  request: DatasetQueryWorkerRequest,
+  columnsById: ReadonlyMap<string, DatasetQueryWorkerRequest["columns"][number]>
+): Map<string, GroupAccumulator> {
+  const groups = new Map<string, GroupAccumulator>();
+  for (const row of rows) {
+    const groupCells = request.plan.groupByColumnIds.map((columnId) => requireCell(row, columnId));
+    const key = JSON.stringify(groupCells.map((cell) => [cell.state, cell.logicalType, cell.value]));
+    let group = groups.get(key);
+    if (!group) {
+      if (groups.size >= request.limits.maxGroups) limit("groups");
+      group = {
+        key,
+        groupCells,
+        aggregates: request.plan.aggregates.map((aggregate) => createAccumulator(aggregate, columnsById))
+      };
+      groups.set(key, group);
+    }
+    request.plan.aggregates.forEach((aggregate, index) => {
+      const accumulator = group!.aggregates[index];
+      if (!accumulator) fail("dataset.query.plan_invalid", "The joined Dataset aggregate is incomplete.");
+      updateAccumulator(accumulator, aggregate.columnId ? requireCell(row, aggregate.columnId) : undefined);
+    });
+  }
+  return groups;
+}
+
+function finalizeGroups(
+  groups: ReadonlyMap<string, GroupAccumulator>,
+  request: DatasetQueryWorkerRequest,
+  columnsById: ReadonlyMap<string, DatasetQueryWorkerRequest["columns"][number]>
+): AggregateRow[] {
+  const source = request.plan.groupByColumnIds.length === 0 && groups.size === 0
+    ? [{ key: "[]", groupCells: [], aggregates: request.plan.aggregates.map((aggregate) => createAccumulator(aggregate, columnsById)) }]
+    : [...groups.values()];
+  return source.map((group) => {
+    const aggregateCells = group.aggregates.map((accumulator, index) =>
+      finalizeAccumulator(accumulator, request.plan.aggregates[index], columnsById));
+    const cells = [...group.groupCells, ...aggregateCells];
+    const sortValues = new Map<string, QueryCell>();
+    request.plan.groupByColumnIds.forEach((columnId, index) => {
+      const cell = group.groupCells[index];
+      if (cell) sortValues.set(columnId, cell);
+    });
+    request.plan.aggregates.forEach((aggregate, index) => {
+      const cell = aggregateCells[index];
+      if (cell) sortValues.set(aggregate.ref, cell);
+    });
+    return {
+      row: { values: cells.map(({ value }) => value), states: cells.map(({ state }) => state) },
+      sortValues,
+      tieKey: group.key
+    };
+  });
+}
+
+function createAccumulator(
+  aggregate: DatasetQueryInternalAggregate,
+  columnsById: ReadonlyMap<string, DatasetQueryWorkerRequest["columns"][number]>
+): AggregateAccumulator {
+  if (aggregate.op === "count") return { op: "count", count: 0 };
+  const column = aggregate.columnId ? columnsById.get(aggregate.columnId) : undefined;
+  if (!column) fail("dataset.query.plan_invalid", "The joined Dataset aggregate column is unavailable.");
+  return aggregate.op === "sum" || aggregate.op === "avg"
+    ? { op: aggregate.op, sum: 0, count: 0, integerInput: column.logicalType === "integer" }
+    : { op: aggregate.op };
+}
+
+function updateAccumulator(accumulator: AggregateAccumulator, cell: QueryCell | undefined): void {
+  if (accumulator.op === "count") {
+    if (!cell || (cell.state !== "missing" && cell.state !== "null")) accumulator.count += 1;
+    return;
+  }
+  if (accumulator.op === "sum" || accumulator.op === "avg") {
+    if (!cell || cell.state !== "value") return;
+    const numeric = numericCellValue(cell);
+    const next = accumulator.sum + numeric;
+    if (!Number.isFinite(next) || (accumulator.integerInput && !Number.isSafeInteger(next))) {
+      fail("dataset.query.numeric_out_of_range", "A joined Dataset aggregate exceeds the exact local range.");
+    }
+    accumulator.sum = next;
+    accumulator.count += 1;
+    return;
+  }
+  if (accumulator.op !== "min" && accumulator.op !== "max") {
+    fail("dataset.query.plan_invalid", "The joined Dataset aggregate accumulator is invalid.");
+  }
+  if (!cell || (cell.state !== "value" && !(cell.state === "empty" && cell.logicalType === "string"))) return;
+  if (!accumulator.value ||
+      (accumulator.op === "min" && compareCells(cell, accumulator.value) < 0) ||
+      (accumulator.op === "max" && compareCells(cell, accumulator.value) > 0)) accumulator.value = cell;
+}
+
+function finalizeAccumulator(
+  accumulator: AggregateAccumulator,
+  aggregate: DatasetQueryInternalAggregate | undefined,
+  columnsById: ReadonlyMap<string, DatasetQueryWorkerRequest["columns"][number]>
+): QueryCell {
+  if (!aggregate) fail("dataset.query.plan_invalid", "The joined Dataset aggregate result is incomplete.");
+  if (accumulator.op === "count") return { state: "value", logicalType: "integer", value: accumulator.count };
+  if (accumulator.op === "sum" || accumulator.op === "avg") {
+    return accumulator.count === 0
+      ? { state: "null", logicalType: "number", value: null }
+      : { state: "value", logicalType: "number",
+          value: accumulator.op === "avg" ? accumulator.sum / accumulator.count : accumulator.sum };
+  }
+  if (accumulator.op !== "min" && accumulator.op !== "max") {
+    fail("dataset.query.plan_invalid", "The joined Dataset aggregate accumulator is invalid.");
+  }
+  const logicalType = aggregate.columnId ? columnsById.get(aggregate.columnId)?.logicalType : undefined;
+  if (!logicalType) fail("dataset.query.plan_invalid", "The joined Dataset aggregate type is unavailable.");
+  return accumulator.value ?? { state: "null", logicalType, value: null };
+}
+
+function createResultColumns(
+  request: DatasetQueryWorkerRequest,
+  columnsById: ReadonlyMap<string, DatasetQueryWorkerRequest["columns"][number]>
+): DatasetQueryCoreColumn[] {
+  const projected = request.plan.selectColumnIds.map((columnId) => {
+    const column = columnsById.get(columnId);
+    if (!column) fail("dataset.query.plan_invalid", "A joined projection column is unavailable.");
+    return { key: column.id, label: column.name, logicalType: column.logicalType, sourceColumnId: column.id };
+  });
+  return [...projected, ...request.plan.aggregates.map((aggregate) => {
+    const source = aggregate.columnId ? columnsById.get(aggregate.columnId) : undefined;
+    return {
+      key: aggregate.ref,
+      label: `${aggregate.op}(${source?.name ?? "*"})`.slice(0, 512),
+      logicalType: aggregate.op === "count" ? "integer" as const
+        : aggregate.op === "sum" || aggregate.op === "avg" ? "number" as const
+          : source?.logicalType ?? "unknown",
+      ...(source ? { sourceColumnId: source.id } : {}),
+      aggregate: aggregate.op
+    };
+  })];
+}
+
+function compareAggregateRows(left: AggregateRow, right: AggregateRow, request: DatasetQueryWorkerRequest): number {
+  for (const order of request.plan.orderBy) {
+    const leftCell = left.sortValues.get(order.by), rightCell = right.sortValues.get(order.by);
+    if (!leftCell || !rightCell) fail("dataset.query.plan_invalid", "Joined Dataset ordering has no output value.");
+    const compared = compareCells(leftCell, rightCell);
+    if (compared !== 0) return order.direction === "asc" ? compared : -compared;
+  }
+  return left.tieKey.localeCompare(right.tieKey, "en-US");
+}
+
+function numericCellValue(cell: QueryCell): number {
+  if (cell.logicalType === "number" && typeof cell.value === "number") return cell.value;
+  if (cell.logicalType === "integer" && typeof cell.value === "string") {
+    const value = Number(cell.value);
+    if (Number.isSafeInteger(value)) return value;
+  }
+  return fail("dataset.query.numeric_out_of_range", "A joined Dataset numeric value exceeds the exact local range.");
 }
 
 function matchesFilter(row: JoinedRow, filter: DatasetQueryInternalFilter): boolean {

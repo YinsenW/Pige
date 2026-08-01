@@ -18,6 +18,12 @@ const PROJECT = "column_project00001";
 const OWNER = "column_owner0000001";
 const PERSON = "column_person000000";
 const RATE = "column_rate00000001";
+const REGION_RELATION = "column_regionrel0001";
+const REGION_TABLE = "table_regions00001";
+const REGION = "column_region000001";
+const COUNTRY_RELATION = "column_countryrel001";
+const COUNTRY_TABLE = "table_countries0001";
+const COUNTRY = "column_country00001";
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
@@ -51,6 +57,45 @@ describe("Dataset relation query core", () => {
     } finally { database.close(); }
     const request = createRequest({ ...fixture, payloadChecksum: checksum(fixture.payloadPath) });
     expect(() => executeDatasetQuery(request)).toThrowError(expect.objectContaining({ code: "dataset.query.payload_invalid" }));
+  });
+
+  it("groups an exact three-hop relation chain and enforces the bounded group limit", () => {
+    const fixture = createFixture();
+    const request: DatasetQueryWorkerRequest = {
+      ...createRequest(fixture),
+      requestId: "three-hop-aggregate",
+      columns: [
+        { id: RATE, tableId: TARGET_TABLE, name: "rate", ordinal: 1, logicalType: "integer" },
+        { id: COUNTRY, tableId: COUNTRY_TABLE, name: "country", ordinal: 0, logicalType: "string" }
+      ],
+      joins: [
+        { relationColumnId: OWNER, targetTable: { id: TARGET_TABLE, name: "people", rowCount: 2, columnCount: 3 } },
+        { relationColumnId: REGION_RELATION, targetTable: { id: REGION_TABLE, name: "regions", rowCount: 2, columnCount: 2 } },
+        { relationColumnId: COUNTRY_RELATION, targetTable: { id: COUNTRY_TABLE, name: "countries", rowCount: 2, columnCount: 1 } }
+      ],
+      plan: {
+        selectColumnIds: [COUNTRY], filters: [], groupByColumnIds: [COUNTRY],
+        aggregates: [{ ref: "aggregate_1", op: "sum", columnId: RATE }],
+        orderBy: [{ by: "aggregate_1", direction: "desc" }], limit: 10
+      }
+    };
+
+    expect(executeDatasetQuery(request)).toMatchObject({
+      sourceMatchedRowCount: 2,
+      matchedRowCount: 2,
+      returnedRowCount: 2,
+      returnedRowIds: [],
+      columns: [
+        { key: COUNTRY, label: "country" },
+        { key: "aggregate_1", label: "sum(rate)", aggregate: "sum" }
+      ],
+      rows: [{ values: ["US", 80] }, { values: ["UK", 40] }]
+    });
+    expect(() => executeDatasetQuery({
+      ...request,
+      requestId: "three-hop-group-limit",
+      limits: { ...request.limits, maxGroups: 1 }
+    })).toThrowError(expect.objectContaining({ code: "dataset.query.limit.groups" }));
   });
 });
 
@@ -94,17 +139,27 @@ function createFixture(): Fixture {
     ]) meta.run(key, value);
     const table = database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
     table.run(SOURCE_TABLE, 0, "projects", "fixture:projects", "{}", "{}", 2, 2);
-    table.run(TARGET_TABLE, 1, "people", "fixture:people", "{}", "{}", 2, 2);
+    table.run(TARGET_TABLE, 1, "people", "fixture:people", "{}", "{}", 2, 3);
+    table.run(REGION_TABLE, 2, "regions", "fixture:regions", "{}", "{}", 2, 2);
+    table.run(COUNTRY_TABLE, 3, "countries", "fixture:countries", "{}", "{}", 2, 1);
     const column = database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)");
     column.run(PROJECT, SOURCE_TABLE, 0, "project", "text", "[\"text\"]", "{}");
     column.run(OWNER, SOURCE_TABLE, 1, "owner", "text", "[\"pige.relation.single\"]", "{}");
     column.run(PERSON, TARGET_TABLE, 0, "person", "text", "[\"text\"]", "{}");
     column.run(RATE, TARGET_TABLE, 1, "rate", "integer", "[\"integer\"]", "{}");
+    column.run(REGION_RELATION, TARGET_TABLE, 2, "region", "text", "[\"pige.relation.single\"]", "{}");
+    column.run(REGION, REGION_TABLE, 0, "region", "text", "[\"text\"]", "{}");
+    column.run(COUNTRY_RELATION, REGION_TABLE, 1, "country", "text", "[\"pige.relation.single\"]", "{}");
+    column.run(COUNTRY, COUNTRY_TABLE, 0, "country", "text", "[\"text\"]", "{}");
     const row = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
     row.run("row_project0000001", SOURCE_TABLE, 0, 2);
     row.run("row_project0000002", SOURCE_TABLE, 1, 3);
     row.run("row_person00000001", TARGET_TABLE, 0, 2);
     row.run("row_person00000002", TARGET_TABLE, 1, 3);
+    row.run("row_region00000001", REGION_TABLE, 0, 4);
+    row.run("row_region00000002", REGION_TABLE, 1, 5);
+    row.run("row_country0000001", COUNTRY_TABLE, 0, 6);
+    row.run("row_country0000002", COUNTRY_TABLE, 1, 7);
     const cell = database.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)");
     scalar(cell, "row_project0000001", PROJECT, "text", "Aurora");
     relation(cell, "row_project0000001", OWNER, "row_person00000002");
@@ -112,8 +167,16 @@ function createFixture(): Fixture {
     relation(cell, "row_project0000002", OWNER, "row_person00000001");
     scalar(cell, "row_person00000001", PERSON, "text", "Ada");
     scalar(cell, "row_person00000001", RATE, "integer", "40");
+    relation(cell, "row_person00000001", REGION_RELATION, "row_region00000001");
     scalar(cell, "row_person00000002", PERSON, "text", "Grace");
     scalar(cell, "row_person00000002", RATE, "integer", "80");
+    relation(cell, "row_person00000002", REGION_RELATION, "row_region00000002");
+    scalar(cell, "row_region00000001", REGION, "text", "London");
+    relation(cell, "row_region00000001", COUNTRY_RELATION, "row_country0000001");
+    scalar(cell, "row_region00000002", REGION, "text", "Seattle");
+    relation(cell, "row_region00000002", COUNTRY_RELATION, "row_country0000002");
+    scalar(cell, "row_country0000001", COUNTRY, "text", "UK");
+    scalar(cell, "row_country0000002", COUNTRY, "text", "US");
   } finally { database.close(); }
   return { payloadPath, payloadChecksum: checksum(payloadPath) };
 }
@@ -145,7 +208,7 @@ function createRequest(fixture: Fixture): DatasetQueryWorkerRequest {
       { id: PROJECT, tableId: SOURCE_TABLE, name: "project", ordinal: 0, logicalType: "string" },
       { id: RATE, tableId: TARGET_TABLE, name: "rate", ordinal: 1, logicalType: "integer" }
     ],
-    join: { relationColumnId: OWNER, targetTable: { id: TARGET_TABLE, name: "people", rowCount: 2, columnCount: 2 } },
+    joins: [{ relationColumnId: OWNER, targetTable: { id: TARGET_TABLE, name: "people", rowCount: 2, columnCount: 3 } }],
     plan: {
       selectColumnIds: [PROJECT, RATE],
       filters: [{ columnId: RATE, op: "gt", value: 50 }],
