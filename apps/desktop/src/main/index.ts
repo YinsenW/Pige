@@ -3474,8 +3474,9 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
     ? getNoteMarkdownEditorRedoService().redo(request)
     : duplicateTopicResult;
   const agentResult = result.status === "not_found" ? getKnowledgeActivityService().redo(request) : result;
-  if (agentResult.status === "redone" || agentResult.status === "already_redone") scheduleActivityIndexRebuild();
-  return agentResult;
+  const memoryResult = agentResult.status === "not_found" ? getAgentMemoryService().redo(request) : agentResult;
+  if (memoryResult.status === "redone" || memoryResult.status === "already_redone") scheduleActivityIndexRebuild();
+  return memoryResult;
 });
 ipcMain.handle("library.list", (_event, request?: LibraryListRequest) => getLibraryService().list(request));
 ipcMain.handle(LIBRARY_BROWSE_CHANNEL, (_event, request: LibraryBrowseRequest) => {

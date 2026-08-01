@@ -291,7 +291,9 @@ export class DiagnosticsService {
         checkedAt: health.checkedAt,
         localOnly: health.localOnly,
         recentErrorCount: health.recentErrorCount,
-        checks: health.checks
+        checks: health.checks,
+        crashRecoveryHistory: health.crashRecoveryHistory,
+        ...(health.crashRecovery ? { crashRecovery: health.crashRecovery } : {})
       },
       recentEvents: this.#readRecentEvents(),
       ...(preview.selectedOptionalCategories.includes("provider_metadata") && optional.providerMetadata

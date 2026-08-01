@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult } from "@pige/contracts";
+import type { KnowledgeActivityRedoRequest, KnowledgeActivityRedoResult, KnowledgeActivitySummary, KnowledgeActivityUndoResult } from "@pige/contracts";
 import {
   MemoryDeleteRequestSchema, MemoryDisableRequestSchema, MemoryEditRequestSchema,
   MemoryEnableRequestSchema, MemoryExportRequestSchema, MemoryExportResultSchema,
@@ -19,21 +19,21 @@ import {
   applyMemoryReceipt as applyReceipt, assertMemoryRegistryBindings as assertRegistryBindings,
   createMemoryId, createMemoryRequestId, createMemoryLifecycleOperation as createLifecycleOperation,
   createMemoryOperationId as createOperationId, createMemoryRestoreOperation as createRestoreOperation,
+  createMemoryRedoIntent, createMemoryRedoOperation, createMemoryRedoRegistry,
   createMemoryUndoOperationId as createUndoOperationId, createMemoryUndoRegistry as createUndoRegistry,
-  hashMemoryRegistry as hashRegistry, isMatchingMemoryRestoreOperation as isMatchingRestoreOperation,
+  hashMemoryRegistry as hashRegistry, isMatchingMemoryRedoOperation, isMatchingMemoryRedoReceipt,
+  isMatchingMemoryRestoreOperation as isMatchingRestoreOperation,
   isValidMemoryEditTransition, memoryLifecycleConflict as lifecycleConflict,
   memoryOperationRelativePath as operationRelativePath, memoryReceiptRelativePath as receiptRelativePath,
+  memoryOperationAfterRevision as operationAfterRevision, memoryRedoUnavailableReason,
   memoryRestoreIntentRelativePath as restoreIntentRelativePath, memoryUndoUnavailableReason as undoUnavailableReason,
-  prepareMemoryMutation as prepareMutation, prepareMemoryCreation, readMemoryOperationBinding, stableJson,
+  prepareMemoryMutation as prepareMutation, prepareMemoryCreation, readMemoryOperationBinding, recoverMemoryOperationChain, stableJson,
   type MemoryEventRecord, type MemoryLifecycleMutationAction, type MemoryLifecycleReceipt,
   type MemoryRegistry, type MemoryRestoreIntent, type StoredMemoryRecord
 } from "./agent-memory-lifecycle";
 import { containsRestrictedModelContent } from "./model-egress-content";
-
 const REGISTRY_FILE = "registry.json";
-const MAX_REGISTRY_BYTES = 2 * 1024 * 1024;
-const MAX_PRIVATE_RECORD_BYTES = 4 * 1024 * 1024;
-
+const MAX_REGISTRY_BYTES = 2 * 1024 * 1024; const MAX_PRIVATE_RECORD_BYTES = 4 * 1024 * 1024;
 export interface RememberVaultPreferenceRequest {
   readonly vaultPath: string;
   readonly activeVaultId: string;
@@ -48,32 +48,20 @@ export interface RememberVaultPreferenceRequest {
   readonly parentJobId: string;
   readonly language?: MemoryLanguageFact;
 }
-
-export interface AgentMemoryServiceDependencies {
-  readonly now?: () => Date;
-  readonly randomBytes?: (size: number) => Buffer;
-  readonly activeVaultPath?: () => string | undefined;
-}
+export interface AgentMemoryServiceDependencies { readonly now?: () => Date; readonly randomBytes?: (size: number) => Buffer; readonly activeVaultPath?: () => string | undefined; }
 export interface AgentMemoryRecoveryResult { readonly recovered: number; readonly failed: number; }
-
 export class AgentMemoryService {
-  readonly #now: () => Date;
-  readonly #randomBytes: (size: number) => Buffer;
-  readonly #activeVaultPath: (() => string | undefined) | undefined;
-  readonly #knownVaultPaths = new Set<string>();
-
+  readonly #now: () => Date; readonly #randomBytes: (size: number) => Buffer;
+  readonly #activeVaultPath: (() => string | undefined) | undefined; readonly #knownVaultPaths = new Set<string>();
   constructor(dependencies: AgentMemoryServiceDependencies = {}) {
-    this.#now = dependencies.now ?? (() => new Date());
-    this.#randomBytes = dependencies.randomBytes ?? randomBytes;
+    this.#now = dependencies.now ?? (() => new Date()); this.#randomBytes = dependencies.randomBytes ?? randomBytes;
     this.#activeVaultPath = dependencies.activeVaultPath;
   }
-
   list(vaultPath: string, activeVaultId: string): MemorySummary {
     this.#rememberVault(vaultPath);
     const registry = this.#readRegistry(vaultPath);
     return projectSummary(activeVaultId, registry);
   }
-
   rememberPreference(request: RememberVaultPreferenceRequest): MemoryRecordSummary {
     this.#rememberVault(request.vaultPath);
     const title = request.title.trim();
@@ -136,7 +124,6 @@ export class AgentMemoryService {
     this.#recoverReceipt(request.vaultPath, prepared.receipt);
     return prepared.record;
   }
-
   disable(vaultPath: string, request: MemoryDisableRequest): MemoryMutationResult {
     this.#rememberVault(vaultPath);
     const parsed = MemoryDisableRequestSchema.parse(request);
@@ -159,7 +146,6 @@ export class AgentMemoryService {
     this.#writeInspectableRecord(vaultPath, records[index]!);
     return MemoryMutationResultSchema.parse({ status: "committed", summary: projectSummary(parsed.activeVaultId, next) });
   }
-
   enable(vaultPath: string, request: MemoryEnableRequest): MemoryLifecycleMutationResult {
     const parsed = MemoryEnableRequestSchema.parse(request);
     return this.#mutate(vaultPath, parsed.activeVaultId, {
@@ -169,7 +155,6 @@ export class AgentMemoryService {
       memoryId: parsed.memoryId
     });
   }
-
   edit(vaultPath: string, request: MemoryEditRequest): MemoryLifecycleMutationResult {
     const parsed = MemoryEditRequestSchema.parse(request);
     if (containsRestrictedModelContent(`${parsed.title}\n${parsed.body}`)) {
@@ -184,7 +169,6 @@ export class AgentMemoryService {
       body: parsed.body
     });
   }
-
   delete(vaultPath: string, request: MemoryDeleteRequest): MemoryLifecycleMutationResult {
     const parsed = MemoryDeleteRequestSchema.parse(request);
     return this.#mutate(vaultPath, parsed.activeVaultId, {
@@ -194,7 +178,6 @@ export class AgentMemoryService {
       memoryId: parsed.memoryId
     });
   }
-
   reset(vaultPath: string, request: MemoryResetRequest): MemoryLifecycleMutationResult {
     const parsed = MemoryResetRequestSchema.parse(request);
     return this.#mutate(vaultPath, parsed.activeVaultId, {
@@ -203,7 +186,6 @@ export class AgentMemoryService {
       expectedRevision: parsed.expectedRevision
     });
   }
-
   export(vaultPath: string, request: MemoryExportRequest, privateDestinationPath: string): MemoryExportResult {
     this.#rememberVault(vaultPath);
     const parsed = MemoryExportRequestSchema.parse(request);
@@ -237,7 +219,6 @@ export class AgentMemoryService {
       return MemoryExportResultSchema.parse({ ...identity, status: "failed", revision: registry.revision });
     }
   }
-
   recall(vaultPath: string, limit = 8): readonly MemoryRecordSummary[] {
     this.#rememberVault(vaultPath);
     return this.#readRegistry(vaultPath).records
@@ -245,7 +226,6 @@ export class AgentMemoryService {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .slice(0, Math.max(0, Math.min(limit, 8)));
   }
-
   activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
     const binding = readMemoryOperationBinding(operation);
     if (
@@ -264,10 +244,15 @@ export class AgentMemoryService {
     const target = binding.memoryId
       ? { kind: "memory" as const, memoryId: binding.memoryId }
       : { kind: "memory" as const };
-    const receipt = vaultPath ? this.#readReceiptForOperation(vaultPath, operation) : undefined;
+    const candidateReceipt = vaultPath ? this.#readReceiptForOperation(vaultPath, operation) : undefined;
+    const receipt = candidateReceipt && (candidateReceipt.operationId === operation.id || vaultPath &&
+      isMatchingMemoryRedoReceipt(operation, candidateReceipt, (id) => this.#readOperation(vaultPath, id))) ? candidateReceipt : undefined;
     const unavailableReason = !registry || !receipt
       ? "legacy_record" as const
       : undoUnavailableReason(registry, receipt);
+    const redoOperation = undoOperation && vaultPath ? this.#readOperation(vaultPath, createUndoOperationId(undoOperation.id)) : undefined;
+    const canRedo = !!undoOperation && !redoOperation && !!registry && !!receipt &&
+      memoryRedoUnavailableReason(registry, receipt) === undefined;
     return {
       operationId: operation.id,
       kind: operation.kind as "create_memory" | "update_memory" | "trash_memory",
@@ -276,19 +261,21 @@ export class AgentMemoryService {
       target,
       status: undoOperation ? "undone" : "applied",
       canUndo: !undoOperation && unavailableReason === undefined,
+      ...(undoOperation ? { canRedo } : {}),
       ...(undoOperation
-        ? { undoUnavailableReason: "already_undone" as const }
+        ? {
+            undoUnavailableReason: "already_undone" as const,
+            ...(!canRedo ? { redoUnavailableReason: redoOperation ? "already_redone" as const : "content_changed" as const } : {})
+          }
         : unavailableReason ? { undoUnavailableReason: unavailableReason } : {})
     };
   }
-
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
     const binding = readMemoryOperationBinding(operation);
     if (!binding || binding.action === "restore" || binding.action === "undo_create") return undefined;
     const candidate = operations.find((entry) => entry.id === createUndoOperationId(operation.id));
     return candidate && isMatchingRestoreOperation(operation, candidate) ? candidate : undefined;
   }
-
   undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult {
     const binding = readMemoryOperationBinding(operation);
     if (!binding || binding.action === "restore" || binding.action === "undo_create") {
@@ -301,7 +288,10 @@ export class AgentMemoryService {
     if (!vaultPath) return { status: "not_found", operationId: operation.id };
     this.#rememberVault(vaultPath);
     const receipt = this.#readReceiptForOperation(vaultPath, operation);
-    if (!receipt || receipt.operationId !== operation.id) return { status: "not_found", operationId: operation.id };
+    if (!receipt || (receipt.operationId !== operation.id &&
+      !isMatchingMemoryRedoReceipt(operation, receipt, (id) => this.#readOperation(vaultPath, id)))) {
+      return { status: "not_found", operationId: operation.id };
+    }
     const undoOperationId = createUndoOperationId(operation.id);
     const existing = this.#readOperation(vaultPath, undoOperationId);
     if (existing) {
@@ -335,23 +325,58 @@ export class AgentMemoryService {
       revisionId: String(next.revision)
     };
   }
-
+  redo(request: KnowledgeActivityRedoRequest): KnowledgeActivityRedoResult {
+    if (!request || typeof request !== "object" || !OPERATION_ID_PATTERN.test(request.operationId)) {
+      throw new PigeDomainError("activity.invalid_operation_id", "The Activity operation identity is invalid.");
+    }
+    const vaultPath = this.#currentVaultPath();
+    const original = vaultPath ? this.#readOperation(vaultPath, request.operationId) : undefined;
+    const binding = original && readMemoryOperationBinding(original);
+    if (!vaultPath || !original || !binding || binding.action === "restore" || binding.action === "undo_create") {
+      return { status: "not_found", operationId: request.operationId };
+    }
+    const receipt = this.#readReceiptForOperation(vaultPath, original);
+    const undo = this.#readOperation(vaultPath, createUndoOperationId(original.id));
+    if (!receipt || (receipt.operationId !== original.id &&
+      !isMatchingMemoryRedoReceipt(original, receipt, (id) => this.#readOperation(vaultPath, id))) ||
+      !undo || !isMatchingRestoreOperation(original, undo)) {
+      return { status: "not_found", operationId: original.id };
+    }
+    const redoOperationId = createUndoOperationId(undo.id);
+    const existing = this.#readOperation(vaultPath, redoOperationId);
+    if (existing) {
+      if (!isMatchingMemoryRedoOperation(original, undo, existing)) throw lifecycleConflict();
+      return { status: "already_redone", operationId: original.id, undoOperationId: undo.id,
+        redoOperationId, revisionId: String(operationAfterRevision(existing)) };
+    }
+    const registry = this.#readRegistry(vaultPath);
+    if (request.expectedRevisionId !== undefined && request.expectedRevisionId !== String(registry.revision)) {
+      return { status: "stale", operationId: original.id, currentRevisionId: String(registry.revision) };
+    }
+    if (memoryRedoUnavailableReason(registry, receipt)) {
+      return { status: "stale", operationId: original.id, currentRevisionId: String(registry.revision) };
+    }
+    const next = createMemoryRedoRegistry(registry, receipt);
+    const intent = createMemoryRedoIntent(original, undo, registry, next, this.#now().toISOString());
+    this.#persistRestoreIntent(vaultPath, intent);
+    this.#recoverRedoIntent(vaultPath, receipt, intent, original, undo);
+    return { status: "redone", operationId: original.id, undoOperationId: undo.id,
+      redoOperationId, revisionId: String(next.revision) };
+  }
   recoverIncompleteOperations(): AgentMemoryRecoveryResult {
     let recovered = 0;
     let failed = 0;
     for (const vaultPath of this.#vaultPathsForRecovery()) {
       for (const receipt of this.#readAllReceipts(vaultPath)) {
         try {
-          const intent = this.#readRestoreIntent(vaultPath, receipt.operationId);
-          if (intent) {
-            const operation = this.#readOperation(vaultPath, receipt.operationId);
-            if (!operation) throw lifecycleConflict();
-            const undoOperation = this.#readOperation(vaultPath, intent.undoOperationId);
-            if (undoOperation && !isMatchingRestoreOperation(operation, undoOperation)) throw lifecycleConflict();
-            if (this.#recoverRestoreIntent(vaultPath, receipt, intent, operation)) recovered += 1;
-          } else if (this.#recoverReceipt(vaultPath, receipt)) {
-            recovered += 1;
-          }
+          recovered += recoverMemoryOperationChain({
+            recoverReceipt: () => this.#recoverReceipt(vaultPath, receipt),
+            readOriginal: () => this.#readOperation(vaultPath, receipt.operationId),
+            readOperation: (id) => this.#readOperation(vaultPath, id),
+            readIntent: (id) => this.#readRestoreIntent(vaultPath, id),
+            recoverRestore: (intent, operation) => this.#recoverRestoreIntent(vaultPath, receipt, intent, operation),
+            recoverRedo: (intent, operation, undo) => this.#recoverRedoIntent(vaultPath, receipt, intent, operation, undo)
+          });
         } catch {
           failed += 1;
         }
@@ -359,7 +384,6 @@ export class AgentMemoryService {
     }
     return { recovered, failed };
   }
-
   #mutate(
     vaultPath: string,
     activeVaultId: string,
@@ -411,7 +435,6 @@ export class AgentMemoryService {
     this.#recoverReceipt(vaultPath, receipt);
     return lifecycleResult("committed", activeVaultId, input.requestId, prepared.next, operationId);
   }
-
   #recoverReceipt(vaultPath: string, receipt: MemoryLifecycleReceipt): boolean {
     const operation = createLifecycleOperation(receipt);
     const existingOperation = this.#readOperation(vaultPath, operation.id);
@@ -435,7 +458,6 @@ export class AgentMemoryService {
     this.#persistOperation(vaultPath, operation);
     return true;
   }
-
   #recoverRestoreIntent(
     vaultPath: string,
     receipt: MemoryLifecycleReceipt,
@@ -468,7 +490,26 @@ export class AgentMemoryService {
     this.#persistOperation(vaultPath, restoreOperation);
     return true;
   }
-
+  #recoverRedoIntent(vaultPath: string, receipt: MemoryLifecycleReceipt, intent: MemoryRestoreIntent,
+    original: OperationRecord, undo: OperationRecord): boolean {
+    if (intent.originalOperationId !== undo.id || intent.undoOperationId !== createUndoOperationId(undo.id)) throw lifecycleConflict();
+    const operation = createMemoryRedoOperation(original, undo, intent);
+    const existing = this.#readOperation(vaultPath, operation.id);
+    if (existing) {
+      if (!isMatchingMemoryRedoOperation(original, undo, existing)) throw lifecycleConflict();
+      this.#syncReceiptProjection(vaultPath, receipt, this.#readRegistry(vaultPath));
+      return false;
+    }
+    const current = this.#readRegistry(vaultPath); const currentHash = hashRegistry(current);
+    if (currentHash === intent.baseRegistryHash && current.revision === intent.baseRevision) {
+      const next = createMemoryRedoRegistry(current, receipt);
+      if (next.revision !== intent.restoredRevision || hashRegistry(next) !== intent.restoredRegistryHash) throw lifecycleConflict();
+      this.#writeRegistryExact(vaultPath, currentHash, next);
+    } else if (currentHash !== intent.restoredRegistryHash || current.revision !== intent.restoredRevision) throw lifecycleConflict();
+    this.#syncReceiptProjection(vaultPath, receipt, this.#readRegistry(vaultPath));
+    this.#persistOperation(vaultPath, operation);
+    return true;
+  }
   #readRegistry(vaultPath: string): MemoryRegistry {
     const root = ensureMemoryRoot(vaultPath);
     const registryPath = path.join(root, REGISTRY_FILE);
@@ -486,24 +527,20 @@ export class AgentMemoryService {
     );
     return registry;
   }
-
   #writeRegistry(vaultPath: string, registry: MemoryRegistry): void {
     atomicWrite(path.join(ensureMemoryRoot(vaultPath), REGISTRY_FILE), serializeRegistry(registry), this.#randomBytes);
   }
-
   #writeRegistryExact(vaultPath: string, expectedHash: string, registry: MemoryRegistry): void {
     const current = this.#readRegistry(vaultPath);
     if (hashRegistry(current) !== expectedHash) throw lifecycleConflict();
     this.#writeRegistry(vaultPath, registry);
   }
-
   #writeInspectableRecord(vaultPath: string, record: MemoryRecordSummary): void {
     const atomsRoot = path.join(ensureMemoryRoot(vaultPath), "atoms");
     ensureDirectory(atomsRoot);
     const frontmatter = JSON.stringify({ ...record, body: undefined });
     atomicWrite(path.join(atomsRoot, `${record.id}.md`), `---\n${frontmatter}\n---\n\n${record.body}\n`, this.#randomBytes);
   }
-
   #syncInspectableRecords(vaultPath: string, receipt: MemoryLifecycleReceipt, next: MemoryRegistry): void {
     for (const removed of receipt.removedRecords) {
       removeRegularFileIfPresent(path.join(ensureMemoryRoot(vaultPath), "atoms", `${removed.id}.md`));
@@ -513,7 +550,6 @@ export class AgentMemoryService {
       this.#writeInspectableRecord(vaultPath, record);
     }
   }
-
   #syncReceiptProjection(vaultPath: string, receipt: MemoryLifecycleReceipt, registry: MemoryRegistry): void {
     const ids = receipt.memoryId ? [receipt.memoryId] : receipt.removedRecords.map((record) => record.id);
     for (const id of ids) {
@@ -522,28 +558,24 @@ export class AgentMemoryService {
       else removeRegularFileIfPresent(path.join(ensureMemoryRoot(vaultPath), "atoms", `${id}.md`));
     }
   }
-
   #persistReceipt(vaultPath: string, receipt: MemoryLifecycleReceipt): void {
     const relativePath = receiptRelativePath(receipt);
     writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(receipt, null, 2)}\n`, this.#randomBytes);
     const adopted = this.#readReceipt(vaultPath, relativePath);
     if (!adopted || stableJson(adopted) !== stableJson(receipt)) throw lifecycleConflict();
   }
-
   #persistRestoreIntent(vaultPath: string, intent: MemoryRestoreIntent): void {
     const relativePath = restoreIntentRelativePath(intent.originalOperationId);
     writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(intent, null, 2)}\n`, this.#randomBytes);
     const adopted = this.#readRestoreIntent(vaultPath, intent.originalOperationId);
     if (!adopted || stableJson(adopted) !== stableJson(intent)) throw lifecycleConflict();
   }
-
   #persistOperation(vaultPath: string, operation: OperationRecord): void {
     const relativePath = operationRelativePath(operation.id);
     writePrivateExclusive(vaultPath, relativePath, `${JSON.stringify(operation, null, 2)}\n`, this.#randomBytes);
     const adopted = this.#readOperation(vaultPath, operation.id);
     if (!adopted || stableJson(adopted) !== stableJson(operation)) throw lifecycleConflict();
   }
-
   #readReceipt(vaultPath: string, relativePath: string): MemoryLifecycleReceipt | undefined {
     const value = readPrivateJson(vaultPath, relativePath, MAX_PRIVATE_RECORD_BYTES);
     if (value === undefined) return undefined;
@@ -558,7 +590,6 @@ export class AgentMemoryService {
     }
     return receipt;
   }
-
   #findReceiptByRequest(vaultPath: string, requestId: string): MemoryLifecycleReceipt | undefined {
     const create = this.#readReceipt(vaultPath, `.pige/memory/creates/${requestId}.json`);
     const edit = this.#readReceipt(vaultPath, `.pige/memory/edits/${requestId}.json`);
@@ -567,22 +598,18 @@ export class AgentMemoryService {
     if ([create, edit, mutation, trash].filter(Boolean).length > 1) throw lifecycleConflict();
     return create ?? edit ?? mutation ?? trash;
   }
-
   #readReceiptForOperation(vaultPath: string, operation: OperationRecord): MemoryLifecycleReceipt | undefined {
     const binding = readMemoryOperationBinding(operation);
     return binding ? this.#readReceipt(vaultPath, binding.receiptPath) : undefined;
   }
-
   #readRestoreIntent(vaultPath: string, operationId: string): MemoryRestoreIntent | undefined {
     const value = readPrivateJson(vaultPath, restoreIntentRelativePath(operationId), MAX_PRIVATE_RECORD_BYTES);
     return value === undefined ? undefined : parseMemoryRestoreIntent(value);
   }
-
   #readOperation(vaultPath: string, operationId: string): OperationRecord | undefined {
     const value = readPrivateJson(vaultPath, operationRelativePath(operationId), MAX_PRIVATE_RECORD_BYTES);
     return value === undefined ? undefined : OperationRecordSchema.parse(value);
   }
-
   #readAllReceipts(vaultPath: string): readonly MemoryLifecycleReceipt[] {
     const relativeRoots = [".pige/memory/creates", ".pige/memory/edits", ".pige/memory/mutations", ".pige/trash/memory"];
     const receipts: MemoryLifecycleReceipt[] = [];
@@ -599,7 +626,6 @@ export class AgentMemoryService {
     }
     return receipts;
   }
-
   #validateEditedRecord(
     vaultPath: string,
     event: MemoryEventRecord,
@@ -632,23 +658,19 @@ export class AgentMemoryService {
       return false;
     }
   }
-
   #rememberVault(vaultPath: string): void {
     this.#knownVaultPaths.add(fs.realpathSync.native(vaultPath));
   }
-
   #currentVaultPath(): string | undefined {
     const configured = this.#activeVaultPath?.();
     if (configured) return configured;
     return this.#knownVaultPaths.size === 1 ? [...this.#knownVaultPaths][0] : undefined;
   }
-
   #vaultPathsForRecovery(): readonly string[] {
     const configured = this.#activeVaultPath?.();
     return configured ? [configured] : [...this.#knownVaultPaths];
   }
 }
-
 function assertMemoryCreationRequest(
   receipt: MemoryLifecycleReceipt,
   request: RememberVaultPreferenceRequest,
@@ -674,7 +696,6 @@ function assertMemoryCreationRequest(
     receipt.afterRecord.provenance.kind !== expectedProvenance
   ) throw lifecycleConflict();
 }
-
 function lifecycleResult(
   status: "committed" | "stale" | "not_found",
   activeVaultId: string,
@@ -691,7 +712,6 @@ function lifecycleResult(
     summary: projectSummary(activeVaultId, registry)
   });
 }
-
 function projectSummary(activeVaultId: string, registry: MemoryRegistry): MemorySummary {
   return MemorySummarySchema.parse({
     apiVersion: 1,
@@ -702,7 +722,6 @@ function projectSummary(activeVaultId: string, registry: MemoryRegistry): Memory
       .map(projectRecord)
   });
 }
-
 function projectRecord(record: StoredMemoryRecord): MemoryRecordSummary {
   return MemoryRecordSummarySchema.parse({
     id: record.id,
@@ -715,7 +734,6 @@ function projectRecord(record: StoredMemoryRecord): MemoryRecordSummary {
     updatedAt: record.updatedAt
   });
 }
-
 export function parseMemoryRegistry(value: MemoryRegistry): MemoryRegistry {
   if (
     value.schemaVersion !== 1 || !Number.isSafeInteger(value.revision) || value.revision < 0 ||
@@ -725,7 +743,6 @@ export function parseMemoryRegistry(value: MemoryRegistry): MemoryRegistry {
   const records = value.records.map(parseStoredMemoryRecord);
   return { schemaVersion: 1, revision: value.revision, events, records };
 }
-
 function parseMemoryEvent(value: unknown): MemoryEventRecord {
   if (!value || typeof value !== "object") throw registryInvalid("A memory event is invalid.");
   const event = value as Partial<MemoryEventRecord>;
@@ -743,13 +760,11 @@ function parseMemoryEvent(value: unknown): MemoryEventRecord {
     })
   };
 }
-
 function memoryLanguageOrLegacy(value: unknown): MemoryLanguageFact {
   return MemoryLanguageFactSchema.parse(value ?? {
     domain: "memory", language: "unknown", basis: "legacy_missing"
   });
 }
-
 function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
   if (!value || typeof value !== "object") throw registryInvalid("A memory atom is invalid.");
   const record = value as Partial<StoredMemoryRecord>;
@@ -778,7 +793,6 @@ function parseStoredMemoryRecord(value: unknown): StoredMemoryRecord {
     ...(record.editProvenance ? { editProvenance: record.editProvenance } : {})
   };
 }
-
 export function parseMemoryLifecycleReceipt(value: unknown): MemoryLifecycleReceipt {
   if (!value || typeof value !== "object") throw lifecycleConflict();
   const receipt = value as Partial<MemoryLifecycleReceipt>;
@@ -828,7 +842,6 @@ export function parseMemoryLifecycleReceipt(value: unknown): MemoryLifecycleRece
   }
   return { ...(receipt as MemoryLifecycleReceipt), removedEvents, removedRecords, ...(beforeRecord ? { beforeRecord } : {}), ...(afterRecord ? { afterRecord } : {}) };
 }
-
 export function parseMemoryRestoreIntent(value: unknown): MemoryRestoreIntent {
   if (!value || typeof value !== "object") throw lifecycleConflict();
   const intent = value as Partial<MemoryRestoreIntent>;
@@ -840,7 +853,6 @@ export function parseMemoryRestoreIntent(value: unknown): MemoryRestoreIntent {
   ) throw lifecycleConflict();
   return intent as MemoryRestoreIntent;
 }
-
 function assertReceiptRequest(
   receipt: MemoryLifecycleReceipt,
   activeVaultId: string,
@@ -860,11 +872,9 @@ function assertReceiptRequest(
     ))
   ) throw lifecycleConflict();
 }
-
 function serializeRegistry(registry: MemoryRegistry): string {
   return `${JSON.stringify(registry, null, 2)}\n`;
 }
-
 function ensureMemoryRoot(vaultPath: string): string {
   if (!path.isAbsolute(vaultPath)) throw new PigeDomainError("memory.vault_invalid", "Memory requires an active vault.");
   const vaultRoot = fs.realpathSync.native(vaultPath);
@@ -875,13 +885,11 @@ function ensureMemoryRoot(vaultPath: string): string {
   }
   return root;
 }
-
 function ensureDirectory(directoryPath: string): void {
   fs.mkdirSync(directoryPath, { recursive: true, mode: 0o700 });
   const stats = fs.lstatSync(directoryPath);
   if (!stats.isDirectory() || stats.isSymbolicLink()) throw new PigeDomainError("memory.path_unsafe", "A memory directory is unsafe.");
 }
-
 function resolveVaultPrivatePath(vaultPath: string, relativePath: string): string {
   if (
     path.isAbsolute(relativePath) || relativePath.includes("\\") ||
@@ -892,7 +900,6 @@ function resolveVaultPrivatePath(vaultPath: string, relativePath: string): strin
   if (!resolved.startsWith(`${root}${path.sep}`)) throw lifecycleConflict();
   return resolved;
 }
-
 function writePrivateExclusive(
   vaultPath: string,
   relativePath: string,
@@ -909,7 +916,6 @@ function writePrivateExclusive(
   }
   atomicWriteExclusive(filePath, contents, random);
 }
-
 function readPrivateJson(vaultPath: string, relativePath: string, maximumBytes: number): unknown | undefined {
   const filePath = resolveVaultPrivatePath(vaultPath, relativePath);
   if (!fs.existsSync(filePath)) return undefined;
@@ -917,7 +923,6 @@ function readPrivateJson(vaultPath: string, relativePath: string, maximumBytes: 
   if (!stats.isFile() || stats.isSymbolicLink() || stats.size > maximumBytes) throw lifecycleConflict();
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
-
 function atomicWrite(filePath: string, contents: string, random: (size: number) => Buffer): void {
   const temporaryPath = `${filePath}.tmp-${process.pid}-${random(8).toString("hex")}`;
   let descriptor: number | undefined;
@@ -935,7 +940,6 @@ function atomicWrite(filePath: string, contents: string, random: (size: number) 
     fs.rmSync(temporaryPath, { force: true });
   }
 }
-
 function atomicWriteExclusive(filePath: string, contents: string, random: (size: number) => Buffer): void {
   const temporaryPath = `${filePath}.tmp-${process.pid}-${random(8).toString("hex")}`;
   let descriptor: number | undefined;
@@ -954,7 +958,6 @@ function atomicWriteExclusive(filePath: string, contents: string, random: (size:
     fs.rmSync(temporaryPath, { force: true });
   }
 }
-
 function writePrivateExport(destinationPath: string, contents: string, random: (size: number) => Buffer): void {
   if (!path.isAbsolute(destinationPath)) throw lifecycleConflict();
   const parent = path.dirname(destinationPath);
@@ -985,7 +988,6 @@ function writePrivateExport(destinationPath: string, contents: string, random: (
     fs.rmSync(temporaryPath, { force: true });
   }
 }
-
 function removeRegularFileIfPresent(filePath: string): void {
   if (!fs.existsSync(filePath)) return;
   const stats = fs.lstatSync(filePath);
@@ -993,6 +995,5 @@ function removeRegularFileIfPresent(filePath: string): void {
   fs.unlinkSync(filePath);
   flushDirectoryWhereSupported(path.dirname(filePath));
 }
-
 function isSha256(value: unknown): value is string { return typeof value === "string" && /^sha256:[a-f0-9]{64}$/u.test(value); }
 function registryInvalid(message: string): PigeDomainError { return new PigeDomainError("memory.registry_invalid", message); }

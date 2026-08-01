@@ -148,7 +148,25 @@ describe("AgentMemoryService", () => {
       sourceRefs: [{ kind: "operation", id: operationId }]
     });
     expect(service.findUndoOperation(operation, [operation, inverse])).toEqual(inverse);
-    expect(service.activitySummary(operation, inverse)).toMatchObject({ status: "undone", canUndo: false });
+    expect(service.activitySummary(operation, inverse)).toMatchObject({ status: "undone", canUndo: false, canRedo: true });
+    expect(service.redo({ operationId, expectedRevisionId: "1" })).toMatchObject({ status: "stale", currentRevisionId: "2" });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([]);
+    const redone = service.redo({ operationId, expectedRevisionId: "2" });
+    expect(redone).toMatchObject({ status: "redone", operationId, undoOperationId: inverse.id, revisionId: "3" });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([expect.objectContaining({ id: record.id })]);
+    expect(service.redo({ operationId })).toEqual({ ...redone, status: "already_redone" });
+    expect(service.activitySummary(operation, inverse)).toMatchObject({ status: "undone", canRedo: false,
+      redoUnavailableReason: "already_redone" });
+    const forward = readOperation(vaultPath, redone.redoOperationId!);
+    expect(service.activitySummary(forward)).toMatchObject({ status: "applied", canUndo: true });
+    const secondUndo = service.undo(forward, "3");
+    expect(secondUndo).toMatchObject({ status: "undone", revisionId: "4" });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([]);
+    expect(service.activitySummary(forward, readOperation(vaultPath, secondUndo.undoOperationId!)))
+      .toMatchObject({ status: "undone", canRedo: true });
+    expect(service.redo({ operationId: forward.id, expectedRevisionId: "4" }))
+      .toMatchObject({ status: "redone", revisionId: "5" });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([expect.objectContaining({ id: record.id })]);
   });
 
   it("rejects mismatched event provenance and ignores a stale fixed temporary file", () => {
@@ -332,7 +350,7 @@ describe("AgentMemoryService", () => {
     expect(service.recall(vaultPath)).toEqual([]);
   });
 
-  it("recovers an interrupted edit and Undo restores the prior exact atom across restart", () => {
+  it("recovers an interrupted edit and repeated Undo/Redo across restart", () => {
     const vaultPath = createVault();
     const service = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
     const original = remember(service, vaultPath, "editundo");
@@ -382,6 +400,27 @@ describe("AgentMemoryService", () => {
     expect(registry.events[0]).toMatchObject({ title: original.title, body: original.body });
     expect(registry.records[0]).toEqual(original);
     expect(registry.records[0]).not.toHaveProperty("editProvenance");
+
+    const redone = afterUndoRestart.redo({ operationId: operation.id, expectedRevisionId: "3" });
+    expect(redone).toMatchObject({ status: "redone", revisionId: "4" });
+    expect(afterUndoRestart.list(vaultPath, VAULT_ID).records[0]).toMatchObject({
+      title: "Temporary edit", body: "This edit will be restored through Activity Undo."
+    });
+    fs.rmSync(findOperationPath(vaultPath, redone.redoOperationId!));
+    const afterRedoRestart = new AgentMemoryService({ activeVaultPath: () => vaultPath });
+    expect(afterRedoRestart.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const forward = readOperation(vaultPath, redone.redoOperationId!);
+    expect(forward).toMatchObject({
+      kind: "update_memory", sourceRefs: [{ kind: "operation", id: undone.undoOperationId }]
+    });
+    const secondUndo = afterRedoRestart.undo(forward, "4");
+    const secondRedo = afterRedoRestart.redo({ operationId: forward.id, expectedRevisionId: "5" });
+    fs.rmSync(findOperationPath(vaultPath, secondRedo.redoOperationId!));
+    const afterSecondRedoRestart = new AgentMemoryService({ activeVaultPath: () => vaultPath });
+    expect(afterSecondRedoRestart.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(readOperation(vaultPath, secondRedo.redoOperationId!)).toMatchObject({
+      kind: "update_memory", sourceRefs: [{ kind: "operation", id: secondUndo.undoOperationId }]
+    });
   });
 
   it("deletes trash-first, recovers a missing Operation, and restores private provenance through Undo", () => {
@@ -417,7 +456,10 @@ describe("AgentMemoryService", () => {
     expect(service.list(vaultPath, VAULT_ID).records).toEqual([expect.objectContaining({ id: record.id })]);
     const undoOperation = readOperation(vaultPath, undone.undoOperationId!);
     expect(service.findUndoOperation(operation, [operation, undoOperation])).toEqual(undoOperation);
-    expect(service.activitySummary(operation, undoOperation)).toMatchObject({ status: "undone", canUndo: false });
+    expect(service.activitySummary(operation, undoOperation)).toMatchObject({ status: "undone", canUndo: false, canRedo: true });
+    const redone = service.redo({ operationId: operation.id, expectedRevisionId: "3" });
+    expect(redone).toMatchObject({ status: "redone", revisionId: "4" });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([]);
   });
 
   it("rejects a tampered edited atom in a delete receipt before restoring registry state", () => {
@@ -479,11 +521,15 @@ describe("AgentMemoryService", () => {
     const summary = service.list(vaultPath, VAULT_ID);
     expect(summary.revision).toBe(5);
     expect(new Set(summary.records.map((entry) => entry.id))).toEqual(new Set([first.id, second.id, later.id]));
+    expect(service.redo({ operationId: operation.id, expectedRevisionId: "5" })).toMatchObject({
+      status: "redone", revisionId: "6"
+    });
+    expect(service.list(vaultPath, VAULT_ID).records).toEqual([expect.objectContaining({ id: later.id })]);
     expect(service.reset(vaultPath, {
       apiVersion: 1,
       requestId: "memory_request_gggggggggggggggg",
       activeVaultId: VAULT_ID,
-      expectedRevision: summary.revision
+      expectedRevision: 6
     }).status).toBe("committed");
   });
 

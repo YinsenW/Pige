@@ -607,17 +607,47 @@ function isSupportBundleApp(value: unknown): boolean {
 }
 
 function isDiagnosticsHealth(value: unknown): boolean {
-  if (!isRecord(value) || !hasExactKeys(value, [
-    "status", "checkedAt", "localOnly", "recentErrorCount", "checks"
-  ])) return false;
+  if (!isRecord(value)) return false;
+  const keys = [
+    "status", "checkedAt", "localOnly", "recentErrorCount", "checks",
+    ...(value.crashRecovery === undefined ? [] : ["crashRecovery"]),
+    ...(value.crashRecoveryHistory === undefined ? [] : ["crashRecoveryHistory"])
+  ];
+  if (!hasExactKeys(value, keys)) return false;
   if ((value.status !== "ok" && value.status !== "degraded") || value.localOnly !== true ||
     !isIsoDate(value.checkedAt) || !isBoundedCount(value.recentErrorCount, 100) ||
-    !Array.isArray(value.checks) || value.checks.length !== 1) return false;
+    !Array.isArray(value.checks) || value.checks.length !== 1 ||
+    (value.crashRecovery !== undefined && !isCrashRecoverySummary(value.crashRecovery, false)) ||
+    (value.crashRecoveryHistory !== undefined &&
+      (!Array.isArray(value.crashRecoveryHistory) || value.crashRecoveryHistory.length > 10 ||
+        !value.crashRecoveryHistory.every((entry) => isCrashRecoverySummary(entry, true))))) return false;
   const check = value.checks[0];
   return isRecord(check) && hasExactKeys(check, ["id", "status", "message"]) &&
     check.id === "diagnostics_store" &&
     ((check.status === "ok" && check.message === "Local diagnostics store is writable.") ||
       (check.status === "error" && check.message === "Local diagnostics store is unavailable."));
+}
+
+function isCrashRecoverySummary(value: unknown, completed: boolean): boolean {
+  if (!isRecord(value)) return false;
+  const hasCompletedAt = value.completedAt !== undefined;
+  if (!hasExactKeys(value, [
+    "recoveryId", "status", "detectedAt", ...(hasCompletedAt ? ["completedAt"] : []),
+    "capturesPreserved", "jobsRecovered", "jobsNeedRetry", "proposalsRecovered",
+    "proposalsAwaitingReview", "sourcesNeedRepair", "indexRebuildRunning"
+  ])) return false;
+  if (!/^crashrecovery_[a-f0-9]{32}$/u.test(String(value.recoveryId)) ||
+    !isIsoDate(value.detectedAt) || typeof value.indexRebuildRunning !== "boolean" ||
+    ![
+      value.capturesPreserved, value.jobsRecovered, value.jobsNeedRetry, value.proposalsRecovered,
+      value.proposalsAwaitingReview, value.sourcesNeedRepair
+    ].every((count) => isBoundedCount(count, 1_000_000))) return false;
+  if (completed) {
+    return (value.status === "recovered" || value.status === "needs_attention") &&
+      hasCompletedAt && isIsoDate(value.completedAt);
+  }
+  return (value.status === "recovering" || value.status === "recovered" || value.status === "needs_attention") &&
+    (!hasCompletedAt || isIsoDate(value.completedAt));
 }
 
 function isRecentEvents(value: unknown): boolean {

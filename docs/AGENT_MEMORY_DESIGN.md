@@ -61,10 +61,11 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
 - Enabled Home recall adds at most eight recently updated active atoms as lower-authority
   user context, never system policy. Current instruction, `PIGE.md`, settings and safety win.
 - Settings lists <=1,000 safe atoms. Edit secret-scans then CAS-changes only L1 title/body; status,
-  L0 and private provenance remain. Receipt/`update_memory`/Undo is replay/restart-adoptable;
-  tampering closes and UI retains stale drafts.
+  L0 and private provenance remain. Receipt/`update_memory` and matching Activity Undo/Redo are
+  replay/restart-adoptable across repeated cycles; tampering closes and UI retains stale drafts.
 - Enable/delete/reset use revision CAS. Delete/reset retain exact L0/L1 privately, record
-  `trash_memory`, and Undo writes `restore_memory` without losing later facts; removed atoms leave recall.
+  `trash_memory`, and Undo/Redo writes deterministic forward Operations without losing later facts;
+  removed atoms leave recall.
 - Export rechecks revision after Main's dialog and writes safe summaries; results are pathless.
 - Backup binds the exact registry revision/checksum, lifecycle receipts, restore intents and
   linked Operations; restore revalidates those bindings before publication. Active records
