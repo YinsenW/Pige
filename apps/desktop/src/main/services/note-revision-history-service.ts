@@ -22,6 +22,7 @@ import {
   findMarkdownPageByIdAtSignature,
   readMarkdownPageContentAtSignature
 } from "./markdown-page-index";
+import { isRevisionHistoryKnowledgePage } from "./reader-generated-note-reveal-service";
 
 const MAX_HISTORY_REVISIONS = 100;
 const MAX_OPERATION_ENTRIES = 10_000;
@@ -30,7 +31,6 @@ const MAX_OPERATION_SCAN_BYTES = 64 * 1024 * 1024;
 const OPERATION_FILE = /^op_\d{8}_[a-z0-9]{8,}\.json$/u;
 const YEAR_DIRECTORY = /^\d{4}$/u;
 const MONTH_DIRECTORY = /^\d{2}$/u;
-const ACTIVE_TYPED_HISTORY_PAGE_TYPES = new Set(["claim", "question", "concept", "entity"]);
 
 export interface NoteRevisionHistoryVaultPort {
   current(): VaultSummary | undefined;
@@ -330,8 +330,10 @@ function readOperationBeforeImage(
 }
 
 function isHistoryPage(pageType: unknown, pageStatus: unknown): boolean {
-  return pageType === "note" ||
-    (pageStatus === "active" && typeof pageType === "string" && ACTIVE_TYPED_HISTORY_PAGE_TYPES.has(pageType));
+  return isRevisionHistoryKnowledgePage(
+    typeof pageType === "string" ? pageType : undefined,
+    typeof pageStatus === "string" ? pageStatus : undefined
+  );
 }
 
 function createEntry(

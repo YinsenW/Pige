@@ -1491,6 +1491,10 @@ status: "active"
       pageType: "source", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
     writePage({ vaultPath, fileName: "archived-claim.md", pageId: "page_20260801_archived01", title: "Archived claim",
       pageType: "claim", status: "archived", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+    writePage({ vaultPath, fileName: "topic.md", pageId: "page_20260801_topic0001", title: "Topic",
+      pageType: "topic", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+    writePage({ vaultPath, fileName: "archived-topic.md", pageId: "page_20260801_topic0002", title: "Archived topic",
+      pageType: "topic", status: "archived", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     expect(rendered.revealGeneratedEligibility).toEqual({
@@ -1544,6 +1548,24 @@ status: "active"
       canArchive: false, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
     expect(archivedClaim.restoreEligibility).toEqual({
+      canRestore: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    const topic = await notes.render({ pageId: "page_20260801_topic0001" }, OWNER_ID);
+    expect(topic.historyEligibility).toEqual({
+      canBrowse: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(topic.archiveEligibility).toEqual({
+      canArchive: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(topic.restoreEligibility).toEqual({
+      canRestore: false, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    const archivedTopic = await notes.render({ pageId: "page_20260801_topic0002" }, OWNER_ID);
+    expect(archivedTopic.historyEligibility).toBeUndefined();
+    expect(archivedTopic.archiveEligibility).toEqual({
+      canArchive: false, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(archivedTopic.restoreEligibility).toEqual({
       canRestore: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
 

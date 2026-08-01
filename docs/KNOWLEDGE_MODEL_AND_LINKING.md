@@ -386,6 +386,9 @@ Deduplication rules:
   lifecycle data excludes Markdown/path.
 - Active claims, questions, concepts, entities and topics use the same exact-current recoverable
   trash/list/restore boundary regardless of author provenance; source pages remain ineligible.
+- Notes, claims, questions, concepts, entities and topics also share exact-current archive/restore
+  and bounded revision-history preview/restore. Each forward restore writes one reversible
+  `restore_page`, restart adopts the same effect, and source or non-active history stays ineligible.
 - If uncertain, preserve both pages.
 
 Multilingual rules preserve source language, add useful translated aliases, avoid duplicates caused

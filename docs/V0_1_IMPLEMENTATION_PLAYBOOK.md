@@ -399,6 +399,12 @@ Build:
 - [B4.07 -> E4.04] Graph and backlink foundations rebuildable from durable truth.
 - [B4.08 -> E4.06] Implemented grounded Home Agent creation and restart adoption for schema-valid topic, concept, entity, claim, and question pages with stable IDs and one `create_page` Operation; tags remain lightweight facets.
 
+Managed knowledge-page lifecycle is now complete for notes, claims, questions, concepts, entities
+and topics: exact-current archive/restore, trash/list/restore, bounded revision history, immutable
+preview, reversible restore and restart adoption share the same Main-owned boundary. Source pages
+remain deliberately read-only. This closes PIGE-KNOW-001; E4.01/E4.05 remain partial for their
+independent packaged metadata/relationship and migration breadth.
+
 Deferred from this phase:
 
 - [D4.01] Vector search before the local model is ready; assigned to P6.

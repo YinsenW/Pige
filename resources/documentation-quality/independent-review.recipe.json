@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:25:00.000Z",
+  "reviewedAt": "2026-08-01T16:32:42.059Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-BACKUP-003 validated versioned export and external-dependency completeness closure.",
+    "scope": "PIGE-KNOW-001 complete managed knowledge-page lifecycle, including Topic archive/restore and revision history.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "b6edd9d3ea60b344db36ebeb148a35d830cf2cb8bb6b203ec438d3327b3bd1b7"
+    "reviewedSha256": "1737b50a2583d3df40b0786d058848acc0e80228052793b3f45f6733f78b3be7"
   },
   "reviewers": [
     {
-      "reviewerId": "backup-completeness-review",
-      "task": "Review versioned Backup completeness authority and acceptance",
+      "reviewerId": "topic-lifecycle-review",
+      "task": "Review complete managed knowledge-page lifecycle authority and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the Backup and acceptance contract; Development supplies separate manifest, coordinator, preload and Settings UI evidence."
+      "independence": "Planning reviews lifecycle and acceptance facts; Development supplies separate Main projection, archive, immutable history, restart and Reader interaction evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "backup-completeness-review",
+      "reviewerId": "topic-lifecycle-review",
       "blockerCount": 0,
-      "summary": "The validated manifest remains durable authority while the renderer receives only bounded dependency counts."
+      "summary": "Every managed knowledge page type now preserves stable identity through archive, restore, immutable history and restart while source pages stay read-only."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "backup-completeness-review",
+      "reviewerId": "topic-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Data, API, Settings UI, Job recovery and privacy contracts agree on one pathless completeness projection."
+      "summary": "Knowledge, Markdown, UI, Operations and Main service policy agree on one exact-current pathless lifecycle for all six managed page types."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "backup-completeness-review",
+      "reviewerId": "topic-lifecycle-review",
       "blockerCount": 0,
-      "summary": "PIGE-BACKUP-003 is verified by archive, manifest, Job, Operation, completeness and Settings evidence."
+      "summary": "PIGE-KNOW-001 is verified by creation, facets, relationships, trash recovery, archive recovery, history restore, UI and restart evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "backup-completeness-review",
+      "reviewerId": "topic-lifecycle-review",
       "blockerCount": 0,
-      "summary": "The existing Backup owner derives completeness without a new channel, Job class or durable format."
+      "summary": "One shared lifecycle predicate and existing archive/history owners close Topic parity without a new channel, durable format or renderer authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "backup-completeness-review",
+      "reviewerId": "topic-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Existing data, API, UI, recovery and playbook owners hold the decision without a new design document."
+      "summary": "Existing Knowledge, UI, playbook, decision and trace owners contain the closure without introducing another design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/backup-service.test.ts tests/unit/backup-coordinator-service.test.ts tests/unit/restore-ui.test.ts",
+      "command": "npx vitest run tests/unit/note-archive-service.test.ts tests/unit/note-revision-history-service.test.ts tests/unit/note-revision-history-ui.test.ts tests/unit/notes-service.test.ts tests/unit/full-ui-library.test.ts",
       "status": "passed",
-      "evidence": "Validated archive, required/optional dependency counts, durable Operation and pathless Settings results pass directly."
+      "evidence": "All six managed page types pass archive/restore, exact immutable history, Undo/restart adoption and projection; the real Library Reader also adopts an authoritative archived Topic."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The completeness candidate compiles and builds without growing the frozen Backup service budget."
+      "evidence": "The Topic lifecycle compiles and builds while existing Main and service owners remain inside governed architecture boundaries."
     },
     {
-      "command": "npm run verify:docs && npm run verify:decisions",
+      "command": "npm run verify:traceability && npm run verify:documentation-quality",
       "status": "passed",
-      "evidence": "Data, API, UI, recovery, acceptance and semantic-claim owners remain mutually consistent."
+      "evidence": "Knowledge, UI, decision, playbook, acceptance and semantic-claim owners agree on the complete managed page lifecycle."
     }
   ],
   "coordination": {
-    "taskId": "external-web-lifecycle-bind-20260801",
-    "taskTitle": "Bind complete External/Web lifecycle closure",
+    "taskId": "topic-lifecycle-bind-20260802",
+    "taskTitle": "Bind complete managed knowledge-page lifecycle",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Skill receipts remain readable; External/Web export and trash restore reuse the exact inert manifest and install disclosure without migration.",
-    "acknowledgement": "Planning promotes PIGE-SKILL-001 and E8.01 from exact staging, runtime, scope, lifecycle, restart and Settings evidence."
+    "compatibility": "Existing page IDs, Markdown files, Operations and Reader channels remain compatible; Topic adopts the same currentness and restore mechanics as other managed pages without migration.",
+    "acknowledgement": "Planning promotes PIGE-KNOW-001 from complete creation, facet, relationship, trash, archive, history, UI and restart evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

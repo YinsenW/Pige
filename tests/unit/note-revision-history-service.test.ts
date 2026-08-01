@@ -14,7 +14,7 @@ import { NoteRevisionHistoryService } from "../../apps/desktop/src/main/services
 const VAULT_ID = "vault_20260731_notehistory";
 const PAGE_ID = "page_20260731_notehistory";
 const roots: string[] = [];
-const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity"] as const;
+const HISTORY_PAGE_TYPES = ["note", "claim", "question", "concept", "entity", "topic"] as const;
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
@@ -190,7 +190,7 @@ function readOperation(vaultPath: string, operationId: string): OperationRecord 
 type HistoryFixturePageType = typeof HISTORY_PAGE_TYPES[number] | "source";
 
 function editableTypes() {
-  return { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true } as const;
+  return { allowClaim: true, allowQuestion: true, allowConcept: true, allowEntity: true, allowTopic: true } as const;
 }
 
 function markdown(type: HistoryFixturePageType, status: "active" | "archived" = "active"): string {

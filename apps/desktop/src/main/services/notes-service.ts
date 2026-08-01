@@ -39,7 +39,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
-import { isLifecycleKnowledgePage, isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
+import { isLifecycleKnowledgePage, isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isRevisionHistoryKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { readClaimConfidence } from "./claim-confidence-service"; import { readEntityType } from "./entity-type-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { projectConceptParents } from "./concept-parent-service"; import { projectTopicParents } from "./topic-parent-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u, EDITOR_PAGE_TYPES = new Set(["note", "source", "claim", "question", "concept", "entity"]);
@@ -204,7 +204,7 @@ export class NotesService {
         renderContextId,
         ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(isRenamableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { renameEligibility: { canRename: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
-        ...(stable.document.summary.pageType !== "note" && isRenamableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(stable.document.summary.pageType !== "note" && isRevisionHistoryKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(stable.document.summary.pageType !== "note" && isLifecycleKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { archiveEligibility: { canArchive: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) }, restoreEligibility: { canRestore: stable.document.summary.status === "archived", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(stable.document.summary.pageType === "note"
           ? {
