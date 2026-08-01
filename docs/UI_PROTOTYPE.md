@@ -646,8 +646,10 @@ Copy  Quote  Ask  Translate  Polish  Expand  Summarize  More
 
 Action behavior:
 
-- Copy/quote stay local. Other actions submit exact identity to the shared owner; Note, Claim and
-  Question stage one review, and applied opens only the matching authoritative page type.
+- Copy/quote stay local. Other actions submit exact identity to the shared owner; Note, Claim,
+  Question, Concept, Entity and Topic stage one review, and applied opens only the matching
+  authoritative page type. The extra knowledge types stay behind the existing `Turn into…`
+  disclosure instead of adding default Reader controls.
 - Closed/drift keeps Reader/selection/focus; renderer owns no body/path/hash/span/apply.
 
 ### 8.4 Structured Knowledge Surface

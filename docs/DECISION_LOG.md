@@ -4043,7 +4043,8 @@ The grounded Home Agent write path may create schema-valid `topic`, `concept`, `
 `claim`, and `question` Markdown pages. Main owns stable page identity, type-specific
 frontmatter, grounded source citation, Job provenance, and one deterministic `create_page`
 Operation; retry and restart adopt the same durable effect. Model output cannot create a
-`source` page.
+`source` page. The Reader's progressively disclosed `Turn into…` action may use the same
+durable owner for an exact current selection after explicit proposal review, including `note`.
 
 Rationale:
 
@@ -4054,6 +4055,8 @@ Consequences:
 
 - B4.08 and E4.06 are verified for grounded Home Agent creation and restart adoption.
 - Claims without valid evidence remain review-required, and tags remain lightweight facets.
+- Reader selection requests bind the requested page type and selected bytes to the durable turn;
+  approval opens only the matching authoritative page type.
 - Broader edit, relationship, merge, import, trash, and full lifecycle acceptance remains open
   under PIGE-KNOW-001.
 
