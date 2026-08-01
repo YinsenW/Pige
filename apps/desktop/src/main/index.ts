@@ -321,6 +321,7 @@ import { NoteTrashService } from "./services/note-trash-service";
 import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
+import { QuestionAnswerService } from "./services/question-answer-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
@@ -457,6 +458,7 @@ let noteTrashRedoService: NoteTrashRedoService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
+let questionAnswerService: QuestionAnswerService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteAliasService: NoteAliasService | undefined;
 let noteMergeService: NoteMergeService | undefined;
@@ -1818,6 +1820,12 @@ const getQuestionStateService = (): QuestionStateService => {
     })
   );
   return questionStateService;
+};
+const getQuestionAnswerService = (): QuestionAnswerService => {
+  questionAnswerService ??= new QuestionAnswerService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowQuestion: true }),
+    () => getVaultService().activeVaultPath());
+  return questionAnswerService;
 };
 const getNoteTagService = (): NoteTagService => {
   noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
@@ -3254,6 +3262,7 @@ registerReaderIpc({
   getNoteTrashService,
   getNoteArchiveService,
   getQuestionStateService,
+  getQuestionAnswerService,
   getNoteTagService,
   getNoteAliasService,
   getNoteMergeService,
@@ -3737,6 +3746,9 @@ app.whenReady().then(async () => {
       allowQuestion: true
     })
   );
+  questionAnswerService = new QuestionAnswerService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowQuestion: true }),
+    () => getVaultService().activeVaultPath());
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteAliasService = new NoteAliasService(getNotesService(), noteMarkdownEditorService, () => getVaultService().activeVaultPath());
   noteMergeService = new NoteMergeService(getVaultService(), getNotesService());

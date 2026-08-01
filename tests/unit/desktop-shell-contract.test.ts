@@ -319,6 +319,30 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("freezes pathless current-Reader question answer search and exact mutation", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const answerSchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers"'),
+      schemasSource.indexOf("export const NoteAddTagRequestSchema")
+    );
+    expect(answerSchemas).toContain('NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer"');
+    expect(answerSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(answerSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(answerSchemas).toContain("expectedTargetUpdatedAt: z.string().datetime({ offset: true })");
+    expect(contractsSource).toContain("readonly searchQuestionAnswers:");
+    expect(contractsSource).toContain("readonly changeQuestionAnswer:");
+    expect(preloadSource).toContain("NoteSearchQuestionAnswersRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeQuestionAnswerRequestSchema.parse(request)");
+    expect(appSource.match(/onSearchQuestionAnswers=\{\(request\) => window\.pige\.notes\.searchQuestionAnswers\(request\)\}/gu))
+      .toHaveLength(2);
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(answerSchemas).not.toContain(privateField);
+    }
+  });
+
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

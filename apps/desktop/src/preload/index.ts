@@ -175,6 +175,10 @@ import type {
   NoteRestoreArchivedResult,
   NoteSetQuestionStateRequest,
   NoteSetQuestionStateResult,
+  NoteSearchQuestionAnswersRequest,
+  NoteSearchQuestionAnswersResult,
+  NoteChangeQuestionAnswerRequest,
+  NoteChangeQuestionAnswerResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -660,6 +664,12 @@ import {
   NOTE_SET_QUESTION_STATE_CHANNEL,
   NoteSetQuestionStateRequestSchema,
   NoteSetQuestionStateResultSchema,
+  NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
+  NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
+  NoteSearchQuestionAnswersRequestSchema,
+  NoteSearchQuestionAnswersResultSchema,
+  NoteChangeQuestionAnswerRequestSchema,
+  NoteChangeQuestionAnswerResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -2083,6 +2093,12 @@ const api: PigeDesktopApi = {
           NoteSetQuestionStateRequestSchema.parse(request)
         )
       ),
+    searchQuestionAnswers: async (request: NoteSearchQuestionAnswersRequest): Promise<NoteSearchQuestionAnswersResult> =>
+      NoteSearchQuestionAnswersResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL, NoteSearchQuestionAnswersRequestSchema.parse(request))),
+    changeQuestionAnswer: async (request: NoteChangeQuestionAnswerRequest): Promise<NoteChangeQuestionAnswerResult> =>
+      NoteChangeQuestionAnswerResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_QUESTION_ANSWER_CHANNEL, NoteChangeQuestionAnswerRequestSchema.parse(request))),
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(
         await ipcRenderer.invoke(NOTE_ADD_TAG_CHANNEL, NoteAddTagRequestSchema.parse(request))

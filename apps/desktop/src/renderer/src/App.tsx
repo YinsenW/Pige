@@ -3774,7 +3774,7 @@ export function LibraryPanel(props: {
             onSourceReconnected: props.onCurrentNoteSourceReconnected
           } : {})}
           onOpenSourcePage={props.onOpenNote}
-          onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)}
+          onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)} onSearchQuestionAnswers={(request) => window.pige.notes.searchQuestionAnswers(request)} onChangeQuestionAnswer={(request) => window.pige.notes.changeQuestionAnswer(request)}
           onQuestionStateChanged={props.onCurrentNoteMerged}
           {...(props.onActivateInlineReference ? { onActivateInlineReference: props.onActivateInlineReference } : {})}
           onDevelopment={showReaderDevelopment}
@@ -6761,7 +6761,7 @@ function HomeComposer(props: {
                 onSelectionActionResult={props.onReaderSelectionAction}
                 onSelectionTransformResult={revealHomeReaderSelectionTransform}
                 onSelectionCreateNoteResult={props.onReaderSelectionCreateNote}
-                onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)}
+                onSetQuestionState={(request) => window.pige.notes.setQuestionState(request)} onSearchQuestionAnswers={(request) => window.pige.notes.searchQuestionAnswers(request)} onChangeQuestionAnswer={(request) => window.pige.notes.changeQuestionAnswer(request)}
                 onQuestionStateChanged={adoptMergedHomeNote}
                 related={selectedNoteRelated}
                 relatedLoadingPageId={noteLoadingPageId}

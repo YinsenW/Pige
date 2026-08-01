@@ -101,6 +101,12 @@ import {
   NOTE_SET_QUESTION_STATE_CHANNEL,
   NoteSetQuestionStateRequestSchema,
   NoteSetQuestionStateResultSchema,
+  NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
+  NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
+  NoteSearchQuestionAnswersRequestSchema,
+  NoteSearchQuestionAnswersResultSchema,
+  NoteChangeQuestionAnswerRequestSchema,
+  NoteChangeQuestionAnswerResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -169,6 +175,7 @@ import type { NoteMarkdownImportService } from "./services/note-markdown-import-
 import type { NoteRevisionHistoryService } from "./services/note-revision-history-service";
 import type { LibraryTopicRenameService } from "./services/library-topic-rename-service";
 import type { QuestionStateService } from "./services/question-state-service";
+import type { QuestionAnswerService } from "./services/question-answer-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -187,6 +194,7 @@ interface RegisterReaderIpcOptions {
   readonly getNoteTrashService: () => NoteTrashService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getQuestionStateService: () => QuestionStateService;
+  readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getNoteTagService: () => NoteTagService;
   readonly getNoteRenameService: () => NoteRenameService;
   readonly getNoteAliasService: () => NoteAliasService;
@@ -454,6 +462,24 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteSetQuestionStateResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSearchQuestionAnswersRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteSearchQuestionAnswersResultSchema.parse({ ...parsed, status: "failed" });
+    try { return NoteSearchQuestionAnswersResultSchema.parse(options.getQuestionAnswerService().search(ownerId, parsed)); }
+    catch { return NoteSearchQuestionAnswersResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_QUESTION_ANSWER_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeQuestionAnswerRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteChangeQuestionAnswerResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = NoteChangeQuestionAnswerResultSchema.parse(await options.getQuestionAnswerService().change(ownerId, parsed));
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result : NoteChangeQuestionAnswerResultSchema.parse({ ...parsed, status: "failed" });
+    } catch { return NoteChangeQuestionAnswerResultSchema.parse({ ...parsed, status: "failed" }); }
   });
   options.ipcMain.handle(NOTE_ADD_TAG_CHANNEL, async (event, request: unknown) => {
     const parsed = NoteAddTagRequestSchema.parse(request);

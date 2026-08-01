@@ -1723,6 +1723,7 @@ export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistor
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
 export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
+export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
 export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteRenameRequestIdSchema = z.string().regex(/^noterenamereq_[a-z0-9]{16,64}$/);
@@ -1831,6 +1832,17 @@ export const NoteSourceMetadataSummarySchema = z.object({
   remainingCount: z.number().int().nonnegative().max(995)
 }).strict();
 export const NoteQuestionStateSchema = z.enum(["open", "partially_answered", "answered", "stale"]);
+export const NoteQuestionAnswerItemSchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(240),
+  pageType: z.enum(["note", "claim"]),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const NoteQuestionAnswersSummarySchema = z.object({
+  canEdit: z.boolean(),
+  revision: NoteEditorRevisionSchema,
+  items: z.array(NoteQuestionAnswerItemSchema).max(32)
+}).strict();
 export const NoteQuestionStateSummarySchema = z.object({
   state: NoteQuestionStateSchema,
   canChange: z.boolean(),
@@ -1851,6 +1863,7 @@ export const NoteRenderResultSchema = z.object({
   topicRenameEligibility: TopicRenameEligibilitySchema.optional(),
   sourceMetadata: NoteSourceMetadataSummarySchema.optional(),
   questionState: NoteQuestionStateSummarySchema.optional(),
+  questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
@@ -1929,6 +1942,8 @@ export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
+export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers" as const;
+export const NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
@@ -2010,6 +2025,51 @@ export const NoteSetQuestionStateResultSchema = z.discriminatedUnion("status", [
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteSetQuestionStateResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
+]);
+const NoteQuestionAnswerOwnerSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteSearchQuestionAnswersRequestSchema = NoteQuestionAnswerOwnerSchema.extend({
+  requestId: NoteQuestionAnswerRequestIdSchema,
+  query: z.string().trim().min(1).max(160)
+}).strict();
+export const NoteSearchQuestionAnswersResultSchema = z.discriminatedUnion("status", [
+  NoteSearchQuestionAnswersRequestSchema.extend({
+    status: z.literal("ready"),
+    candidates: z.array(NoteQuestionAnswerItemSchema).max(20)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSearchQuestionAnswersRequestSchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteChangeQuestionAnswerRequestSchema = NoteQuestionAnswerOwnerSchema.extend({
+  requestId: NoteQuestionAnswerRequestIdSchema,
+  action: z.enum(["add", "remove"]),
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((request, context) => {
+  if (request.action === "add" && !request.expectedTargetUpdatedAt) context.addIssue({
+    code: "custom", path: ["expectedTargetUpdatedAt"], message: "Adding an answer requires current target identity."
+  });
+});
+export const NoteChangeQuestionAnswerResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1), requestId: NoteQuestionAnswerRequestIdSchema, activeVaultId: VaultIdSchema,
+    currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema,
+    expectedRevision: NoteEditorRevisionSchema, action: z.enum(["add", "remove"]), targetPageId: PageIdSchema,
+    expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional(), status: z.literal("committed"),
+    operationId: OperationIdSchema, render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) => z.object({
+    apiVersion: z.literal(1), requestId: NoteQuestionAnswerRequestIdSchema, activeVaultId: VaultIdSchema,
+    currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema,
+    expectedRevision: NoteEditorRevisionSchema, action: z.enum(["add", "remove"]), targetPageId: PageIdSchema,
+    expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional(), status: z.literal(status)
+  }).strict())
 ]);
 export const NoteAddTagRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -11311,6 +11371,8 @@ export type NoteSourceMetadataItem = z.infer<typeof NoteSourceMetadataItemSchema
 export type NoteSourceMetadataSummary = z.infer<typeof NoteSourceMetadataSummarySchema>;
 export type NoteQuestionState = z.infer<typeof NoteQuestionStateSchema>;
 export type NoteQuestionStateSummary = z.infer<typeof NoteQuestionStateSummarySchema>;
+export type NoteQuestionAnswerItem = z.infer<typeof NoteQuestionAnswerItemSchema>;
+export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
 export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
@@ -11335,6 +11397,10 @@ export type NoteRestoreArchivedResult = z.infer<typeof NoteRestoreArchivedResult
 export type NoteQuestionStateRequestId = z.infer<typeof NoteQuestionStateRequestIdSchema>;
 export type NoteSetQuestionStateRequest = z.infer<typeof NoteSetQuestionStateRequestSchema>;
 export type NoteSetQuestionStateResult = z.infer<typeof NoteSetQuestionStateResultSchema>;
+export type NoteSearchQuestionAnswersRequest = z.infer<typeof NoteSearchQuestionAnswersRequestSchema>;
+export type NoteSearchQuestionAnswersResult = z.infer<typeof NoteSearchQuestionAnswersResultSchema>;
+export type NoteChangeQuestionAnswerRequest = z.infer<typeof NoteChangeQuestionAnswerRequestSchema>;
+export type NoteChangeQuestionAnswerResult = z.infer<typeof NoteChangeQuestionAnswerResultSchema>;
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
 export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
 export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;

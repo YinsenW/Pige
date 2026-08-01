@@ -16,6 +16,8 @@ import type { NoteMarkdownImportService } from "../../apps/desktop/src/main/serv
 import type { NoteRelateService } from "../../apps/desktop/src/main/services/note-relate-service";
 import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
+import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
+import { NoteChangeQuestionAnswerResultSchema } from "@pige/schemas";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
 
@@ -47,7 +49,8 @@ function makeHarness(
   noteRenameService?: Partial<NoteRenameService>,
   noteAliasService?: Partial<NoteAliasService>,
   libraryTopicRenameService?: Partial<LibraryTopicRenameService>,
-  questionStateService?: Partial<QuestionStateService>
+  questionStateService?: Partial<QuestionStateService>,
+  questionAnswerService?: Partial<QuestionAnswerService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -91,6 +94,10 @@ function makeHarness(
     getQuestionStateService: () => {
       if (questionStateService) return questionStateService as QuestionStateService;
       throw new Error("Question state service was not expected.");
+    },
+    getQuestionAnswerService: () => {
+      if (questionAnswerService) return questionAnswerService as QuestionAnswerService;
+      throw new Error("Question answer service was not expected.");
     },
     getNoteTagService: () => {
       if (noteTagService) return noteTagService as NoteTagService;
@@ -147,6 +154,8 @@ describe("registerReaderIpc", () => {
       "notes.archiveCurrent",
       "notes.restoreArchived",
       "notes.setQuestionState",
+      "notes.searchQuestionAnswers",
+      "notes.changeQuestionAnswer",
       "notes.addTag",
       "notes.editTaxonomy",
       "notes.rename",
@@ -203,6 +212,41 @@ describe("registerReaderIpc", () => {
     await expect(handlers.get("notes.setQuestionState")!({ sender } as IpcMainInvokeEvent, request))
       .resolves.toMatchObject({ status: "committed", render: { questionState: { state: "answered" } } });
     expect(setState).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds question-answer search and mutation to the tracked Reader owner", async () => {
+    const owner = { apiVersion: 1 as const, requestId: "questionanswerreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_question", currentPageId: "page_20260801_question1",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    const candidate = { pageId: "page_20260801_answer001", title: "Answer", pageType: "note" as const,
+      updatedAt: "2026-08-01T11:00:00.000Z" };
+    const search = vi.fn(() => ({ ...owner, query: "Answer", status: "ready" as const, candidates: [candidate] }));
+    const render = { summary: { pageId: owner.currentPageId, title: "Question", pageType: "question" as const,
+      status: "active" as const, pagePath: "wiki/question.md", createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T12:00:00.000Z", sourceIds: [] }, html: "<h1>Question</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      questionAnswers: { canEdit: true, revision: `noteeditrev_${"b".repeat(64)}`, items: [candidate] } };
+    const change = vi.fn(async (_ownerId, changeRequest) => ({ ...changeRequest, status: "committed" as const,
+      operationId: "op_20260801_questionanswer1", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined,
+      vi.fn(), undefined, undefined, undefined, undefined, { search, change });
+    const sender = makeSender(62);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: owner.currentPageId });
+    await expect(handlers.get("notes.searchQuestionAnswers")!({ sender } as IpcMainInvokeEvent,
+      { ...owner, query: "Answer" })).resolves.toMatchObject({ status: "ready", candidates: [candidate] });
+    expect(() => NoteChangeQuestionAnswerResultSchema.parse({ ...owner, action: "add", targetPageId: candidate.pageId,
+      expectedTargetUpdatedAt: candidate.updatedAt, status: "committed", operationId: "op_20260801_questionanswer1", render }))
+      .not.toThrow();
+    const changed = await handlers.get("notes.changeQuestionAnswer")!({ sender } as IpcMainInvokeEvent,
+      { ...owner, action: "add", targetPageId: candidate.pageId, expectedTargetUpdatedAt: candidate.updatedAt });
+    expect(change).toHaveBeenCalledTimes(1);
+    expect(changed).toMatchObject({ status: "committed", operationId: "op_20260801_questionanswer1" });
+    expect(search).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ query: "Answer" }));
+    expect(change).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ action: "add" }));
     expect(refreshed).toHaveBeenCalledTimes(1);
   });
 

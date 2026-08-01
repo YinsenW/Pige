@@ -388,11 +388,12 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fixture.adapter.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
   });
 
-  it("records an allowed question-state update and converges Undo and Redo after restart", () => {
+  it("records an allowed question-state and answer-link update and converges Undo and Redo after restart", () => {
     const fixture = createAdapterFixture({ pageType: "question", allowQuestion: true });
     const opened = requireOpened(fixture.service);
     const markdown = opened.markdown
       .replace('  state: "open"', '  state: "answered"')
+      .replace("  answered_by: []", '  answered_by: ["page_20260801_answer001"]')
       .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z");
     const committed = fixture.service.save({
       requestId: "noteeditreq_questionstatefixture",
@@ -409,11 +410,13 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(restartedActivity.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
     expect(restartedActivity.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  state: "open"');
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("  answered_by: []");
     expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({
       operationId: operation.id,
       expectedRevisionId: operation.before?.id
     })).toMatchObject({ status: "redone", revisionId: committed.revisionId });
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  state: "answered"');
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  answered_by: ["page_20260801_answer001"]');
   });
 
   it("recovers only an exact interrupted forward Undo and remains idempotent", () => {
