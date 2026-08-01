@@ -522,6 +522,7 @@ export function App(): React.JSX.Element {
   const activityOpenSequence = useRef(0);
   const activityOpenInFlightRef = useRef<string | null>(null);
   const activityHistoryLoadInFlightRef = useRef(false);
+  const activityHistoryFilterRef = useRef<{ query?: string; status?: "applied" | "undone" }>({});
   const activityJobsRefreshSequence = useRef(0);
   const activityListRef = useRef<KnowledgeActivityListResult | null>(activityList);
   const readerSelectionProposalSequence = useRef(0);
@@ -865,6 +866,7 @@ export function App(): React.JSX.Element {
       };
       homeJobStateFilter.states.push("awaiting_review");
       homeJobStateFilter.states.push("cancel_requested");
+      const activityFilter = activeVaultIdRef.current === nextOnboarding.activeVault?.vaultId ? activityHistoryFilterRef.current : {};
       const [nextJobs, nextBackupJobs, nextActivities] = nextOnboarding.activeVault
         ? await Promise.all([
           window.pige.jobs.list({
@@ -877,7 +879,7 @@ export function App(): React.JSX.Element {
             classes: ["backup"],
             states: ["queued", "running", "cancel_requested", "waiting_dependency", "failed_retryable", "failed_final"]
           }).catch(() => undefined),
-          window.pige.activity.list({ limit: 20 }).catch(() => undefined)
+          window.pige.activity.list({ limit: 20, ...activityFilter }).catch(() => undefined)
         ])
         : [undefined, undefined, undefined];
       if (refreshId !== vaultRefreshSequence.current) return;
@@ -890,7 +892,7 @@ export function App(): React.JSX.Element {
         setSelectedNoteVaultId(null);
         setNoteLoadingPageId(null);
         setNoteAgentOpen(false);
-        setActivityList(null);
+        setActivityList(null); activityHistoryFilterRef.current = {};
         activityJobsRefreshSequence.current += 1;
         setActivityJobs([]);
         setActivityHistoryLoadingMore(false);
@@ -1983,7 +1985,7 @@ export function App(): React.JSX.Element {
     setActivityHistoryLoadingMore(true);
     setActivityHistoryLoadFailed(false);
     try {
-      const result = await window.pige.activity.list({ limit: 20, cursor });
+      const result = await window.pige.activity.list({ limit: 20, cursor, ...activityHistoryFilterRef.current });
       const latest = activityListRef.current;
       if (activeVaultIdRef.current !== vaultId || latest?.activeVaultId !== vaultId || latest.nextCursor !== cursor || result.activeVaultId !== vaultId) return false;
       const known = new Set(latest.activities.map(({ operationId }) => operationId));
@@ -2038,7 +2040,7 @@ export function App(): React.JSX.Element {
       ) void reloadSelectedCollection();
     } catch {
       try {
-        const current = await window.pige.activity.list({ limit: 20 });
+        const current = await window.pige.activity.list({ limit: 20, ...activityHistoryFilterRef.current });
         if (current.activeVaultId !== activeVaultIdRef.current) return;
         const exact = current.activities.find((activity) => activity.operationId === operationId);
         if (exact?.status === "undone") {
@@ -3188,20 +3190,18 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "history" ? (
             <ActivityHistorySettingsPanel
-              activeVaultId={activeVault?.vaultId ?? null}
-              activities={activityList?.activities ?? []}
-              jobs={activityJobs}
-              hasMore={activityList?.hasMore === true}
-              loadingMore={activityHistoryLoadingMore}
-              loadMoreFailed={activityHistoryLoadFailed}
+              activeVaultId={activeVault?.vaultId ?? null} activities={activityList?.activities ?? []}
+              total={activityList?.total ?? 0} filter={activityHistoryFilterRef.current}
+              jobs={activityJobs} hasMore={activityList?.hasMore === true}
+              loadingMore={activityHistoryLoadingMore} loadMoreFailed={activityHistoryLoadFailed}
               undoingId={activityUndoingId} redoingId={activityRedoingId} openingId={activityOpeningId}
               blockedIds={activityBlockedIds} locale={locale}
               onOpen={openActivityTarget}
               onRestored={async (pageId) => { const opened = await openNoteTarget(pageId, false); void refreshLibrary(); if (opened) { setView("library"); setSettingsOpen(false); } return opened; }}
               onUndo={undoActivity}
               onLoadMore={loadMoreActivityHistory}
-              onCancelJob={cancelJob}
-              onRetryJob={retryJob}
+              onSearchResult={(result, filter) => { activityHistoryFilterRef.current = filter; setActivityList(result); setActivityHistoryLoadFailed(false); }}
+              onCancelJob={cancelJob} onRetryJob={retryJob}
               onRefreshJobs={refreshActivityJobs}
               onRedo={redoActivity}
               t={t}

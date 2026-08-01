@@ -18,6 +18,7 @@ interface ActivityCursorBinding {
   readonly offset: number;
   readonly boundaryOperationId: string;
   readonly boundaryCreatedAt: string;
+  readonly filterHash: string;
 }
 
 export class KnowledgeActivityHistory {
@@ -37,16 +38,18 @@ export class KnowledgeActivityHistory {
     readonly summarize: (operation: OperationRecord) => KnowledgeActivitySummary | undefined;
   }): KnowledgeActivityListResult {
     const limit = clampLimit(input.request.limit);
+    const filterHash = createFilterHash(input.request);
     const activities = input.operations
       .map(input.summarize)
       .filter((summary): summary is KnowledgeActivitySummary => summary !== undefined)
+      .filter((summary) => matchesFilter(summary, input.request))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || left.operationId.localeCompare(right.operationId));
     const snapshotHash = createSnapshotHash(activities);
     let offset = 0;
     if (input.request.cursor) {
       const binding = this.#cursors.get(input.request.cursor);
       if (!binding || binding.activeVaultId !== input.activeVaultId || binding.vaultPath !== input.vaultPath ||
-        binding.snapshotHash !== snapshotHash || binding.offset < 1 ||
+        binding.snapshotHash !== snapshotHash || binding.filterHash !== filterHash || binding.offset < 1 ||
         activities[binding.offset - 1]?.operationId !== binding.boundaryOperationId ||
         activities[binding.offset - 1]?.createdAt !== binding.boundaryCreatedAt) {
         throw staleCursor();
@@ -63,7 +66,8 @@ export class KnowledgeActivityHistory {
       snapshotHash,
       offset: nextOffset,
       boundaryOperationId: activities[nextOffset - 1]!.operationId,
-      boundaryCreatedAt: activities[nextOffset - 1]!.createdAt
+      boundaryCreatedAt: activities[nextOffset - 1]!.createdAt,
+      filterHash
     }) : undefined;
     return {
       scannedAt: new Date().toISOString(),
@@ -86,6 +90,27 @@ export class KnowledgeActivityHistory {
     }
     return cursor;
   }
+}
+
+function matchesFilter(
+  activity: KnowledgeActivitySummary,
+  request: KnowledgeActivityListRequest
+): boolean {
+  if (request.status && activity.status !== request.status) return false;
+  const query = normalizeQuery(request.query ?? "");
+  if (!query) return true;
+  return normalizeQuery(`${activity.targetLabel ?? ""}\n${activity.kind}`).includes(query);
+}
+
+function createFilterHash(request: KnowledgeActivityListRequest): string {
+  return createHash("sha256").update(JSON.stringify({
+    query: normalizeQuery(request.query ?? ""),
+    status: request.status ?? null
+  })).digest("hex");
+}
+
+function normalizeQuery(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLocaleLowerCase();
 }
 
 function createSnapshotHash(activities: readonly KnowledgeActivitySummary[]): string {

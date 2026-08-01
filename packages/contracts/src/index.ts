@@ -1567,6 +1567,8 @@ export interface JobActionResult {
 export interface KnowledgeActivityListRequest {
   readonly limit?: number;
   readonly cursor?: string;
+  readonly query?: string;
+  readonly status?: "applied" | "undone";
 }
 
 export type KnowledgeActivityUndoUnavailableReason =

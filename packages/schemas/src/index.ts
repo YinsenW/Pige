@@ -1338,7 +1338,9 @@ export const KnowledgeActivityCursorSchema = z.string()
 
 export const KnowledgeActivityListRequestSchema = z.object({
   limit: z.number().int().min(1).max(20).optional(),
-  cursor: KnowledgeActivityCursorSchema.optional()
+  cursor: KnowledgeActivityCursorSchema.optional(),
+  query: z.string().trim().min(1).max(120).optional(),
+  status: z.enum(["applied", "undone"]).optional()
 }).strict();
 
 export const KnowledgeActivitySummarySchema = z.object({
@@ -11461,6 +11463,13 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
       message: "An applied create-page proposal must return its created page identity."
     });
   } else if (!expectsCreatedPage && result.createdPageId !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["createdPageId"],
+      message: "Only an applied create-page proposal may return a created page identity."
+    });
+  }
+  if (!expectsCreatedPage && result.createdPageId !== undefined) {
     context.addIssue({
       code: "custom",
       path: ["createdPageId"],
