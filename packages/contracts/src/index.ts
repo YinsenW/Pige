@@ -435,6 +435,8 @@ import type {
   NoteResolveInlineReferenceResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
+  PiPackageInspectRequest,
+  PiPackageInspectResult,
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
@@ -712,6 +714,10 @@ export type {
   PiPackageInstallResult,
   PiPackageInstallTaskId,
   PiPackageInstalledSummary,
+  PiPackageInstalledInspection,
+  PiPackageInspectRequest,
+  PiPackageInspectRequestId,
+  PiPackageInspectResult,
   PiPackageId,
   PiPackageCatalogEntry,
   PiPackageCatalogId,
@@ -2480,6 +2486,9 @@ export interface PigeDesktopApi {
     readonly catalogQuery: (
       request: PiPackageCatalogQueryRequest
     ) => Promise<PiPackageCatalogQueryResult>;
+    readonly inspect: (
+      request: PiPackageInspectRequest
+    ) => Promise<PiPackageInspectResult>;
     readonly install: (
       request: PiPackageInstallRequest
     ) => Promise<PiPackageInstallResult>;

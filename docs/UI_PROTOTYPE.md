@@ -1169,7 +1169,9 @@ and boundaries; selection only fills install. Disabled rows offer Update, one pr
 metadata-only Pin/Unpin; pinned rows disable maintenance. Mutations serialize and adopt registry
 truth while failure retains drafts/inventory. Effects confirm; pin/unpin does not. No path/code or
 runtime authority. Verified private-trash candidates offer Restore; success returns disabled and
-closed outcomes adopt authoritative registry truth.
+closed outcomes adopt authoritative registry truth. An installed row can open one focusable,
+pathless Details region after Main revalidates its managed tree and manifest. Exact reviewed catalog
+metadata is labeled reviewed; unmatched installs remain visibly unknown rather than inheriting trust.
 
 ### Backup And Restore
 

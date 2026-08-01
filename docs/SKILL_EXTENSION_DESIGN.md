@@ -175,7 +175,9 @@ filesystem/cloud disclosure. Selection grants no authority. Confirmed install pu
 after link/dependency/hook/bin/native rejection; trash-uninstall adopts once. Exact update retains
 one offline rollback tree. Restart-safe pin blocks maintenance before effects; unpin restores
 receipt-derived eligibility. Exact private-trash restore revalidates and returns disabled without
-network or execution. IPC exposes no code/path/body. Enable/runtime stay open.
+network or execution. Installed-row inspection revalidates the exact managed tree and descriptor;
+it shows reviewed catalog disclosure only for an exact identity match and otherwise stays honestly
+`unknown`. IPC exposes no code/path/body. Enable/runtime stay open.
 
 The Feishu recipe binds CLI/package/native, 27-Skill/444-file identities, hashes, destinations,
 overwrite/link policy and environment before confirmation; opaque `npx` or later discovery fail.

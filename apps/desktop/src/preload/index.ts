@@ -295,6 +295,8 @@ import type {
   PigeDesktopApi,
   PiPackageInstallRequest,
   PiPackageInstallResult,
+  PiPackageInspectRequest,
+  PiPackageInspectResult,
   PiPackageCatalogQueryRequest,
   PiPackageCatalogQueryResult,
   PiPackageRegistryQueryResult,
@@ -698,6 +700,8 @@ import {
   PermissionSetDefaultModeResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
+  PiPackageInspectRequestSchema,
+  PiPackageInspectResultSchema,
   PiPackageCatalogQueryRequestSchema,
   PiPackageCatalogQueryResultSchema,
   PiPackageRegistryQueryResultSchema,
@@ -2269,6 +2273,11 @@ const api: PigeDesktopApi = {
       PiPackageCatalogQueryResultSchema.parse(await ipcRenderer.invoke(
         "piPackages.catalogQuery",
         PiPackageCatalogQueryRequestSchema.parse(request)
+      )),
+    inspect: async (request: PiPackageInspectRequest): Promise<PiPackageInspectResult> =>
+      PiPackageInspectResultSchema.parse(await ipcRenderer.invoke(
+        "piPackages.inspect",
+        PiPackageInspectRequestSchema.parse(request)
       )),
     install: async (request: PiPackageInstallRequest): Promise<PiPackageInstallResult> =>
       PiPackageInstallResultSchema.parse(await ipcRenderer.invoke(

@@ -827,6 +827,8 @@ export const PiPackageSetEnabledRequestIdSchema = z.string()
   .regex(/^pi_package_enable_request_[a-z0-9]{16,64}$/u);
 export const PiPackageRestoreRequestIdSchema = z.string()
   .regex(/^pi_package_restore_request_[a-z0-9]{16,64}$/u);
+export const PiPackageInspectRequestIdSchema = z.string()
+  .regex(/^pi_package_inspect_request_[a-z0-9]{16,64}$/u);
 export const PiPackageRestoreContextIdSchema = z.string()
   .regex(/^pi_package_restore_context_v1_[a-f0-9]{32,64}$/u);
 export const PiPackageRollbackIdSchema = z.string()
@@ -3500,6 +3502,55 @@ export const PiPackageCatalogQueryResultSchema = z.discriminatedUnion("status", 
     }
   }
 });
+
+export const PiPackageInstalledInspectionSchema = z.object({
+  packageId: PiPackageIdSchema,
+  packageName: PiPackageNameSchema,
+  version: PiPackageVersionSchema,
+  integrity: PiPackageIntegritySchema,
+  installedAt: z.string().datetime({ offset: true }),
+  state: z.enum(["installed_disabled", "installed_enabled"]),
+  packageTypes: z.array(PiPackageTypeSchema).min(1).max(4).readonly(),
+  dependencyCount: z.number().int().min(0).max(256),
+  enabled: z.boolean(),
+  pinned: z.boolean(),
+  source: z.literal("npm"),
+  installationTrust: z.literal("community"),
+  integrityStatus: z.literal("verified"),
+  catalogDisclosure: z.discriminatedUnion("status", [
+    z.object({ status: z.literal("reviewed"), entry: PiPackageCatalogEntrySchema }).strict(),
+    z.object({ status: z.literal("unknown") }).strict()
+  ])
+}).strict().superRefine((inspection, context) => {
+  if (inspection.enabled !== (inspection.state === "installed_enabled")) {
+    context.addIssue({ code: "custom", path: ["state"], message: "Package state must match its enabled projection." });
+  }
+  if (inspection.catalogDisclosure.status === "reviewed") {
+    const entry = inspection.catalogDisclosure.entry;
+    if (entry.packageName !== inspection.packageName || entry.version !== inspection.version ||
+      entry.integrity !== inspection.integrity ||
+      JSON.stringify(entry.packageTypes) !== JSON.stringify(inspection.packageTypes)) {
+      context.addIssue({ code: "custom", path: ["catalogDisclosure"], message: "Reviewed disclosure must match the installed package identity." });
+    }
+  }
+});
+export const PiPackageInspectRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: PiPackageInspectRequestIdSchema,
+  expectedRegistryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  packageId: PiPackageIdSchema
+}).strict();
+const PiPackageInspectResultIdentitySchema = PiPackageInspectRequestSchema.omit({ expectedRegistryRevision: true });
+export const PiPackageInspectResultSchema = z.discriminatedUnion("status", [
+  PiPackageInspectResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    registryRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    inspection: PiPackageInstalledInspectionSchema
+  }).strict(),
+  PiPackageInspectResultIdentitySchema.extend({ status: z.literal("stale"), registry: PiPackageRegistrySummarySchema }).strict(),
+  PiPackageInspectResultIdentitySchema.extend({ status: z.literal("not_found"), registry: PiPackageRegistrySummarySchema }).strict(),
+  PiPackageInspectResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
 
 export const SkillManifestSchema = z.object({
   id: SkillIdSchema,
@@ -13243,6 +13294,7 @@ export type PiPackageRollbackRequestId = z.infer<typeof PiPackageRollbackRequest
 export type PiPackageSetPinnedRequestId = z.infer<typeof PiPackageSetPinnedRequestIdSchema>;
 export type PiPackageSetEnabledRequestId = z.infer<typeof PiPackageSetEnabledRequestIdSchema>;
 export type PiPackageRestoreRequestId = z.infer<typeof PiPackageRestoreRequestIdSchema>;
+export type PiPackageInspectRequestId = z.infer<typeof PiPackageInspectRequestIdSchema>;
 export type PiPackageRestoreContextId = z.infer<typeof PiPackageRestoreContextIdSchema>;
 export type PiPackageRollbackId = z.infer<typeof PiPackageRollbackIdSchema>;
 export type PiPackageCatalogQueryRequestId = z.infer<typeof PiPackageCatalogQueryRequestIdSchema>;
@@ -13273,6 +13325,9 @@ export type PiPackageRestoreResult = z.infer<typeof PiPackageRestoreResultSchema
 export type PiPackageCatalogEntry = z.infer<typeof PiPackageCatalogEntrySchema>;
 export type PiPackageCatalogQueryRequest = z.infer<typeof PiPackageCatalogQueryRequestSchema>;
 export type PiPackageCatalogQueryResult = z.infer<typeof PiPackageCatalogQueryResultSchema>;
+export type PiPackageInstalledInspection = z.infer<typeof PiPackageInstalledInspectionSchema>;
+export type PiPackageInspectRequest = z.infer<typeof PiPackageInspectRequestSchema>;
+export type PiPackageInspectResult = z.infer<typeof PiPackageInspectResultSchema>;
 export type KnowledgeActivityPageTarget = z.infer<typeof KnowledgeActivityPageTargetSchema>;
 export type KnowledgeActivityCollectionTarget = z.infer<typeof KnowledgeActivityCollectionTargetSchema>;
 export type KnowledgeActivityTarget = z.infer<typeof KnowledgeActivityTargetSchema>;

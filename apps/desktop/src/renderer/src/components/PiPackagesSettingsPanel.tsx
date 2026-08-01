@@ -5,6 +5,8 @@ import type {
   PiPackageCatalogQueryResult,
   PiPackageInstallRequest,
   PiPackageInstallResult,
+  PiPackageInspectRequest,
+  PiPackageInspectResult,
   PiPackageRegistryQueryResult,
   PiPackageRegistrySummary,
   PiPackageRestorableSummary,
@@ -22,10 +24,12 @@ import type {
   PiPackageUpdateResult
 } from "@pige/contracts";
 import { PigeIcon } from "./PigeIcon";
+import { PiPackageInstalledDetails } from "./PiPackageInstalledDetails";
 
 export interface PiPackagesApi {
   summary: () => Promise<PiPackageRegistryQueryResult>;
   catalogQuery: (request: PiPackageCatalogQueryRequest) => Promise<PiPackageCatalogQueryResult>;
+  inspect?: (request: PiPackageInspectRequest) => Promise<PiPackageInspectResult>;
   install: (request: PiPackageInstallRequest) => Promise<PiPackageInstallResult>;
   uninstall: (request: PiPackageUninstallRequest) => Promise<PiPackageUninstallResult>;
   restore: (request: PiPackageRestoreRequest) => Promise<PiPackageRestoreResult>;
@@ -734,6 +738,14 @@ export function PiPackagesSettingsPanel(props: {
                   ) : null}
                 </div>
                 <div className="settings-row-control">
+                  {props.api.inspect ? <PiPackageInstalledDetails
+                    inspect={props.api.inspect}
+                    item={item}
+                    registryRevision={registry.revision}
+                    disabled={mutationBusy || readState !== "ready"}
+                    onRegistry={(next) => setRegistry(next)}
+                    t={props.t}
+                  /> : null}
                   {item.canEnable && props.api.setEnabled ? (
                     <button
                       className="settings-button"
