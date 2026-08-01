@@ -346,6 +346,7 @@ import { EntityTypeService } from "./services/entity-type-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { ConceptParentService } from "./services/concept-parent-service";
+import { TopicParentService } from "./services/topic-parent-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
@@ -501,6 +502,7 @@ let entityTypeService: EntityTypeService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
 let conceptParentService: ConceptParentService | undefined;
+let topicParentService: TopicParentService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteAliasService: NoteAliasService | undefined;
 let noteMergeService: NoteMergeService | undefined;
@@ -1962,6 +1964,16 @@ const getConceptParentService = (): ConceptParentService => {
     () => getVaultService().activeVaultPath()
   );
   return conceptParentService;
+};
+const getTopicParentService = (): TopicParentService => {
+  topicParentService ??= new TopicParentService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowTopic: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  return topicParentService;
 };
 const getNoteTagService = (): NoteTagService => {
   noteTagService ??= new NoteTagService(
@@ -3490,6 +3502,7 @@ registerReaderIpc({
   getQuestionAnswerService,
   getClaimContradictionService,
   getConceptParentService,
+  getTopicParentService,
   getNoteTagService,
   getNoteAliasService,
   getNoteMergeService,
@@ -4027,6 +4040,13 @@ app.whenReady().then(async () => {
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
       allowConcept: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  topicParentService = new TopicParentService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowTopic: true
     }),
     () => getVaultService().activeVaultPath()
   );

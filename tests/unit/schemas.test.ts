@@ -187,6 +187,10 @@ import {
   NoteSearchConceptParentsResultSchema,
   NoteChangeConceptParentRequestSchema,
   NoteChangeConceptParentResultSchema,
+  NoteSearchTopicParentsRequestSchema,
+  NoteSearchTopicParentsResultSchema,
+  NoteChangeTopicParentRequestSchema,
+  NoteChangeTopicParentResultSchema,
   NoteOpenSearchMatchRequestSchema,
   NoteOpenSearchMatchResultSchema,
   NoteArchiveCurrentRequestSchema,
@@ -5270,6 +5274,26 @@ describe("schemas", () => {
     expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
     expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, action: "remove" })).toThrow();
     expect(NoteChangeConceptParentResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
+  });
+
+  it("keeps topic hierarchy search and mutation renderer-safe and revision-fenced", () => {
+    const identity = { apiVersion: 1 as const, requestId: "topicparentreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_topics", currentPageId: "page_20260801_topic001",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    const item = { pageId: "page_20260801_topic002", title: "Broader topic",
+      updatedAt: "2026-08-01T11:00:00.000Z" };
+    const search = { ...identity, query: "broader" };
+    expect(NoteSearchTopicParentsRequestSchema.parse(search)).toEqual(search);
+    expect(NoteSearchTopicParentsResultSchema.parse({ ...search, status: "ready", candidates: [item] }))
+      .toMatchObject({ status: "ready", candidates: [item] });
+    const add = { ...identity, action: "add" as const, targetPageId: item.pageId,
+      expectedTargetUpdatedAt: item.updatedAt };
+    expect(NoteChangeTopicParentRequestSchema.parse(add)).toEqual(add);
+    expect(() => NoteChangeTopicParentRequestSchema.parse({ ...add, localPath: "/private/topic.md" })).toThrow();
+    expect(() => NoteChangeTopicParentRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
+    expect(() => NoteChangeTopicParentRequestSchema.parse({ ...add, action: "remove" })).toThrow();
+    expect(NoteChangeTopicParentResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("keeps Markdown editor identity revision-fenced and drafts exact", () => {

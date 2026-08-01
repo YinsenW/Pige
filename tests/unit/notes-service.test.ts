@@ -197,6 +197,32 @@ describe("notes service", () => {
       .resolves.not.toHaveProperty("claimConfidence");
   });
 
+  it("projects only current stable parent Topics for an active Topic page", async () => {
+    const { vaultPath, vault } = makeVault();
+    const pageId = "page_20260801_topicproj1";
+    const parentPageId = "page_20260801_topicproj2";
+    writePage({ vaultPath, fileName: "parent-topic.md", pageId: parentPageId, title: "Parent topic",
+      pageType: "topic", extraFrontmatter: "topics: []" });
+    writePage({ vaultPath, fileName: "topic.md", pageId, title: "Topic", pageType: "topic",
+      extraFrontmatter: `topics: ["${parentPageId}"]` });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId }, OWNER_ID);
+    expect(rendered.topicParents).toEqual({
+      canEdit: true,
+      revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u),
+      items: [expect.objectContaining({ pageId: parentPageId, title: "Parent topic" })]
+    });
+    expect(notes.resolveManagedPageTarget(OWNER_ID, {
+      activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId!,
+      expectedRevision: rendered.topicParents!.revision
+    }, "topic")).toMatchObject({ status: "ready", pageId, title: "Topic" });
+
+    writePage({ vaultPath, fileName: "malformed-topic.md", pageId: "page_20260801_topicproj3",
+      title: "Malformed topic", pageType: "topic", extraFrontmatter: "topics: []\ntopics: []" });
+    await expect(notes.render({ pageId: "page_20260801_topicproj3" }, OWNER_ID))
+      .resolves.not.toHaveProperty("topicParents");
+  });
+
   it("projects five current SourceRecord summaries while retaining failures and omitting unsafe names", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260709_metadata123";

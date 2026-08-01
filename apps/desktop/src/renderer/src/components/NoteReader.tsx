@@ -13,6 +13,8 @@ import type {
   NoteChangeClaimContradictionRequest, NoteChangeClaimContradictionResult,
   NoteSearchConceptParentsRequest, NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest, NoteChangeConceptParentResult,
+  NoteSearchTopicParentsRequest, NoteSearchTopicParentsResult,
+  NoteChangeTopicParentRequest, NoteChangeTopicParentResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -37,6 +39,7 @@ import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
 import { ReaderConceptParents } from "./ReaderConceptParents";
+import { ReaderTopicParents } from "./ReaderTopicParents";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 
 function readerSelectionEndpoint(
@@ -120,6 +123,12 @@ export function NoteReader(props: {
   readonly onChangeConceptParent?: (
     request: NoteChangeConceptParentRequest
   ) => Promise<NoteChangeConceptParentResult>;
+  readonly onSearchTopicParents?: (
+    request: NoteSearchTopicParentsRequest
+  ) => Promise<NoteSearchTopicParentsResult>;
+  readonly onChangeTopicParent?: (
+    request: NoteChangeTopicParentRequest
+  ) => Promise<NoteChangeTopicParentResult>;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -946,6 +955,11 @@ export function NoteReader(props: {
       {props.activeVaultId && props.onSearchConceptParents && props.onChangeConceptParent && props.onQuestionStateChanged ? (
         <ReaderConceptParents activeVaultId={props.activeVaultId} note={props.note}
           search={props.onSearchConceptParents} change={props.onChangeConceptParent}
+          onCommitted={props.onQuestionStateChanged} t={props.t} />
+      ) : null}
+      {props.activeVaultId && props.onSearchTopicParents && props.onChangeTopicParent && props.onQuestionStateChanged ? (
+        <ReaderTopicParents activeVaultId={props.activeVaultId} note={props.note}
+          search={props.onSearchTopicParents} change={props.onChangeTopicParent}
           onCommitted={props.onQuestionStateChanged} t={props.t} />
       ) : null}
       <ReaderInlineReferenceSurface

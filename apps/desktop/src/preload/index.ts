@@ -206,6 +206,10 @@ import type {
   NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest,
   NoteChangeConceptParentResult,
+  NoteSearchTopicParentsRequest,
+  NoteSearchTopicParentsResult,
+  NoteChangeTopicParentRequest,
+  NoteChangeTopicParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -767,6 +771,12 @@ import {
   NoteSearchConceptParentsResultSchema,
   NoteChangeConceptParentRequestSchema,
   NoteChangeConceptParentResultSchema,
+  NOTE_SEARCH_TOPIC_PARENTS_CHANNEL,
+  NOTE_CHANGE_TOPIC_PARENT_CHANNEL,
+  NoteSearchTopicParentsRequestSchema,
+  NoteSearchTopicParentsResultSchema,
+  NoteChangeTopicParentRequestSchema,
+  NoteChangeTopicParentResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -2392,6 +2402,20 @@ const api: PigeDesktopApi = {
       NoteChangeConceptParentResultSchema.parse(await ipcRenderer.invoke(
         NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
         NoteChangeConceptParentRequestSchema.parse(request)
+      )),
+    searchTopicParents: async (
+      request: NoteSearchTopicParentsRequest
+    ): Promise<NoteSearchTopicParentsResult> =>
+      NoteSearchTopicParentsResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_TOPIC_PARENTS_CHANNEL,
+        NoteSearchTopicParentsRequestSchema.parse(request)
+      )),
+    changeTopicParent: async (
+      request: NoteChangeTopicParentRequest
+    ): Promise<NoteChangeTopicParentResult> =>
+      NoteChangeTopicParentResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_TOPIC_PARENT_CHANNEL,
+        NoteChangeTopicParentRequestSchema.parse(request)
       )),
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(
