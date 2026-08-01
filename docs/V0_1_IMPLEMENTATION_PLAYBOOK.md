@@ -576,7 +576,8 @@ Build:
 - [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
 - [B7.07 -> E7.05] Secret and authority-change guards before autonomous vault-memory persistence;
   durable `create_memory` Activity/Undo and restart adoption close the reversible effect.
-- [B7.08 -> E7.03] Bounded vault history reopens exact timelines; packaged proof remains.
+- [B7.08 -> E7.03] Bounded vault history searches complete durable user/assistant messages,
+  projects one safe match excerpt, and reopens the exact matched event without replay; packaged proof remains.
 - [B7.09 -> E7.04] Implemented deterministic 90-day compaction for settled successful
   Job detail with exact reference retention, `compact_job` attribution, CAS drift
   rejection, and Operation-first restart adoption; conversation events remain intact.

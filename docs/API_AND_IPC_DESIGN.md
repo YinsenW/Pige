@@ -650,8 +650,10 @@ separate evidence refs; this combination grants no ambient search, Dataset, URL 
 capability. `file_drop` remains unscoped.
 
 `agent.conversationHistory` returns <=50 safe summaries; its optional <=120-code-point query
-matches only title/`safePreview`. Open reuses `agent.conversation`, the sole follow-up authority.
-Cursors bind vault/query/snapshot/boundary; drift fails before append. Trash/restore revision-bind
+matches title, `safePreview`, and complete durable user/assistant message text. A match projects
+only its event identity, role, timestamp, and one bounded safe excerpt. Open reuses
+`agent.conversation` and its immutable earlier-page cursors to reveal that exact event; it remains
+the sole follow-up authority. Cursors bind vault/query/snapshot/boundary; drift fails before append. Trash/restore revision-bind
 exact JSONL; restart never replays. `agent.setConversationTitle` tail/title-revision-binds atomic
 manifest-only metadata; stale returns authority. Export rechecks the tail into one Main-selected
 JSON; closed results change no history.

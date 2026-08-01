@@ -328,7 +328,10 @@ Rules:
 - Conversation lists load by recent metadata first.
 - Long messages are paged.
 - Large pasted source bodies are referenced, not duplicated.
-- Search over conversation history uses indexes.
+- Conversation search currently scans only the bounded local history discovery window: at most
+  256 JSONL files, 32 MiB aggregate, and 8 MiB per conversation. It searches visible durable
+  user/assistant text without dereferencing source bodies; a future rebuildable index may replace
+  this scan without changing the safe result or cursor contract.
 - Conversation compaction keeps readable events and references.
 - Chat timeline should not render thousands of events at once.
 

@@ -5402,10 +5402,7 @@ function HomeComposer(props: {
   }, [proposalReview, props.activeVault?.vaultId]);
 
   const openConversationView = async (
-    conversationId: string,
-    view: "current" | "history",
-    expectedTailEventId: string,
-    searchMatchEventId?: string
+    conversationId: string, view: "current" | "history", expectedTailEventId: string, searchMatchEventId?: string
   ): Promise<boolean> => {
     const result = await refreshConversationResult(conversationId, {
       conversationId,
@@ -5420,11 +5417,8 @@ function HomeComposer(props: {
     inlineReferenceSequence.current += 1;
     setSelectedNote(null);
     setSelectedNoteRelated(null);
-    if (searchMatchEventId) {
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => void conversationPagination.revealEvent(searchMatchEventId));
-      });
-    }
+    if (searchMatchEventId) window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => void conversationPagination.revealEvent(searchMatchEventId)));
     return true;
   };
 
