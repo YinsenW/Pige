@@ -6,6 +6,7 @@ import type {
   MemorySummary,
 } from "@pige/schemas";
 import { PigeIcon } from "./PigeIcon";
+import { AgentMemoryRecordBrowser } from "./AgentMemoryRecordBrowser";
 import { AgentMemoryTrashRestorePanel } from "./AgentMemoryTrashRestorePanel";
 
 type Translate = (key: string) => string;
@@ -555,6 +556,7 @@ export function AgentMemorySettingsPanel(
       ? [...summary.records, editDraft.record]
       : summary.records
     : [];
+  const pinnedRecordId = editDraft?.memoryId;
 
   return (
     <section
@@ -636,11 +638,17 @@ export function AgentMemorySettingsPanel(
             </button>
           </div>
         ) : summary && displayedRecords.length > 0 ? (
-          <div
-            className="settings-card"
-            data-memory-revision={summary.revision}
+          <AgentMemoryRecordBrowser
+            ownerIdentity={`${summary.activeVaultId}:${props.focusRequest?.operationId ?? "browse"}`}
+            records={displayedRecords}
+            {...(pinnedRecordId ? { pinnedRecordId } : {})}
+            t={props.t}
           >
-            {displayedRecords.map((record) => {
+            {(visibleRecords) => <div
+              className="settings-card"
+              data-memory-revision={summary.revision}
+            >
+            {visibleRecords.map((record) => {
               const editing =
                 editDraft?.activeVaultId === summary.activeVaultId &&
                 editDraft.memoryId === record.id;
@@ -840,7 +848,8 @@ export function AgentMemorySettingsPanel(
               </div>
               );
             })}
-          </div>
+            </div>}
+          </AgentMemoryRecordBrowser>
         ) : readState === "ready" ? (
           <MemoryStateCard
             icon="memory"
