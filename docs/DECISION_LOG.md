@@ -1,7 +1,7 @@
 # Decision Log
 
 Status: Active decision ledger
-Last reviewed: 2026-07-22
+Last reviewed: 2026-08-01
 
 ## 1. Purpose
 
@@ -4418,6 +4418,34 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/UI_PROTOTYPE.md`
+
+### D-20260801-Persisted-Dictation-Language
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Pige persists the user's dictation language as a machine-local preference, either following
+the app language or selecting one supported UI language. The preference affects only new
+on-device speech sessions and does not authorize microphone access or language downloads.
+
+Rationale:
+
+Voice-input language and UI language are distinct. Persisting the choice prevents repeated
+manual correction while retaining explicit permission and asset-install boundaries.
+
+Consequences:
+
+- Home probes, installs resources for, and starts each new speech session with one resolved language.
+- Existing sessions are not rewritten, and changing the preference never downloads assets.
+- The preference is not backed up and no audio enters storage, diagnostics, backup, or model calls.
+
+References:
+
+- `docs/I18N_DESIGN.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
 
 ## 4. Deferred Decisions
 

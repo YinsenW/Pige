@@ -93,6 +93,10 @@ import type {
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
+  DictationLanguagePreferenceRequest,
+  DictationLanguagePreferenceResult,
+  SetDictationLanguagePreferenceRequest,
+  SetDictationLanguagePreferenceResult,
   KnowledgeTreeResult,
   LibraryBrowseRequest,
   LibraryBrowseResult,
@@ -568,6 +572,12 @@ import {
   LocalSemanticRetrievalRemoveResultSchema,
   LocalSemanticRetrievalStatusRequestSchema,
   LocalSemanticRetrievalStatusSchema,
+  DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+  DictationLanguagePreferenceRequestSchema,
+  DictationLanguagePreferenceResultSchema,
+  SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+  SetDictationLanguagePreferenceRequestSchema,
+  SetDictationLanguagePreferenceResultSchema,
   OCR_LANGUAGE_PREFERENCE_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
@@ -2210,6 +2220,24 @@ const api: PigeDesktopApi = {
       )
   },
   localCapabilities: {
+    dictationLanguagePreference: async (
+      request: DictationLanguagePreferenceRequest
+    ): Promise<DictationLanguagePreferenceResult> =>
+      DictationLanguagePreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+          DictationLanguagePreferenceRequestSchema.parse(request)
+        )
+      ),
+    setDictationLanguagePreference: async (
+      request: SetDictationLanguagePreferenceRequest
+    ): Promise<SetDictationLanguagePreferenceResult> =>
+      SetDictationLanguagePreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+          SetDictationLanguagePreferenceRequestSchema.parse(request)
+        )
+      ),
     ocrLanguagePreference: async (
       request: OcrLanguagePreferenceRequest
     ): Promise<OcrLanguagePreferenceResult> =>

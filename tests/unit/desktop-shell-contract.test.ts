@@ -1020,6 +1020,8 @@ describe("desktop shell build contract", () => {
     const helperInfo = fs.readFileSync(path.resolve("apps/desktop/native/macos-speech/Info.plist"), "utf8");
 
     expect(contractsSource).toContain("readonly speech: {");
+    expect(contractsSource).toContain("readonly dictationLanguagePreference: (");
+    expect(contractsSource).toContain("readonly setDictationLanguagePreference: (");
     expect(contractsSource).not.toContain("audioBytes");
     expect(mainSource).not.toContain('systemPreferences.askForMediaAccess("microphone")');
     expect(mainSource).not.toContain('systemPreferences.getMediaAccessStatus("microphone")');
@@ -1037,6 +1039,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("SpeechAssetInstallEventSchema.safeParse(value)");
     expect(preloadSource).toContain('ipcRenderer.invoke("speech.start", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("speech.installLanguageAsset", parsedRequest)');
+    expect(preloadSource).toContain("DICTATION_LANGUAGE_PREFERENCE_CHANNEL");
+    expect(preloadSource).toContain("SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL");
     expect(preloadSource).not.toContain("PIGE_PACKAGED_RESOURCES_PATH");
     expect(builderConfig).toContain("NSMicrophoneUsageDescription:");
   });

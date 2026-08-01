@@ -331,6 +331,7 @@ import {
   LocalSettingsOcrLanguagePreferenceStore,
   OcrLanguagePreferenceService
 } from "./services/ocr-language-preference-service";
+import { DictationLanguagePreferenceService } from "./services/dictation-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
 import { SourceOriginalReconnectService } from "./services/source-original-reconnect-service";
@@ -470,6 +471,7 @@ let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
+let dictationLanguagePreferenceService: DictationLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
 let updateService: UpdateService | undefined;
 let skillRegistryService: SkillRegistryService | undefined;
@@ -1699,6 +1701,11 @@ const getOcrLanguagePreferenceService = (): OcrLanguagePreferenceService => {
     new LocalSettingsOcrLanguagePreferenceStore(getLocalSettingsStore())
   );
   return ocrLanguagePreferenceService;
+};
+
+const getDictationLanguagePreferenceService = (): DictationLanguagePreferenceService => {
+  dictationLanguagePreferenceService ??= new DictationLanguagePreferenceService(getLocalSettingsStore());
+  return dictationLanguagePreferenceService;
 };
 
 const getLibraryService = (): LibraryService => {
@@ -3046,6 +3053,8 @@ registerMemoryIpc({
 });
 registerLocalCapabilitiesIpc({
   ipcMain,
+  dictationLanguagePreference: (request) => getDictationLanguagePreferenceService().read(request),
+  setDictationLanguagePreference: (request) => getDictationLanguagePreferenceService().set(request),
   ocrLanguagePreference: (request) => getOcrLanguagePreferenceService().read(request),
   setOcrLanguagePreference: (request) => getOcrLanguagePreferenceService().set(request),
   paddleOcrSummary: (request) => getPaddleOcrLifecycleService().summary(request),

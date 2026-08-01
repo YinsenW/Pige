@@ -4858,6 +4858,67 @@ export const SetOcrLanguagePreferenceResultSchema = z.discriminatedUnion("status
   }).strict()
 ]);
 
+export const DICTATION_LANGUAGE_PREFERENCE_CHANNEL =
+  "localCapabilities.dictationLanguagePreference" as const;
+export const SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL =
+  "localCapabilities.setDictationLanguagePreference" as const;
+export const DictationLanguagePreferenceRequestIdSchema = z.string()
+  .regex(/^dictlangreq_[a-z0-9]{16,64}$/u);
+export const DictationLanguagePreferenceSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("automatic") }).strict(),
+  z.object({
+    mode: z.literal("preferred"),
+    language: LocaleSchema
+  }).strict()
+]);
+export const DictationLanguagePreferenceMachineSettingsSchema = z.object({
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: DictationLanguagePreferenceSchema
+}).strict();
+export const DictationLanguagePreferenceSummarySchema =
+  DictationLanguagePreferenceMachineSettingsSchema.extend({
+    apiVersion: z.literal(1),
+    appliesTo: z.literal("new_speech_sessions")
+  }).strict();
+export const DictationLanguagePreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DictationLanguagePreferenceRequestIdSchema
+}).strict();
+const DictationLanguagePreferenceResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DictationLanguagePreferenceRequestIdSchema
+}).strict();
+export const DictationLanguagePreferenceResultSchema = z.discriminatedUnion("status", [
+  DictationLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    summary: DictationLanguagePreferenceSummarySchema
+  }).strict(),
+  DictationLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+export const SetDictationLanguagePreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DictationLanguagePreferenceRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  preference: DictationLanguagePreferenceSchema
+}).strict();
+const DictationLanguagePreferenceAuthoritativeResultSchema =
+  DictationLanguagePreferenceResultIdentitySchema.extend({
+    summary: DictationLanguagePreferenceSummarySchema
+  }).strict();
+export const SetDictationLanguagePreferenceResultSchema = z.discriminatedUnion("status", [
+  DictationLanguagePreferenceAuthoritativeResultSchema.extend({
+    status: z.literal("committed")
+  }).strict(),
+  DictationLanguagePreferenceAuthoritativeResultSchema.extend({
+    status: z.literal("stale")
+  }).strict(),
+  DictationLanguagePreferenceResultIdentitySchema.extend({
+    status: z.literal("failed")
+  }).strict()
+]);
+
 export const MachineLocalSettingsSchema = z.object({
   schemaVersion: z.literal(1),
   activeVaultPath: z.string().min(1).optional(),
@@ -4867,6 +4928,7 @@ export const MachineLocalSettingsSchema = z.object({
   window: WindowPreferencesSchema.optional(),
   updates: UpdateMachineSettingsSchema.optional(),
   ocrLanguagePreference: OcrLanguagePreferenceMachineSettingsSchema.optional(),
+  dictationLanguagePreference: DictationLanguagePreferenceMachineSettingsSchema.optional(),
   dismissedFirstHomeVaultIds: z.array(VaultIdSchema).max(32).optional(),
   recentVaults: z.array(
     z.object({
@@ -11364,6 +11426,14 @@ export type OcrLanguagePreferenceRequest = z.infer<typeof OcrLanguagePreferenceR
 export type OcrLanguagePreferenceResult = z.infer<typeof OcrLanguagePreferenceResultSchema>;
 export type SetOcrLanguagePreferenceRequest = z.infer<typeof SetOcrLanguagePreferenceRequestSchema>;
 export type SetOcrLanguagePreferenceResult = z.infer<typeof SetOcrLanguagePreferenceResultSchema>;
+export type DictationLanguagePreferenceRequestId = z.infer<typeof DictationLanguagePreferenceRequestIdSchema>;
+export type DictationLanguagePreference = z.infer<typeof DictationLanguagePreferenceSchema>;
+export type DictationLanguagePreferenceMachineSettings = z.infer<typeof DictationLanguagePreferenceMachineSettingsSchema>;
+export type DictationLanguagePreferenceSummary = z.infer<typeof DictationLanguagePreferenceSummarySchema>;
+export type DictationLanguagePreferenceRequest = z.infer<typeof DictationLanguagePreferenceRequestSchema>;
+export type DictationLanguagePreferenceResult = z.infer<typeof DictationLanguagePreferenceResultSchema>;
+export type SetDictationLanguagePreferenceRequest = z.infer<typeof SetDictationLanguagePreferenceRequestSchema>;
+export type SetDictationLanguagePreferenceResult = z.infer<typeof SetDictationLanguagePreferenceResultSchema>;
 export type PaddleOcrRequestId = z.infer<typeof PaddleOcrRequestIdSchema>;
 export type PaddleOcrLifecycleState = z.infer<typeof PaddleOcrLifecycleStateSchema>;
 export type PaddleOcrLifecycleAction = z.infer<typeof PaddleOcrLifecycleActionSchema>;

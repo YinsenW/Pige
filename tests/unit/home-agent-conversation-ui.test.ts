@@ -734,6 +734,34 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("uses the persisted dictation language instead of the app locale for a new speech session", async () => {
+    const dom = createDom(420);
+    const harness = createHarness(undefined);
+    harness.dictationLanguagePreference = { mode: "preferred", language: "ja" };
+    harness.speechAvailability = {
+      status: "supported",
+      languageTag: "ja",
+      permission: "granted",
+      canOpenSystemSettings: true
+    };
+    harness.speechStartResult = {
+      status: "started",
+      requestId: "speechreq_1234567890abcdef",
+      sessionId: "speech_1234567890abcdef",
+      languageTag: "ja",
+      metering: "available"
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await clickButtonByAriaLabel(dom, container, enMessages["home.voice.start"]);
+    await waitFor(dom, () => harness.speechStartRequests.length === 1);
+    expect(harness.speechAvailabilityRequests).toEqual([{ languageTag: "ja" }]);
+    expect(harness.speechStartRequests[0]).toMatchObject({ languageTag: "ja" });
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("installs an explicitly requested language asset and requires a second Start action", async () => {
     const dom = createDom(420);
     const harness = createHarness(undefined);
@@ -6231,6 +6259,9 @@ interface ConversationHarness {
     request: CurrentNoteReplaceProposalDecisionRequest
   ) => Promise<CurrentNoteReplaceProposalDecisionResult>;
   locale: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de";
+  dictationLanguagePreference:
+    | { readonly mode: "automatic" }
+    | { readonly mode: "preferred"; readonly language: "zh-Hans" | "en" | "ja" | "ko" | "fr" | "de" };
   windowMode: "compact" | "expanded" | "fullscreen";
   windowFullScreen: boolean;
   readonly windowModeRequests: ("compact" | "expanded" | "fullscreen")[];
@@ -6365,6 +6396,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     currentNoteReplaceProposal: async () => ({ apiVersion: 1, status: "not_found" }),
     decideCurrentNoteReplaceProposal: async () => ({ apiVersion: 1, status: "not_found" }),
     locale: "en",
+    dictationLanguagePreference: { mode: "automatic" },
     windowMode: "compact",
     windowFullScreen: false,
     windowModeRequests: [],
@@ -6718,6 +6750,19 @@ function makePigeApi(harness: ConversationHarness): object {
     },
     system: {
       toolchainHealth: async () => ({ status: "ready" })
+    },
+    localCapabilities: {
+      dictationLanguagePreference: async (request: { readonly requestId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        status: "ready" as const,
+        summary: {
+          apiVersion: 1 as const,
+          revision: 0,
+          preference: harness.dictationLanguagePreference,
+          appliesTo: "new_speech_sessions" as const
+        }
+      })
     },
     vault: {
       onboardingStatus: () => harness.loadOnboarding(),

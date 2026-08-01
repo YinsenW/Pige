@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "22b4163313c6af6f99d5dc8c7732a1cb63547480",
+  "baseline": "6f9ea2ef761d016a0d839ae4ae621dc12c690240",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 245,
-  "baselineLines": 117896,
+  "baselineFileCount": 246,
+  "baselineLines": 117961,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -42,6 +42,7 @@
       ["agent-turn-publication.ts", 386, "jrd"],
       ["durable-agent-turn-answer.ts", 79, "rd"],
       ["diagnostics-lifecycle-service.ts", 868, "jrd"],
+      ["dictation-language-preference-service.ts", 65, ""],
       ["home-agent-attachment-service.ts", 358, "jrd"],
       ["home-authored-text-capture-service.ts", 281, "jard"],
       ["home-current-note-replace.ts", 176, "jar"],
@@ -278,7 +279,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 245,
+    "serviceOwnerCount": 246,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,

@@ -365,7 +365,10 @@ Rules:
 - Availability/start never download. Explicit exact-language Apple install emits API v1
   monotonic `progress | installed | failed` without asset/audio/path/URL/raw error; success
   re-probes and still needs Start. No reliable cancel exists: UI locks focus/route/locale,
-  while teardown only detaches events. Persisted dictation language remains open.
+  while teardown only detaches events. Machine-local dictation language uses strict CAS
+  channels `localCapabilities.dictationLanguagePreference` and
+  `localCapabilities.setDictationLanguagePreference`; it affects new sessions only and
+  never authorizes a language-resource download.
 
 ### 6.3 Jobs
 
