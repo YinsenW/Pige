@@ -455,6 +455,33 @@ source_ids: ["src_20260709_abcd1234"]
     expect(JSON.stringify(result)).not.toContain("selection.md");
   });
 
+  it("re-reads a search result and returns only the current matching Reader segment", async () => {
+    const { vaultPath, vault } = makeVault();
+    writePage({
+      vaultPath,
+      fileName: "search-focus.md",
+      pageId: "page_20260801_searchfocus",
+      title: "Search Focus",
+      body: "First paragraph.\n\nThe durable nebula launch is documented here."
+    });
+    const notes = makeNotes(vaultPath, vault);
+    const result = await notes.openSearchMatch({
+      apiVersion: 1,
+      requestId: "notesearch_20260801searchfocus",
+      activeVaultId: vault.vaultId,
+      pageId: "page_20260801_searchfocus",
+      query: "nebula launch"
+    }, OWNER_ID);
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(result.focusSegmentId).toMatch(/^readerseg_[a-f0-9]{16}$/u);
+    expect(result.render.html).toContain(
+      `data-pige-selection-segment="${result.focusSegmentId}"`
+    );
+    expect(JSON.stringify(result)).not.toContain(vaultPath);
+  });
+
   it("fails closed for unknown, split-surrogate, empty, and stale Reader selections", async () => {
     const { vaultPath, vault } = makeVault();
     writePage({

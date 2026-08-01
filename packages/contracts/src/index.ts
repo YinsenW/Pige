@@ -316,6 +316,8 @@ import type {
   NoteRevisionHistorySummary,
   NoteRenderContextId,
   NoteRenderResult,
+  NoteOpenSearchMatchRequest,
+  NoteOpenSearchMatchResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -752,6 +754,8 @@ export type {
   NoteRevisionHistoryRestoreResult,
   NoteRevisionHistorySummary,
   NoteRenderResult,
+  NoteOpenSearchMatchRequest,
+  NoteOpenSearchMatchResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteSourceReferenceRequestId,
@@ -2408,6 +2412,9 @@ export interface PigeDesktopApi {
   readonly notes: {
     readonly get: (request: NoteGetRequest) => Promise<NoteDocument>;
     readonly render: (request: NoteRenderRequest) => Promise<NoteRenderResult>;
+    readonly openSearchMatch: (
+      request: NoteOpenSearchMatchRequest
+    ) => Promise<NoteOpenSearchMatchResult>;
     readonly openEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
     readonly saveEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
     readonly merge: (request: NoteMergeRequest) => Promise<NoteMergeResult>;

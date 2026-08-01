@@ -167,6 +167,8 @@ import {
   NoteMergeRequestSchema,
   NoteMergeResultSchema,
   NoteRenderResultSchema,
+  NoteOpenSearchMatchRequestSchema,
+  NoteOpenSearchMatchResultSchema,
   NoteArchiveCurrentRequestSchema,
   NoteArchiveCurrentResultSchema,
   NoteRestoreArchivedRequestSchema,
@@ -4841,6 +4843,28 @@ describe("schemas", () => {
     } as const;
     expect(NoteRenderResultSchema.parse(render).trashEligibility)
       .toEqual({ canTrash: true, revision: identity.expectedRevision });
+    const searchMatchRequest = {
+      apiVersion: 1 as const,
+      requestId: "notesearch_20260801contract",
+      activeVaultId: identity.activeVaultId,
+      pageId: identity.currentPageId,
+      query: "current note"
+    };
+    expect(NoteOpenSearchMatchRequestSchema.parse(searchMatchRequest)).toEqual(searchMatchRequest);
+    expect(NoteOpenSearchMatchResultSchema.parse({
+      apiVersion: 1,
+      requestId: searchMatchRequest.requestId,
+      activeVaultId: searchMatchRequest.activeVaultId,
+      pageId: searchMatchRequest.pageId,
+      status: "ready",
+      render,
+      focusSegmentId: "readerseg_0000000000000001"
+    })).toMatchObject({ status: "ready", focusSegmentId: "readerseg_0000000000000001" });
+    expect(() => NoteOpenSearchMatchRequestSchema.parse({
+      ...searchMatchRequest,
+      query: "x",
+      path: "/private/note.md"
+    })).toThrow();
     expect(NoteRenderResultSchema.parse({
       ...render,
       sourceMetadata: {

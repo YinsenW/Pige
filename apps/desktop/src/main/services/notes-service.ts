@@ -10,7 +10,7 @@ import type {
   NoteEditorSaveResult,
   NoteGetRequest,
   NoteOpenSourceReferenceRequest,
-  NoteOpenSourceReferenceResult,
+  NoteOpenSourceReferenceResult, NoteOpenSearchMatchRequest, NoteOpenSearchMatchResult,
   NoteRevealSourceRequest,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
@@ -38,7 +38,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
-import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service";
+import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 export interface NotesVaultPort {
@@ -236,7 +236,7 @@ export class NotesService {
       } : {})
     };
   }
-
+  openSearchMatch(request: NoteOpenSearchMatchRequest, ownerId: string): Promise<NoteOpenSearchMatchResult> { return openNoteSearchMatch(request, ownerId, { currentVaultId: () => this.#vaults.current()?.vaultId, render: (pageId, id) => this.render({ pageId }, id), selectionSegments: (id, contextId) => this.#renderContexts.get(id)?.get(contextId)?.selectionSegments }); }
   openEditor(ownerId: string, request: NoteEditorOpenRequest): NoteEditorOpenResult {
     const identity = editorIdentity(request);
     const context = this.#readRenderContext(ownerId, request.renderContextId);

@@ -36,6 +36,7 @@ import { CurrentNoteAgent } from "./components/CurrentNoteAgent";
 import { ConversationMarkdown } from "./components/ConversationMarkdown";
 import { ConversationMessageActions } from "./components/ConversationSaveAnswerAction";
 import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel";
+import { ConversationCitations, RetrievalResults, toRetrievalAskResult } from "./components/HomeRetrievalResults";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
@@ -167,11 +168,8 @@ import type {
   PigeErrorSummary,
   ProviderConnectNeedsManualModel,
   RecentVaultSummary,
-  RetrievalAnswerCitation,
-  RetrievalAskResult,
   RetrievalSearchRequest,
   RetrievalSearchResult,
-  RetrievalSearchResultItem,
   SpeechAvailabilityResult,
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
@@ -495,6 +493,11 @@ export function App(): React.JSX.Element {
   const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeTreeResult | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
+  const [selectedNoteSearchFocus, setSelectedNoteSearchFocus] = useState<{
+    readonly pageId: string;
+    readonly renderContextId: string;
+    readonly segmentId: string;
+  } | null>(null);
   const [selectedNoteVaultId, setSelectedNoteVaultId] = useState<string | null>(null);
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
   const [noteLoadingPageId, setNoteLoadingPageId] = useState<string | null>(null);
@@ -540,6 +543,15 @@ export function App(): React.JSX.Element {
   activityListRef.current = activityList;
   selectedNoteRef.current = selectedNote;
   selectedNoteVaultIdRef.current = selectedNoteVaultId;
+  useEffect(() => {
+    if (!selectedNoteSearchFocus) return;
+    if (
+      selectedNote?.summary.pageId !== selectedNoteSearchFocus.pageId ||
+      selectedNote.renderContextId !== selectedNoteSearchFocus.renderContextId
+    ) {
+      setSelectedNoteSearchFocus(null);
+    }
+  }, [selectedNote, selectedNoteSearchFocus]);
   selectedCollectionRef.current = selectedCollection;
   homeReaderSelectionContextRef.current = homeReaderSelectionContext;
 
@@ -1301,7 +1313,8 @@ export function App(): React.JSX.Element {
   const openNoteTarget = async (
     pageId: string,
     reportError = true,
-    requiredPageType?: NoteRenderResult["summary"]["pageType"]
+    requiredPageType?: NoteRenderResult["summary"]["pageType"],
+    searchQuery?: string
   ): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
@@ -1314,7 +1327,17 @@ export function App(): React.JSX.Element {
     setSelectedNoteRelated("loading");
     setNoteLoadingPageId(pageId);
     try {
-      const note = await window.pige.notes.render({ pageId });
+      const searchResult = searchQuery
+        ? await window.pige.notes.openSearchMatch({
+            apiVersion: 1,
+            requestId: `notesearch_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+            activeVaultId: vaultId,
+            pageId,
+            query: searchQuery
+          })
+        : null;
+      if (searchResult && searchResult.status !== "ready") throw new Error("Search result is no longer available.");
+      const note = searchResult?.render ?? await window.pige.notes.render({ pageId });
       if (
         requestId !== noteOpenSequence.current ||
         activeVaultIdRef.current !== vaultId ||
@@ -1342,6 +1365,11 @@ export function App(): React.JSX.Element {
       ) return false;
       setSelectedNoteVaultId(vaultId);
       setSelectedNote(note);
+      setSelectedNoteSearchFocus(
+        searchResult?.focusSegmentId && note.renderContextId
+          ? { pageId, renderContextId: note.renderContextId, segmentId: searchResult.focusSegmentId }
+          : null
+      );
       setSelectedCollection(null);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
       return true;
@@ -1356,6 +1384,10 @@ export function App(): React.JSX.Element {
 
   const openNote = async (pageId: string): Promise<void> => {
     await openNoteTarget(pageId);
+  };
+
+  const openNoteSearchMatch = async (pageId: string, query: string): Promise<void> => {
+    await openNoteTarget(pageId, true, undefined, query);
   };
 
   const refreshCurrentNoteAfterDurableTurn = async (identity: {
@@ -2703,6 +2735,9 @@ export function App(): React.JSX.Element {
             onReaderSelectionTransform={revealReaderSelectionTransform}
             onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
             selectedNote={selectedNote}
+            {...(selectedNoteSearchFocus?.segmentId
+              ? { searchFocusSegmentId: selectedNoteSearchFocus.segmentId }
+              : {})}
             selectedNoteRelated={selectedNoteRelated}
             noteLoadingPageId={noteLoadingPageId}
             error={libraryError}
@@ -2730,6 +2765,7 @@ export function App(): React.JSX.Element {
             onCurrentNoteRelated={adoptMergedNote}
             searchFocusRequest={librarySearchFocusRequest}
             onOpenNote={openNote}
+            onOpenSearchMatch={openNoteSearchMatch}
             onCloseNote={() => {
               noteOpenSequence.current += 1;
               inlineReferenceSequence.current += 1;
@@ -2776,6 +2812,9 @@ export function App(): React.JSX.Element {
               onReaderSelectionTransform={revealReaderSelectionTransform}
               onReaderSelectionCreateNote={revealReaderSelectionCreateNote}
               selectedNote={selectedNote}
+              {...(selectedNoteSearchFocus?.segmentId
+                ? { searchFocusSegmentId: selectedNoteSearchFocus.segmentId }
+                : {})}
               selectedNoteRelated={selectedNoteRelated}
               noteLoadingPageId={noteLoadingPageId}
               error={libraryError}
@@ -2783,6 +2822,7 @@ export function App(): React.JSX.Element {
               onGoHome={navigateHome}
               onRefresh={refreshLibrary}
               onSearch={(request) => window.pige.retrieval.search(request)}
+              onOpenSearchMatch={openNoteSearchMatch}
               onOpenSourceReference={(request) => window.pige.notes.openSourceReference(request)}
               onRevealSource={(request) => window.pige.notes.revealSource(request)}
               onReconnectOriginalSource={(request) => window.pige.notes.reconnectOriginalSource(request)}
@@ -3343,6 +3383,7 @@ export function LibraryPanel(props: {
   readonly onLoadMoreCollections?: () => Promise<void>;
   readonly onOpenCollection?: (datasetId: string, tableId: string) => Promise<boolean>;
   readonly selectedNote: NoteRenderResult | null;
+  readonly searchFocusSegmentId?: string;
   readonly selectedNoteRelated: NoteRelatedState;
   readonly noteLoadingPageId: string | null;
   readonly error: string | null;
@@ -3374,6 +3415,7 @@ export function LibraryPanel(props: {
   readonly onCurrentNoteSourceReconnected?: (render: NoteRenderResult) => void;
   readonly searchFocusRequest: number;
   readonly onOpenNote: (pageId: string) => Promise<void>;
+  readonly onOpenSearchMatch?: (pageId: string, query: string) => Promise<void>;
   readonly onCloseNote: () => void;
   readonly onCurrentNoteTrashed?: () => void;
   readonly noteAgentOpen: boolean;
@@ -3748,6 +3790,7 @@ export function LibraryPanel(props: {
         )}
         <NoteReader
           note={props.selectedNote}
+          {...(props.searchFocusSegmentId ? { focusSegmentId: props.searchFocusSegmentId } : {})}
           {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}
           {...(props.onResolveReaderSelection ? { onResolveSelection: props.onResolveReaderSelection } : {})}
           {...(props.onSubmitReaderSelectionAction ? { onSubmitSelectionAction: props.onSubmitReaderSelectionAction } : {})}
@@ -4023,7 +4066,11 @@ export function LibraryPanel(props: {
                       key={item.summary.pageId}
                       disabled={opening}
                       aria-busy={opening}
-                      onClick={() => void props.onOpenNote(item.summary.pageId)}
+                      onClick={() => void (
+                        resultMatchesCurrentQuery && props.onOpenSearchMatch
+                          ? props.onOpenSearchMatch(item.summary.pageId, normalizedQuery)
+                          : props.onOpenNote(item.summary.pageId)
+                      )}
                     >
                       <span className="search-result-icon" aria-hidden="true">
                         {libraryResultIconLabel(item.summary.pageType)}
@@ -4603,6 +4650,7 @@ function HomeComposer(props: {
   const [captureBatchStatus, setCaptureBatchStatus] = useState<HomeCaptureBatchStatus | null>(null);
   const [composerSubmitActive, setComposerSubmitActive] = useState(false);
   const [selectedNote, setSelectedNote] = useState<NoteRenderResult | null>(null);
+  const [selectedNoteFocusSegmentId, setSelectedNoteFocusSegmentId] = useState<string | null>(null);
   const [editorReady, setEditorReady] = useState<NoteMarkdownEditorReady | null>(null);
   const [editorOpenState, setEditorOpenState] = useState<"idle" | "opening" | "failed">("idle");
   const [selectedNoteRelated, setSelectedNoteRelated] = useState<NoteRelatedState>(null);
@@ -5974,7 +6022,11 @@ function HomeComposer(props: {
     setAgentError(nextTimeline?.latestTurn?.error ?? null);
   };
 
-  const openResultTarget = async (pageId: string, reportError = true): Promise<boolean> => {
+  const openResultTarget = async (
+    pageId: string,
+    reportError = true,
+    searchQuery?: string
+  ): Promise<boolean> => {
     const vaultId = activeVaultIdRef.current;
     if (!vaultId) return false;
     inlineReferenceSequence.current += 1;
@@ -5984,13 +6036,24 @@ function HomeComposer(props: {
     setSelectedNoteRelated("loading");
     setNoteLoadingPageId(pageId);
     try {
-      const note = await window.pige.notes.render({ pageId });
+      const searchResult = searchQuery
+        ? await window.pige.notes.openSearchMatch({
+            apiVersion: 1,
+            requestId: `notesearch_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+            activeVaultId: vaultId,
+            pageId,
+            query: searchQuery
+          })
+        : null;
+      if (searchResult && searchResult.status !== "ready") throw new Error("Search result is no longer available.");
+      const note = searchResult?.render ?? await window.pige.notes.render({ pageId });
       if (
         requestId !== noteOpenSequence.current ||
         activeVaultIdRef.current !== vaultId ||
         note.summary.pageId !== pageId
       ) return false;
       setSelectedNote(note);
+      setSelectedNoteFocusSegmentId(searchResult?.focusSegmentId ?? null);
       void loadNoteRelated(pageId, requestId, noteOpenSequence, setSelectedNoteRelated);
       return true;
     } catch {
@@ -6004,6 +6067,10 @@ function HomeComposer(props: {
 
   const openResult = async (pageId: string): Promise<void> => {
     await openResultTarget(pageId);
+  };
+
+  const openSearchResult = async (pageId: string, query?: string): Promise<void> => {
+    await openResultTarget(pageId, true, query);
   };
 
   useEffect(() => {
@@ -6482,7 +6549,7 @@ function HomeComposer(props: {
                     <ConversationCitations
                       answer={message.answer}
                       noteLoadingPageId={noteLoadingPageId}
-                      onOpen={openResult}
+                      onOpen={openSearchResult}
                       t={props.t}
                     />
                   </>
@@ -6581,7 +6648,7 @@ function HomeComposer(props: {
               <ConversationCitations
                 answer={liveConversationAnswer}
                 noteLoadingPageId={noteLoadingPageId}
-                onOpen={openResult}
+                onOpen={openSearchResult}
                 t={props.t}
               />
               <ConversationMessageActions messageId={liveAnswerEventId ?? "live-conversation-answer"}
@@ -6679,6 +6746,7 @@ function HomeComposer(props: {
               ) : null}
               <NoteReader
                 note={selectedNote}
+                {...(selectedNoteFocusSegmentId ? { focusSegmentId: selectedNoteFocusSegmentId } : {})}
                 {...(props.activeVault && selectedNote.renderContextId ? {
                   activeVaultId: props.activeVault.vaultId,
                   onResolveSelection: resolveReaderSelection,
@@ -6729,7 +6797,7 @@ function HomeComposer(props: {
           result={toRetrievalAskResult(agentAnswer)}
           modelUsage={agentModelUsage}
           noteLoadingPageId={noteLoadingPageId}
-          onOpen={openResult}
+          onOpen={openSearchResult}
           t={props.t}
         />
       ) : null}
@@ -7546,157 +7614,6 @@ function formatDatasetScalar(value: string | number | boolean | null): string {
   if (value === null) return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
-}
-
-function ConversationCitations(props: {
-  readonly answer: AgentTurnAnswer | undefined;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpen: (pageId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element | null {
-  const citations = props.answer?.citations.filter(
-    (citation): citation is RetrievalAnswerCitation => !("kind" in citation)
-  ) ?? [];
-  if (citations.length === 0) return null;
-  return (
-    <div className="citation-list conversation-citations" aria-label={props.t("retrieval.citations")}>
-      {citations.map((citation) => (
-        <button
-          type="button"
-          className="citation-row"
-          key={citation.refId}
-          disabled={props.noteLoadingPageId === citation.pageId}
-          onClick={() => void props.onOpen(citation.pageId)}
-        >
-          <span className="citation-index" aria-hidden="true">{citation.label}</span>
-          <span className="citation-copy">
-            <strong>{citation.title}</strong>
-            <span>{props.t(`library.type.${citation.pageType}`)}</span>
-          </span>
-          <PigeIcon name="expand" size={13} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function RetrievalResults(props: {
-  readonly result: RetrievalAskResult;
-  readonly modelUsage: HomeAgentModelUsage;
-  readonly noteLoadingPageId: string | null;
-  readonly onOpen: (pageId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <section className="retrieval-results" aria-label={props.t("retrieval.results")}>
-      <section className="retrieval-answer" aria-label={props.t("retrieval.summary")}>
-        <p className="retrieval-eyebrow">{props.t("retrieval.summary")}</p>
-        <p className="retrieval-answer-text">{props.result.answer}</p>
-        {props.result.warnings.includes("insufficient_evidence") ? (
-          <p className="muted retrieval-warning">{props.t("retrieval.insufficientEvidence")}</p>
-        ) : null}
-        {props.result.citations.length > 0 ? (
-          <div className="retrieval-citations" aria-label={props.t("retrieval.citations")}>
-            {props.result.citations.map((citation) => (
-              <button
-                type="button"
-                className="ghost"
-                key={citation.refId}
-                disabled={props.noteLoadingPageId === citation.pageId}
-                onClick={() => void props.onOpen(citation.pageId)}
-              >
-                {citation.label} {citation.title}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {props.result.warnings.includes("limited_evidence") ? (
-          <p className="muted retrieval-warning">{props.t("retrieval.limitedEvidence")}</p>
-        ) : null}
-        {props.result.degraded ? (
-          <p className="muted retrieval-warning">{props.t("retrieval.degraded")}</p>
-        ) : null}
-      </section>
-      <header className="retrieval-header">
-        <div>
-          <h2>{props.t("retrieval.results")}</h2>
-          <p className="muted">
-            {props.t(props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly")} · {props.t("retrieval.total")}: {props.result.total}
-          </p>
-          {props.modelUsage === "cloud" ? (
-            <p className="muted retrieval-cloud-boundary">{props.t("retrieval.cloudSent")}</p>
-          ) : null}
-        </div>
-      </header>
-      {props.result.results.length === 0 ? (
-        <p className="library-empty">{props.t("retrieval.empty")}</p>
-      ) : (
-        <div className="retrieval-list">
-          {props.result.results.map((item) => (
-            <RetrievalResultRow
-              key={item.summary.pageId}
-              item={item}
-              loading={props.noteLoadingPageId === item.summary.pageId}
-              citationLabel={props.result.citations.find((citation) => citation.pageId === item.summary.pageId)?.label}
-              onOpen={props.onOpen}
-              t={props.t}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function toRetrievalAskResult(answer: AgentTurnAnswer): RetrievalAskResult {
-  if (!answer.retrieval) {
-    throw new Error("Agent retrieval metadata is unavailable.");
-  }
-  const citations = answer.citations.filter(
-    (citation): citation is RetrievalAnswerCitation => !("kind" in citation)
-  );
-  return {
-    ...answer.retrieval,
-    answeredAt: new Date().toISOString(),
-    answer: answer.answer,
-    answerMode: "model_grounded",
-    confidence: answer.grounding === "insufficient_evidence"
-      ? "insufficient"
-      : citations.length > 1
-        ? "grounded"
-        : "limited",
-    citations,
-    warnings: answer.grounding === "insufficient_evidence"
-      ? ["insufficient_evidence"]
-      : [
-          ...(citations.length === 1 ? ["limited_evidence" as const] : []),
-          ...(answer.retrieval.degraded ? ["search_degraded" as const] : [])
-        ]
-  };
-}
-
-function RetrievalResultRow(props: {
-  readonly item: RetrievalSearchResultItem;
-  readonly loading: boolean;
-  readonly citationLabel: string | undefined;
-  readonly onOpen: (pageId: string) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  return (
-    <article className="retrieval-row">
-      <div className="retrieval-row-main">
-        <strong>{props.item.summary.title}</strong>
-        <span>{props.item.snippets[0] ?? props.item.summary.pagePath}</span>
-      </div>
-      <div className="retrieval-row-meta">
-        {props.citationLabel ? <span>{props.citationLabel}</span> : null}
-        <span>{props.t(`library.type.${props.item.summary.pageType}`)}</span>
-        <button type="button" className="ghost" disabled={props.loading} onClick={() => void props.onOpen(props.item.summary.pageId)}>
-          {props.loading ? props.t("note.opening") : props.t("note.open")}
-        </button>
-      </div>
-    </article>
-  );
 }
 
 function classifyTextTransportKind(text: string): "typed_text" | "typed_url" {

@@ -1452,6 +1452,10 @@ describe("desktop shell build contract", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const rendererSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const retrievalResultsSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/HomeRetrievalResults.tsx"),
+      "utf8"
+    );
     const runtimeSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/pi-agent-runtime-adapter.ts"),
       "utf8"
@@ -1508,9 +1512,9 @@ describe("desktop shell build contract", () => {
     expect(homeComposer).toContain('className="conversation-loading-dots"');
     expect(homeComposer).toContain("setAgentModelUsage(outcome.modelUsage)");
     expect(homeComposer).toContain('modelUsage={agentModelUsage}');
-    expect(rendererSource).toContain('props.result.warnings.includes("insufficient_evidence")');
-    expect(rendererSource).toContain('props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly"');
-    expect(rendererSource).toContain('props.t("retrieval.cloudSent")');
+    expect(retrievalResultsSource).toContain('props.result.warnings.includes("insufficient_evidence")');
+    expect(retrievalResultsSource).toContain('props.result.answerMode === "model_grounded" ? "retrieval.modelGrounded" : "retrieval.localOnly"');
+    expect(retrievalResultsSource).toContain('props.t("retrieval.cloudSent")');
     expect(rendererSource).not.toContain("function isLikelyQuestion");
     expect(rendererSource).not.toContain("function extractSingleCaptureUrl");
     expect(homeComposer).not.toContain("window.pige.capture.submitText");

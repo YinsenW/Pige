@@ -904,9 +904,11 @@ Context assembly rule: the retrieval pipeline produces selected evidence for an 
 Current Home uses durable `agent.submitTurn`: Pi may answer directly or select bounded
 retrieval or URL fetch/preserve; no usable model waits/resumes the same turn. One file
 shares the draft; exact-tail follow-up restores bounded checked history and durable
-results. The target completion path permits Pi-owned validation repair and iterative
+results. Explicit retrieval results can open their current page and focus a Main-derived
+matching Reader segment without exposing paths, bodies, index state or renderer-authored
+segment authority. The target completion path permits Pi-owned validation repair and iterative
 authorized read-only tools without a Host-authored one-correction route. Multi-attachment
-recovery, vector/reranking, answer saving, and jump-to-snippet remain open.
+recovery, vector/reranking and answer saving remain open.
 
 Retrieval result contract:
 
