@@ -198,6 +198,7 @@ describe("agent ingest service", () => {
         lexicalSearchAvailable: true,
         vectorSearchAvailable: false,
         rerankerAvailable: false,
+        excludeLowConfidenceOcrFromSummaries: true,
         appLocale: "de",
         generatedKnowledgeLanguage: "app_locale"
       }) }
@@ -1320,7 +1321,21 @@ describe("agent ingest service", () => {
       warnings: [],
       confidence: "high"
     });
-    const service = new AgentIngestService(makeModelPort(), modelClient);
+    await expect(new AgentIngestService(makeModelPort(), modelClient).ingestSource(vaultPath, ocrSource, job))
+      .rejects.toMatchObject({ code: "agent_ingest.empty_source" });
+    const service = new AgentIngestService(makeModelPort(), modelClient, {
+      snapshot: () => ({
+        localDatabaseStatus: "not_initialized",
+        parserToolchainReady: false,
+        ocrEngines: [],
+        speechInputAvailable: false,
+        embeddingModelInstalled: false,
+        lexicalSearchAvailable: false,
+        vectorSearchAvailable: false,
+        rerankerAvailable: false,
+        excludeLowConfidenceOcrFromSummaries: false
+      })
+    });
 
     const result = await service.ingestSource(vaultPath, ocrSource, job);
     const note = fs.readFileSync(path.join(vaultPath, result.pagePath), "utf8");

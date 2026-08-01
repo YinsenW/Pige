@@ -78,12 +78,7 @@ import {
   createModelRuntimeBindingIdentity,
   type ModelRuntimeBindingIdentity
 } from "./model-runtime-binding";
-import {
-  EVIDENCE_CONTEXT_CHARACTER_LIMIT,
-  EvidenceAssemblyService,
-  type EvidenceFragment,
-  type EvidencePack
-} from "./evidence-assembly-service";
+import { EVIDENCE_CONTEXT_CHARACTER_LIMIT, EvidenceAssemblyService, type EvidenceFragment, type EvidencePack } from "./evidence-assembly-service";
 import {
   createGeneratedNoteExclusive,
   pageConflict as generatedNoteConflict,
@@ -91,6 +86,7 @@ import {
   readGeneratedNoteHeader
 } from "./generated-note-file";
 import { hasNodeErrnoExceptionCode as isErrno } from "./object-error-code";
+import { applyOcrSummaryEvidencePolicy, LOW_CONFIDENCE_OCR_THRESHOLD } from "./ocr-summary-evidence-policy";
 import { createVaultRelativePathResolver } from "./vault-layout";
 import {
   bindRetrievalEvidenceToCurrentMarkdown,
@@ -145,6 +141,7 @@ export interface AgentIngestCapabilitySnapshot {
   readonly lexicalSearchAvailable: boolean;
   readonly vectorSearchAvailable: boolean;
   readonly rerankerAvailable: boolean;
+  readonly excludeLowConfidenceOcrFromSummaries: boolean;
 }
 
 export interface AgentIngestCapabilityPort {
@@ -865,6 +862,14 @@ export class AgentIngestService {
 
     let currentSourceRecord = SourceRecordSchema.parse(sourceRecord);
     let currentEvidencePack = await this.#evidence.assemble(vaultPath, currentSourceRecord);
+    const capabilitySnapshot = this.#capabilities.snapshot();
+    const policy = buildAgentRuntimePolicyContext(vaultPath, {
+      jobId: job.id,
+      defaultModel,
+      defaultProvider,
+      ...capabilitySnapshot
+    });
+    currentEvidencePack = applyOcrSummaryEvidencePolicy(currentSourceRecord, currentEvidencePack, policy);
     if (
       currentEvidencePack.fragments.length === 0 &&
       !(
@@ -875,14 +880,6 @@ export class AgentIngestService {
     ) {
       throw emptySourceError();
     }
-
-    const capabilitySnapshot = this.#capabilities.snapshot();
-    const policy = buildAgentRuntimePolicyContext(vaultPath, {
-      jobId: job.id,
-      defaultModel,
-      defaultProvider,
-      ...capabilitySnapshot
-    });
     hooks.onPolicyResolved?.({
       policyContextId: policy.policyContextId,
       policyHash: policy.policyHash
@@ -982,6 +979,7 @@ export class AgentIngestService {
       hooks.throwIfCancellationRequested?.();
       hooks.assertSourceCurrent?.(currentSourceRecord);
       currentEvidencePack = await this.#evidence.assemble(vaultPath, currentSourceRecord);
+      currentEvidencePack = applyOcrSummaryEvidencePolicy(currentSourceRecord, currentEvidencePack, policy);
       currentPromptContext = createAgentIngestPromptContext(
         currentSourceRecord,
         currentEvidencePack,
@@ -2273,7 +2271,8 @@ const unavailableCapabilityPort: AgentIngestCapabilityPort = {
     embeddingModelInstalled: false,
     lexicalSearchAvailable: false,
     vectorSearchAvailable: false,
-    rerankerAvailable: false
+    rerankerAvailable: false,
+    excludeLowConfidenceOcrFromSummaries: true
   })
 };
 
@@ -3381,7 +3380,7 @@ function applySourceQualityGuards(
     warnings.push("The page used reduced web extraction; navigation or boilerplate may remain in the evidence.");
     if (confidence === "high") confidence = "medium";
   }
-  if (ocrConfidence !== undefined && ocrConfidence < 0.65) {
+  if (ocrConfidence !== undefined && ocrConfidence < LOW_CONFIDENCE_OCR_THRESHOLD) {
     warnings.push("Local OCR confidence is low; verify the recognized text against the preserved image.");
     if (confidence === "high") confidence = "medium";
   }

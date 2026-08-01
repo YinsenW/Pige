@@ -1066,7 +1066,7 @@ OCR behavior
 [x] Use OCR for image files
 [x] Use OCR for image-only PDF pages
 [x] Use OCR for image-heavy presentation slides
-[ ] Keep low-confidence OCR text out of summaries
+[x] Keep low-confidence OCR text out of summaries
 
 Test OCR
 Choose Image

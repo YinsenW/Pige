@@ -4991,6 +4991,10 @@ export const OCR_ENGINE_PREFERENCE_CHANNEL =
   "localCapabilities.ocrEnginePreference" as const;
 export const SET_OCR_ENGINE_PREFERENCE_CHANNEL =
   "localCapabilities.setOcrEnginePreference" as const;
+export const OCR_SUMMARY_PREFERENCE_CHANNEL =
+  "localCapabilities.ocrSummaryPreference" as const;
+export const SET_OCR_SUMMARY_PREFERENCE_CHANNEL =
+  "localCapabilities.setOcrSummaryPreference" as const;
 export const OCR_IMAGE_TEST_CHANNEL = "localCapabilities.testOcrImage" as const;
 export const OcrImageTestRequestIdSchema = z.string()
   .regex(/^ocrimagetest_[a-z0-9]{16,64}$/u);
@@ -5054,6 +5058,38 @@ export const SetOcrEnginePreferenceResultSchema = z.discriminatedUnion("status",
   OcrEnginePreferenceAuthoritativeResultSchema.extend({ status: z.literal("committed") }).strict(),
   OcrEnginePreferenceAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
   OcrEnginePreferenceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const OcrSummaryPreferenceRequestIdSchema = z.string()
+  .regex(/^ocrsummaryreq_[a-z0-9]{16,64}$/u);
+export const OcrSummaryPreferenceSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  excludeLowConfidenceOcr: z.boolean(),
+  appliesTo: z.literal("new_agent_jobs")
+}).strict();
+export const OcrSummaryPreferenceRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: OcrSummaryPreferenceRequestIdSchema
+}).strict();
+const OcrSummaryPreferenceResultIdentitySchema = OcrSummaryPreferenceRequestSchema;
+export const OcrSummaryPreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrSummaryPreferenceResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    summary: OcrSummaryPreferenceSummarySchema
+  }).strict(),
+  OcrSummaryPreferenceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SetOcrSummaryPreferenceRequestSchema = OcrSummaryPreferenceRequestSchema.extend({
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  excludeLowConfidenceOcr: z.boolean()
+}).strict();
+const OcrSummaryPreferenceAuthoritativeResultSchema = OcrSummaryPreferenceResultIdentitySchema.extend({
+  summary: OcrSummaryPreferenceSummarySchema
+}).strict();
+export const SetOcrSummaryPreferenceResultSchema = z.discriminatedUnion("status", [
+  OcrSummaryPreferenceAuthoritativeResultSchema.extend({ status: z.literal("committed") }).strict(),
+  OcrSummaryPreferenceAuthoritativeResultSchema.extend({ status: z.literal("stale") }).strict(),
+  OcrSummaryPreferenceResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 export const OcrLanguagePreferenceRequestIdSchema = z.string()
   .regex(/^ocrlangreq_[a-z0-9]{16,64}$/u);
@@ -12068,6 +12104,12 @@ export type OcrEnginePreferenceRequest = z.infer<typeof OcrEnginePreferenceReque
 export type OcrEnginePreferenceResult = z.infer<typeof OcrEnginePreferenceResultSchema>;
 export type SetOcrEnginePreferenceRequest = z.infer<typeof SetOcrEnginePreferenceRequestSchema>;
 export type SetOcrEnginePreferenceResult = z.infer<typeof SetOcrEnginePreferenceResultSchema>;
+export type OcrSummaryPreferenceRequestId = z.infer<typeof OcrSummaryPreferenceRequestIdSchema>;
+export type OcrSummaryPreferenceSummary = z.infer<typeof OcrSummaryPreferenceSummarySchema>;
+export type OcrSummaryPreferenceRequest = z.infer<typeof OcrSummaryPreferenceRequestSchema>;
+export type OcrSummaryPreferenceResult = z.infer<typeof OcrSummaryPreferenceResultSchema>;
+export type SetOcrSummaryPreferenceRequest = z.infer<typeof SetOcrSummaryPreferenceRequestSchema>;
+export type SetOcrSummaryPreferenceResult = z.infer<typeof SetOcrSummaryPreferenceResultSchema>;
 export type OcrLanguagePreference = z.infer<typeof OcrLanguagePreferenceSchema>;
 export type OcrLanguagePreferenceMachineSettings = z.infer<typeof OcrLanguagePreferenceMachineSettingsSchema>;
 export type OcrLanguagePreferenceSummary = z.infer<typeof OcrLanguagePreferenceSummarySchema>;

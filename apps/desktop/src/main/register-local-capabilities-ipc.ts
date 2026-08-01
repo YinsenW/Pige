@@ -10,6 +10,8 @@ import {
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
   OCR_ENGINE_PREFERENCE_CHANNEL,
   SET_OCR_ENGINE_PREFERENCE_CHANNEL,
+  OCR_SUMMARY_PREFERENCE_CHANNEL,
+  SET_OCR_SUMMARY_PREFERENCE_CHANNEL,
   OCR_IMAGE_TEST_CHANNEL,
   TOOLCHAIN_REPAIR_CHANNEL,
   OcrLanguagePreferenceRequestSchema,
@@ -20,6 +22,10 @@ import {
   OcrEnginePreferenceResultSchema,
   SetOcrEnginePreferenceRequestSchema,
   SetOcrEnginePreferenceResultSchema,
+  OcrSummaryPreferenceRequestSchema,
+  OcrSummaryPreferenceResultSchema,
+  SetOcrSummaryPreferenceRequestSchema,
+  SetOcrSummaryPreferenceResultSchema,
   OcrImageTestRequestSchema,
   OcrImageTestResultSchema,
   ToolchainRepairRequestSchema,
@@ -61,6 +67,10 @@ import {
   type OcrEnginePreferenceResult,
   type SetOcrEnginePreferenceRequest,
   type SetOcrEnginePreferenceResult,
+  type OcrSummaryPreferenceRequest,
+  type OcrSummaryPreferenceResult,
+  type SetOcrSummaryPreferenceRequest,
+  type SetOcrSummaryPreferenceResult,
   type OcrImageTestRequest,
   type OcrImageTestResult,
   type ToolchainRepairRequest,
@@ -98,6 +108,12 @@ export interface RegisterLocalCapabilitiesIpcOptions {
   readonly setOcrEnginePreference: (
     request: SetOcrEnginePreferenceRequest
   ) => Awaitable<SetOcrEnginePreferenceResult>;
+  readonly ocrSummaryPreference: (
+    request: OcrSummaryPreferenceRequest
+  ) => Awaitable<OcrSummaryPreferenceResult>;
+  readonly setOcrSummaryPreference: (
+    request: SetOcrSummaryPreferenceRequest
+  ) => Awaitable<SetOcrSummaryPreferenceResult>;
   readonly paddleOcrSummary: (
     request: PaddleOcrSummaryRequest
   ) => Awaitable<PaddleOcrSummary>;
@@ -176,6 +192,22 @@ export function registerLocalCapabilitiesIpc(
     async (_event, request: unknown) => {
       const parsed = SetOcrEnginePreferenceRequestSchema.parse(request);
       return SetOcrEnginePreferenceResultSchema.parse(await options.setOcrEnginePreference(parsed));
+    }
+  );
+
+  options.ipcMain.handle(
+    OCR_SUMMARY_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = OcrSummaryPreferenceRequestSchema.parse(request);
+      return OcrSummaryPreferenceResultSchema.parse(await options.ocrSummaryPreference(parsed));
+    }
+  );
+
+  options.ipcMain.handle(
+    SET_OCR_SUMMARY_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = SetOcrSummaryPreferenceRequestSchema.parse(request);
+      return SetOcrSummaryPreferenceResultSchema.parse(await options.setOcrSummaryPreference(parsed));
     }
   );
 

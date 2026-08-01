@@ -356,6 +356,7 @@ import {
   LocalSettingsOcrEnginePreferenceStore,
   OcrEnginePreferenceService
 } from "./services/ocr-engine-preference-service";
+import { OcrSummaryPreferenceService } from "./services/ocr-summary-preference-service";
 import { DictationLanguagePreferenceService } from "./services/dictation-language-preference-service";
 import { MacOSSpeechAdapter } from "./services/macos-speech-adapter";
 import { ProposalService } from "./services/proposal-service";
@@ -508,6 +509,7 @@ let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
 let ocrImageTestService: OcrImageTestService | undefined;
 let ocrEnginePreferenceService: OcrEnginePreferenceService | undefined;
+let ocrSummaryPreferenceService: OcrSummaryPreferenceService | undefined;
 let ocrLanguagePreferenceService: OcrLanguagePreferenceService | undefined;
 let dictationLanguagePreferenceService: DictationLanguagePreferenceService | undefined;
 let speechService: SpeechService | undefined;
@@ -1770,7 +1772,8 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
     vectorSearchAvailable: vaultPath ? getLocalRagEngineService().availableNow(vaultPath) : false,
-    rerankerAvailable: getLocalRagEngineService().rerankerAvailableNow()
+    rerankerAvailable: getLocalRagEngineService().rerankerAvailableNow(),
+    excludeLowConfidenceOcrFromSummaries: getOcrSummaryPreferenceService().excludeLowConfidenceOcr()
   };
 };
 
@@ -1786,6 +1789,11 @@ const getOcrEnginePreferenceService = (): OcrEnginePreferenceService => {
     new LocalSettingsOcrEnginePreferenceStore(getLocalSettingsStore())
   );
   return ocrEnginePreferenceService;
+};
+
+const getOcrSummaryPreferenceService = (): OcrSummaryPreferenceService => {
+  ocrSummaryPreferenceService ??= new OcrSummaryPreferenceService(app.getPath("userData"));
+  return ocrSummaryPreferenceService;
 };
 
 const getDictationLanguagePreferenceService = (): DictationLanguagePreferenceService => {
@@ -3245,6 +3253,8 @@ registerLocalCapabilitiesIpc({
   testOcrImage: (request, inputPath) => getOcrImageTestService().run(request, inputPath),
   ocrEnginePreference: (request) => getOcrEnginePreferenceService().read(request),
   setOcrEnginePreference: (request) => getOcrEnginePreferenceService().set(request),
+  ocrSummaryPreference: (request) => getOcrSummaryPreferenceService().read(request),
+  setOcrSummaryPreference: (request) => getOcrSummaryPreferenceService().set(request),
   dictationLanguagePreference: (request) => getDictationLanguagePreferenceService().read(request),
   setDictationLanguagePreference: (request) => getDictationLanguagePreferenceService().set(request),
   ocrLanguagePreference: (request) => getOcrLanguagePreferenceService().read(request),

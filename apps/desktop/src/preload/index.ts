@@ -144,6 +144,10 @@ import type {
   SetOcrLanguagePreferenceResult,
   OcrEnginePreferenceRequest,
   OcrEnginePreferenceResult,
+  OcrSummaryPreferenceRequest,
+  OcrSummaryPreferenceResult,
+  SetOcrSummaryPreferenceRequest,
+  SetOcrSummaryPreferenceResult,
   OcrImageTestRequest,
   OcrImageTestResult,
   SetOcrEnginePreferenceRequest,
@@ -662,6 +666,12 @@ import {
   OcrImageTestResultSchema,
   OcrEnginePreferenceRequestSchema,
   OcrEnginePreferenceResultSchema,
+  OCR_SUMMARY_PREFERENCE_CHANNEL,
+  SET_OCR_SUMMARY_PREFERENCE_CHANNEL,
+  OcrSummaryPreferenceRequestSchema,
+  OcrSummaryPreferenceResultSchema,
+  SetOcrSummaryPreferenceRequestSchema,
+  SetOcrSummaryPreferenceResultSchema,
   SetOcrEnginePreferenceRequestSchema,
   SetOcrEnginePreferenceResultSchema,
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
@@ -2453,6 +2463,24 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           SET_OCR_ENGINE_PREFERENCE_CHANNEL,
           SetOcrEnginePreferenceRequestSchema.parse(request)
+        )
+      ),
+    ocrSummaryPreference: async (
+      request: OcrSummaryPreferenceRequest
+    ): Promise<OcrSummaryPreferenceResult> =>
+      OcrSummaryPreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          OCR_SUMMARY_PREFERENCE_CHANNEL,
+          OcrSummaryPreferenceRequestSchema.parse(request)
+        )
+      ),
+    setOcrSummaryPreference: async (
+      request: SetOcrSummaryPreferenceRequest
+    ): Promise<SetOcrSummaryPreferenceResult> =>
+      SetOcrSummaryPreferenceResultSchema.parse(
+        await ipcRenderer.invoke(
+          SET_OCR_SUMMARY_PREFERENCE_CHANNEL,
+          SetOcrSummaryPreferenceRequestSchema.parse(request)
         )
       ),
     testOcrImage: async (

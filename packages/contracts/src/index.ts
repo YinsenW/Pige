@@ -206,6 +206,10 @@ import type {
   OcrEnginePreferenceResult,
   OcrImageTestRequest,
   OcrImageTestResult,
+  OcrSummaryPreferenceRequest,
+  OcrSummaryPreferenceResult,
+  SetOcrSummaryPreferenceRequest,
+  SetOcrSummaryPreferenceResult,
   SetOcrEnginePreferenceRequest,
   SetOcrEnginePreferenceResult,
   PaddleOcrCatalogComponent,
@@ -869,6 +873,11 @@ export type {
   OcrEnginePreferenceSummary,
   OcrImageTestRequest,
   OcrImageTestResult,
+  OcrSummaryPreferenceRequest,
+  OcrSummaryPreferenceResult,
+  OcrSummaryPreferenceSummary,
+  SetOcrSummaryPreferenceRequest,
+  SetOcrSummaryPreferenceResult,
   SetOcrEnginePreferenceRequest,
   SetOcrEnginePreferenceResult,
   DictationLanguagePreference,
@@ -1103,6 +1112,7 @@ export interface AgentRuntimePolicyContext {
     readonly speechInputAvailable: boolean;
     readonly embeddingModelInstalled: boolean;
     readonly hiddenDownloadsAllowed: false;
+    readonly excludeLowConfidenceOcrFromSummaries: boolean;
   };
 }
 
@@ -2539,6 +2549,12 @@ export interface PigeDesktopApi {
     readonly setOcrEnginePreference: (
       request: SetOcrEnginePreferenceRequest
     ) => Promise<SetOcrEnginePreferenceResult>;
+    readonly ocrSummaryPreference: (
+      request: OcrSummaryPreferenceRequest
+    ) => Promise<OcrSummaryPreferenceResult>;
+    readonly setOcrSummaryPreference: (
+      request: SetOcrSummaryPreferenceRequest
+    ) => Promise<SetOcrSummaryPreferenceResult>;
     readonly testOcrImage: (
       request: OcrImageTestRequest
     ) => Promise<OcrImageTestResult>;

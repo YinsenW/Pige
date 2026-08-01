@@ -156,6 +156,28 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
         appliesTo: "new_ocr_jobs" as const
       }
     })),
+    ocrSummaryPreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "ready" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 0,
+        excludeLowConfidenceOcr: true,
+        appliesTo: "new_agent_jobs" as const
+      }
+    })),
+    setOcrSummaryPreference: vi.fn((input: { readonly requestId: string; readonly excludeLowConfidenceOcr: boolean }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "committed" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 1,
+        excludeLowConfidenceOcr: input.excludeLowConfidenceOcr,
+        appliesTo: "new_agent_jobs" as const
+      }
+    })),
     paddleOcrSummary: vi.fn(() => notInstalledSummary),
     installPaddleOcr: vi.fn((input: typeof request) => ({
       apiVersion: 1 as const,
@@ -234,6 +256,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       "setOcrLanguagePreference",
       "ocrEnginePreference",
       "setOcrEnginePreference",
+      "ocrSummaryPreference",
+      "setOcrSummaryPreference",
       "testOcrImage",
       "paddleOcrSummary",
       "installPaddleOcr",
@@ -255,6 +279,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       "localCapabilities.ocrLanguagePreference",
       "localCapabilities.ocrEnginePreference",
       "localCapabilities.setOcrEnginePreference",
+      "localCapabilities.ocrSummaryPreference",
+      "localCapabilities.setOcrSummaryPreference",
       "localCapabilities.testOcrImage",
       "localCapabilities.setOcrLanguagePreference",
       "localCapabilities.paddleOcrSummary",
@@ -308,6 +334,15 @@ describe("registerLocalCapabilitiesIpc", () => {
       .resolves.toMatchObject({ status: "committed", summary: { preference: "paddleocr_local" } });
     expect(callbacks.ocrEnginePreference).toHaveBeenCalledWith(engineRead);
     expect(callbacks.setOcrEnginePreference).toHaveBeenCalledWith(engineSet);
+
+    const summaryRead = { apiVersion: 1, requestId: "ocrsummaryreq_abcdefghijklmnop" } as const;
+    const summarySet = { ...summaryRead, expectedRevision: 0, excludeLowConfidenceOcr: false } as const;
+    await expect(call(handlers, "localCapabilities.ocrSummaryPreference", summaryRead))
+      .resolves.toMatchObject({ status: "ready", summary: { excludeLowConfidenceOcr: true } });
+    await expect(call(handlers, "localCapabilities.setOcrSummaryPreference", summarySet))
+      .resolves.toMatchObject({ status: "committed", summary: { excludeLowConfidenceOcr: false } });
+    expect(callbacks.ocrSummaryPreference).toHaveBeenCalledWith(summaryRead);
+    expect(callbacks.setOcrSummaryPreference).toHaveBeenCalledWith(summarySet);
 
     const imageTest = { apiVersion: 1, requestId: "ocrimagetest_abcdefghijklmnop" } as const;
     await expect(call(handlers, "localCapabilities.testOcrImage", imageTest))
