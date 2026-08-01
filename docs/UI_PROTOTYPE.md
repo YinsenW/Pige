@@ -780,6 +780,10 @@ lists bounded current concepts; Add/Remove is single-flight, preserves focus and
 on stale/failure, and adopts only Main's authoritative committed render. Narrower concepts appear
 through derived backlinks and the next Knowledge Tree rebuild; users never maintain both directions.
 
+An active Topic Reader uses the same calm progressive disclosure for **Parent topics**. Search lists
+only bounded current Topic identities; Add/Remove preserves Reader and focus on closed outcomes,
+rejects cycles, and adopts only Main's authoritative committed render. Child Topics remain derived.
+
 ## 12. Knowledge Health
 
 Settings > Index & Maintenance owns the report. Eligible broken links offer Remove/Retarget;

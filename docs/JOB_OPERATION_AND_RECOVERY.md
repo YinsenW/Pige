@@ -493,10 +493,10 @@ type RetryPolicyState = {
 };
 ```
 
-Concept hierarchy add/remove is a short synchronous Reader mutation, not a new Job class. It uses
-the Markdown editor's existing reversible `update_page` Operation: the before-image preserves the
-exact previous `concept.parent_concepts`, Activity Undo/Redo converges after restart, and derived
-narrower backlinks/Knowledge Tree are rebuilt only after the durable commit.
+Concept and Topic hierarchy add/remove are short synchronous Reader mutations, not new Job classes.
+They use the Markdown editor's existing reversible `update_page` Operation: the before-image
+preserves the exact previous `concept.parent_concepts` or Topic parent IDs, Activity Undo/Redo
+converges after restart, and derived child backlinks/Knowledge Tree rebuild only after commit.
 
 Rules:
 

@@ -4952,6 +4952,34 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/QUALITY_AND_TEST_STRATEGY.md`
 
+### D-20260801-Topic-Parent-Single-Direction
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Store explicit Topic hierarchy only as bounded stable parent Topic IDs in the child Topic's common
+`topics` field. Rebuild child edges; never maintain a second durable child list.
+
+Rationale:
+
+One readable Markdown direction avoids divergent parent/child truth and reuses the existing
+rebuildable relationship index. Exact Reader currentness, target identity and cycle checks keep the
+small manual correction safe without creating another Job class or exposing graph internals.
+
+Consequences:
+
+- One Topic may name at most eight active parent Topic IDs; malformed or cyclic truth fails closed.
+- Add/remove commits through the existing reversible `update_page` Operation and survives restart.
+- Renderer contracts remain body/path-free and adopt only Main's authoritative Topic render.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
