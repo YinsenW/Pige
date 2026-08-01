@@ -2806,7 +2806,7 @@ Consequences:
 - Standing-authority active-vault knowledge Markdown needs no Permission prompt; Pi core,
   extension, package, or local-tool actions outside that scope stay brokered. Exact BYOK
   destinations retain their separate standing egress authority.
-- Exact create, cited append, bounded tags, and one directed link have Activity/Undo; proposals stay transitional, other mutations open.
+- Exact create, cited append, bounded tags, and one directed link have Activity/Undo. User Library tag rename, merge, whole-tag removal and single-page removal also regain exact effects through matching-Undo Redo with restart adoption; proposals stay transitional and other mutations remain open.
 - Home uses quiet Activity/details/Undo, not routine confirmation cards.
 
 References:
