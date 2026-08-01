@@ -193,7 +193,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `models.providerApiKeys` | `explicit_warning` | Connect writes only after the disclosed gesture and probe; native confirmation remains for revision-fenced credential replacement |
 | `models.manualModelIds` | `none` | Validated as part of the confirmed provider workflow |
 | `models.defaultPiAgentModel` | `none` | Validated enabled-model selection |
-| `maintenance.localDatabaseReset` | `explicit_confirmation` | `guardSettingAction` before rebuildable-state deletion |
+| `maintenance.localDatabaseReset` | `explicit_confirmation` | `guardSettingAction`, exact active-Vault binding reproof, rebuildable-root reset, then awaited durable `index_rebuild` result |
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
 | `toolchain.health` | `none` | Derived read-only status |
@@ -202,7 +202,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 
 Changing a permission requirement without changing its enforcement path and tests is a contract error. `permission_broker` is fail-closed in `guardSettingAction` until the real broker path supplies an authorization decision.
 
-`maintenance.rebuildLocalDatabase` is a non-destructive maintenance command, not a persisted registry setting. It creates an auditable `index_rebuild` job from durable Markdown and therefore requires no confirmation. `maintenance.localDatabaseReset` is the distinct destructive-to-derived-state action and remains guarded by `explicit_confirmation`.
+`maintenance.rebuildLocalDatabase` is a non-destructive maintenance command, not a persisted registry setting. It creates an auditable `index_rebuild` job from durable Markdown and therefore requires no confirmation. `maintenance.localDatabaseReset` is the distinct destructive-to-derived-state action: it remains guarded by `explicit_confirmation`, re-proves the reviewed active Vault before deletion, removes only rebuildable roots, and does not settle until its durable rebuild Job returns.
 
 ## 6.1 Agent Policy Effect Registry
 
