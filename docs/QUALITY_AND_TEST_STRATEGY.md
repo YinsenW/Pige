@@ -284,8 +284,10 @@ Tests must verify:
   text, partial JSON, thinking, other tool arguments, citations/grounding, IDs, provider
   payloads, control frames, wrong sender, stale sequence, and post-cancel events.
 - The Pi final replaces the draft exactly once and creates durable assistant/Job output.
-  Invalid/stale citation refs are removed or marked unavailable without rejecting body
-  text; provider failure and cancellation leave no durable draft; restart never replays one.
+  Ordinary general prose remains pass-through. Unknown citation refs and exact
+  Source/current-note/Dataset evidence answers without any Host-owned ref become a
+  localized insufficient-evidence result without a repair Provider turn; provider failure
+  and cancellation leave no durable draft; restart never replays one.
 - Initial context has instruction/policy/tools; evidence follows selected calls. Without
   a model, one durable turn waits and performs no semantic work.
 - Only registered tool calls write; retry/restart reuses call/Operation identity.
@@ -293,6 +295,9 @@ Tests must verify:
   mandatory finish tool, grounding/citation schema, or Host repair follow-up. Tool input,
   authority, resource, revision and durable-effect failures remain bounded at their owning
   boundaries; denied authority remains blocked and cancellation wins.
+- Grounded-answer validation tests prove exact Host refs project local knowledge, invented
+  refs fail closed, Source/current-note/Dataset evidence turns cannot retain uncited factual
+  prose, and ordinary general answers remain unchanged.
 - Tool-freedom tests prove the Host does not select a semantic route, relevant registered
   core tools remain available, read-only/idempotent tools may be revisited, and corrected
   side-effect calls retain deterministic identity without duplicate writes.
@@ -373,6 +378,9 @@ Tests and evaluation fixtures must verify:
 - Grounded summaries answer only from selected snippets and cite the evidence used.
 - Grounded/vault-only answers expose missing or contradictory evidence; general answers
   use no fabricated vault citations.
+- Home final-projection fixtures cover exact Host refs, invented refs, and missing refs for
+  Source/current-note/Dataset evidence, including localized insufficiency without a second
+  Provider turn.
 - Note Agent UI tests cover scope, stale isolation, draft revocation, recovery, egress and model switching; mutation/selection remains open.
 - Multilingual fixtures preserve source language metadata and answer Home queries in the query language where required.
 

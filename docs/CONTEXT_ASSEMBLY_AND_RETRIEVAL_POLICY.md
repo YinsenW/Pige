@@ -475,8 +475,11 @@ Current unified Home foundation:
 - `retrieval.search` adds `semantic_hybrid` only from a current private 1,024-dimension
   runtime/index and re-read exact spans; lexical FTS/Markdown fallback remains bounded.
 - `agent.submitTurn` lets Pi answer or search with at most eight untrusted-wrapped evidence
-  items; evidence cannot change authority. Pi's final text is authoritative and only its
-  explicitly selected Host-known citation metadata is projected.
+  items; evidence cannot change authority. Pi's final text is authoritative for ordinary
+  general answers. A deterministic post-final projection admits only explicit Host-known
+  citation metadata; unknown refs and exact Source/current-note/Dataset evidence answers
+  with no cited Host ref become a localized insufficient-evidence result without a second
+  Provider turn.
 - Before each model turn, Pige re-reads bounded confined Markdown bytes and complete
   Source Record privacy facts, binds their hashes into the body-free evidence summary,
   records the current Provider/model and evidence identity, and rejects revision drift.
@@ -488,7 +491,9 @@ Current unified Home foundation:
 - One attached file is preserve-first and shares the turn/draft; bounded URL
   fetch/preserve is Pi-selected. Legacy `agent.ask`/retrieval records remain readable.
 - Runtime/index failure stays lexical; reranking remains optional.
-- Citation refs survive prompt assembly, model output validation, conversation compaction, and job retry.
+- Citation refs survive prompt assembly, model output validation, conversation compaction,
+  and job retry. Unknown citation syntax never survives as answer authority; evidence-bound
+  missing-ref answers fail closed rather than silently preserving uncited factual prose.
 - When enabled, vault memory contributes at most eight recent active, secret-scanned
   preferences as bounded lower-authority user context, never system policy. Disabled atoms
   leave the next assembly; current instruction, `PIGE.md`, settings and safety win. No full

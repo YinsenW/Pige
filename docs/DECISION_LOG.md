@@ -4916,6 +4916,42 @@ References:
 
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`; `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260801-Home-Grounded-Answer-Validation
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Keep the upstream Pi final as the authoritative semantic answer without a mandatory
+terminal tool, grounding schema, Host repair, or second Provider turn. After that final,
+Pige performs one deterministic local citation projection: ordinary general prose passes
+unchanged; exact Host-owned refs project local knowledge; unknown refs and exact
+Source/current-note/Dataset evidence answers that omit every required ref become the
+localized insufficient-evidence result with no citations.
+
+Rationale:
+
+Pi must remain free to answer and orchestrate tools, while evidence-bound factual output
+must not become durable merely because the model omitted or invented citation syntax.
+Local projection preserves upstream ownership and avoids another model call while closing
+the fabricated or uncited evidence path at the authority boundary.
+
+Consequences:
+
+- General answers remain pass-through and need no citation shape.
+- Citation identity comes only from the exact Host-owned evidence set for the turn.
+- Missing or unknown refs cannot trigger a repair loop, Provider retry, durable mutation,
+  or fabricated citation; the user sees localized insufficiency instead.
+- Broader grounded-summary quality, linking/ranking breadth, scale, UI/package and platform
+  evidence remain open under E6.10/PIGE-EVAL-004.
+
+References:
+
+- `docs/PROMPT_DESIGN.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "16377ac8f06ec52c8990427d93dfbad30601411a",
+  "baseline": "cd627199c50f5e565745caa9a082aa88129a5368",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 288,
-  "baselineLines": 126357,
+  "baselineFileCount": 289,
+  "baselineLines": 126417,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -57,6 +57,7 @@
       ["diagnostics-lifecycle-service.ts", 868, "jrd"],
       ["dictation-language-preference-service.ts", 65, ""],
       ["home-agent-attachment-service.ts", 358, "jrd"],
+      ["home-grounded-answer-validator.ts", 60, "f"],
       ["home-authored-text-capture-service.ts", 281, "jard"],
       ["home-current-note-replace.ts", 176, "jar"],
       ["high-risk-confirmation-service.ts", 268, "pr"],
@@ -321,7 +322,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 288,
+    "serviceOwnerCount": 289,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
