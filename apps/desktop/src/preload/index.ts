@@ -511,6 +511,7 @@ import {
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
+  COLLECTION_TRASH_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
@@ -542,6 +543,8 @@ import {
   CollectionRenameViewResultSchema,
   CollectionTrashViewRequestSchema,
   CollectionTrashViewResultSchema,
+  CollectionTrashDatasetRequestSchema,
+  CollectionTrashDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
   CollectionOpenRequestSchema,
@@ -944,6 +947,8 @@ import type {
   CollectionRenameViewResult,
   CollectionTrashViewRequest,
   CollectionTrashViewResult,
+  CollectionTrashDatasetRequest,
+  CollectionTrashDatasetResult,
   CollectionOpenCitationRequest,
   CollectionOpenCitationResult,
   CollectionOpenRequest,
@@ -1478,6 +1483,20 @@ async function invokeCollectionTrashView(
     result.tableId !== parsedRequest.tableId ||
     result.viewId !== parsedRequest.viewId
   ) throw new Error("Invalid Managed Collection view-trash response identity.");
+  return result;
+}
+
+async function invokeCollectionTrashDataset(
+  request: CollectionTrashDatasetRequest
+): Promise<CollectionTrashDatasetResult> {
+  const parsedRequest = CollectionTrashDatasetRequestSchema.parse(request);
+  const result = CollectionTrashDatasetResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_TRASH_DATASET_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId) {
+    throw new Error("Invalid Managed Dataset trash response identity.");
+  }
   return result;
 }
 
@@ -2169,6 +2188,7 @@ const api: PigeDesktopApi = {
     updateView: invokeCollectionUpdateView,
     renameView: invokeCollectionRenameView,
     trashView: invokeCollectionTrashView,
+    trashDataset: invokeCollectionTrashDataset,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
   },

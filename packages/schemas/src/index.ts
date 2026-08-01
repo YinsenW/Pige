@@ -1316,6 +1316,8 @@ export const KnowledgeActivitySummarySchema = z.object({
     "restore_collection_view",
     "trash_collection_column",
     "trash_collection_row",
+    "trash_dataset",
+    "restore_dataset",
     "create_memory",
     "update_memory",
     "trash_memory",
@@ -7119,6 +7121,7 @@ export const COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL = "collections.addRollupColumn
 export const COLLECTION_UPDATE_ROLLUP_COLUMN_CHANNEL = "collections.updateRollupColumn" as const;
 export const COLLECTION_RENAME_VIEW_CHANNEL = "collections.renameView" as const;
 export const COLLECTION_TRASH_VIEW_CHANNEL = "collections.trashView" as const;
+export const COLLECTION_TRASH_DATASET_CHANNEL = "collections.trashDataset" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -7401,6 +7404,7 @@ export const CollectionDatasetSummarySchema = z.object({
   datasetId: DatasetQueryDatasetIdSchema,
   title: z.string().trim().min(1).max(240),
   activeRevisionId: DatasetQueryRevisionIdSchema,
+  canTrash: z.boolean().default(false),
   tableCount: DatasetQueryCountSchema,
   tables: z.array(CollectionDatasetTableSummarySchema).max(32),
   tablesTruncated: z.boolean()
@@ -7745,6 +7749,25 @@ export const CollectionRevealResultSchema = z.discriminatedUnion("status", [
   CollectionRevealResultIdentitySchema.extend({ status: z.literal("revealed") }).strict(),
   ...(["stale", "not_found", "failed"] as const).map((status) =>
     CollectionRevealResultIdentitySchema.extend({ status: z.literal(status) }).strict())
+]);
+
+const CollectionTrashDatasetIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
+export const CollectionTrashDatasetRequestSchema = CollectionTrashDatasetIdentitySchema;
+export const CollectionTrashDatasetResultSchema = z.discriminatedUnion("status", [
+  CollectionTrashDatasetIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionTrashDatasetIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "ineligible", "failed"])
+  }).strict()
 ]);
 
 const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
@@ -11195,6 +11218,8 @@ export const OperationRecordSchema = z.object({
     "restore_collection_view",
     "trash_collection_column",
     "trash_collection_row",
+    "trash_dataset",
+    "restore_dataset",
     "trash_artifact",
     "restore_artifact",
     "create_page",
@@ -11756,6 +11781,8 @@ export type CollectionDatasetSummary = z.infer<typeof CollectionDatasetSummarySc
 export type CollectionDatasetTableSummary = z.infer<typeof CollectionDatasetTableSummarySchema>;
 export type CollectionListRequest = z.infer<typeof CollectionListRequestSchema>;
 export type CollectionListResult = z.infer<typeof CollectionListResultSchema>;
+export type CollectionTrashDatasetRequest = z.infer<typeof CollectionTrashDatasetRequestSchema>;
+export type CollectionTrashDatasetResult = z.infer<typeof CollectionTrashDatasetResultSchema>;
 export type LibraryBrowseRequestId = z.infer<typeof LibraryBrowseRequestIdSchema>;
 export type LibraryBrowseSnapshotId = z.infer<typeof LibraryBrowseSnapshotIdSchema>;
 export type LibraryBrowseCursor = z.infer<typeof LibraryBrowseCursorSchema>;
