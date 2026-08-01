@@ -45,6 +45,7 @@ import {
 } from "@pige/schemas";
 import { containsRestrictedModelContent } from "./model-egress-content";
 import { hasObjectErrorCode as isErrno } from "./object-error-code";
+import { projectEnabledPureSkillRuntimes, type EnabledPureSkillRuntime } from "./pure-skill-runtime-service";
 import {
   isSupportedExternalWebRuntime,
   readSkillEnableEligibility,
@@ -67,7 +68,6 @@ import {
   type SkillUpdateResolution
 } from "./skill-source-update-registry";
 import { withLegacySkillScope } from "./skill-scope-policy";
-
 const MAX_REGISTRY_BYTES = 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_FRONTMATTER_BYTES = 32 * 1024;
@@ -170,7 +170,8 @@ export class SkillRegistryService {
   }
   enabledExternalWebRuntimes = (): readonly EnabledExternalWebSkillRuntime[] =>
     projectEnabledExternalWebSkillRuntimes(this.#readRegistry(), (id) => this.#readManifest(id));
-
+  enabledPureSkillRuntimes = (): readonly EnabledPureSkillRuntime[] =>
+    projectEnabledPureSkillRuntimes(this.#readRegistry(), this.#scope, (id) => this.#readManifest(id));
   restore(requestInput: SkillRestoreRequest): SkillRestoreResult {
     const request = SkillRestoreRequestSchema.parse(withLegacySkillScope(requestInput, this.#scope));
     const identity = {
@@ -621,7 +622,6 @@ export class SkillRegistryService {
     this.#lifecycleStore.prepare();
   }
 }
-
 export function parseSkillManifest(source: string): SkillManifest {
   if (Buffer.byteLength(source, "utf8") > MAX_MANIFEST_BYTES || /[\u0000\uFFFD]/u.test(source)) {
     throw skillError("skill.manifest_invalid", "Skill manifest is unsafe or oversized.");
