@@ -38,11 +38,11 @@ interface OperationScanResult {
   readonly operations: readonly OperationRecord[];
   readonly invalidOperationCount: number;
 }
-interface PrivateFileSnapshot {
+export interface PrivateFileSnapshot {
   readonly bytes: Buffer;
   readonly stat: fs.Stats;
 }
-interface GeneratedIndexUpdate {
+export interface GeneratedIndexUpdate {
   readonly indexPath: string;
   readonly basePath: string;
   readonly expectedRevision: fs.Stats;
@@ -139,7 +139,9 @@ export class KnowledgeActivityService {
   recoverIncompleteUndos(): KnowledgeActivityRecoveryResult {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return { recovered: 0, failed: 0 };
-    const scan = readOperationRecords(vaultPath);
+    let scan = readOperationRecords(vaultPath);
+    const agentRedo = this.#agentRedo?.recoverIncompleteRedos(vaultPath, scan.operations) ?? { recovered: 0, failed: 0 };
+    if (agentRedo.recovered > 0) scan = readOperationRecords(vaultPath);
     const undoByOperationId = createUndoOperationMap(scan.operations);
     let recovered = 0;
     let failed = 0;
@@ -147,6 +149,8 @@ export class KnowledgeActivityService {
       const existingUndo = undoByOperationId.get(operation.id);
       if (existingUndo) {
         try {
+          if (this.#agentRedo?.activityState(vaultPath, operation, existingUndo, scan.operations)
+            ?.redoUnavailableReason === "already_redone") continue;
           assertCompletedUndoState(vaultPath, operation, existingUndo);
         } catch {
           failed += 1;
@@ -167,6 +171,8 @@ export class KnowledgeActivityService {
       const existingUndo = undoByOperationId.get(operation.id);
       if (existingUndo) {
         try {
+          if (this.#agentRedo?.activityState(vaultPath, operation, existingUndo, scan.operations)
+            ?.redoUnavailableReason === "already_redone") continue;
           assertCompletedUndoState(vaultPath, operation, existingUndo);
         } catch {
           failed += 1;
@@ -181,7 +187,7 @@ export class KnowledgeActivityService {
         failed += 1;
       }
     }
-    const agentRedo = this.#agentRedo?.recoverIncompleteRedos(vaultPath, scan.operations) ?? { recovered: 0, failed: 0 }; const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const memory = this.#memory?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const pages = this.#pages?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const sources = this.#sources?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + agentRedo.recovered + collections.recovered + editor.recovered + memory.recovered + pages.recovered + sources.recovered, failed: failed + agentRedo.failed + collections.failed + editor.failed + memory.failed + pages.failed + sources.failed };
+    const collections = this.#collections?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const editor = this.#editor?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const memory = this.#memory?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const pages = this.#pages?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; const sources = this.#sources?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 }; return { recovered: recovered + agentRedo.recovered + collections.recovered + editor.recovered + memory.recovered + pages.recovered + sources.recovered, failed: failed + agentRedo.failed + collections.failed + editor.failed + memory.failed + pages.failed + sources.failed };
   }
   #requireActiveVault(): VaultSummary {
     const activeVault = this.#vaults.current();
@@ -692,7 +698,7 @@ function createUndoOperation(
   });
 }
 
-function generatedPageBinding(operation: OperationRecord): {
+export function generatedPageBinding(operation: OperationRecord): {
   readonly pagePath: string;
   readonly contentHash: string;
 } | undefined {
@@ -715,7 +721,7 @@ function generatedPageBinding(operation: OperationRecord): {
   return { pagePath: target.path, contentHash: after.id };
 }
 
-function isGeneratedCreatePageOperation(operation: OperationRecord): boolean {
+export function isGeneratedCreatePageOperation(operation: OperationRecord): boolean {
   const target = operation.targetRefs[0];
   return operation.kind === "create_page" &&
     operation.reversible !== "no" &&
@@ -768,7 +774,7 @@ function assertUndoOperationIdentityAvailable(
   }
 }
 
-function isMatchingUndoOperation(operation: OperationRecord, candidate: OperationRecord): boolean {
+export function isMatchingUndoOperation(operation: OperationRecord, candidate: OperationRecord): boolean {
   const binding = generatedPageBinding(operation);
   const target = operation.targetRefs[0];
   const candidateTarget = candidate.targetRefs[0];
@@ -832,13 +838,13 @@ function assertCompletedUndoState(
   }
 }
 
-function trashPathFor(operation: OperationRecord): string {
+export function trashPathFor(operation: OperationRecord): string {
   const target = operation.targetRefs[0];
   if (!target?.path) throw new PigeDomainError("activity.operation_conflict", "The Activity page path is missing.");
   return [".pige", "trash", "pages", operation.id, path.posix.basename(target.path)].join("/");
 }
 
-function createUndoOperationId(operationId: string): string {
+export function createUndoOperationId(operationId: string): string {
   const dateKey = /^op_(\d{8})_/.exec(operationId)?.[1];
   if (!dateKey) throw new PigeDomainError("activity.invalid_operation_id", "The Activity operation identity is invalid.");
   const digest = createHash("sha256")
@@ -989,7 +995,7 @@ function reconcileOperationTemporary(vaultPath: string, temporaryPath: string): 
   flushDirectory(directory);
 }
 
-function commitOperationExclusive(vaultPath: string, operation: OperationRecord): OperationRecord {
+export function commitOperationExclusive(vaultPath: string, operation: OperationRecord): OperationRecord {
   const operationPath = operationFilePath(vaultPath, operation.id);
   const directory = path.dirname(operationPath);
   ensureSafeDirectory(vaultPath, directory);
@@ -1116,7 +1122,7 @@ function operationFilePath(vaultPath: string, operationId: string): string {
   );
 }
 
-function readPrivateFile(
+export function readPrivateFile(
   vaultPath: string,
   filePath: string,
   maximumBytes: number,
@@ -1216,14 +1222,14 @@ function reconcilePreservedIndexLink(
   }
 }
 
-function indexLinkLineIndexes(lines: readonly string[], pagePath: string): number[] {
+export function indexLinkLineIndexes(lines: readonly string[], pagePath: string): number[] {
   return lines
     .map((line, index) => ({ line, index }))
     .filter(({ line }) => line.startsWith("- [") && line.includes(`](${pagePath})`))
     .map(({ index }) => index);
 }
 
-function replaceIndexConflictPreserving(
+export function replaceIndexConflictPreserving(
   vaultPath: string,
   operationId: string,
   update: GeneratedIndexUpdate
@@ -1478,7 +1484,7 @@ function reconcileInstalledIndexTemporary(vaultPath: string, indexPath: string, 
   flushDirectory(directory);
 }
 
-function indexBackupPath(vaultPath: string, operationId: string): string {
+export function indexBackupPath(vaultPath: string, operationId: string): string {
   if (!OPERATION_ID.test(operationId)) {
     throw new PigeDomainError("activity.invalid_operation_id", "The Activity operation identity is invalid.");
   }

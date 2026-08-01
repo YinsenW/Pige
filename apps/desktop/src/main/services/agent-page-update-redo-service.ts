@@ -21,10 +21,17 @@ import {
 import { removeGeneratedNoteExact, replaceGeneratedNoteExact } from "./generated-note-file";
 import { preservesEditableMarkdownPageOwnership } from "./markdown-source-editor-policy";
 import { validateActivityMarkdown } from "./note-markdown-editor-service";
+import { AgentPageCreateRedoService } from "./agent-page-create-redo-service";
 
 type RedoState = Pick<KnowledgeActivitySummary, "canRedo" | "redoUnavailableReason">;
 
 export class AgentPageUpdateRedoService {
+  readonly #create: AgentPageCreateRedoService;
+
+  constructor(create: AgentPageCreateRedoService = new AgentPageCreateRedoService()) {
+    this.#create = create;
+  }
+
   activityState(
     vaultPath: string,
     operation: OperationRecord,
@@ -32,7 +39,8 @@ export class AgentPageUpdateRedoService {
     operations: readonly OperationRecord[]
   ): RedoState | undefined {
     const binding = readAgentPageUpdateOperationBinding(operation);
-    if (!binding || !undo || !isMatchingAgentPageUpdateUndo(operation, undo)) return undefined;
+    if (!binding) return this.#create.activityState(vaultPath, operation, undo, operations);
+    if (!undo || !isMatchingAgentPageUpdateUndo(operation, undo)) return undefined;
     const redo = operations.find(({ id }) => id === createAgentPageUpdateRedoOperationId(operation.id));
     if (redo) {
       try {
@@ -68,7 +76,8 @@ export class AgentPageUpdateRedoService {
     expectedRevisionId?: string
   ): KnowledgeActivityRedoResult {
     const binding = readAgentPageUpdateOperationBinding(operation);
-    if (!binding || !undo || !isMatchingAgentPageUpdateUndo(operation, undo)) {
+    if (!binding) return this.#create.redo(vaultPath, operation, undo, operations, expectedRevisionId);
+    if (!undo || !isMatchingAgentPageUpdateUndo(operation, undo)) {
       return { status: "not_found", operationId: operation.id };
     }
     const redoId = createAgentPageUpdateRedoOperationId(operation.id);
@@ -157,7 +166,8 @@ export class AgentPageUpdateRedoService {
         failed += 1;
       }
     }
-    return { recovered, failed };
+    const create = this.#create.recoverIncompleteRedos(vaultPath, operations);
+    return { recovered: recovered + create.recovered, failed: failed + create.failed };
   }
 }
 

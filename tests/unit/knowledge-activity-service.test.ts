@@ -21,6 +21,7 @@ import {
   AgentPageUpdateRedoService,
   createAgentPageUpdateRedoOperationId
 } from "../../apps/desktop/src/main/services/agent-page-update-redo-service";
+import { createAgentPageCreateRedoOperationId } from "../../apps/desktop/src/main/services/agent-page-create-redo-service";
 
 const temporaryRoots: string[] = [];
 
@@ -362,6 +363,76 @@ describe("Knowledge Activity and Undo", () => {
       before: { kind: "page", id: hash(fixture.pageContent), path: fixture.pageRelativePath },
       after: { kind: "page", id: hash(fixture.pageContent), path: fixture.trashRelativePath }
     });
+  });
+
+  it("redoes an exact Agent-created page from recoverable trash and adopts replay", () => {
+    const fixture = createFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    const undo = service.undo({ operationId: fixture.operation.id });
+    expect(undo).toMatchObject({ status: "undone" });
+    expect(service.list().activities[0]).toMatchObject({ status: "undone", canRedo: true });
+
+    const first = service.redo({ operationId: fixture.operation.id });
+    expect(first).toMatchObject({
+      status: "redone",
+      undoOperationId: undo.undoOperationId,
+      revisionId: hash(fixture.pageContent)
+    });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(fixture.pageContent);
+    expect(fs.existsSync(fixture.trashPath)).toBe(false);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, "index.md"), "utf8"))
+      .toContain(fixture.pageRelativePath);
+
+    const restarted = createActivityServiceWithAgentRedo(fixture.vaults);
+    fs.mkdirSync(path.dirname(fixture.trashPath), { recursive: true });
+    fs.copyFileSync(fixture.pagePath, fixture.trashPath, fs.constants.COPYFILE_EXCL);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.existsSync(fixture.trashPath)).toBe(false);
+    expect(restarted.redo({ operationId: fixture.operation.id })).toMatchObject({
+      status: "already_redone",
+      redoOperationId: first.redoOperationId
+    });
+    expect(restarted.list().activities[0]).toMatchObject({
+      canRedo: false,
+      redoUnavailableReason: "already_redone"
+    });
+  });
+
+  it("does not overwrite an occupied Agent-created page path during Redo", () => {
+    const fixture = createFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    fs.mkdirSync(path.dirname(fixture.pagePath), { recursive: true });
+    fs.writeFileSync(fixture.pagePath, "External page replacement.\n", "utf8");
+
+    expect(service.list().activities[0]).toMatchObject({
+      canRedo: false,
+      redoUnavailableReason: "content_changed"
+    });
+    expect(service.redo({ operationId: fixture.operation.id })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe("External page replacement.\n");
+    expect(fs.readFileSync(fixture.trashPath, "utf8")).toBe(fixture.pageContent);
+  });
+
+  it("recovers one Agent create-page Redo after page restoration and before receipt commit", () => {
+    const fixture = createFixture();
+    const service = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(service.undo({ operationId: fixture.operation.id })).toMatchObject({ status: "undone" });
+    fs.mkdirSync(path.dirname(fixture.pagePath), { recursive: true });
+    fs.copyFileSync(fixture.trashPath, fixture.pagePath, fs.constants.COPYFILE_EXCL);
+
+    const restarted = createActivityServiceWithAgentRedo(fixture.vaults);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 1, failed: 0 });
+    const redoId = createAgentPageCreateRedoOperationId(fixture.operation.id);
+    expect(requireOperation(fixture.vaultPath, redoId)).toMatchObject({
+      kind: "restore_page",
+      sourceRefs: [
+        { kind: "operation", id: fixture.operation.id },
+        { kind: "operation", id: undoOperationId(fixture.operation.id) }
+      ]
+    });
+    expect(fs.existsSync(fixture.trashPath)).toBe(false);
+    expect(restarted.recoverIncompleteUndos()).toEqual({ recovered: 0, failed: 0 });
   });
 
   it("lists a checksum-bound existing-note update and restores exact prior bytes idempotently", () => {
