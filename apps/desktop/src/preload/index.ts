@@ -389,6 +389,10 @@ import type {
   MemoryMutationResult,
   MemoryResetRequest,
   MemorySummary,
+  MemoryTrashListRequest,
+  MemoryTrashRestoreRequest,
+  MemoryTrashRestoreResult,
+  MemoryTrashSummary,
   SkillRegistryMutationResult,
   SkillRegistryQueryRequest,
   SkillRegistryQueryResult,
@@ -935,6 +939,10 @@ import {
   MemoryMutationResultSchema,
   MemoryResetRequestSchema,
   MemorySummarySchema,
+  MemoryTrashListRequestSchema,
+  MemoryTrashRestoreRequestSchema,
+  MemoryTrashRestoreResultSchema,
+  MemoryTrashSummarySchema,
   SkillRegistryQueryRequestSchema,
   SkillRegistryQueryResultSchema,
   SkillRegistrySummarySchema,
@@ -2247,6 +2255,16 @@ const api: PigeDesktopApi = {
   memory: {
     list: async (request: MemoryListRequest): Promise<MemorySummary> =>
       MemorySummarySchema.parse(await ipcRenderer.invoke("memory.list", MemoryListRequestSchema.parse(request))),
+    listTrash: async (request: MemoryTrashListRequest): Promise<MemoryTrashSummary> =>
+      MemoryTrashSummarySchema.parse(await ipcRenderer.invoke(
+        "memory.listTrash",
+        MemoryTrashListRequestSchema.parse(request)
+      )),
+    restoreTrash: async (request: MemoryTrashRestoreRequest): Promise<MemoryTrashRestoreResult> =>
+      MemoryTrashRestoreResultSchema.parse(await ipcRenderer.invoke(
+        "memory.restoreTrash",
+        MemoryTrashRestoreRequestSchema.parse(request)
+      )),
     disable: async (request: MemoryDisableRequest): Promise<MemoryMutationResult> =>
       MemoryMutationResultSchema.parse(await ipcRenderer.invoke(
         "memory.disable",

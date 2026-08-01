@@ -462,6 +462,9 @@ Trash rules:
 - Trash entries should retain original path, object ID, deletion time, operation ID, previous checksum when available, and reason.
 - Trash restore should re-check path conflicts before restoring.
 - Managed Dataset trash inventory projects only title and stable Dataset/revision/Operation identities. Direct Library restore binds the exact inventory revision and reuses the same forward restore Operation as Activity Undo; tamper, path conflict, restored state, or inventory drift fails closed.
+- Deleted Agent-memory inventory projects only title, kind, time and stable Memory/Operation identity.
+  Direct Settings restore binds the current registry revision and reuses the same `restore_memory`
+  Operation as Activity Undo; private L0/L1 content, provenance, receipt paths and hashes stay in Main.
 - Permanent deletion from trash is out of scope for ordinary Agent actions and should require explicit user confirmation if exposed.
 
 Compaction rules:

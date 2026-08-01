@@ -34,6 +34,18 @@ const summary = {
     updatedAt: "2026-07-27T10:01:00.000Z"
   }]
 } as const;
+const trashSummary = {
+  apiVersion: 1,
+  activeVaultId,
+  revision: 8,
+  records: [{
+    memoryId: recordRequest.memoryId,
+    trashOperationId: "op_20260727_memorytrash",
+    kind: "preference",
+    title: "Concise replies",
+    trashedAt: "2026-07-27T10:02:00.000Z"
+  }]
+} as const;
 
 function makeHarness(overrides: {
   readonly getActiveVaultBinding?: () => typeof binding | undefined;
@@ -45,6 +57,7 @@ function makeHarness(overrides: {
   const handlers = new Map<string, IpcHandler>();
   const publishMemoryChanged = vi.fn();
   const listMemory = vi.fn(() => summary);
+  const listMemoryTrash = vi.fn(() => trashSummary);
   const disableMemory = vi.fn(() => ({ status: "committed", summary } as const));
   const lifecycle = (request: typeof recordRequest | typeof vaultRequest) => ({
     apiVersion: 1,
@@ -58,6 +71,15 @@ function makeHarness(overrides: {
   const editMemory = vi.fn(overrides.editMemory ?? ((_binding, request) => lifecycle(request)));
   const deleteMemory = vi.fn((_binding, request) => lifecycle(request));
   const resetMemory = vi.fn((_binding, request) => lifecycle(request));
+  const restoreMemoryTrash = vi.fn((_binding, request) => ({
+    apiVersion: 1,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    status: "committed" as const,
+    operationId: "op_20260727_memoryrestore",
+    summary,
+    trash: { ...trashSummary, records: [] }
+  }));
   const exportMemory = vi.fn(overrides.exportMemory ?? ((_binding, request) => ({
     apiVersion: 1,
     requestId: request.requestId,
@@ -75,6 +97,8 @@ function makeHarness(overrides: {
     })),
     getActiveVaultBinding: overrides.getActiveVaultBinding ?? (() => binding),
     listMemory,
+    listMemoryTrash,
+    restoreMemoryTrash,
     disableMemory,
     editMemory,
     enableMemory,
@@ -101,6 +125,8 @@ describe("registerMemoryIpc", () => {
     const harness = makeHarness();
     expect([...harness.handlers.keys()]).toEqual([
       "memory.list",
+      "memory.listTrash",
+      "memory.restoreTrash",
       "memory.disable",
       "memory.edit",
       "memory.enable",
@@ -110,6 +136,11 @@ describe("registerMemoryIpc", () => {
     ]);
 
     await expect(call(harness, "memory.list", { apiVersion: 1, activeVaultId })).resolves.toEqual(summary);
+    await expect(call(harness, "memory.listTrash", { apiVersion: 1, activeVaultId })).resolves.toEqual(trashSummary);
+    await expect(call(harness, "memory.restoreTrash", {
+      ...recordRequest,
+      trashOperationId: trashSummary.records[0].trashOperationId
+    })).resolves.toMatchObject({ status: "committed", trash: { records: [] } });
     await expect(call(harness, "memory.disable", recordRequest)).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.edit", {
       ...recordRequest,
@@ -119,7 +150,7 @@ describe("registerMemoryIpc", () => {
     await expect(call(harness, "memory.enable", recordRequest)).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.delete", recordRequest)).resolves.toMatchObject({ status: "committed" });
     await expect(call(harness, "memory.reset", vaultRequest)).resolves.toMatchObject({ status: "committed" });
-    expect(harness.publishMemoryChanged).toHaveBeenCalledTimes(5);
+    expect(harness.publishMemoryChanged).toHaveBeenCalledTimes(6);
     expect(harness.publishMemoryChanged).toHaveBeenCalledWith(summary);
   });
 

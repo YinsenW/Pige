@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "One strict YAML and type-specific boundary validates, rewrites and indexes all Pige-managed Markdown page types and closes PIGE-SCHEMA-001.",
+    "scope": "Individual Agent Memory trash inventory and direct restore now bind exact receipts, Operations, restart recovery, strict IPC and body-free Settings evidence while remaining lifecycle gaps stay explicit.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "857659063da0447b93c835227f7da885ae9168b0f62b7df45890360b847bd6b2"
+    "reviewedSha256": "9293d916fb378b8a1621b3597a87cb1d8aa44acba9ebdaed5d08b2b6d98646b8"
   },
   "reviewers": [
     {

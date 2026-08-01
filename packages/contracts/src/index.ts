@@ -252,6 +252,10 @@ import type {
   MemoryRecordSummary,
   MemoryResetRequest,
   MemorySummary,
+  MemoryTrashListRequest,
+  MemoryTrashRestoreRequest,
+  MemoryTrashRestoreResult,
+  MemoryTrashSummary,
   JobClass,
   JobChangedEvent as JobChangedEventSchemaType,
   JobRecord,
@@ -1029,6 +1033,10 @@ export type {
   MemoryRecordSummary,
   MemoryResetRequest,
   MemorySummary,
+  MemoryTrashListRequest,
+  MemoryTrashRestoreRequest,
+  MemoryTrashRestoreResult,
+  MemoryTrashSummary,
   SkillCapability,
   SkillDataBoundary,
   SkillDiscardStagedRequest,
@@ -2445,6 +2453,8 @@ export interface PigeDesktopApi {
   };
   readonly memory: {
     readonly list: (request: MemoryListRequest) => Promise<MemorySummary>;
+    readonly listTrash: (request: MemoryTrashListRequest) => Promise<MemoryTrashSummary>;
+    readonly restoreTrash: (request: MemoryTrashRestoreRequest) => Promise<MemoryTrashRestoreResult>;
     readonly disable: (request: MemoryDisableRequest) => Promise<MemoryMutationResult>;
     readonly edit: (request: MemoryEditRequest) => Promise<MemoryLifecycleMutationResult>;
     readonly enable: (request: MemoryEnableRequest) => Promise<MemoryLifecycleMutationResult>;

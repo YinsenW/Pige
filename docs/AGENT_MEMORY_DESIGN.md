@@ -65,7 +65,9 @@ projection only. Vault memory is portable and backed up unless excluded; indexes
   replay/restart-adoptable across repeated cycles; tampering closes and UI retains stale drafts.
 - Enable/delete/reset use revision CAS. Delete/reset retain exact L0/L1 privately, record
   `trash_memory`, and Undo/Redo writes deterministic forward Operations without losing later facts;
-  removed atoms leave recall.
+  removed atoms leave recall. Settings can directly list eligible single-delete trash as body/path-free
+  title/kind/time summaries and restore one exact current item through the same `restore_memory`
+  Operation/restart owner; reset-wide recovery remains Activity-owned.
 - Export rechecks revision after Main's dialog and writes safe summaries; results are pathless.
 - Backup binds the exact registry revision/checksum, lifecycle receipts, restore intents and
   linked Operations; restore revalidates those bindings before publication. Active records

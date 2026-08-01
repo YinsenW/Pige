@@ -4146,6 +4146,50 @@ export const MemoryListRequestSchema = z.object({
 }).strict();
 
 export const MemoryRequestIdSchema = z.string().regex(/^memory_request_[a-z0-9]{16,64}$/);
+export const MemoryTrashRecordSummarySchema = z.object({
+  memoryId: MemoryRecordIdSchema,
+  trashOperationId: OperationIdSchema,
+  kind: MemoryKindSchema,
+  title: z.string().trim().min(1).max(120),
+  trashedAt: z.string().datetime({ offset: true })
+}).strict();
+export const MemoryTrashSummarySchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  records: z.array(MemoryTrashRecordSummarySchema).max(1_000)
+}).strict();
+export const MemoryTrashListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema
+}).strict();
+export const MemoryTrashRestoreRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: MemoryRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  memoryId: MemoryRecordIdSchema,
+  trashOperationId: OperationIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const MemoryTrashRestoreResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: MemoryRequestIdSchema,
+    activeVaultId: VaultIdSchema,
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    summary: MemorySummarySchema,
+    trash: MemoryTrashSummarySchema
+  }).strict(),
+  ...(["stale", "not_found"] as const).map((status) => z.object({
+    apiVersion: z.literal(1),
+    requestId: MemoryRequestIdSchema,
+    activeVaultId: VaultIdSchema,
+    status: z.literal(status),
+    summary: MemorySummarySchema,
+    trash: MemoryTrashSummarySchema
+  }).strict())
+]);
 const MemoryRecordMutationRequestIdentitySchema = z.object({
   apiVersion: z.literal(1),
   requestId: MemoryRequestIdSchema,
@@ -13094,6 +13138,11 @@ export type MemoryRecordSummary = z.infer<typeof MemoryRecordSummarySchema>;
 export type MemorySummary = z.infer<typeof MemorySummarySchema>;
 export type MemoryListRequest = z.infer<typeof MemoryListRequestSchema>;
 export type MemoryRequestId = z.infer<typeof MemoryRequestIdSchema>;
+export type MemoryTrashRecordSummary = z.infer<typeof MemoryTrashRecordSummarySchema>;
+export type MemoryTrashSummary = z.infer<typeof MemoryTrashSummarySchema>;
+export type MemoryTrashListRequest = z.infer<typeof MemoryTrashListRequestSchema>;
+export type MemoryTrashRestoreRequest = z.infer<typeof MemoryTrashRestoreRequestSchema>;
+export type MemoryTrashRestoreResult = z.infer<typeof MemoryTrashRestoreResultSchema>;
 export type MemoryDisableRequest = z.infer<typeof MemoryDisableRequestSchema>;
 export type MemoryEnableRequest = z.infer<typeof MemoryEnableRequestSchema>;
 export type MemoryDeleteRequest = z.infer<typeof MemoryDeleteRequestSchema>;

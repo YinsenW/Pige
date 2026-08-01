@@ -429,6 +429,7 @@ import { HomeSkillStagingToolService } from "./services/home-skill-staging-tool"
 import { ExternalWebSkillRuntimeService } from "./services/external-web-skill-runtime-service";
 import { PureSkillRuntimeService } from "./services/pure-skill-runtime-service";
 import { AgentMemoryService } from "./services/agent-memory-service";
+import { AgentMemoryTrashService } from "./services/agent-memory-trash-service";
 import { VaultService } from "./services/vault-service";
 import { WindowModeService } from "./services/window-mode-service";
 import { getWindowShellOptions } from "./window-shell-options";
@@ -558,6 +559,7 @@ let skillUrlInstallService: SkillUrlInstallService | undefined;
 let externalWebSkillRuntimeService: ExternalWebSkillRuntimeService | undefined;
 let pureSkillRuntimeService: PureSkillRuntimeService | undefined;
 let agentMemoryService: AgentMemoryService | undefined;
+let agentMemoryTrashService: AgentMemoryTrashService | undefined;
 let paddleOcrLifecycleService: PaddleOcrLifecycleService | undefined;
 let paddleOcrRuntimeComposition: PaddleOcrRuntimeComposition | undefined;
 let taskProcessSessionService: TaskProcessSessionService | undefined;
@@ -891,8 +893,13 @@ const getPureSkillRuntimeService = (): PureSkillRuntimeService => {
 };
 
 const getAgentMemoryService = (): AgentMemoryService => {
-  agentMemoryService ??= new AgentMemoryService();
+  agentMemoryService ??= new AgentMemoryService({ activeVaultPath: () => getVaultService().activeVaultPath() });
   return agentMemoryService;
+};
+
+const getAgentMemoryTrashService = (): AgentMemoryTrashService => {
+  agentMemoryTrashService ??= new AgentMemoryTrashService(getAgentMemoryService());
+  return agentMemoryTrashService;
 };
 
 const getPaddleOcrLifecycleService = (): PaddleOcrLifecycleService => {
@@ -3438,6 +3445,8 @@ registerMemoryIpc({
     return vault && vaultPath ? { vaultId: vault.vaultId, vaultPath } : undefined;
   },
   listMemory: (binding) => getAgentMemoryService().list(binding.vaultPath, binding.vaultId),
+  listMemoryTrash: (binding, request) => getAgentMemoryTrashService().list(binding.vaultPath, request),
+  restoreMemoryTrash: (binding, request) => getAgentMemoryTrashService().restore(binding.vaultPath, request),
   disableMemory: (binding, request) => getAgentMemoryService().disable(binding.vaultPath, request),
   editMemory: (binding, request) => getAgentMemoryService().edit(binding.vaultPath, request),
   enableMemory: (binding, request) => getAgentMemoryService().enable(binding.vaultPath, request),

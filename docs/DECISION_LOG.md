@@ -5465,6 +5465,33 @@ References:
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Agent-Memory-Direct-Trash-Restore
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Expose individually deleted vault-scoped Agent Memory through a body-free Settings trash inventory and restore it only through the exact durable delete Operation and existing Memory Undo owner.
+
+Rationale:
+
+Memory deletion was already trash-first, reversible and restart-safe through Activity, but users could not discover or restore a deleted item directly from the Memory surface. A narrow projection of stable identity, kind, title and deletion time closes that workflow without projecting private Memory bodies, provenance, paths or receipt internals.
+
+Consequences:
+
+- Main rereads and validates the exact delete receipt, Operation and restore chain before minting restore authority.
+- Restore is registry-revision fenced, preserves unrelated Memory records and converges through the existing `restore_memory` Operation across restart.
+- Reset-wide direct restore, remaining durable classes, compaction, cleanup, migration and permanent-delete confirmation remain open; PIGE-VAULT-004 and E9.04 stay partial.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
