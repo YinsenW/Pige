@@ -42,6 +42,7 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HomeJobAction } from "./components/HomeJobAction";
+import { useHomeJobEvents } from "./components/useHomeJobEvents";
 import {
   HomeCaptureDropZone,
   settleHomeCaptureBatch,
@@ -235,6 +236,7 @@ const startupDestinationApi: StartupDestinationApi = {
   load: () => window.pige.settings.startupDestination(),
   set: (request) => window.pige.settings.setStartupDestination(request)
 };
+const HOME_JOB_CLASSES = ["capture", "parse", "ocr", "dataset_import", "agent_ingest", "agent_turn", "index_rebuild"] as const;
 type View = "home" | "library" | "knowledgeTree";
 type EditableActiveCollection = {
   readonly mode: "editable";
@@ -806,7 +808,7 @@ export function App(): React.JSX.Element {
   }, [appearanceSummary?.effectiveTheme]);
 
   useEffect(() => {
-    const homeWorkActive = recentJobs.some((job) => job.state === "queued" || job.state === "running");
+    const homeWorkActive = recentJobs.some((job) => job.state === "queued" || job.state === "running" || job.state === "cancel_requested");
     const backupWorkActive = backupJobs.some((job) =>
       job.state === "queued" || job.state === "running" || job.state === "cancel_requested"
     );
@@ -853,7 +855,7 @@ export function App(): React.JSX.Element {
         window.pige.agent.runtimeStatus()
       ]);
       const homeJobStateFilter = {
-        states: ["queued", "running", "waiting_dependency", "failed_retryable", "failed_final"] as JobState[]
+        states: ["queued", "running", "waiting_dependency", "waiting_permission", "failed_retryable", "failed_final"] as JobState[]
       };
       homeJobStateFilter.states.push("awaiting_review");
       homeJobStateFilter.states.push("cancel_requested");
@@ -861,7 +863,7 @@ export function App(): React.JSX.Element {
         ? await Promise.all([
           window.pige.jobs.list({
             limit: 100,
-            classes: ["capture", "parse", "ocr", "agent_ingest", "agent_turn", "index_rebuild"],
+            classes: HOME_JOB_CLASSES,
             ...homeJobStateFilter
           }).catch(() => undefined),
           window.pige.jobs.list({
@@ -916,7 +918,7 @@ export function App(): React.JSX.Element {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
   };
-
+  useHomeJobEvents(onboarding?.activeVault?.vaultId, HOME_JOB_CLASSES, refreshVaultState, setRecentJobs, setBackupJobs);
   const refreshActivityJobs = async (): Promise<boolean> => {
     const activeVaultId = activeVaultIdRef.current;
     const sequence = ++activityJobsRefreshSequence.current;
@@ -7194,6 +7196,7 @@ function isActiveProcessingFileJob(job: JobSummary): boolean {
   return job.state === "queued" ||
     job.state === "running" ||
     job.state === "waiting_dependency" ||
+    job.state === "waiting_permission" ||
     job.state === "awaiting_review" ||
     job.state === "cancel_requested" ||
     job.state === "failed_retryable";
@@ -7204,7 +7207,7 @@ function jobStateMessageKey(job: JobSummary): string {
   if (job.state === "queued") return "home.jobQueued";
   if (job.state === "running") return "home.jobRunning";
   if (job.state === "cancel_requested") return "home.jobCancelRequested";
-  if (job.state === "waiting_dependency") return "home.jobWaiting";
+  if (job.state === "waiting_dependency" || job.state === "waiting_permission") return "home.jobWaiting";
   if (job.state === "awaiting_review") return "home.jobReview";
   return "home.jobFailed";
 }

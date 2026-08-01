@@ -464,7 +464,9 @@ Rules:
   Active parse/OCR/`agent_turn`/Agent ingest/`index_rebuild` may still become
   `cancel_requested`. Capture/parse/OCR/Agent-ingest writers persist a real pre-publication checkpoint before their first
   domain effect; the Job write must succeed before publication. Abandon/archive is separate.
-- `jobs.list` exposes persisted stage/progress by polling; numeric Home rendering and pushed progress events remain open.
+- `jobs.list` remains the restart/fallback snapshot for persisted stage and progress. Main emits
+  strict `jobs.changed` events only after the same durable Job commit is read back; Home adopts
+  their bounded numeric progress and authoritative cancellation state for the active Vault.
 - Source-page projection is internal, not renderer-exposed. Document/image parse or OCR
   children require Pi tool events.
 - Direct-image OCR uses the same durable Job actions: no-capability parents wait without a child, recovery requeues them, retry reuses one child, cancellation reaches active OCR, and safe summaries never return private paths.

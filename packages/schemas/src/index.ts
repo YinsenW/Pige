@@ -11021,6 +11021,41 @@ export const JobRecordSchema = z.object({
   }
 });
 
+export const JOB_CHANGED_EVENT_CHANNEL = "jobs.changed" as const;
+export const JobChangedSummarySchema = z.object({
+  id: JobIdSchema,
+  class: JobClassSchema,
+  state: JobStateSchema,
+  stage: JobStageSchema.optional(),
+  progress: z.object({
+    completedUnits: z.number().nonnegative(),
+    totalUnits: z.number().positive().optional(),
+    unit: z.string().min(1).optional(),
+    messageKey: z.string().min(1).optional()
+  }).optional(),
+  sourceId: SourceIdSchema.optional(),
+  captureId: CaptureIdSchema.optional(),
+  conversationEventId: ConversationEventIdSchema.optional(),
+  sourceDisplayName: z.string().min(1).max(512).optional(),
+  sourceKind: SourceKindSchema.optional(),
+  backupKind: z.enum(["user_backup", "restore_rollback"]).optional(),
+  canReconnectDependency: z.boolean(),
+  canReconnectBackupDestination: z.boolean(),
+  canContinueIncomplete: z.boolean(),
+  canCancel: z.boolean(),
+  canRetry: z.boolean(),
+  error: PigeErrorSummarySchema.optional(),
+  message: z.string().min(1),
+  createdAt: z.string().datetime({ offset: true }),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const JobChangedEventSchema = z.object({
+  apiVersion: z.literal(1),
+  sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  activeVaultId: VaultIdSchema,
+  job: JobChangedSummarySchema
+}).strict();
+
 const AgentIngestStatementSchema = z.object({
   text: z.string().trim().min(1).max(1600),
   evidenceRefs: z.array(z.string().regex(/^ev_\d{2}$/)).max(8)
@@ -12000,6 +12035,7 @@ export type KnowledgeHealthClaimSourceRepairResult = z.infer<typeof KnowledgeHea
 export type JobCheckpoint = z.infer<typeof JobCheckpointSchema>;
 export type JobRef = z.infer<typeof JobRefSchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
+export type JobChangedEvent = z.infer<typeof JobChangedEventSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;

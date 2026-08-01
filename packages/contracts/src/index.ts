@@ -246,6 +246,7 @@ import type {
   MemoryResetRequest,
   MemorySummary,
   JobClass,
+  JobChangedEvent as JobChangedEventSchemaType,
   JobRecord,
   JobStage,
   JobState,
@@ -1505,6 +1506,8 @@ export interface JobSummary {
   readonly updatedAt: string;
 }
 
+export type JobChangedEvent = JobChangedEventSchemaType;
+
 export interface JobsListResult {
   readonly scannedAt: string;
   readonly activeVaultId: string;
@@ -2304,6 +2307,7 @@ export interface PigeDesktopApi {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
     readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
+    readonly onChanged: (listener: (event: JobChangedEvent) => void) => () => void;
     readonly reconnectOriginalSource: (
       request: ReferencedOriginalReconnectRequest
     ) => Promise<ReferencedOriginalReconnectResult>;

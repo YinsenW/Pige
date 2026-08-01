@@ -61,9 +61,7 @@ export function HomeJobAction(props: {
       {pending ? props.repair.pendingLabel : props.repair.label}
     </button>;
   }
-  if (props.job.state === "queued" || (
-    props.job.class === "agent_turn" && (props.job.state === "running" || props.job.state === "cancel_requested")
-  )) {
+  if (props.job.canCancel === true || props.job.state === "cancel_requested") {
     return <button
       className={props.compact ? "task-icon-action" : "job-action"}
       type="button"

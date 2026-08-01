@@ -3183,6 +3183,7 @@ describe("jobs service", () => {
     await started;
     const runningJob = jobs.list({ classes: ["index_rebuild"], states: ["running"] }).jobs[0];
     expect(runningJob?.progress).toEqual({ completedUnits: 0, totalUnits: 5, unit: "index_item" });
+    expect(runningJob?.canCancel).toBe(true);
     expect(jobs.cancel({ jobId: requireValue(runningJob).id }).status).toBe("cancel_requested");
 
     await expect(rebuilding).rejects.toMatchObject({ code: "index_rebuild_failed" });

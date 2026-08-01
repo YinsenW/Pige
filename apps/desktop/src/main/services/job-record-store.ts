@@ -30,6 +30,15 @@ export interface JobRecordRevision {
   readonly ino: number;
 }
 
+export interface JobRecordCommitEvent { readonly rootPath: string; readonly job: JobRecord }
+type JobRecordCommitListener = (event: JobRecordCommitEvent) => void;
+const jobRecordCommitListeners = new Set<JobRecordCommitListener>();
+
+export function subscribeJobRecordCommits(listener: JobRecordCommitListener): () => void {
+  jobRecordCommitListeners.add(listener);
+  return () => jobRecordCommitListeners.delete(listener);
+}
+
 export interface JobRecordSnapshot {
   readonly path: string;
   readonly job: JobRecord;
@@ -339,7 +348,9 @@ export class JobRecordStore {
       temporaryPresent = false;
       flushDirectoryWhereSupported(path.dirname(resolvedPath));
       assertDirectoryChainUnchanged(this.#rootPath, path.dirname(resolvedPath), directoryIdentity);
-      return assertCommittedSnapshot(this.read(resolvedPath), bytes);
+      const committed = assertCommittedSnapshot(this.read(resolvedPath), bytes);
+      publishJobRecordCommit(this.#rootPath, committed.job);
+      return committed;
     } catch (caught) {
       if (caught instanceof PigeDomainError) throw caught;
       throw new PigeDomainError("job.write_failed", "The Job record could not be created durably.");
@@ -375,7 +386,9 @@ export class JobRecordStore {
       assertDirectoryChainUnchanged(this.#rootPath, path.dirname(resolvedPath), directoryIdentity);
       flushDirectoryWhereSupported(path.dirname(resolvedPath));
       assertDirectoryChainUnchanged(this.#rootPath, path.dirname(resolvedPath), directoryIdentity);
-      return assertCommittedSnapshot(this.read(resolvedPath), bytes);
+      const committed = assertCommittedSnapshot(this.read(resolvedPath), bytes);
+      publishJobRecordCommit(this.#rootPath, committed.job);
+      return committed;
     } catch (caught) {
       if (caught instanceof PigeDomainError) throw caught;
       if (isErrno(caught, "ENOENT") || isErrno(caught, "EEXIST")) throw revisionConflict();
@@ -420,6 +433,12 @@ export class JobRecordStore {
       throw new PigeDomainError("job.path_unsafe", "The Job record path is outside its owned root.");
     }
     return resolvedPath;
+  }
+}
+
+function publishJobRecordCommit(rootPath: string, job: JobRecord): void {
+  for (const listener of jobRecordCommitListeners) {
+    try { listener(Object.freeze({ rootPath, job })); } catch { /* Observers never alter durable commits. */ }
   }
 }
 
