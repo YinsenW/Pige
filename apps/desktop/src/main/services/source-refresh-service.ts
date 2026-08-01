@@ -115,6 +115,15 @@ export class SourceRefreshService {
     return record.storageStrategy === "reference_original" && isEligible(record, this.#parser, this.#ocr);
   }
 
+  refreshableSourceIds(sourceIds: readonly string[]): readonly string[] {
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!vaultPath) return [];
+    return sourceIds.filter((sourceId) => {
+      const snapshot = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
+      return snapshot !== undefined && isEligible(snapshot.record, this.#parser, this.#ocr);
+    });
+  }
+
   async replaceReferencedOriginal(
     input: ReferencedOriginalReplacementInput,
     assertCurrent: () => boolean
