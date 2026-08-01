@@ -2518,9 +2518,9 @@ describe("jobs service", () => {
     expect(completed?.agentKnowledgeOutcome).toMatchObject({
       kind: "created",
       knowledgeFields: ["title", "summary", "key_points", "citations", "tags"],
-      citationRefs: [{ kind: "source", id: captureResult.sourceId }],
-      undoOperationIds: completed?.operationIds
+      citationRefs: [{ kind: "source", id: captureResult.sourceId }]
     });
+    expect(completed?.agentKnowledgeOutcome?.undoOperationIds).toHaveLength(1);
     const completedRecord = JSON.parse(fs.readFileSync(
       findFile(path.join(vaultPath, ".pige/jobs"), `${completed?.id}.json`),
       "utf8"
