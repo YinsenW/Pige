@@ -1329,6 +1329,7 @@ export const KnowledgeActivityListResultSchema = z.object({
 
 export const KNOWLEDGE_HEALTH_MAX_ISSUE_SUMMARIES = 100;
 export const KNOWLEDGE_HEALTH_MAX_DUPLICATE_TOPIC_PAGES = 8;
+export const KNOWLEDGE_HEALTH_MAX_BROKEN_LINK_OCCURRENCES = 32;
 export const KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES = 128 * 1024;
 export const KnowledgeHealthRequestIdSchema = z.string()
   .regex(/^knowledge_health_request_[a-z0-9]{16,64}$/);
@@ -1376,6 +1377,17 @@ export const KnowledgeHealthIssueKindSchema = z.enum([
   "duplicate_topic",
   "unsourced_claim"
 ]);
+const KnowledgeHealthBrokenLinkOccurrenceSchema = z.object({
+  ordinal: z.number().int().min(1).max(KNOWLEDGE_HEALTH_MAX_BROKEN_LINK_OCCURRENCES),
+  displayLabel: z.string().min(1).max(256).refine(
+    (value) => !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value),
+    "Broken-link labels contain unsafe control text."
+  ),
+  repairContextId: KnowledgeHealthRepairContextIdSchema,
+  sourceRevision: KnowledgeHealthPageRevisionSchema,
+  sourceRenderProof: KnowledgeHealthRenderProofSchema,
+  occurrenceId: KnowledgeHealthOccurrenceIdSchema
+}).strict();
 const KnowledgeHealthBrokenLinkIssueSchema = z.object({
   kind: z.literal("broken_link"),
   page: KnowledgeHealthPageRefSchema,
@@ -1383,11 +1395,27 @@ const KnowledgeHealthBrokenLinkIssueSchema = z.object({
   repairContextId: KnowledgeHealthRepairContextIdSchema.optional(),
   sourceRevision: KnowledgeHealthPageRevisionSchema.optional(),
   sourceRenderProof: KnowledgeHealthRenderProofSchema.optional(),
-  occurrenceId: KnowledgeHealthOccurrenceIdSchema.optional()
+  occurrenceId: KnowledgeHealthOccurrenceIdSchema.optional(),
+  repairableOccurrences: z.array(KnowledgeHealthBrokenLinkOccurrenceSchema)
+    .max(KNOWLEDGE_HEALTH_MAX_BROKEN_LINK_OCCURRENCES)
+    .optional()
 }).strict().superRefine((issue, context) => {
-  const proofs = [issue.repairContextId, issue.sourceRevision, issue.sourceRenderProof, issue.occurrenceId];
-  if (proofs.some((value) => value !== undefined) && proofs.some((value) => value === undefined)) {
+  const legacyProof = [issue.repairContextId, issue.sourceRevision, issue.sourceRenderProof, issue.occurrenceId];
+  if (legacyProof.some((value) => value !== undefined) && legacyProof.some((value) => value === undefined)) {
     context.addIssue({ code: "custom", path: ["repairContextId"], message: "Broken-link repair proof must be complete." });
+  }
+  const occurrences = issue.repairableOccurrences ?? [];
+  if (occurrences.length === 0 && issue.repairableOccurrences !== undefined) {
+    context.addIssue({ code: "custom", path: ["repairableOccurrences"], message: "Repairable occurrences cannot be empty." });
+  }
+  if (occurrences.some((occurrence, index) => occurrence.ordinal !== index + 1) ||
+    new Set(occurrences.map(({ repairContextId }) => repairContextId)).size !== occurrences.length ||
+    new Set(occurrences.map(({ occurrenceId }) => occurrenceId)).size !== occurrences.length) {
+    context.addIssue({ code: "custom", path: ["repairableOccurrences"], message: "Broken-link occurrences must be unique and ordered." });
+  }
+  if (occurrences.some((occurrence) => occurrence.sourceRevision !== occurrences[0]?.sourceRevision ||
+    occurrence.sourceRenderProof !== occurrences[0]?.sourceRenderProof)) {
+    context.addIssue({ code: "custom", path: ["repairableOccurrences"], message: "Broken-link source proofs must agree." });
   }
 });
 const KnowledgeHealthOrphanPageIssueSchema = z.object({
@@ -1423,13 +1451,6 @@ export const KnowledgeHealthIssueSummarySchema = z.discriminatedUnion("kind", [
   KnowledgeHealthDuplicateTopicIssueSchema,
   KnowledgeHealthUnsourcedClaimIssueSchema
 ]).superRefine((issue, context) => {
-  if (issue.kind === "broken_link" && issue.repairContextId && issue.unresolvedLinkCount !== 1) {
-    context.addIssue({
-      code: "custom",
-      path: ["repairContextId"],
-      message: "A repair context requires exactly one unresolved link."
-    });
-  }
   if (issue.kind === "orphan_page") {
     const proofs = [issue.repairContextId, issue.targetRevision, issue.targetRenderProof];
     if (proofs.some((value) => value !== undefined) && proofs.some((value) => value === undefined)) {
@@ -1514,7 +1535,8 @@ export const KnowledgeHealthRunResultSchema = z.discriminatedUnion("status", [
 ]).superRefine((result, context) => {
   if (result.status !== "ready") return;
   if (result.coverage !== "complete" && result.issues.some((issue) =>
-    issue.kind === "broken_link" && issue.repairContextId !== undefined
+    issue.kind === "broken_link" &&
+      (issue.repairContextId !== undefined || issue.repairableOccurrences !== undefined)
   )) {
     context.addIssue({
       code: "custom",

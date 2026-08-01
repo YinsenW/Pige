@@ -17,12 +17,9 @@ export type RepairableOrphan = Extract<KnowledgeHealthIssueSummary, { readonly k
   readonly targetRenderProof: string;
 };
 
-export type RepairableBrokenLink = Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }> & {
-  readonly repairContextId: string;
-  readonly sourceRevision: string;
-  readonly sourceRenderProof: string;
-  readonly occurrenceId: string;
-};
+type BrokenLinkIssue = Extract<KnowledgeHealthIssueSummary, { readonly kind: "broken_link" }>;
+type BrokenLinkOccurrence = NonNullable<BrokenLinkIssue["repairableOccurrences"]>[number];
+export type RepairableBrokenLink = Omit<BrokenLinkIssue, "repairableOccurrences"> & BrokenLinkOccurrence;
 
 export type RepairableDuplicateTopic = Extract<KnowledgeHealthIssueSummary, { readonly kind: "duplicate_topic" }> & {
   readonly repairContextId: string;
@@ -49,7 +46,7 @@ export function KnowledgeHealthReadyResult(props: {
   readonly locale: Locale;
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
-  readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
+  readonly onRetargetIssue: (issue: RepairableBrokenLink, trigger: HTMLButtonElement) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan, trigger: HTMLButtonElement) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly onChooseClaimSource: (issue: RepairableUnsourcedClaim, trigger: HTMLButtonElement) => void;
@@ -130,7 +127,7 @@ function KnowledgeHealthIssueRow(props: {
   readonly issue: KnowledgeHealthIssueSummary;
   readonly onOpenPage: (pageId: string) => Promise<void>;
   readonly onRepairIssue: (issue: RepairableBrokenLink) => Promise<void>;
-  readonly onRetargetIssue: (issue: RepairableBrokenLink) => void;
+  readonly onRetargetIssue: (issue: RepairableBrokenLink, trigger: HTMLButtonElement) => void;
   readonly onChooseOrphanParent: (issue: RepairableOrphan, trigger: HTMLButtonElement) => void;
   readonly onMergeDuplicateTopic: (issue: RepairableDuplicateTopic, trigger: HTMLButtonElement) => void;
   readonly onChooseClaimSource: (
@@ -177,10 +174,15 @@ function KnowledgeHealthIssueRow(props: {
     : "";
   const page = props.issue.page;
   const issueKey = knowledgeHealthIssueKey(props.issue);
-  const repairableIssue = props.issue.kind === "broken_link" && props.issue.repairContextId &&
-    props.issue.sourceRevision && props.issue.sourceRenderProof && props.issue.occurrenceId
-    ? props.issue as RepairableBrokenLink
-    : null;
+  const brokenIssue = props.issue.kind === "broken_link" ? props.issue : null;
+  const repairableOccurrences = brokenIssue
+    ? (brokenIssue.repairableOccurrences ?? []).map((occurrence) => ({
+      kind: "broken_link" as const,
+      page: brokenIssue.page,
+      unresolvedLinkCount: brokenIssue.unresolvedLinkCount,
+      ...occurrence
+    } satisfies RepairableBrokenLink))
+    : [];
   const repairableOrphan = props.issue.kind === "orphan_page" && props.issue.repairContextId &&
     props.issue.targetRevision && props.issue.targetRenderProof
     ? props.issue as RepairableOrphan
@@ -196,22 +198,25 @@ function KnowledgeHealthIssueRow(props: {
         {page.title}
       </button>
       {detail}
-      {repairableIssue ? (
-        <>
-          {" · "}
-          <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
-            onClick={() => props.onRetargetIssue(repairableIssue)}>
-            {props.t("maintenance.knowledgeHealth.retarget")}
-          </button>
-          {" · "}
-          <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
-            onClick={() => void props.onRepairIssue(repairableIssue)}>
-            {props.t(props.repairState?.kind === "repairing" && props.repairState.issueKey === issueKey
-              ? "maintenance.knowledgeHealth.repairing"
-              : "maintenance.knowledgeHealth.removeBrokenLink")}
-          </button>
-        </>
-      ) : null}
+      {repairableOccurrences.map((occurrence) => {
+        const occurrenceKey = `${issueKey}:${occurrence.occurrenceId}`;
+        return (
+          <span key={occurrence.occurrenceId} data-knowledge-health-broken-occurrence={occurrence.ordinal}>
+            {" · "}{occurrence.ordinal}. {occurrence.displayLabel}{" · "}
+            <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
+              onClick={(event) => props.onRetargetIssue(occurrence, event.currentTarget)}>
+              {props.t("maintenance.knowledgeHealth.retarget")}
+            </button>
+            {" · "}
+            <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
+              onClick={() => void props.onRepairIssue(occurrence)}>
+              {props.t(props.repairState?.kind === "repairing" && props.repairState.issueKey === occurrenceKey
+                ? "maintenance.knowledgeHealth.repairing"
+                : "maintenance.knowledgeHealth.removeBrokenLink")}
+            </button>
+          </span>
+        );
+      })}
       {repairableOrphan ? (
         <>
           {" · "}

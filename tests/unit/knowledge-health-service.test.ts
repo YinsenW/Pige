@@ -457,26 +457,64 @@ describe("KnowledgeHealthService", () => {
     expect(fs.readFileSync(parentDrift.orphanPagePath, "utf8")).toBe(parentDrift.orphanMarkdown);
   });
 
-  it("offers only the three exact forms and excludes unsafe or ambiguous occurrences", () => {
-    for (const [body, target, eligible] of [
-      ["[[Missing Page]]", "Missing Page", true],
-      ["[[Missing Page|plain label]]", "Missing Page", true],
-      ["[plain label](missing-local-target.md)", "missing-local-target.md", true],
-      ["`[[Missing Page]]`", "Missing Page", false],
-      ["![[Missing Page]]", "Missing Page", false],
-      ["![plain label](missing-local-target.md)", "missing-local-target.md", false],
-      ["[[Missing Page|**complex**]]", "Missing Page", false],
-      ["[[Missing Page|nested [label]]]", "Missing Page", false],
-      ["[[Missing Page]] and [[Missing Page]]", "Missing Page", false],
-      ["No body link.", "Repair page", false],
-      ["[label](../missing-local-target.md)", "../missing-local-target.md", false],
-      ["[label](https://example.com/missing.md)", "https://example.com/missing.md", false]
+  it("repairs only the explicitly selected occurrence on a page with repeated broken links", () => {
+    const fixture = createRepairFixture(
+      "First [[Missing Page|first label]], then [[Missing Page|second label]].",
+      "Missing Page"
+    );
+    const report = fixture.service.run(fixture.vaultPath, request);
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues.find((entry) => entry.kind === "broken_link");
+    if (issue?.kind !== "broken_link" || issue.repairableOccurrences?.length !== 2) {
+      throw new Error("Expected two exact repairable occurrences.");
+    }
+    expect(issue.repairableOccurrences.map(({ ordinal, displayLabel }) => ({ ordinal, displayLabel })))
+      .toEqual([
+        { ordinal: 1, displayLabel: "first label" },
+        { ordinal: 2, displayLabel: "second label" }
+      ]);
+    const selected = issue.repairableOccurrences[1]!;
+    const result = fixture.service.repair(fixture.vaultPath, {
+      apiVersion: 1,
+      requestId: "knowledge_health_repair_request_selectedoccurrence",
+      activeVaultId: report.activeVaultId,
+      reportRequestId: report.requestId,
+      indexGeneration: report.indexGeneration,
+      issueKind: "broken_link",
+      pageId: issue.page.pageId,
+      action: "unlink_broken_reference",
+      repairContextId: selected.repairContextId,
+      sourceRevision: selected.sourceRevision,
+      sourceRenderProof: selected.sourceRenderProof,
+      occurrenceId: selected.occurrenceId
+    });
+    expect(result).toMatchObject({ status: "committed" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8"))
+      .toContain("First [[Missing Page|first label]], then second label.");
+    expect(fixture.operations).toHaveLength(1);
+  });
+
+  it("offers only exact safe forms and projects each duplicate occurrence independently", () => {
+    for (const [body, target, eligibleCount] of [
+      ["[[Missing Page]]", "Missing Page", 1],
+      ["[[Missing Page|plain label]]", "Missing Page", 1],
+      ["[plain label](missing-local-target.md)", "missing-local-target.md", 1],
+      ["`[[Missing Page]]`", "Missing Page", 0],
+      ["![[Missing Page]]", "Missing Page", 0],
+      ["![plain label](missing-local-target.md)", "missing-local-target.md", 0],
+      ["[[Missing Page|**complex**]]", "Missing Page", 0],
+      ["[[Missing Page|nested [label]]]", "Missing Page", 0],
+      ["[[Missing Page]] and [[Missing Page]]", "Missing Page", 2],
+      ["No body link.", "Repair page", 0],
+      ["[label](../missing-local-target.md)", "../missing-local-target.md", 0],
+      ["[label](https://example.com/missing.md)", "https://example.com/missing.md", 0]
     ] as const) {
       const fixture = createRepairFixture(body, target);
       const report = fixture.service.run(fixture.vaultPath, request);
       if (report.status !== "ready") throw new Error("Expected a ready report.");
       const issue = report.issues.find((entry) => entry.kind === "broken_link");
-      expect(issue?.kind === "broken_link" && !!issue.repairContextId, body).toBe(eligible);
+      expect(issue?.kind === "broken_link" ? issue.repairableOccurrences?.length ?? 0 : 0, body)
+        .toBe(eligibleCount);
     }
   });
 });
@@ -523,7 +561,7 @@ function createRepairFixture(body: string, target: string, persistentActivity = 
       page: { pageId, title: "Repair page" },
       unresolvedLinkCount: 1
     }],
-    repairTargetsByPageId: new Map([[pageId, target]]),
+    repairTargetsByPageId: new Map([[pageId, [target]]]),
     truncated: false
   });
   return {

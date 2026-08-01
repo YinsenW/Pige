@@ -16,6 +16,7 @@ import type {
 } from "@pige/contracts";
 import { extractPigeMarkdownLinkRefs, parsePigeFrontmatter } from "@pige/markdown";
 import {
+  KNOWLEDGE_HEALTH_MAX_BROKEN_LINK_OCCURRENCES,
   KNOWLEDGE_HEALTH_MAX_ORPHAN_PARENT_CANDIDATES,
   KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES,
   KNOWLEDGE_HEALTH_MAX_TARGET_CANDIDATES,
@@ -396,13 +397,14 @@ export class KnowledgeHealthService {
       const issue = snapshot.issues.find((candidate) =>
         candidate.kind === "broken_link" && candidate.page.pageId === request.pageId
       );
-      if (!issue || issue.kind !== "broken_link" || issue.unresolvedLinkCount !== 1) return stale();
-      const target = snapshot.repairTargetsByPageId?.get(request.pageId);
-      if (!target || target !== context.target) return stale();
+      if (!issue || issue.kind !== "broken_link") return stale();
+      const targets = snapshot.repairTargetsByPageId?.get(request.pageId);
+      if (!targets?.includes(context.target)) return stale();
       if (opened.revisionId !== context.revisionId || opened.renderIdentity !== context.renderIdentity) {
         return stale();
       }
-      const occurrence = findEligibleOccurrence(opened.markdown, target);
+      const occurrence = findEligibleOccurrences(opened.markdown, [context.target])
+        .find((candidate) => sameOccurrence(candidate, context));
       if (!occurrence || !sameOccurrence(occurrence, context)) return repairResult(request, "ineligible");
       let replacement = occurrence.label;
       if (request.action === "retarget_broken_reference") {
@@ -497,12 +499,12 @@ export class KnowledgeHealthService {
         projected.push({ ...issue, repairContextId, targetRevision, targetRenderProof });
         continue;
       }
-      if (issue.kind !== "broken_link" || issue.unresolvedLinkCount !== 1) {
+      if (issue.kind !== "broken_link") {
         projected.push(issue);
         continue;
       }
-      const target = snapshot.repairTargetsByPageId?.get(issue.page.pageId);
-      if (!target) {
+      const targets = snapshot.repairTargetsByPageId?.get(issue.page.pageId);
+      if (!targets?.length) {
         projected.push(issue);
         continue;
       }
@@ -511,35 +513,51 @@ export class KnowledgeHealthService {
         projected.push(issue);
         continue;
       }
-      const occurrence = findEligibleOccurrence(opened.markdown, target);
-      if (!occurrence) {
+      const occurrences = findEligibleOccurrences(opened.markdown, targets)
+        .slice(0, Math.min(
+          KNOWLEDGE_HEALTH_MAX_BROKEN_LINK_OCCURRENCES,
+          MAX_REPAIR_CONTEXTS - this.#repairContexts.size - this.#orphanRepairContexts.size
+        ));
+      if (!occurrences.length) {
         projected.push(issue);
         continue;
       }
-      const repairContextId = this.#createRepairContextId();
       const sourceRevision = publicRevision(opened.revisionId);
       const sourceRenderProof = renderProof(this.#reportEpoch, "source", opened.renderIdentity, issue.page.pageId);
-      const occurrenceId = occurrenceProof(this.#reportEpoch, issue.page.pageId, target, occurrence);
-      this.#repairContexts.set(repairContextId, {
-        reportEpoch: this.#reportEpoch,
-        reportRequestId: request.requestId,
-        activeVaultId: request.activeVaultId,
-        indexGeneration: snapshot.indexGeneration,
-        pageId: issue.page.pageId,
-        revisionId: opened.revisionId,
-        renderIdentity: opened.renderIdentity,
-        target,
-        ...occurrence,
-        sourceRevision,
-        sourceRenderProof,
-        occurrenceId
+      const repairableOccurrences = occurrences.map((occurrence, index) => {
+        const repairContextId = this.#createRepairContextId();
+        const occurrenceId = occurrenceProof(this.#reportEpoch, issue.page.pageId, occurrence.target, occurrence);
+        this.#repairContexts.set(repairContextId, {
+          reportEpoch: this.#reportEpoch,
+          reportRequestId: request.requestId,
+          activeVaultId: request.activeVaultId,
+          indexGeneration: snapshot.indexGeneration,
+          pageId: issue.page.pageId,
+          revisionId: opened.revisionId,
+          renderIdentity: opened.renderIdentity,
+          ...occurrence,
+          sourceRevision,
+          sourceRenderProof,
+          occurrenceId
+        });
+        return {
+          ordinal: index + 1,
+          displayLabel: occurrence.label,
+          repairContextId,
+          sourceRevision,
+          sourceRenderProof,
+          occurrenceId
+        };
       });
       projected.push({
         ...issue,
-        repairContextId,
-        sourceRevision,
-        sourceRenderProof,
-        occurrenceId
+        ...(repairableOccurrences.length === 1 ? {
+          repairContextId: repairableOccurrences[0]!.repairContextId,
+          sourceRevision: repairableOccurrences[0]!.sourceRevision,
+          sourceRenderProof: repairableOccurrences[0]!.sourceRenderProof,
+          occurrenceId: repairableOccurrences[0]!.occurrenceId
+        } : {}),
+        repairableOccurrences
       });
     }
     return projected;
@@ -599,32 +617,34 @@ function readyResult(
   };
 }
 
-function findEligibleOccurrence(markdown: string, expectedTarget: string): EligibleOccurrence | undefined {
-  const parsedRefs = extractPigeMarkdownLinkRefs(markdown)
-    .filter((reference) => reference.target === expectedTarget);
-  if (parsedRefs.length !== 1) return undefined;
+function findEligibleOccurrences(
+  markdown: string,
+  expectedTargets: readonly string[]
+): readonly (EligibleOccurrence & { readonly target: string })[] {
+  const expected = new Set(expectedTargets);
+  const parsedTargets = new Set(extractPigeMarkdownLinkRefs(markdown).map(({ target }) => target));
   const bodyStart = parsePigeFrontmatter(markdown)?.bodyStartOffset ?? 0;
   const searchable = maskCode(markdown.slice(bodyStart));
-  const matches: EligibleOccurrence[] = [];
+  const matches: Array<EligibleOccurrence & { readonly target: string }> = [];
   for (const match of searchable.matchAll(/(?<!!)\[\[([^\]\n]+)\]\]/gu)) {
     const source = match[0];
     const parts = (match[1] ?? "").split("|");
     if (parts.length > 2) continue;
     const target = normalizeInline(parts[0] ?? "");
     const label = parts.length === 2 ? normalizePlainLabel(parts[1] ?? "") : target;
-    if (!target || !label || target !== expectedTarget) continue;
+    if (!target || !label || !expected.has(target) || !parsedTargets.has(target)) continue;
     const start = bodyStart + (match.index ?? 0);
-    matches.push({ start, end: start + source.length, source, label });
+    matches.push({ start, end: start + source.length, source, label, target });
   }
   for (const match of searchable.matchAll(/(?<!!)\[([^\]\n]+)\]\(([^)\s]+)\)/gu)) {
     const source = match[0];
     const label = normalizePlainLabel(match[1] ?? "");
     const target = normalizeLocalMarkdownTarget(match[2] ?? "");
-    if (!label || !target || target !== expectedTarget) continue;
+    if (!label || !target || !expected.has(target) || !parsedTargets.has(target)) continue;
     const start = bodyStart + (match.index ?? 0);
-    matches.push({ start, end: start + source.length, source, label });
+    matches.push({ start, end: start + source.length, source, label, target });
   }
-  return matches.length === 1 ? matches[0] : undefined;
+  return matches.sort((left, right) => left.start - right.start);
 }
 
 function maskCode(markdown: string): string {
@@ -719,8 +739,8 @@ function snapshotStillMatches(
   const issue = snapshot.issues.find((candidate) =>
     candidate.kind === "broken_link" && candidate.page.pageId === context.pageId
   );
-  return issue?.kind === "broken_link" && issue.unresolvedLinkCount === 1 &&
-    snapshot.repairTargetsByPageId?.get(context.pageId) === context.target;
+  return issue?.kind === "broken_link" &&
+    snapshot.repairTargetsByPageId?.get(context.pageId)?.includes(context.target) === true;
 }
 
 function sourcePageStillMatches(
@@ -729,7 +749,8 @@ function sourcePageStillMatches(
 ): boolean {
   if (opened.status !== "opened" || opened.revisionId !== context.revisionId ||
     opened.renderIdentity !== context.renderIdentity) return false;
-  const occurrence = findEligibleOccurrence(opened.markdown, context.target);
+  const occurrence = findEligibleOccurrences(opened.markdown, [context.target])
+    .find((candidate) => sameOccurrence(candidate, context));
   return !!occurrence && sameOccurrence(occurrence, context);
 }
 

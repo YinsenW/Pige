@@ -282,7 +282,7 @@ describe("local database service", () => {
     writePage(vaultPath, "wiki/origin.md", {
       id: "page_20260727_healthorig",
       title: "Health Origin",
-      body: "[[Missing Page]]"
+      body: "[[Missing Page]] and [[Other Missing Page]]"
     });
     writeRawPage(vaultPath, "wiki/invalid.md", "page_20260727_invalidxx", "tags: invalid");
 
@@ -293,7 +293,7 @@ describe("local database service", () => {
     expect(report?.issues).toContainEqual({
       kind: "broken_link",
       page: { pageId: "page_20260727_healthorig", title: "Health Origin" },
-      unresolvedLinkCount: 1
+      unresolvedLinkCount: 2
     });
     expect(report?.issues).toContainEqual({
       kind: "unsourced_claim",
@@ -309,7 +309,8 @@ describe("local database service", () => {
     }]);
     expect(report?.issues.some((issue) => issue.kind === "orphan_page")).toBe(true);
     expect(report?.counts.unsourcedClaimCount).toBe(1);
-    expect(report?.repairTargetsByPageId?.get("page_20260727_healthorig")).toBe("Missing Page");
+    expect(report?.repairTargetsByPageId?.get("page_20260727_healthorig"))
+      .toEqual(["Missing Page", "Other Missing Page"]);
 
     writePage(vaultPath, "wiki/new.md", {
       id: "page_20260727_healthnew1",
