@@ -312,6 +312,12 @@ import type {
   NoteSetClaimConfidenceResult,
   NoteEntityType,
   NoteEntityTypeSummary,
+  NoteEntityMentionItem,
+  NoteEntityMentionsSummary,
+  NoteSearchEntityMentionsRequest,
+  NoteSearchEntityMentionsResult,
+  NoteChangeEntityMentionRequest,
+  NoteChangeEntityMentionResult,
   NoteSetEntityTypeRequest,
   NoteSetEntityTypeResult,
   NoteQuestionAnswerItem,
@@ -783,6 +789,12 @@ export type {
   NoteSetClaimConfidenceResult,
   NoteEntityType,
   NoteEntityTypeSummary,
+  NoteEntityMentionItem,
+  NoteEntityMentionsSummary,
+  NoteSearchEntityMentionsRequest,
+  NoteSearchEntityMentionsResult,
+  NoteChangeEntityMentionRequest,
+  NoteChangeEntityMentionResult,
   NoteSetEntityTypeRequest,
   NoteSetEntityTypeResult,
   NoteQuestionAnswerItem,
@@ -2582,6 +2594,12 @@ export interface PigeDesktopApi {
     readonly setEntityType: (
       request: NoteSetEntityTypeRequest
     ) => Promise<NoteSetEntityTypeResult>;
+    readonly searchEntityMentions: (
+      request: NoteSearchEntityMentionsRequest
+    ) => Promise<NoteSearchEntityMentionsResult>;
+    readonly changeEntityMention: (
+      request: NoteChangeEntityMentionRequest
+    ) => Promise<NoteChangeEntityMentionResult>;
     readonly searchQuestionAnswers: (
       request: NoteSearchQuestionAnswersRequest
     ) => Promise<NoteSearchQuestionAnswersResult>;

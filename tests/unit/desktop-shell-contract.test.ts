@@ -421,6 +421,30 @@ describe("desktop shell build contract", () => {
       expect(answerSchemas).not.toContain(privateField);
     }
   });
+  it("freezes pathless current-Reader Entity mention search and exact mutation", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const appSource = fs.readFileSync(path.resolve("apps/desktop/src/renderer/src/App.tsx"), "utf8");
+    const mentionSchemas = schemasSource.slice(
+      schemasSource.indexOf("const NoteEntityMentionOwnerSchema"),
+      schemasSource.indexOf("const NoteQuestionAnswerOwnerSchema")
+    );
+    expect(schemasSource).toContain('NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL = "notes.searchEntityMentions"');
+    expect(schemasSource).toContain('NOTE_CHANGE_ENTITY_MENTION_CHANNEL = "notes.changeEntityMention"');
+    expect(mentionSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(mentionSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(mentionSchemas).toContain("expectedTargetUpdatedAt: z.string().datetime({ offset: true })");
+    expect(contractsSource).toContain("readonly searchEntityMentions:");
+    expect(contractsSource).toContain("readonly changeEntityMention:");
+    expect(preloadSource).toContain("NoteSearchEntityMentionsRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeEntityMentionRequestSchema.parse(request)");
+    expect(appSource.match(/onSearchEntityMentions=\{\(request\) => window\.pige\.notes\.searchEntityMentions\(request\)\}/gu))
+      .toHaveLength(2);
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(mentionSchemas).not.toContain(privateField);
+    }
+  });
   it("freezes pathless Claim contradiction search and mutation authority", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");

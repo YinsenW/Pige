@@ -194,6 +194,10 @@ import type {
   NoteSetClaimConfidenceResult,
   NoteSetEntityTypeRequest,
   NoteSetEntityTypeResult,
+  NoteSearchEntityMentionsRequest,
+  NoteSearchEntityMentionsResult,
+  NoteChangeEntityMentionRequest,
+  NoteChangeEntityMentionResult,
   NoteSearchQuestionAnswersRequest,
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
@@ -759,6 +763,12 @@ import {
   NOTE_SET_ENTITY_TYPE_CHANNEL,
   NoteSetEntityTypeRequestSchema,
   NoteSetEntityTypeResultSchema,
+  NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL,
+  NOTE_CHANGE_ENTITY_MENTION_CHANNEL,
+  NoteSearchEntityMentionsRequestSchema,
+  NoteSearchEntityMentionsResultSchema,
+  NoteChangeEntityMentionRequestSchema,
+  NoteChangeEntityMentionResultSchema,
   NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
   NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
   NoteSearchQuestionAnswersRequestSchema,
@@ -2429,6 +2439,12 @@ const api: PigeDesktopApi = {
           NoteSetEntityTypeRequestSchema.parse(request)
         )
       ),
+    searchEntityMentions: async (request: NoteSearchEntityMentionsRequest): Promise<NoteSearchEntityMentionsResult> =>
+      NoteSearchEntityMentionsResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL, NoteSearchEntityMentionsRequestSchema.parse(request))),
+    changeEntityMention: async (request: NoteChangeEntityMentionRequest): Promise<NoteChangeEntityMentionResult> =>
+      NoteChangeEntityMentionResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_ENTITY_MENTION_CHANNEL, NoteChangeEntityMentionRequestSchema.parse(request))),
     searchQuestionAnswers: async (request: NoteSearchQuestionAnswersRequest): Promise<NoteSearchQuestionAnswersResult> =>
       NoteSearchQuestionAnswersResultSchema.parse(await ipcRenderer.invoke(
         NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL, NoteSearchQuestionAnswersRequestSchema.parse(request))),

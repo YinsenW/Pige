@@ -7,6 +7,7 @@ import type {
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
   NoteSetClaimConfidenceRequest, NoteSetClaimConfidenceResult,
   NoteSetEntityTypeRequest, NoteSetEntityTypeResult,
+  NoteSearchEntityMentionsRequest, NoteSearchEntityMentionsResult, NoteChangeEntityMentionRequest, NoteChangeEntityMentionResult,
   NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
@@ -35,7 +36,7 @@ import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createR
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
-import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl";
+import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl"; import { ReaderEntityMentions } from "./ReaderEntityMentions";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
 import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
 import { ReaderConceptParents } from "./ReaderConceptParents";
@@ -109,6 +110,7 @@ export function NoteReader(props: {
   readonly onClaimConfidenceChanged?: (render: NoteRenderResult) => void;
   readonly onSetEntityType?: (request: NoteSetEntityTypeRequest) => Promise<NoteSetEntityTypeResult>;
   readonly onEntityTypeChanged?: (render: NoteRenderResult) => void;
+  readonly onSearchEntityMentions?: (request: NoteSearchEntityMentionsRequest) => Promise<NoteSearchEntityMentionsResult>; readonly onChangeEntityMention?: (request: NoteChangeEntityMentionRequest) => Promise<NoteChangeEntityMentionResult>;
   readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
   readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
   readonly onSearchClaimContradictions?: (
@@ -942,6 +944,8 @@ export function NoteReader(props: {
           search={props.onSearchQuestionAnswers} change={props.onChangeQuestionAnswer}
           onCommitted={props.onQuestionStateChanged} t={props.t} />
       ) : null}
+      {props.activeVaultId && props.onSearchEntityMentions && props.onChangeEntityMention && props.onEntityTypeChanged
+        ? <ReaderEntityMentions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchEntityMentions} change={props.onChangeEntityMention} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onSearchClaimContradictions && props.onChangeClaimContradiction && props.onQuestionStateChanged ? (
         <ReaderClaimContradictions
           activeVaultId={props.activeVaultId}
