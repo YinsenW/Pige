@@ -27,10 +27,26 @@ import { acquireSourceRefreshLocator, readCurrentSourceRecordSnapshot } from "./
 import { SourcePageService } from "./source-page-service";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
 import { createChangedSourceRelinkOperation } from "./source-relink-operation";
+import {
+  sourceRefreshDisplayName as safeDisplayName,
+  sourceRefreshFingerprint as sourceFingerprint,
+  sourceRefreshRevision as sourceRevision
+} from "./source-refresh-identity";
 
 export interface SourceRefreshVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
+}
+
+export interface WebSourceRefreshPort {
+  isEligible(record: SourceRecord): boolean;
+  ownsPreview(previewId: string): boolean;
+  preview(request: SourceRefreshPreviewRequest, renderContextCurrent: () => boolean): Promise<SourceRefreshPreviewResult>;
+  confirm(request: SourceRefreshConfirmRequest, renderContextCurrent: () => boolean): Promise<SourceRefreshConfirmResult>;
+  activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined;
+  undo(operation: OperationRecord): KnowledgeActivityUndoResult;
+  recoverIncompleteOperations(): KnowledgeActivityRecoveryResult;
+  hasReceipt(vaultPath: string, operationId: string): boolean;
 }
 
 interface PendingPreview {
@@ -97,18 +113,21 @@ export class SourceRefreshService {
   readonly #parser: DocumentParserPort;
   readonly #ocr: OcrPort | undefined;
   readonly #sourcePages: SourcePageService;
+  readonly #web: WebSourceRefreshPort | undefined;
   readonly #previews = new Map<string, PendingPreview>();
 
   constructor(
     vaults: SourceRefreshVaultPort,
     parser: DocumentParserPort,
     sourcePages = new SourcePageService(),
-    ocr?: OcrPort
+    ocr?: OcrPort,
+    web?: WebSourceRefreshPort
   ) {
     this.#vaults = vaults;
     this.#parser = parser;
     this.#sourcePages = sourcePages;
     this.#ocr = ocr;
+    this.#web = web;
   }
 
   canReplaceReferencedOriginal(record: SourceRecord): boolean {
@@ -120,7 +139,8 @@ export class SourceRefreshService {
     if (!vaultPath) return [];
     return sourceIds.filter((sourceId) => {
       const snapshot = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
-      return snapshot !== undefined && isEligible(snapshot.record, this.#parser, this.#ocr);
+      return snapshot !== undefined && (isEligible(snapshot.record, this.#parser, this.#ocr) ||
+        this.#web?.isEligible(snapshot.record) === true);
     });
   }
 
@@ -186,6 +206,8 @@ export class SourceRefreshService {
     if (!scope || !renderContextCurrent()) return { ...identity, status: "stale" };
     const current = readCurrentSourceRecordSnapshot(scope.vaultPath, request.sourceId);
     if (!current) return { ...identity, status: "not_found" };
+    if (current.record.kind === "url") return this.#web?.preview(request, renderContextCurrent) ??
+      { ...identity, status: "ineligible" };
     if (!isEligible(current.record, this.#parser, this.#ocr)) return { ...identity, status: "ineligible" };
     let locator: ReturnType<typeof acquireSourceRefreshLocator> | undefined;
     let snapshot: VerifiedFileSnapshot | undefined;
@@ -249,6 +271,7 @@ export class SourceRefreshService {
   ): Promise<SourceRefreshConfirmResult> {
     this.#expirePreviews();
     const identity = { ...request };
+    if (this.#web?.ownsPreview(request.previewId)) return this.#web.confirm(request, renderContextCurrent);
     const pending = this.#previews.get(request.previewId);
     this.#previews.delete(request.previewId);
     if (!pending) return { ...identity, status: "stale" };
@@ -290,7 +313,7 @@ export class SourceRefreshService {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) return undefined;
     const receipt = readReceipt(vaultPath, operation.id);
-    if (!receipt) return undefined;
+    if (!receipt) return this.#web?.activitySummary(operation, undo);
     const targetLabel = safeDisplayName(receipt.beforeRecord);
     if (undo || receipt.state === "undone") {
       return {
@@ -330,6 +353,7 @@ export class SourceRefreshService {
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
     const vaultPath = this.#requireVaultPath();
     const receipt = readReceipt(vaultPath, operation.id);
+    if (!receipt && this.#web?.hasReceipt(vaultPath, operation.id)) return this.#web.undo(operation);
     if (!receipt) throw new PigeDomainError("activity.legacy_record", "The source refresh receipt is unavailable.");
     if (receipt.state === "undone") return { status: "already_undone", operationId: operation.id };
     const current = readCurrentSourceRecordSnapshot(vaultPath, receipt.sourceId)?.record;
@@ -387,9 +411,10 @@ export class SourceRefreshService {
         failed += 1;
       }
     }
+    const web = this.#web?.recoverIncompleteOperations() ?? { recovered: 0, failed: 0 };
     return {
-      recovered,
-      failed,
+      recovered: recovered + web.recovered,
+      failed: failed + web.failed,
       ...(relinkedSourceIds.size > 0 ? { relinkedSourceIds: [...relinkedSourceIds].sort() } : {})
     };
   }
@@ -627,26 +652,6 @@ async function observeCurrent(vaultPath: string, record: SourceRecord): Promise<
 function samePreviewIdentity(left: SourceRefreshPreviewRequest, right: SourceRefreshConfirmRequest): boolean {
   return left.activeVaultId === right.activeVaultId && left.currentPageId === right.currentPageId &&
     left.renderContextId === right.renderContextId && left.sourceId === right.sourceId;
-}
-
-function sourceFingerprint(record: SourceRecord): { readonly checksum: string; readonly size: number } {
-  if (record.storageStrategy === "copy_to_source_library" && record.managedCopy) {
-    return { checksum: record.managedCopy.checksum, size: record.managedCopy.size };
-  }
-  if (record.storageStrategy === "reference_original" && record.original?.checksum !== undefined && record.original.lastKnownSize !== undefined) {
-    return { checksum: record.original.checksum, size: record.original.lastKnownSize };
-  }
-  throw new PigeDomainError("source.refresh_ineligible", "This source has no recorded input fingerprint.");
-}
-
-function sourceRevision(record: SourceRecord): string {
-  return `sourcerefreshrev_${createHash("sha256").update(JSON.stringify(record)).digest("hex")}`;
-}
-
-function safeDisplayName(record: SourceRecord): string {
-  const raw = record.original?.displayName ?? (typeof record.metadata.title === "string" ? record.metadata.title : "Saved source");
-  const safe = path.basename(raw).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/gu, " ").replace(/\s+/gu, " ").trim();
-  return (safe || "Saved source").slice(0, 160);
 }
 
 function sourceRecordPath(vaultPath: string, sourceId: string): string {

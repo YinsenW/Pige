@@ -61,8 +61,8 @@ describe("Reader source refresh action", () => {
       preview: {
         previewId,
         expectedSourceRevision: revision,
-        displayName: "Evidence.txt",
-        sourceKind: "plain_text_file" as const,
+        displayName: "Saved article",
+        sourceKind: "url" as const,
         previousSize: 1024,
         currentSize: 2048,
         sizeDelta: 1024,
@@ -92,7 +92,7 @@ describe("Reader source refresh action", () => {
     await act(async () => { check.click(); await settle(harness.dom); });
 
     const dialog = harness.container.querySelector('[role="dialog"]');
-    expect(dialog?.textContent).toContain("Evidence.txt");
+    expect(dialog?.textContent).toContain("Saved article");
     expect(dialog?.textContent).toContain("1 KB → 2 KB");
     expect(dialog?.textContent).toContain("2 artifacts");
     expect(dialog?.textContent).not.toContain(revision);

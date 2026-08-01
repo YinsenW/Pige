@@ -372,6 +372,10 @@ describe("schemas", () => {
       ...preview,
       preview: { ...preview.preview, displayName: "source.png", sourceKind: "image_file" }
     })).toMatchObject({ status: "changed", preview: { sourceKind: "image_file" } });
+    expect(SourceRefreshPreviewResultSchema.parse({
+      ...preview,
+      preview: { ...preview.preview, displayName: "Saved article", sourceKind: "url" }
+    })).toMatchObject({ status: "changed", preview: { sourceKind: "url" } });
     expect(() => SourceRefreshPreviewResultSchema.parse({ ...preview, path: "/private/source.txt" })).toThrow();
     expect(() => SourceRefreshPreviewResultSchema.parse({
       ...preview,
