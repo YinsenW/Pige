@@ -2792,6 +2792,51 @@ describe("jobs service", () => {
       .toMatchObject({ canUndo: true });
   });
 
+  it("recovers a committed Agent publication without duplicating its append-only log entry", async () => {
+    const { vaultPath, vault } = makeVault();
+    const modelClient = new StaticModelClient(standardAgentOutput("Recovered publication log"));
+    const { capture, jobs } = makeServices(
+      vaultPath,
+      vault,
+      new AgentIngestService(makeModelPort(), modelClient)
+    );
+    const captured = capture.submitText({
+      text: "A restart after log append must converge without a duplicate activity entry.",
+      inputKind: "typed_text",
+      userIntent: "capture",
+      locale: "en"
+    });
+    jobs.processQueuedCaptures({ jobIds: [captured.jobId] });
+    const queued = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+    const originalAppend = fs.appendFileSync.bind(fs);
+    let simulatedCrash = false;
+    vi.spyOn(fs, "appendFileSync").mockImplementation((file, data, options) => {
+      originalAppend(file, data, options);
+      if (
+        !simulatedCrash &&
+        path.resolve(String(file)) === path.join(vaultPath, "log.md") &&
+        String(data).includes("pige-operation:")
+      ) {
+        simulatedCrash = true;
+        throw new Error("simulated process loss after append-only log publication");
+      }
+    });
+
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [queued.id] }))
+      .toEqual({ processed: 1, completed: 0, failed: 1 });
+    vi.restoreAllMocks();
+    const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
+    expect(jobs.retry({ jobId: failed.id }).status).toBe("requeued");
+    expect(await jobs.processQueuedAgentIngest({ jobIds: [failed.id] }))
+      .toEqual({ processed: 1, completed: 1, failed: 0 });
+
+    const log = fs.readFileSync(path.join(vaultPath, "log.md"), "utf8");
+    expect(simulatedCrash).toBe(true);
+    expect(log.match(/Recovered publication log/gu)).toHaveLength(1);
+    expect(log.match(/<!-- pige-operation:op_[a-z0-9_]+ -->/gu)).toHaveLength(1);
+    expect(modelClient.requests).toHaveLength(1);
+  });
+
   it("preserves an external edit made after a create link but before recovery", async () => {
     const { vaultPath, vault } = makeVault();
     const modelClient = new StaticModelClient(standardAgentOutput("Recovery conflict note"));
