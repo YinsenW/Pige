@@ -4447,6 +4447,37 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/SETTINGS_AND_PREFERENCES.md`
 
+### D-20260801-Local-Reranker-Lifecycle
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Pige provides one optional, explicitly downloaded Qwen3 Reranker 0.6B Q3_K_M GGUF as a
+private machine asset. Install verifies exact reviewed bytes and settles disabled; explicit Enable
+creates the only runtime lease. The Local RAG Engine may reorder at most twelve bounded local
+candidates through the reviewed prebuilt node-llama-cpp ranking context.
+
+Rationale:
+
+The retrieval contract already calls for optional local reranking, but provider-backed or automatic
+downloads would violate the local-first and user-consent boundaries. A Pige-owned exact asset and
+fail-open ordering adapter makes the function usable without turning it into a required dependency.
+
+Consequences:
+
+- The asset is outside every vault, excluded from backup, never bundled, and removable from Local Capabilities.
+- No URL, checksum, path, query body, candidate body, model prompt, or score crosses the renderer lifecycle API.
+- Unavailable, changed, slow, malformed, or failing ranking preserves the existing lexical or semantic-hybrid result order.
+- Runtime readiness becomes true only after one verified bounded ranking call, never from installed bytes alone.
+
+References:
+
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

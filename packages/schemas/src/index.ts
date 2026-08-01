@@ -8153,6 +8153,68 @@ export const LocalSemanticRetrievalDisableResultSchema =
 export const LocalSemanticRetrievalRemoveResultSchema =
   LocalSemanticRetrievalMutationResultSchema;
 
+export const LOCAL_RERANKER_ASSET_ID = "qwen3_reranker_0_6b_q3_k_m" as const;
+export const LOCAL_RERANKER_ASSET_REVISION =
+  "tensorblock-4bf3a1660c61f2754fc18035fb1d728d9b8735fc-q3_k_m" as const;
+export const LOCAL_RERANKER_ASSET_SHA256 =
+  "sha256:6e60eb5e4bcb695ff3f0e164b542dfaae90d7311845f434a451daa55e6a93c77" as const;
+export const LOCAL_RERANKER_ASSET_BYTES = 346_896_352 as const;
+
+export const LocalRerankerRequestIdSchema = z.string()
+  .regex(/^rerankasset_[a-z0-9]{16,64}$/u);
+export const LocalRerankerStatusRequestSchema = z.object({ apiVersion: z.literal(1) }).strict();
+export const LocalRerankerStatusSchema = z.object({
+  apiVersion: z.literal(1),
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  assetId: z.literal(LOCAL_RERANKER_ASSET_ID),
+  assetState: LocalSemanticRetrievalAssetStateSchema,
+  downloadSizeBytes: z.literal(LOCAL_RERANKER_ASSET_BYTES),
+  hybridSearchRemainsAvailable: z.literal(true),
+  activeJobId: JobIdSchema.optional()
+}).strict().superRefine((status, context) => {
+  const active = status.assetState === "installing" || status.assetState === "verifying";
+  if (active !== (status.activeJobId !== undefined)) {
+    context.addIssue({ code: "custom", message: "Only an active reranker install may expose a Job.", path: ["activeJobId"] });
+  }
+});
+
+const LocalRerankerMutationRequestIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LocalRerankerRequestIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const LocalRerankerInstallRequestSchema = LocalRerankerMutationRequestIdentitySchema;
+export const LocalRerankerEnableRequestSchema = LocalRerankerMutationRequestIdentitySchema;
+export const LocalRerankerDisableRequestSchema = LocalRerankerMutationRequestIdentitySchema;
+export const LocalRerankerRemoveRequestSchema = LocalRerankerMutationRequestIdentitySchema;
+
+const LocalRerankerMutationResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: LocalRerankerRequestIdSchema,
+  revision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+}).strict();
+export const LocalRerankerInstallResultSchema = z.discriminatedUnion("status", [
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("accepted"), jobId: JobIdSchema }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("already_installed") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const LocalRerankerEnableResultSchema = z.discriminatedUnion("status", [
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("committed") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("already_enabled") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const LocalRerankerMutationResultSchema = z.discriminatedUnion("status", [
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("committed") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  LocalRerankerMutationResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const LocalRerankerDisableResultSchema = LocalRerankerMutationResultSchema;
+export const LocalRerankerRemoveResultSchema = LocalRerankerMutationResultSchema;
+
 export const PADDLE_OCR_ENGINE_ID = "paddleocr_local" as const;
 export const PaddleOcrRequestIdSchema = z.string()
   .regex(/^paddleocr_[a-z0-9]{16,64}$/u);
@@ -11430,6 +11492,18 @@ export type LocalSemanticRetrievalEnableResult = z.infer<typeof LocalSemanticRet
 export type LocalSemanticRetrievalMutationResult = z.infer<typeof LocalSemanticRetrievalMutationResultSchema>;
 export type LocalSemanticRetrievalDisableResult = z.infer<typeof LocalSemanticRetrievalDisableResultSchema>;
 export type LocalSemanticRetrievalRemoveResult = z.infer<typeof LocalSemanticRetrievalRemoveResultSchema>;
+export type LocalRerankerRequestId = z.infer<typeof LocalRerankerRequestIdSchema>;
+export type LocalRerankerStatusRequest = z.infer<typeof LocalRerankerStatusRequestSchema>;
+export type LocalRerankerStatus = z.infer<typeof LocalRerankerStatusSchema>;
+export type LocalRerankerInstallRequest = z.infer<typeof LocalRerankerInstallRequestSchema>;
+export type LocalRerankerEnableRequest = z.infer<typeof LocalRerankerEnableRequestSchema>;
+export type LocalRerankerDisableRequest = z.infer<typeof LocalRerankerDisableRequestSchema>;
+export type LocalRerankerRemoveRequest = z.infer<typeof LocalRerankerRemoveRequestSchema>;
+export type LocalRerankerInstallResult = z.infer<typeof LocalRerankerInstallResultSchema>;
+export type LocalRerankerEnableResult = z.infer<typeof LocalRerankerEnableResultSchema>;
+export type LocalRerankerMutationResult = z.infer<typeof LocalRerankerMutationResultSchema>;
+export type LocalRerankerDisableResult = z.infer<typeof LocalRerankerDisableResultSchema>;
+export type LocalRerankerRemoveResult = z.infer<typeof LocalRerankerRemoveResultSchema>;
 export type OcrLanguagePreferenceRequestId = z.infer<typeof OcrLanguagePreferenceRequestIdSchema>;
 export type OcrLanguagePreference = z.infer<typeof OcrLanguagePreferenceSchema>;
 export type OcrLanguagePreferenceMachineSettings = z.infer<typeof OcrLanguagePreferenceMachineSettingsSchema>;

@@ -1771,8 +1771,8 @@ Waiver rules:
 | Dependency | Status | Pige usage | Upstream source | Pin/update policy | Data boundary and notes |
 | --- | --- | --- | --- | --- | --- |
 | Qwen3 Embedding 0.6B Q8_0 GGUF (`rag.qwen3-embedding-0.6b-q8_0`) | optional | Single v0.1 local embedding asset. | https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/tree/c2602621d50895a7b8277ddd4a8c31e699c9d002 | Explicit exact manifest download. | Private machine asset; only its verified lease reaches B6.06. |
-| Qwen3 Reranker 0.6B | optional | Advanced local reranking after large vault threshold or explicit settings action. | https://huggingface.co/Qwen/Qwen3-Reranker-0.6B | Do not auto-download in v0.1. | Local model asset outside vault. |
-| node-llama-cpp (`runtime.node-llama-cpp`) | required | Private Qwen3 embedding runtime. | https://github.com/withcatai/node-llama-cpp/tree/v3.18.1 | Exact `3.18.1`; reviewed prebuilt targets only, no download/build fallback. | Main/worker local-only; verified asset path never crosses its adapter. |
+| Qwen3 Reranker 0.6B Q3_K_M GGUF (`rag.qwen3-reranker-0.6b-q3_k_m`) | optional | Bounded local reranking after an explicit Settings install and enable action. | https://huggingface.co/tensorblock/Qwen_Qwen3-Reranker-0.6B-GGUF/tree/4bf3a1660c61f2754fc18035fb1d728d9b8735fc | Exact file, byte size and SHA-256 in the dependency manifest; never auto-download. | Private machine asset outside vault; slow, invalid or unavailable ranking preserves the original retrieval order. |
+| node-llama-cpp (`runtime.node-llama-cpp`) | required | Private Qwen3 embedding and reranking runtime. | https://github.com/withcatai/node-llama-cpp/tree/v3.18.1 | Exact `3.18.1`; reviewed prebuilt targets only, no download/build fallback. | Main/worker local-only; verified asset paths never cross their adapters. |
 
 ### 16.5 Platform APIs
 

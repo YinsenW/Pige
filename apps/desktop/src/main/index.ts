@@ -165,6 +165,7 @@ import { registerSourceReconnectIpc } from "./register-source-reconnect-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
+import { registerLocalRerankerIpc } from "./register-local-reranker-ipc";
 import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
 import { registerMemoryIpc } from "./register-memory-ipc";
 import { registerSkillsIpc } from "./register-skills-ipc";
@@ -347,6 +348,8 @@ import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { LocalRagEngineService } from "./services/local-rag-engine-service";
+import { LocalRerankerRuntime } from "./services/local-reranker-runtime";
+import { LocalRerankerService } from "./services/local-reranker-service";
 import {
   LocalSemanticEmbeddingRuntime,
   probePackagedLocalSemanticRuntime
@@ -469,6 +472,8 @@ let retrievalService: RetrievalService | undefined;
 let localSemanticRetrievalService: LocalSemanticRetrievalService | undefined;
 let localSemanticEmbeddingRuntime: LocalSemanticEmbeddingRuntime | undefined;
 let localRagEngineService: LocalRagEngineService | undefined;
+let localRerankerService: LocalRerankerService | undefined;
+let localRerankerRuntime: LocalRerankerRuntime | undefined;
 let documentParserService: DocumentParserService | undefined;
 let sourceRefreshService: SourceRefreshService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
@@ -1710,7 +1715,7 @@ const getAgentCapabilitySnapshot = (): AgentIngestCapabilitySnapshot => {
     embeddingModelInstalled: getLocalSemanticRetrievalService().embeddingModelInstalled(),
     lexicalSearchAvailable: localDatabaseStatus === "ready",
     vectorSearchAvailable: vaultPath ? getLocalRagEngineService().availableNow(vaultPath) : false,
-    rerankerAvailable: false
+    rerankerAvailable: getLocalRagEngineService().rerankerAvailableNow()
   };
 };
 
@@ -2079,6 +2084,7 @@ const getLocalRagEngineService = (): LocalRagEngineService => {
     localRagEngineService = new LocalRagEngineService({
       database: getLocalDatabaseService(),
       embeddings: getLocalSemanticEmbeddingRuntime(),
+      reranker: getLocalRerankerRuntime(),
       createVectorPort: (vaultPath) => createPackagedSqliteVectorIndexDriver({
         rootPath: join(vaultPath, ".pige", "indexes", "vectors")
       })
@@ -2096,6 +2102,26 @@ const getLocalSemanticRetrievalService = (): LocalSemanticRetrievalService => {
     void localSemanticRetrievalService.recover();
   }
   return localSemanticRetrievalService;
+};
+
+const getLocalRerankerRuntime = (): LocalRerankerRuntime => {
+  if (!localRerankerRuntime) {
+    localRerankerRuntime = new LocalRerankerRuntime({
+      createAssetLease: () => getLocalRerankerService().createAssetLease()
+    });
+  }
+  return localRerankerRuntime;
+};
+
+const getLocalRerankerService = (): LocalRerankerService => {
+  if (!localRerankerService) {
+    localRerankerService = new LocalRerankerService({
+      appDataRoot: app.getPath("userData"),
+      onAssetRevoked: () => localRerankerRuntime?.dispose()
+    });
+    void localRerankerService.recover();
+  }
+  return localRerankerService;
 };
 
 const getDiagnosticsService = (): DiagnosticsService => {
@@ -2992,6 +3018,14 @@ registerLocalSemanticRetrievalIpc({
   enable: (request) => getLocalSemanticRetrievalService().enable(request),
   disable: (request) => getLocalSemanticRetrievalService().disable(request),
   remove: (request) => getLocalSemanticRetrievalService().remove(request)
+});
+registerLocalRerankerIpc({
+  ipcMain,
+  status: (request) => getLocalRerankerService().status(request),
+  install: (request) => getLocalRerankerService().install(request),
+  enable: (request) => getLocalRerankerService().enable(request),
+  disable: (request) => getLocalRerankerService().disable(request),
+  remove: (request) => getLocalRerankerService().remove(request)
 });
 registerSkillsIpc({
   ipcMain,

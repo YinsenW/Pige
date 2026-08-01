@@ -174,6 +174,16 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  LocalRerankerDisableRequest,
+  LocalRerankerDisableResult,
+  LocalRerankerEnableRequest,
+  LocalRerankerEnableResult,
+  LocalRerankerInstallRequest,
+  LocalRerankerInstallResult,
+  LocalRerankerRemoveRequest,
+  LocalRerankerRemoveResult,
+  LocalRerankerStatus,
+  LocalRerankerStatusRequest,
   OcrLanguagePreferenceRequest,
   OcrLanguagePreferenceResult,
   SetOcrLanguagePreferenceRequest,
@@ -775,6 +785,18 @@ export type {
   LocalSemanticRetrievalRequestId,
   LocalSemanticRetrievalStatus,
   LocalSemanticRetrievalStatusRequest,
+  LocalRerankerDisableRequest,
+  LocalRerankerDisableResult,
+  LocalRerankerEnableRequest,
+  LocalRerankerEnableResult,
+  LocalRerankerInstallRequest,
+  LocalRerankerInstallResult,
+  LocalRerankerMutationResult,
+  LocalRerankerRemoveRequest,
+  LocalRerankerRemoveResult,
+  LocalRerankerRequestId,
+  LocalRerankerStatus,
+  LocalRerankerStatusRequest,
   OcrLanguagePreference,
   OcrLanguagePreferenceMachineSettings,
   OcrLanguagePreferenceRequest,
@@ -2451,6 +2473,11 @@ export interface PigeDesktopApi {
     readonly removeLocalSemanticAsset: (
       request: LocalSemanticRetrievalRemoveRequest
     ) => Promise<LocalSemanticRetrievalRemoveResult>;
+    readonly localRerankerStatus: (request: LocalRerankerStatusRequest) => Promise<LocalRerankerStatus>;
+    readonly installLocalReranker: (request: LocalRerankerInstallRequest) => Promise<LocalRerankerInstallResult>;
+    readonly enableLocalReranker: (request: LocalRerankerEnableRequest) => Promise<LocalRerankerEnableResult>;
+    readonly disableLocalReranker: (request: LocalRerankerDisableRequest) => Promise<LocalRerankerDisableResult>;
+    readonly removeLocalReranker: (request: LocalRerankerRemoveRequest) => Promise<LocalRerankerRemoveResult>;
   };
   readonly vault: {
     readonly current: () => Promise<VaultSummary | undefined>;

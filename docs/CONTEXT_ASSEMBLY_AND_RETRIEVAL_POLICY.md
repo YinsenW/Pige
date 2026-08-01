@@ -126,6 +126,11 @@ Home retrieval and Agent retrieval should follow this local-first pipeline:
 10. Return the bounded evidence/context pack to Pi Agent; the retrieval tool never calls
     a model or another tool.
 
+The optional local reranker receives only the current query and at most twelve already-selected,
+bounded title/snippet candidates. Its verified machine asset and prebuilt runtime are admitted only
+after a successful bounded call; load, identity, score, or latency failure returns the candidates in
+their pre-rerank order and never removes lexical or semantic-hybrid availability.
+
 Rules:
 
 - Ingest permits one current-vault search after readable-source inspection (query <=320;

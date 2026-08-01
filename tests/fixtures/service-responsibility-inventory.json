@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "20aa5f8d5edb0592efe965b80975bf0bdabcccff",
+  "baseline": "c321fa6a94267deaa870e07b71f1deebc37974ef",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 250,
-  "baselineLines": 118620,
+  "baselineFileCount": 253,
+  "baselineLines": 119325,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -59,6 +59,8 @@
       ["library-tag-rename-service.ts", 690, "rdf"],
       ["library-topic-rename-service.ts", 453, "rdf"],
       ["local-tool-job-recorder.ts", 90, "jr"],
+      ["local-reranker-asset-store.ts", 225, "rd"],
+      ["local-reranker-service.ts", 309, "jpr"],
       ["local-semantic-retrieval-service.ts", 354, "jpr"],
       ["managed-collection-service.ts", 893, "rd"],
       ["managed-collection-citation-service.ts", 159, "rf"],
@@ -213,6 +215,7 @@
       ["library-service.ts", 142, "f"],
       ["library-tags-service.ts", 183, "f"],
       ["local-rag-engine-service.ts", 233, "rf"],
+      ["local-reranker-runtime.ts", 171, "pr"],
       ["local-semantic-embedding-runtime.ts", 241, "pr"],
       ["local-tool-package.ts", 710, "pdf"],
       ["model-provider-connection.ts", 286, "p"],
@@ -283,7 +286,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 250,
+    "serviceOwnerCount": 253,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
