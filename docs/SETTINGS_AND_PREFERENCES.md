@@ -196,6 +196,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `diagnostics.health` | `none` | Derived read-only status |
 | `diagnostics.supportBundleExport` | `explicit_confirmation` | Preview plus main-process native save dialog |
 | `toolchain.health` | `none` | Derived read-only status |
+| `ocr.enginePreference` | `none` | Strict machine-local CAS; each new OCR call reads the authoritative preference and the Main router changes real adapter order with a safe local fallback |
 | `speech.dictationLanguage` | `none` | Strict machine-local CAS; Home availability/install/start resolve the selected language for every new session |
 
 Changing a permission requirement without changing its enforcement path and tests is a contract error. `permission_broker` is fail-closed in `guardSettingAction` until the real broker path supplies an authorization decision.
@@ -216,6 +217,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
 | Generated knowledge language | `language.generatedKnowledgeLanguage` | Yes | Appearance Service, Agent Orchestrator | New Agent jobs; source bodies remain untranslated |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
+| OCR engine preference | `none` | No | OCR Service | New OCR jobs; changes real Main-owned adapter order and preserves a safe local fallback |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
 | Memory enabled state | `memory.vaultMemoryEnabled` | Yes | Agent Memory Service | New memory reads/writes |
 | Memory backup inclusion | `memory.includeMemoryInBackup` | No | Backup Service | Next backup |

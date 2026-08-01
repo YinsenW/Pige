@@ -560,6 +560,10 @@ Engine routing:
 
 Current macOS image, PDF, and PPTX implementation:
 
+- Main persists a machine-local CAS preference (`automatic`, `platform_native`, or
+  `paddleocr_local`) and reads it for each new OCR call. Automatic and platform preference keep
+  the native adapter first; Paddle preference tries the verified managed adapter first. An
+  unavailable preferred adapter falls back locally without downloading or exposing tool paths.
 - The verified bounded Swift helper serves direct images, Pi-selected PDF pages, and
   selected PPTX media through one schema-versioned, local-only process boundary.
 - Main-process owners verify sources and pixels, persist independent checksummed OCR
