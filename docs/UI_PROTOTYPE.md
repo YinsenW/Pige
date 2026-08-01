@@ -305,7 +305,7 @@ Behavior:
 - Activity History is in Settings; Home keeps active attention.
 - Activity History loads bounded older pages through one Load more action. A stale or failed next page preserves every visible row and returns focus to Load more; exhausting history returns focus to the History heading. Existing Open and Undo behavior is unchanged.
 - Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
-- An undone exact note edit offers Redo only while the original page bytes and durable Undo binding still match. Undo and Redo share one in-flight lock; success rereads Activity truth and restores focus to the newly available inverse action. If that row disappears, focus falls back to the History heading; drift or blocked authority fails closed.
+- An undone exact note edit or user Library tag rename, merge, whole-tag removal, or single-page removal offers Redo only while every original page and durable Undo binding still matches. Undo and Redo share one in-flight lock; success rereads Activity truth and restores focus to the newly available inverse action. If that row disappears, focus falls back to the History heading; drift or blocked authority fails closed.
 - Applied rows open current-vault pages in Reader or memory in Agent & Memory by safe ID. Exact Edit or heading receives focus; drift/failure returns to Activity/Open focus. Labels/paths grant no authority; Open never invokes Undo.
 
 ### 4.4 Sidebar Expanded
@@ -465,7 +465,7 @@ Processing states:
 - Needs attention.
 - Completed with warnings.
 
-Current Home Activity distinguishes created from updated. Checksum-current exact create/cited append offers non-confirming Undo; changed/hashless/missing fails closed. Settings Activity now offers restart-safe Redo for an exact user note edit after its matching Undo. Proposals stay transitional; general update, broader restore/redo, broad history, and packaged proof remain open.
+Current Home Activity distinguishes created from updated. Checksum-current exact create/cited append offers non-confirming Undo; changed/hashless/missing fails closed. Settings Activity offers restart-safe Redo after matching Undo for an exact user note edit and exact user Library tag rename, merge, whole-tag removal, or single-page removal. Proposals stay transitional; general update, broader restore/redo, broad history, and packaged proof remain open.
 
 ## 7. Home Conversation And Optional Local Knowledge
 

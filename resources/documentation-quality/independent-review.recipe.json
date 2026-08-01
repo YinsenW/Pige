@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-07-31T00:00:00Z",
+  "reviewedAt": "2026-08-01T00:00:00Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,10 +52,10 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit Redo and explainable Knowledge Tree density.",
+    "scope": "Vault v2 language migration, macOS Phase 1 scope, acceptance reconciliation, public governance, localized release states, deterministic successful-Job compaction, grounded knowledge-page creation, machine-local startup destination, recoverable active-Vault relocation, path-independent Vault display-name rename, proof-bound source reconnect, exact active-note title rename, alias management and confirmed tag removal, source refresh/reimport, Activity history, vault-portable Agent memory backup inclusion, restart-safe exact note-edit and Library tag lifecycle Redo, and explainable Knowledge Tree density.",
     "exclude": ["resources/documentation-quality/independent-review.recipe.json"],
     "minimumFileCount": 35,
-    "reviewedSha256": "1af10f1de5e2b5840d6e95d1278e6d22ca875684c01f97e26f1460b7da50533b"
+    "reviewedSha256": "774cf491efa908658fe9d7ef8533846095f63bfa7fcb51acabc7609ba2a7cfbd"
   },
   "reviewers": [{
     "reviewerId": "vault-v2-alpha-convergence-review",
@@ -67,28 +67,28 @@
       "ongoing_development_support",
       "documentation_leanness_and_maintainability"
     ],
-    "independence": "Planning reviewed exact Reader tag removal against knowledge, Markdown, API, Job and UI owners while retaining note-title, alias, Redo and Knowledge Tree density contracts; Development supplied executable service/schema/IPC evidence and UI Design P0/P1 is clear."
+    "independence": "Planning reviewed exact user Library tag lifecycle Redo against API, Job, UI and Decision owners while retaining note-title, alias, exact-note Redo and Knowledge Tree density contracts; Development supplied executable service/Main/recovery evidence and the existing Activity UI remains authoritative."
   }],
   "dimensions": [
-    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title and alias management while listing existing tags with one confirmed Remove action; Knowledge Tree density retains exact counts and navigation."},
-    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, knowledge, API, Job and UI owners agree on exact revision binding, bounded aliases, canonical one-tag removal and the reversible update_page lifecycle."},
-    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Schema, service, stale/negative, IPC, Reader and density evidence bind the slices without promoting broader partial requirements or exits."},
-    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Main ownership, atomic recovery, deterministic request identity, index refresh, density bands and six-locale accessible states are explicit and executable."},
-    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing owner sections, decision ledger and trace inventory absorb bounded tag-removal semantics while preserving title, alias, Redo and density contracts."}
+    {"id":"navigation_and_resource_lifecycle","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Reader/Library retain title, alias and tag management while Activity exposes exact restart-safe inverse actions; Knowledge Tree density retains exact counts and navigation."},
+    {"id":"cross_document_contract_consistency","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"PRD, API, Job, UI and Decision owners agree on matching-Undo authority, exact affected-page reproof and deterministic forward update_page Redo for user Library tag lifecycle actions."},
+    {"id":"continuous_traceability_and_acceptance","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Service, stale/negative, Main routing, restart-recovery and Activity evidence bind the tag Redo slice without promoting broader partial requirements or exits."},
+    {"id":"ongoing_development_support","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Main ownership, atomic multi-page recovery, deterministic Redo identity, index refresh and existing accessible Activity states are explicit and executable."},
+    {"id":"documentation_leanness_and_maintainability","score":9.8,"reviewerId":"vault-v2-alpha-convergence-review","blockerCount":0,"summary":"Existing API, Job, UI and Decision owner sections absorb bounded Library tag Redo semantics without a new document or status promotion."}
   ],
   "verification": [
     {"command":"npm run verify:prd-contract && npm run verify:doc-map && npm run verify:links","status":"passed","evidence":"Exact tag-removal semantics, owner routing and links remain structurally synchronized."},
-    {"command":"npm test -- <focused Reader tag-removal files> && npm run build","status":"passed","evidence":"Exact removal contract, Main mutation, Reader confirmation and production bundles are executable."},
+    {"command":"npx vitest run tests/unit/library-tag-rename-service.test.ts tests/unit/desktop-shell-contract.test.ts && npm run build","status":"passed","evidence":"Exact tag lifecycle Redo, Main routing, replay, stale closure and restart recovery are executable."},
     {"command":"npm run verify:architecture-reset && npm run verify:change","status":"passed","evidence":"Service responsibility, Main/renderer authority and change-scoped verification remain enforced."}
   ],
   "coordination": {
-    "taskId": "reader-note-tag-remove-bind-20260731",
-    "taskTitle": "Bind exact Reader note tag removal",
+    "taskId": "library-tag-redo-bind-20260801",
+    "taskTitle": "Bind exact Library tag lifecycle Redo",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main owns exact vault/page/render/revision/tag proof; one existing tag changes through update_page while body, topics, other tags and renderer pathlessness remain stable.",
-    "acknowledgement": "Planning binds the implemented Reader tag-removal slice while preserving complete taxonomy editing, note-title rename, alias management, exact note-edit Redo and Knowledge Tree density; referenced requirements/exits remain partial. UI Design P0/P1 is clear."
+    "compatibility": "Main alone binds the original or forward Operation to its matching Undo and private receipt, re-proves every affected page and publishes one deterministic pathless update_page Redo; renderer authority and existing tag mutations remain unchanged.",
+    "acknowledgement": "Planning binds the implemented Library tag lifecycle Redo slice while preserving exact-note Redo, taxonomy editing, note-title rename, alias management and Knowledge Tree density; referenced requirements/exits remain partial and no new UI surface is introduced."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": [

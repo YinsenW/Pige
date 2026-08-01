@@ -480,7 +480,7 @@ base hash or Operation internals.
 
 `activity.list` may project `{kind:"collection",datasetId,tableId,revisionId}` for cell/row/column updates. `activity.undo` binds its exact revision and writes forward or returns stale; page Undo and the body/path/hash ban remain.
 
-`activity.redo` is limited to an exact user-authored Markdown `update_page` that already has one matching Undo. It accepts the original Operation ID and optional expected before revision, writes one deterministic forward `update_page`, and returns only `redone`, `already_redone`, `stale`, or `not_found` without exposing page paths, Markdown, hashes, or private recovery images.
+`activity.redo` supports an exact user-authored Markdown `update_page` or an exact user Library tag rename, merge, whole-tag removal, or single-page tag removal that already has one matching Undo. It accepts the original or later forward Operation ID and optional expected before revision, re-proves every affected page, writes one deterministic forward `update_page`, and returns only `redone`, `already_redone`, `stale`, or `not_found` without exposing page paths, Markdown, hashes, or private recovery images.
 
 ### 6.5 Library And Notes
 
