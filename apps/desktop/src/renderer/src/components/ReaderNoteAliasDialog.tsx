@@ -18,7 +18,7 @@ export async function submitReaderNoteAliasChange(input: { readonly note: NoteRe
   readonly submit: ReaderNoteAliasSubmit | null | undefined; readonly currentNote?: () => NoteRenderResult | null | undefined;
 }): Promise<ReaderNoteAliasOutcome> {
   const alias = canonicalNoteAlias(input.alias), eligibility = input.note?.aliasing, renderContextId = input.note?.renderContextId;
-  if (!input.note || input.note.summary.pageType !== "note" || input.note.summary.status !== "active" || !eligibility || !input.activeVaultId ||
+  if (!input.note || !isTaxonomyKnowledgePageType(input.note.summary.pageType) || input.note.summary.status !== "active" || !eligibility || !input.activeVaultId ||
     !renderContextId || !input.submit || !alias || alias.length > 120 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) ||
     (input.action === "add" ? !eligibility.canAdd : !eligibility.canRemove)) return { status: "retained" };
   const request: NoteAliasChangeRequest = { apiVersion: 1, requestId: `notealiasreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
@@ -27,11 +27,15 @@ export async function submitReaderNoteAliasChange(input: { readonly note: NoteRe
   try {
     const result = await input.submit(request), current = input.currentNote?.();
     if (!identityMatches(request, result) || (current && !requestMatchesNote(request, current)) || result.status !== "committed" ||
-      result.render.summary.pageId !== request.currentPageId || result.render.summary.pageType !== "note" || !result.render.renderContextId) {
+      result.render.summary.pageId !== request.currentPageId || result.render.summary.pageType !== input.note.summary.pageType || !result.render.renderContextId) {
       return { status: "retained" };
     }
     return { status: "committed", render: result.render };
   } catch { return { status: "retained" }; }
+}
+
+function isTaxonomyKnowledgePageType(pageType: NoteRenderResult["summary"]["pageType"]): boolean {
+  return pageType === "note" || pageType === "claim" || pageType === "question" || pageType === "concept" || pageType === "entity";
 }
 
 export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; readonly aliases: readonly string[]; readonly canAdd: boolean;

@@ -4,6 +4,7 @@ import { parsePigeFrontmatter } from "@pige/markdown";
 import { createMarkdownPageReferenceKeys, normalizeMarkdownPageReferenceKey, scanMarkdownPages } from "./markdown-page-index";
 import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import type { NotesService } from "./notes-service";
+import { isTaxonomyKnowledgePage } from "./reader-generated-note-reveal-service";
 
 type AliasTargetPort = Pick<NotesService, "resolveTrashTarget" | "render">;
 type AliasEditorPort = Pick<NoteMarkdownEditorService, "open" | "save">;
@@ -28,11 +29,14 @@ export class NoteAliasService {
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.currentPageId });
     if (opened.status !== "opened") return closed(request, opened.status === "not_found" ? "not_found" : "failed");
     if (opened.revisionId !== target.pageContentHash || !target.assertCurrent()) return closed(request, "stale");
-    const parsed = parsePigeFrontmatter(opened.markdown), aliases = parsed?.frontmatter.aliases ?? [];
+    const parsed = parsePigeFrontmatter(opened.markdown), frontmatter = parsed?.frontmatter;
+    const aliases = frontmatter?.aliases ?? [];
     const aliasKeys = aliases.map((alias) => normalizeMarkdownPageReferenceKey(alias));
-    if (parsed?.frontmatter.id !== request.currentPageId || parsed.frontmatter.type !== "note" ||
-      parsed.frontmatter.status !== "active" || aliases.length > 64 || aliasKeys.some((currentKey, index) => !currentKey || canonicalAlias(aliases[index]!) !== aliases[index]) ||
-      new Set(aliasKeys).size !== aliasKeys.length || normalizeMarkdownPageReferenceKey(parsed.frontmatter.title ?? "") === key) {
+    const pageType = frontmatter?.type;
+    if (!frontmatter || frontmatter.id !== request.currentPageId ||
+      !isTaxonomyKnowledgePage(pageType, frontmatter.status) || frontmatter.status !== "active" ||
+      aliases.length > 64 || aliasKeys.some((currentKey, index) => !currentKey || canonicalAlias(aliases[index]!) !== aliases[index]) ||
+      new Set(aliasKeys).size !== aliasKeys.length || normalizeMarkdownPageReferenceKey(frontmatter.title ?? "") === key) {
       return closed(request, "ineligible");
     }
     const ownMatches = aliases.filter((alias) => normalizeMarkdownPageReferenceKey(alias) === key);
@@ -55,7 +59,7 @@ export class NoteAliasService {
     try { render = await this.#targets.render({ pageId: request.currentPageId }, ownerId); }
     catch { return closed(request, "failed"); }
     const present = render.aliasing?.aliases.some((alias) => normalizeMarkdownPageReferenceKey(alias) === key) === true;
-    if (!render.renderContextId || render.summary.pageId !== request.currentPageId || render.summary.pageType !== "note" ||
+    if (!render.renderContextId || render.summary.pageId !== request.currentPageId || render.summary.pageType !== pageType ||
       (request.action === "add" ? !present : present)) return closed(request, "failed");
     return { ...request, status: "committed", operationId: saved.operationId, render };
   }

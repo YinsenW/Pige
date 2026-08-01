@@ -1865,10 +1865,13 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
-  it("corrects tags and topics on the exact Library Reader note and retains both drafts on stale", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "corrects tags and topics on the exact Library Reader %s and retains both drafts on stale", async (pageType) => {
     const dom = createDom(); const root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: NoteEditTaxonomyRequest[] = []; const adopted: NoteRenderResult[] = []; let mode: "stale" | "committed" = "stale";
-    let selected: NoteRenderResult = { ...readerNote(), tagging: { tags: ["research"], topics: ["PKM"], canAdd: true, canEdit: true, revision: `noteeditrev_${"a".repeat(32)}` } };
+    const initial = readerNote();
+    let selected: NoteRenderResult = { ...initial, summary: { ...initial.summary, pageType },
+      tagging: { tags: ["research"], topics: ["PKM"], canAdd: true, canEdit: true, revision: `noteeditrev_${"a".repeat(32)}` } };
     const onAddNoteTag = async (request: NoteEditTaxonomyRequest): Promise<NoteEditTaxonomyResult> => {
       requests.push(request); return mode === "committed"
         ? { ...request, status: "committed", operationId: "operation_note_taxonomy_library", render: {
@@ -1949,10 +1952,12 @@ describe("full UI Library", () => {
     await act(async () => root.unmount()); dom.window.close();
   });
 
-  it("adds and removes one exact Library Reader alias while retaining an ambiguous draft", async () => {
+  it.each(["note", "claim", "question", "concept", "entity"] as const)(
+    "adds and removes one exact Library Reader %s alias while retaining an ambiguous draft", async (pageType) => {
     const dom = createDom(), root = createRoot(dom.window.document.querySelector("#root")!);
     const requests: NoteAliasChangeRequest[] = [], adopted: NoteRenderResult[] = []; let mode: "conflict" | "committed" = "conflict";
-    let selected: NoteRenderResult = { ...readerNote(), aliasing: { aliases: [], canAdd: true, canRemove: false,
+    const initial = readerNote();
+    let selected: NoteRenderResult = { ...initial, summary: { ...initial.summary, pageType }, aliasing: { aliases: [], canAdd: true, canRemove: false,
       revision: `noteeditrev_${"a".repeat(32)}` } };
     const onChangeNoteAlias = async (request: NoteAliasChangeRequest): Promise<NoteAliasChangeResult> => {
       requests.push(request); if (mode === "conflict") return { ...request, status: "conflict" };
@@ -3852,6 +3857,11 @@ function createDom(): JSDOM {
     configurable: true,
     value: (handle: number) => dom.window.clearTimeout(handle)
   });
+  Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: {
+    unlinkRelation: vi.fn(), setQuestionState: vi.fn(), searchQuestionAnswers: vi.fn(),
+    changeQuestionAnswer: vi.fn(), searchClaimContradictions: vi.fn(), changeClaimContradiction: vi.fn(),
+    searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn()
+  } } });
   return dom;
 }
 

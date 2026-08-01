@@ -20,13 +20,15 @@ export function isEditableMarkdownPageType(
   markdown: string,
   allowClaim: boolean,
   allowQuestion = false,
-  allowConcept = false
+  allowConcept = false,
+  allowEntity = false
 ): boolean {
   const pageType = parsePigeFrontmatter(markdown)?.frontmatter.type;
   return isEditableMarkdownPage(markdown) ||
     (allowClaim && pageType === "claim") ||
     (allowQuestion && pageType === "question") ||
-    (allowConcept && pageType === "concept");
+    (allowConcept && pageType === "concept") ||
+    (allowEntity && pageType === "entity");
 }
 
 export function preservesEditableMarkdownPageOwnership(
@@ -34,12 +36,14 @@ export function preservesEditableMarkdownPageOwnership(
   after: string,
   allowClaim: boolean,
   allowQuestion = false,
-  allowConcept = false
+  allowConcept = false,
+  allowEntity = false
 ): boolean {
   if (preservesEditableMarkdownOwnership(before, after)) return true;
   const beforeType = parsePigeFrontmatter(before)?.frontmatter.type;
   const afterType = parsePigeFrontmatter(after)?.frontmatter.type;
   return (allowClaim && beforeType === "claim" && afterType === "claim") ||
     (allowQuestion && beforeType === "question" && afterType === "question") ||
-    (allowConcept && beforeType === "concept" && afterType === "concept");
+    (allowConcept && beforeType === "concept" && afterType === "concept") ||
+    (allowEntity && beforeType === "entity" && afterType === "entity");
 }

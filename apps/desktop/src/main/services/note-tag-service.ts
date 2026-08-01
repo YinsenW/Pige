@@ -11,6 +11,10 @@ import type {
 import { createPigeTagKey, normalizePigeTag, parsePigeFrontmatter } from "@pige/markdown";
 import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import type { NotesService } from "./notes-service";
+import {
+  isTaxonomyKnowledgePage,
+  type TaxonomyKnowledgePageType
+} from "./reader-generated-note-reveal-service";
 
 type NoteTagTargetPort = Pick<NotesService, "resolveTrashTarget" | "render">;
 type NoteTagEditorPort = Pick<NoteMarkdownEditorService, "open" | "save">;
@@ -43,6 +47,8 @@ export class NoteTagService {
     if (opened.revisionId !== target.pageContentHash || !target.assertCurrent()) {
       return closedResult(request, "stale");
     }
+    const pageType = taxonomyPageType(opened.markdown);
+    if (!pageType) return closedResult(request, "ineligible");
     const markdown = addTagToMarkdown(opened.markdown, request.tag, this.#now().toISOString());
     if (!markdown) return closedResult(request, "ineligible");
     const saved = this.#editor.save({
@@ -63,6 +69,7 @@ export class NoteTagService {
     }
     const expectedTagKey = createPigeTagKey(request.tag);
     if (!render.renderContextId || render.summary.pageId !== request.currentPageId ||
+      render.summary.pageType !== pageType ||
       !expectedTagKey || !render.tagging?.tags.some((tag) => createPigeTagKey(tag) === expectedTagKey)) {
       return closedResult(request, "failed");
     }
@@ -79,6 +86,8 @@ export class NoteTagService {
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.currentPageId });
     if (opened.status !== "opened") return closedEditResult(request, opened.status === "not_found" ? "not_found" : "failed");
     if (opened.revisionId !== target.pageContentHash || !target.assertCurrent()) return closedEditResult(request, "stale");
+    const pageType = taxonomyPageType(opened.markdown);
+    if (!pageType) return closedEditResult(request, "ineligible");
     const markdown = replaceTaxonomyInMarkdown(opened.markdown, request.tags, request.topics, this.#now().toISOString());
     if (!markdown) return closedEditResult(request, "ineligible");
     const saved = this.#editor.save({
@@ -90,6 +99,7 @@ export class NoteTagService {
     try {
       const render = await this.#targets.render({ pageId: request.currentPageId }, ownerId);
       if (!render.renderContextId || render.summary.pageId !== request.currentPageId ||
+        render.summary.pageType !== pageType ||
         !sameCanonical(render.tagging?.tags, request.tags) || !sameCanonical(render.tagging?.topics, request.topics)) {
         return closedEditResult(request, "failed");
       }
@@ -109,6 +119,8 @@ export class NoteTagService {
     const opened = this.#editor.open({ activeVaultId: request.activeVaultId, pageId: request.currentPageId });
     if (opened.status !== "opened") return removeClosedResult(request, opened.status === "not_found" ? "not_found" : "failed");
     if (opened.revisionId !== target.pageContentHash || !target.assertCurrent()) return removeClosedResult(request, "stale");
+    const pageType = taxonomyPageType(opened.markdown);
+    if (!pageType) return removeClosedResult(request, "ineligible");
     const markdown = removeTagFromMarkdown(opened.markdown, request.tag, this.#now().toISOString());
     if (!markdown) return removeClosedResult(request, "ineligible");
     const expectedFrontmatter = parsePigeFrontmatter(markdown)?.frontmatter;
@@ -123,7 +135,8 @@ export class NoteTagService {
     try { render = await this.#targets.render({ pageId: request.currentPageId }, ownerId); }
     catch { return removeClosedResult(request, "failed"); }
     const removedKey = createPigeTagKey(request.tag);
-    if (!render.renderContextId || render.summary.pageId !== request.currentPageId || !removedKey ||
+    if (!render.renderContextId || render.summary.pageId !== request.currentPageId ||
+      render.summary.pageType !== pageType || !removedKey ||
       render.tagging?.tags.some((tag) => createPigeTagKey(tag) === removedKey) ||
       !sameCanonical(render.tagging?.tags, expectedFrontmatter.tags ?? []) ||
       !sameCanonical(render.tagging?.topics, expectedFrontmatter.topics ?? [])) return removeClosedResult(request, "failed");
@@ -150,7 +163,8 @@ function replaceTaxonomyInMarkdown(
   markdown: string, requestedTags: readonly string[], requestedTopics: readonly string[], updatedAt: string
 ): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active") return undefined;
+  if (!parsed || !isTaxonomyKnowledgePage(parsed.frontmatter.type, parsed.frontmatter.status) ||
+    parsed.frontmatter.status !== "active") return undefined;
   const tags = requestedTags.map(normalizePigeTag);
   const topics = requestedTopics.map(canonicalTaxonomyValue);
   if (tags.some((entry) => !entry) || topics.some((entry) => !entry)) return undefined;
@@ -191,7 +205,8 @@ function sameCanonical(actual: readonly string[] | undefined, expected: readonly
 function removeTagFromMarkdown(markdown: string, requestedTag: string, updatedAt: string): string | undefined {
   const parsed = parsePigeFrontmatter(markdown);
   const tagKey = createPigeTagKey(requestedTag);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active" || !tagKey) return undefined;
+  if (!parsed || !isTaxonomyKnowledgePage(parsed.frontmatter.type, parsed.frontmatter.status) ||
+    parsed.frontmatter.status !== "active" || !tagKey) return undefined;
   const tags = parsed.frontmatter.tags ?? [];
   if (!tags.some((tag) => createPigeTagKey(tag) === tagKey)) return undefined;
   const tagMatches = [...parsed.raw.matchAll(/^tags:[^\r\n]*$/gmu)];
@@ -209,7 +224,8 @@ function addTagToMarkdown(markdown: string, requestedTag: string, updatedAt: str
   const tag = normalizePigeTag(requestedTag);
   if (!tag) return undefined;
   const tagKey = createPigeTagKey(tag);
-  if (parsed?.frontmatter.type !== "note" || parsed.frontmatter.status !== "active" || !tagKey) return undefined;
+  if (!parsed || !isTaxonomyKnowledgePage(parsed.frontmatter.type, parsed.frontmatter.status) ||
+    parsed.frontmatter.status !== "active" || !tagKey) return undefined;
   const tags = parsed.frontmatter.tags ?? [];
   if (tags.length >= 12 || tags.some((current) => createPigeTagKey(current) === tagKey)) return undefined;
   const tagMatches = [...parsed.raw.matchAll(/^tags:[^\r\n]*$/gmu)];
@@ -227,6 +243,12 @@ function insertTagsField(raw: string, tag: string): string {
   const sourceIds = /^source_ids:[^\r\n]*$/mu;
   if (sourceIds.test(raw)) return raw.replace(sourceIds, `tags: ${JSON.stringify([tag])}\n$&`);
   return `${raw.replace(/\s*$/u, "")}\ntags: ${JSON.stringify([tag])}\n`;
+}
+
+function taxonomyPageType(markdown: string): TaxonomyKnowledgePageType | undefined {
+  const frontmatter = parsePigeFrontmatter(markdown)?.frontmatter;
+  return frontmatter && frontmatter.status === "active" &&
+    isTaxonomyKnowledgePage(frontmatter.type, frontmatter.status) ? frontmatter.type : undefined;
 }
 
 function mapSaveStatus(status: "stale" | "not_found" | "invalid" | "failed"):
