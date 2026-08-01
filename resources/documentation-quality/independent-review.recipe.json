@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T18:00:00.000Z",
+  "reviewedAt": "2026-08-01T17:37:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Agent-created and Agent-updated page Activity Redo closes the current autonomous/approved write recovery lifecycle and verifies PIGE-JOB-005.",
+    "scope": "PIGE-JOB-005 and PIGE-MEM-001 repeated restart-safe Agent Memory Activity Undo/Redo.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "9f569403aaab2e89990957194e3b04bc7b1f2c4814dd30f17934452c58df51b9"
+    "reviewedSha256": "7a3642bbd811860b436f6454de349c549b38ed6047623f1f274e29bfdc5599ab"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-page-redo-review",
-      "task": "Review exact Agent page create/update Redo and PIGE-JOB-005 acceptance",
+      "reviewerId": "agent-memory-redo-review",
+      "task": "Review repeated Agent Memory Activity Undo/Redo and restart adoption",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews recovery and acceptance facts; Development supplies separate create/update Redo owners and Activity integration evidence."
+      "independence": "Planning reviews Memory, Operation and acceptance contracts; Development supplies separate registry, receipt, Activity-chain and restart evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-page-redo-review",
+      "reviewerId": "agent-memory-redo-review",
       "blockerCount": 0,
-      "summary": "Agent create/update Redo reuses the existing Activity surface and never asks the renderer to provide page bytes, paths or recovery authority."
+      "summary": "Existing Activity UI invokes one Main Redo chain; every Redo forward Operation remains undoable and repeatable without another renderer workflow."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-page-redo-review",
+      "reviewerId": "agent-memory-redo-review",
       "blockerCount": 0,
-      "summary": "Operation kinds, private receipts, Activity eligibility, restart adoption and acceptance all describe the same exact matching-Undo lifecycle."
+      "summary": "Memory, Job/Operation, playbook and decision owners agree on exact receipt-bound repeated Undo/Redo and fail-closed drift."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-page-redo-review",
+      "reviewerId": "agent-memory-redo-review",
       "blockerCount": 0,
-      "summary": "PIGE-JOB-005 is backed by current create, update, tag, link, Dataset and memory Agent-write evidence rather than future mutation families."
+      "summary": "PIGE-JOB-005 and PIGE-MEM-001 gain direct repeated Memory Activity and restart-adoption evidence without changing their already verified status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-page-redo-review",
+      "reviewerId": "agent-memory-redo-review",
       "blockerCount": 0,
-      "summary": "Two bounded private Redo owners isolate exact page-image mechanics from the frozen Activity and Agent publication owners."
+      "summary": "Pure lifecycle helpers own chain validation while AgentMemoryService stays below its architecture ceiling and retains registry authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-page-redo-review",
+      "reviewerId": "agent-memory-redo-review",
       "blockerCount": 0,
-      "summary": "Existing recovery, playbook, decision, trace, acceptance and responsibility owners contain the complete delta without a new design document."
+      "summary": "Existing Memory, Job/Operation, playbook, decision, acceptance and review owners contain the completed lifecycle without a new document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/knowledge-activity-service.test.ts tests/unit/desktop-shell-contract.test.ts",
+      "command": "npx vitest run tests/unit/agent-memory-service.test.ts tests/unit/knowledge-activity-service.test.ts tests/unit/desktop-shell-contract.test.ts --pool=threads --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused Activity and shell tests cover exact create/update Redo, drift rejection and restart adoption."
+      "evidence": "All 134 focused Memory lifecycle, Activity and Main boundary tests pass, including repeated Undo/Redo and second-cycle restart adoption."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The candidate compiles and builds with both private Redo owners recorded within protected architecture boundaries."
+      "evidence": "The Memory redo candidate compiles and builds while AgentMemoryService remains below its architecture ceiling."
     },
     {
-      "command": "npm run verify:traceability && npm run verify:documentation-quality",
+      "command": "npm run verify:traceability && npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Recovery, playbook, decision, acceptance, semantic-claim and responsibility owners agree on the verified current Agent-write lifecycle."
+      "evidence": "Memory, Operation, playbook, decision, acceptance and semantic claims agree on the repeated-cycle contract."
     }
   ],
   "coordination": {
-    "taskId": "agent-page-redo-bind-20260801",
-    "taskTitle": "Bind Agent page create/update Redo and current write recovery acceptance",
+    "taskId": "agent-memory-redo-bind-20260802",
+    "taskTitle": "Bind repeated Agent Memory Activity Undo/Redo",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Activity list, Undo and renderer contracts remain unchanged; only exact eligible matching-Undo Agent page Operations gain Redo.",
-    "acknowledgement": "Planning records complete current Agent-write Operation/recovery coverage and promotes PIGE-JOB-005 to verified without claiming unimplemented future mutation families."
+    "compatibility": "Existing Memory registries, receipts, restore intents and Operations remain readable; current receipts gain deterministic forward Redo chains without migration.",
+    "acknowledgement": "Planning binds direct repeated Memory Activity evidence while keeping PIGE-JOB-005 and PIGE-MEM-001 verified."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

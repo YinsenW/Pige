@@ -5231,6 +5231,38 @@ References:
 - `PRIVACY.md`
 - `docs/TECH_ARCHITECTURE.md`
 
+### D-20260802-Agent-Memory-Activity-Redo
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Every current Pige-owned Agent Memory create, edit, enable, delete and reset receipt supports
+matching Activity Redo after Undo. Each cycle reuses the exact original receipt content, binds the
+matching Undo Operation, publishes a new deterministic forward Operation and remains restart-adoptable.
+
+Rationale:
+
+Memory lifecycle mutations already retained exact private receipts and supported restart-safe Undo,
+but treating Redo as a terminal replay left the resulting forward Activity unable to be undone again.
+Activity promises reversible current effects, so Memory must preserve the same repeated-cycle
+contract as current note and Collection mutations without copying or weakening private provenance.
+
+Consequences:
+
+- Redo re-proves the exact current registry, receipt, matching Undo chain and optional revision CAS.
+- Later unrelated memory atoms survive every Undo/Redo cycle.
+- A Redo forward Operation is itself a valid Memory Activity and can be undone and redone again.
+- Missing or tampered receipts, Operations, registry state or chain identities fail before mutation.
+- Restart walks the exact durable chain and adopts each interrupted registry/Operation publication once.
+
+References:
+
+- `docs/AGENT_MEMORY_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

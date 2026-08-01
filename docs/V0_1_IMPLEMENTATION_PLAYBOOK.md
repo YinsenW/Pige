@@ -596,7 +596,8 @@ Build:
 - [B7.03 -> E7.01] Exact create-note review/apply/conflict recovery foundation; exceptional proposal review remains transitional.
 - [B7.04 -> E7.01] Hash-bound create/update/tag/link recovery plus exact matching-Undo Redo for Agent-created and Agent-updated pages; current autonomous and approved Agent writes publish attributable recovery-bound Operations.
 - [B7.05 -> E7.02] Explicit and exact authored preference/correction/workflow memory with private provenance.
-- [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, and reset.
+- [B7.06 -> E7.02] Memory inspection, edit, disable, delete, export, reset, and matching
+  restart-safe Activity Undo/Redo across repeated lifecycle cycles.
 - [B7.07 -> E7.05] Secret and authority-change guards before autonomous vault-memory persistence;
   durable `create_memory` Activity/Undo and restart adoption close the reversible effect.
 - [B7.08 -> E7.03] Bounded vault history searches complete durable user/assistant messages,
