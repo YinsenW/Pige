@@ -1236,6 +1236,7 @@
   "note.proposal.decisionFailed": "Die Prüfentscheidung konnte nicht gespeichert werden. Es wurde nichts geändert.",
   "note.proposal.later": "Später",
   "note.proposal.keep_current": "Aktuelle Notiz behalten",
+  "note.proposal.apply_proposed": "Vorgeschlagene Version anwenden",
   "note.proposal.manual_edit": "Manuell bearbeiten",
   "note.proposal.line.added": "Hinzugefügter Text",
   "note.proposal.line.context": "Unveränderter Kontext",

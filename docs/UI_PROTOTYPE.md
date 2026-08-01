@@ -635,8 +635,10 @@ Current production boundary:
 - Replace needs same-turn review; apply refreshes Library/Home Reader, closed results retain state,
   Activity owns Undo and renderer no target.
 - Append/replace conflicts retain review, show bounded base/current/proposed lines, and offer
-  **Keep current note** or **Edit manually**. Keep-current is revision-bound and writes no note;
-  later drift refreshes the conflict instead of silently resolving different bytes.
+  **Keep current note**, **Apply proposed version**, or **Edit manually**. Keep-current is
+  revision-bound and writes no note; apply-proposed records the reviewed current bytes for exact
+  Undo before the explicit write; later drift refreshes the conflict instead of silently resolving
+  different bytes.
 - Selection binds identity/action; writes gain Operation/Undo or bounded review. Other mutations stay
   unavailable and reads never write.
 

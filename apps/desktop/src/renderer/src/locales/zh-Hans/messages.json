@@ -1236,6 +1236,7 @@
   "note.proposal.decisionFailed": "无法保存审阅决定。未进行任何更改。",
   "note.proposal.later": "稍后",
   "note.proposal.keep_current": "保留当前笔记",
+  "note.proposal.apply_proposed": "应用提议版本",
   "note.proposal.manual_edit": "手动编辑",
   "note.proposal.line.added": "新增文字",
   "note.proposal.line.context": "未更改的上下文",

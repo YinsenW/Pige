@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
+import { OperationIdSchema } from "@pige/schemas";
 import {
   createGeneratedNoteExclusive,
   readGeneratedNoteExact
@@ -22,13 +23,16 @@ export interface CurrentNoteConflictResolution {
   readonly intentHash: string;
   readonly currentRevision: `noteeditrev_${string}`;
   readonly lines: readonly CurrentNoteConflictLine[];
+  readonly decision: "keep_current" | "apply_proposed";
+  readonly operationId?: string;
 }
 
 interface ResolutionRecord extends CurrentNoteConflictResolution {
   readonly schemaVersion: 1;
   readonly kind: "current_note_conflict_resolution";
   readonly mutationKind: CurrentNoteConflictMutationKind;
-  readonly decision: "keep_current";
+  readonly decision: "keep_current" | "apply_proposed";
+  readonly operationId?: string;
   readonly decidedAt: string;
 }
 
@@ -72,16 +76,22 @@ export class CurrentNoteConflictReviewService {
     return projectResolution(value);
   }
 
-  keepCurrent(input: {
+  resolve(input: {
     readonly vaultPath: string;
     readonly mutationKind: CurrentNoteConflictMutationKind;
     readonly proposalId: string;
     readonly intentHash: string;
     readonly currentRevision: `noteeditrev_${string}`;
     readonly lines: readonly CurrentNoteConflictLine[];
+    readonly decision: "keep_current" | "apply_proposed";
+    readonly operationId?: string;
   }): CurrentNoteConflictResolution {
     assertIdentity(input.proposalId, input.intentHash);
-    if (!NOTE_REVISION.test(input.currentRevision) || !validLines(input.lines)) {
+    if (
+      !NOTE_REVISION.test(input.currentRevision) || !validLines(input.lines) ||
+      (input.decision === "apply_proposed") !== (input.operationId !== undefined) ||
+      (input.operationId !== undefined && !OperationIdSchema.safeParse(input.operationId).success)
+    ) {
       throw conflict("The current-note conflict review is outside its safe bound.");
     }
     const record: ResolutionRecord = {
@@ -92,7 +102,8 @@ export class CurrentNoteConflictReviewService {
       intentHash: input.intentHash,
       currentRevision: input.currentRevision,
       lines: input.lines,
-      decision: "keep_current",
+      decision: input.decision,
+      ...(input.operationId ? { operationId: input.operationId } : {}),
       decidedAt: new Date().toISOString()
     };
     const target = resolutionPath(input.vaultPath, input.mutationKind, input.proposalId);
@@ -119,7 +130,10 @@ function isResolution(value: unknown): value is ResolutionRecord {
   const record = value as Partial<ResolutionRecord>;
   return record.schemaVersion === 1 && record.kind === "current_note_conflict_resolution" &&
     (record.mutationKind === "append" || record.mutationKind === "replace") &&
-    record.decision === "keep_current" && typeof record.decidedAt === "string" &&
+    (record.decision === "keep_current" || record.decision === "apply_proposed") &&
+    (record.decision === "apply_proposed") === (record.operationId !== undefined) &&
+    (record.operationId === undefined || OperationIdSchema.safeParse(record.operationId).success) &&
+    typeof record.decidedAt === "string" &&
     typeof record.proposalId === "string" && PROPOSAL_ID.test(record.proposalId) &&
     typeof record.intentHash === "string" && INTENT_HASH.test(record.intentHash) &&
     typeof record.currentRevision === "string" && NOTE_REVISION.test(record.currentRevision) &&
@@ -141,7 +155,9 @@ function projectResolution(record: ResolutionRecord): CurrentNoteConflictResolut
     proposalId: record.proposalId,
     intentHash: record.intentHash,
     currentRevision: record.currentRevision,
-    lines: record.lines
+    lines: record.lines,
+    decision: record.decision,
+    ...(record.operationId ? { operationId: record.operationId } : {})
   };
 }
 

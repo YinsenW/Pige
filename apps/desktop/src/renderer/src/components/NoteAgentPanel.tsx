@@ -73,7 +73,7 @@ export function NoteAgentPanel(props: {
   readonly onSelectModel?: (modelId: string) => Promise<boolean>;
   readonly onOpenCitation?: (pageId: string) => void;
   readonly onCopyMessage?: (messageId: string) => Promise<boolean> | boolean;
-  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply" | "keep_current" | "manual_edit") => void;
+  readonly onProposalAction?: (proposalId: string, action: "reject" | "later" | "apply" | "keep_current" | "apply_proposed" | "manual_edit") => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const paneRef = useRef<HTMLElement | null>(null);
@@ -376,10 +376,10 @@ export function NoteAgentPanel(props: {
                   ) : null}
                   {props.proposal.state === "conflicted" && props.proposal.currentRevision ? (
                     <div className="proposal-actions">
-                      {(["manual_edit", "keep_current"] as const).map((action) => (
+                      {(["manual_edit", "keep_current", "apply_proposed"] as const).map((action) => (
                         <button
                           key={action}
-                          className={action === "keep_current" ? "primary-button" : "quiet-button"}
+                          className={action === "apply_proposed" ? "primary-button" : "quiet-button"}
                           type="button"
                           disabled={!props.onProposalAction}
                           onClick={() => props.proposal && props.onProposalAction?.(props.proposal.id, action)}

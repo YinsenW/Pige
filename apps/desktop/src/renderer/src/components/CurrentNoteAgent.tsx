@@ -369,7 +369,7 @@ export function CurrentNoteAgent(props: {
 
   const decideAppendProposal = async (
     proposalId: string,
-    action: "reject" | "later" | "apply" | "keep_current" | "manual_edit"
+    action: "reject" | "later" | "apply" | "keep_current" | "apply_proposed" | "manual_edit"
   ): Promise<void> => {
     const current = appendProposal;
     if (!current || current.preview.proposalId !== proposalId) return;
@@ -383,7 +383,8 @@ export function CurrentNoteAgent(props: {
       props.onClose();
       return;
     }
-    const resolvingConflict = action === "keep_current" && current.preview.state === "conflicted" && current.preview.currentRevision;
+    const resolvingConflict = (action === "keep_current" || action === "apply_proposed") &&
+      current.preview.state === "conflicted" && current.preview.currentRevision;
     if (appendProposalDecisionInFlightRef.current || (current.preview.state !== "ready" && !resolvingConflict)) return;
     const vaultId = props.vaultId;
     const pageId = props.pageId;
@@ -399,7 +400,7 @@ export function CurrentNoteAgent(props: {
     setAppendProposal({ preview: { ...current.preview, state: "resolving" } });
     let result: CurrentNoteMutationProposalDecisionResult;
     try {
-      const decision = action === "apply" ? "approve" as const : action === "keep_current" ? "keep_current" as const : "reject" as const;
+      const decision = action === "apply" ? "approve" as const : action === "keep_current" || action === "apply_proposed" ? action : "reject" as const;
       result = current.preview.kind === "append_current_note"
         ? await window.pige.agent.decideCurrentNoteAppendProposal({
             apiVersion: 1,
@@ -409,7 +410,7 @@ export function CurrentNoteAgent(props: {
             proposalId,
             expectedRevision: current.preview.revision,
             decision,
-            ...(decision === "keep_current" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
+            ...(decision === "keep_current" || decision === "apply_proposed" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           })
         : await window.pige.agent.decideCurrentNoteReplaceProposal({
             apiVersion: 1,
@@ -418,7 +419,7 @@ export function CurrentNoteAgent(props: {
             proposalId,
             expectedRevision: current.preview.revision,
             decision,
-            ...(decision === "keep_current" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
+            ...(decision === "keep_current" || decision === "apply_proposed" ? { expectedCurrentRevision: current.preview.currentRevision! } : {})
           });
     } catch {
       if (sequence === appendProposalSequenceRef.current) {
