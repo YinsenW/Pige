@@ -433,7 +433,7 @@ interface VaultRoots {
 interface ResolvedQueryBinding {
   readonly dataset: BoundDataset;
   readonly table: BoundTable;
-  readonly targetTable?: BoundTable; readonly relationColumn?: BoundColumn;
+  readonly joins: readonly { readonly sourceTable: BoundTable; readonly targetTable: BoundTable; readonly relationColumn: BoundColumn }[];
   readonly columnsByRef: ReadonlyMap<ColumnOpaqueRef, BoundColumn>;
 }
 
@@ -673,7 +673,7 @@ function createCatalogEnvelope(
       aggregateOperators: ["count", "sum", "min", "max", "avg"],
       orderDirections: ["asc", "desc"],
       aggregateRefs: "aggregate_N refers to the Nth aggregate in this query",
-      relationJoin: "join={relation,targetTable} follows one declared Pige relation; projection/filter/order may use source or target columns",
+      relationJoin: "join={relation,targetTable,next?} follows at most two declared Pige relations; projection/filter/order may use columns from the bound tables",
       limits: {
         selectedColumns: limits.maxSelectedColumns,
         filters: limits.maxFilters,
@@ -746,16 +746,21 @@ function resolveQueryBinding(
   if (!dataset || !table) {
     throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query references an unavailable opaque catalog item.");
   }
-  const relationColumn = request.join ? table.columns.find((column) => column.ref === request.join?.relation) : undefined;
-  const targetTable = request.join
-    ? dataset.tables.find((candidate) => candidate.ref === request.join?.targetTable)
-    : undefined;
-  if (request.join && (!relationColumn?.column.relation || !targetTable ||
-      relationColumn.column.relation.targetTableId !== targetTable.table.id)) {
-    throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query relation join is not declared by the selected table.");
+  const requestedHops = request.join ? [request.join, ...(request.join.next ? [request.join.next] : [])] : [];
+  const joins: Array<ResolvedQueryBinding["joins"][number]> = [];
+  let sourceTable = table;
+  for (const hop of requestedHops) {
+    const relationColumn = sourceTable.columns.find((column) => column.ref === hop.relation);
+    const targetTable = dataset.tables.find((candidate) => candidate.ref === hop.targetTable);
+    if (!relationColumn?.column.relation || !targetTable || relationColumn.column.relation.targetTableId !== targetTable.table.id) {
+      throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query relation join is not declared by its selected source table.");
+    }
+    joins.push({ sourceTable, targetTable, relationColumn });
+    sourceTable = targetTable;
   }
-  const queryableColumns = [...table.columns.filter((column) => column !== relationColumn),
-    ...(targetTable ? targetTable.columns : [])];
+  const relationColumnIds = new Set(joins.map(({ relationColumn }) => relationColumn.column.id));
+  const queryableColumns = [table, ...joins.map(({ targetTable }) => targetTable)].flatMap(({ columns }) => columns)
+    .filter(({ column }) => !relationColumnIds.has(column.id));
   const columnsByRef = new Map(queryableColumns.map((column) => [column.ref, column]));
   const referenced = collectRequestColumnRefs(request);
   if (referenced.size > limits.maxReferencedColumns) {
@@ -768,8 +773,7 @@ function resolveQueryBinding(
     }
   }
   validateQueryColumnTypes(request, columnsByRef);
-  return { dataset, table, ...(targetTable ? { targetTable } : {}),
-    ...(relationColumn ? { relationColumn } : {}), columnsByRef };
+  return { dataset, table, joins, columnsByRef };
 }
 
 function collectRequestColumnRefs(request: DatasetQueryRequest): Set<ColumnOpaqueRef> {
@@ -888,16 +892,12 @@ function createWorkerInput(
       columnCount: binding.table.table.columnCount
     },
     columns,
-    ...(binding.targetTable && binding.relationColumn ? {
-      join: {
-        relationColumnId: binding.relationColumn.column.id,
-        targetTable: {
-          id: binding.targetTable.table.id,
-          name: binding.targetTable.table.name,
-          rowCount: binding.targetTable.table.rowCount,
-          columnCount: binding.targetTable.table.columnCount
-        }
-      }
+    ...(binding.joins.length > 0 ? {
+      joins: binding.joins.map(({ relationColumn, targetTable }) => ({
+        relationColumnId: relationColumn.column.id,
+        targetTable: { id: targetTable.table.id, name: targetTable.table.name,
+          rowCount: targetTable.table.rowCount, columnCount: targetTable.table.columnCount }
+      }))
     } : {}),
     plan: {
       selectColumnIds: request.select.map(toColumnId),
@@ -1006,8 +1006,8 @@ function validateCoreResult(result: DatasetQueryCoreResult, input: PreparedWorke
     result.truncated !== (result.matchedRowCount > result.returnedRowCount) ||
     result.rows.some((row) => row.values.length !== result.columns.length || row.states.length !== result.columns.length) ||
     result.usedColumnIds.length === 0 ||
-    result.usedColumnIds.some((id) =>
-      id !== input.join?.relationColumnId && !input.columns.some((column) => column.id === id)) ||
+    result.usedColumnIds.some((id) => !input.joins?.some(({ relationColumnId }) => relationColumnId === id) &&
+      !input.columns.some((column) => column.id === id)) ||
     result.returnedRowIds.length > input.limits.maxResultRows ||
     byteLength(JSON.stringify(result)) > input.limits.maxResultBytes + 1_024
   ) {
@@ -1038,10 +1038,11 @@ function createExecutionResult(
   limits: DatasetQueryLimits
 ): DatasetQueryExecutionResult {
   const refsByColumnId = new Map(
-    [...binding.table.columns, ...(binding.targetTable?.columns ?? [])]
+    [binding.table, ...binding.joins.map(({ targetTable }) => targetTable)].flatMap(({ columns }) => columns)
       .map(({ ref, column }) => [column.id, ref] as const)
   );
-  const resultTableName = binding.targetTable ? `${binding.table.table.name} → ${binding.targetTable.table.name}` : binding.table.table.name;
+  const resultTableName = [binding.table, ...binding.joins.map(({ targetTable }) => targetTable)]
+    .map(({ table }) => table.name).join(" → ");
   const previewColumns = core.columns.map((column) => ({
     key: refsByColumnId.get(column.key) ?? column.key,
     label: column.label,

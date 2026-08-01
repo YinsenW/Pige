@@ -165,7 +165,7 @@ export function executeDatasetQuery(request: DatasetQueryWorkerRequest): Dataset
     database.setAuthorizer(authorizeFixedDatasetRead);
     validateFixedSchema(database);
     validatePayloadBinding(database, request);
-    result = request.join ? executeDatasetRelationQuery(database, request) : runBoundedPlan(database, request);
+    result = request.joins ? executeDatasetRelationQuery(database, request) : runBoundedPlan(database, request);
   } catch (caught) {
     if (caught instanceof PigeDomainError) throw caught;
     throw new PigeDomainError(

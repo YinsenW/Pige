@@ -27,45 +27,65 @@ interface JoinedRow {
   readonly cells: ReadonlyMap<string, QueryCell>;
 }
 
-/** Executes one bounded inner join by a Pige-owned single-row relation. */
+/** Executes up to two bounded inner joins by Pige-owned single-row relations. */
 export function executeDatasetRelationQuery(
   database: DatabaseSync,
   request: DatasetQueryWorkerRequest
 ): DatasetQueryCoreResult {
-  const join = request.join;
-  if (!join || request.plan.aggregates.length > 0 || request.plan.groupByColumnIds.length > 0) {
+  const joins = request.joins;
+  if (!joins || joins.length < 1 || joins.length > 2 ||
+      request.plan.aggregates.length > 0 || request.plan.groupByColumnIds.length > 0) {
     fail("dataset.query.plan_invalid", "The Dataset relation join plan is invalid.");
   }
-  validateTargetBinding(database, request);
+  validateTargetBindings(database, request);
   const columnsById = new Map(request.columns.map((column) => [column.id, column]));
   const usedColumnIds = collectUsedColumnIds(request);
   const sourceColumns = request.columns.filter((column) =>
     column.tableId === request.table.id && usedColumnIds.includes(column.id)
   );
-  const targetColumns = request.columns.filter((column) =>
-    column.tableId === join.targetTable.id && usedColumnIds.includes(column.id)
+  const targetColumns = joins.map(({ targetTable }) => request.columns.filter((column) =>
+    column.tableId === targetTable.id && usedColumnIds.includes(column.id)
+  ));
+  const totalRows = request.table.rowCount + joins.reduce((sum, { targetTable }) => sum + targetTable.rowCount, 0);
+  const predictedCells = request.table.rowCount * (sourceColumns.length + 1) + joins.reduce(
+    (sum, { targetTable }, index) => sum + targetTable.rowCount *
+      ((targetColumns[index]?.length ?? 0) + (index < joins.length - 1 ? 1 : 0)),
+    0
   );
-  const totalRows = request.table.rowCount + join.targetTable.rowCount;
-  const predictedCells = request.table.rowCount * (sourceColumns.length + 1) +
-    join.targetTable.rowCount * targetColumns.length;
   if (totalRows > request.limits.maxScanRows) limit("scan_rows");
   if (!Number.isSafeInteger(predictedCells) || predictedCells > request.limits.maxScanCells) limit("scan_cells");
 
-  const targets = readTableRows(database, join.targetTable.id, join.targetTable.rowCount, targetColumns, request.limits);
-  const targetsById = new Map(targets.map((target) => [target.rowId, target]));
+  const targetsByHop = joins.map(({ targetTable }, index) => new Map(
+    readTableRows(database, targetTable.id, targetTable.rowCount, targetColumns[index] ?? [], request.limits)
+      .map((target) => [target.rowId, target])
+  ));
   const sources = readTableRows(database, request.table.id, request.table.rowCount, sourceColumns, request.limits);
-  const relationRows = readRelationTargets(database, request.table.id, request.table.rowCount, join.relationColumnId, request.limits);
+  const relationRowsByHop = joins.map((join, index) => readRelationTargets(
+    database,
+    index === 0 ? request.table.id : joins[index - 1]!.targetTable.id,
+    index === 0 ? request.table.rowCount : joins[index - 1]!.targetTable.rowCount,
+    join.relationColumnId,
+    request.limits
+  ));
   const joined: JoinedRow[] = [];
   for (const source of sources) {
-    const targetRowId = relationRows.get(source.rowId);
-    if (targetRowId === undefined || targetRowId === null) continue;
-    const target = targetsById.get(targetRowId);
-    if (!target) fail("dataset.query.payload_invalid", "A Dataset relation points outside its bound target table.");
+    let current = source;
+    const cells = new Map(source.cells);
+    let complete = true;
+    for (const [index, relationRows] of relationRowsByHop.entries()) {
+      const targetRowId = relationRows.get(current.rowId);
+      if (targetRowId === undefined || targetRowId === null) { complete = false; break; }
+      const target = targetsByHop[index]!.get(targetRowId);
+      if (!target) fail("dataset.query.payload_invalid", "A Dataset relation points outside its bound target table.");
+      for (const [columnId, cell] of target.cells) cells.set(columnId, cell);
+      current = target;
+    }
+    if (!complete) continue;
     const row: JoinedRow = {
       rowId: source.rowId,
       ordinal: source.ordinal,
       sourceRow: source.sourceRow,
-      cells: new Map([...source.cells, ...target.cells])
+      cells
     };
     if (request.plan.filters.every((filter) => matchesFilter(row, filter))) joined.push(row);
   }
@@ -103,8 +123,21 @@ export function executeDatasetRelationQuery(
   return { ...withoutHash, resultHash: createDatasetQueryResultHash(withoutHash) };
 }
 
-function validateTargetBinding(database: DatabaseSync, request: DatasetQueryWorkerRequest): void {
-  const target = request.join!.targetTable;
+function validateTargetBindings(database: DatabaseSync, request: DatasetQueryWorkerRequest): void {
+  let sourceTableId = request.table.id;
+  for (const join of request.joins!) {
+    validateTargetBinding(database, request, join, sourceTableId);
+    sourceTableId = join.targetTable.id;
+  }
+}
+
+function validateTargetBinding(
+  database: DatabaseSync,
+  request: DatasetQueryWorkerRequest,
+  join: NonNullable<DatasetQueryWorkerRequest["joins"]>[number],
+  sourceTableId: string
+): void {
+  const target = join.targetTable;
   const table = database.prepare(
     "SELECT table_id, source_name, row_count, column_count FROM pige_dataset_tables WHERE table_id = ?"
   ).get(target.id) as unknown as readonly unknown[] | undefined;
@@ -125,8 +158,8 @@ function validateTargetBinding(database: DatabaseSync, request: DatasetQueryWork
   }
   const relation = database.prepare(
     "SELECT table_id FROM pige_dataset_columns WHERE column_id = ?"
-  ).get(request.join!.relationColumnId) as unknown as readonly unknown[] | undefined;
-  if (!relation || relation[0] !== request.table.id) {
+  ).get(join.relationColumnId) as unknown as readonly unknown[] | undefined;
+  if (!relation || relation[0] !== sourceTableId) {
     fail("dataset.query.payload_binding_invalid", "The Dataset relation column is not owned by the selected table.");
   }
 }
@@ -203,7 +236,7 @@ function readRelationTargets(
 
 function collectUsedColumnIds(request: DatasetQueryWorkerRequest): string[] {
   return [...new Set([
-    request.join!.relationColumnId,
+    ...request.joins!.map(({ relationColumnId }) => relationColumnId),
     ...request.plan.selectColumnIds,
     ...request.plan.filters.map(({ columnId }) => columnId),
     ...request.plan.orderBy.flatMap(({ by }) => by.startsWith("aggregate_") ? [] : [by])

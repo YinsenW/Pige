@@ -114,9 +114,13 @@ const DatasetQueryOrderSchema = z.object({
   direction: z.enum(["asc", "desc"])
 }).strict();
 
-const DatasetQueryRelationJoinSchema = z.object({
+const DatasetQueryRelationHopSchema = z.object({
   relation: ColumnOpaqueRefSchema,
   targetTable: TableOpaqueRefSchema
+}).strict();
+
+const DatasetQueryRelationJoinSchema = DatasetQueryRelationHopSchema.extend({
+  next: DatasetQueryRelationHopSchema.optional()
 }).strict();
 
 const DatasetCatalogToolRequestSchema = z.object({
@@ -166,7 +170,7 @@ const DatasetQueryOnlyToolRequestSchema = z.object({
     context.addIssue({
       code: "custom",
       path: ["join"],
-      message: "The first bounded relation join supports projection, filtering, and ordering only."
+      message: "Bounded relation joins support projection, filtering, and ordering only."
     });
   }
   for (const [index, order] of (request.orderBy ?? []).entries()) {
@@ -292,7 +296,7 @@ export interface DatasetQueryWorkerInput {
     readonly columnCount: number;
   };
   readonly columns: readonly DatasetQueryInternalColumn[];
-  readonly join?: {
+  readonly joins?: readonly {
     readonly relationColumnId: string;
     readonly targetTable: {
       readonly id: string;
@@ -300,7 +304,7 @@ export interface DatasetQueryWorkerInput {
       readonly rowCount: number;
       readonly columnCount: number;
     };
-  };
+  }[];
   readonly plan: DatasetQueryInternalPlan;
   readonly limits: DatasetQueryLimits;
 }
@@ -373,7 +377,7 @@ export function createDatasetQueryPlanHash(request: DatasetQueryWorkerRequest): 
     schemaChecksum: request.binding.schemaChecksum,
     payloadChecksum: request.binding.payloadChecksum,
     tableId: request.table.id,
-    ...(request.join ? { join: request.join } : {}),
+    ...(request.joins ? { joins: request.joins } : {}),
     selectColumnIds: request.plan.selectColumnIds,
     filters: request.plan.filters,
     groupByColumnIds: request.plan.groupByColumnIds,
