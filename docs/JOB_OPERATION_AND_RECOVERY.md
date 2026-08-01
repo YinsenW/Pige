@@ -584,7 +584,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_source_record`, `update_source_record`, `relink_source`.
 - `copy_source_asset`, `move_source_asset`, `trash_source_asset`, `restore_source_asset`.
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
-- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `add_collection_lookup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
+- `create_dataset_revision`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `add_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`.
 - `trash_conversation`, `restore_conversation`.
 - `update_index`.
@@ -596,7 +596,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_external_file` (reserved for the unregistered external create-only foundation).
 - `backup_created`, `restore_applied`, `migration_applied`.
 
-Manual note-title rename uses one `rename_page` Operation whose private before/after path and Markdown receipts support restart adoption, exact Undo and matching-Undo Redo. Redo re-proves the restored Markdown and original destination vacancy, reuses the exact images, and publishes a deterministic forward `rename_page`; interrupted publication adopts once and destination or content drift preserves live bytes. Publication preserves `page_id`, aliases the prior title, and rebuilds derived indexes only after durable commit; stale ownership or destination conflict publishes nothing.
+Manual note-title rename uses one `rename_page` Operation whose private before/after path and Markdown receipts support restart adoption, exact Undo and matching-Undo Redo. Redo re-proves the restored Markdown and original destination vacancy, reuses the exact images, and publishes a deterministic forward `rename_page`; interrupted publication adopts once and destination or content drift preserves live bytes. Publication preserves page_id, aliases the prior title, and rebuilds derived indexes only after durable commit; stale ownership or destination conflict publishes nothing.
 
 Lifecycle coverage:
 

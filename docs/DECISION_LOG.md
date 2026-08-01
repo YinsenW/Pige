@@ -3962,7 +3962,7 @@ Date: 2026-07-29
 
 Decision:
 
-Persist and revision-update Pige formula/relation/lookup descriptors on Dataset columns.
+Persist and revision-update Pige formula/relation/lookup/rollup descriptors on Dataset columns.
 
 Rationale:
 
@@ -3971,7 +3971,8 @@ Schema truth preserves empty tables and exact Undo.
 Consequences:
 
 - Formulas use numeric inputs; single relations store same-Dataset row IDs. Lookups follow one
-  relation to a scalar target and remain derived/read-only. Guards and Activity own atomic Undo.
+  relation to a scalar target, and rollups derive count or numeric sum from one relation. Lookup and
+  rollup cells remain derived/read-only. Guards and Activity own atomic Undo.
 
 References:
 
