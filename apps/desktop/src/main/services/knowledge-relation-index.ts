@@ -8,7 +8,7 @@ import {
 import type { MarkdownPageRecord } from "./markdown-page-index";
 
 export type DurableKnowledgeRelationType =
-  | "has_topic" | "links_to" | "mentions_entity" | "related_to" | "contradicts" | "answers";
+  | "has_topic" | "links_to" | "mentions_entity" | "related_to" | "contradicts" | "answers" | "broader_than";
 
 export interface KnowledgeTreeEntityInput {
   readonly entityId: string;
@@ -85,6 +85,14 @@ export function indexPageKnowledgeRelations(db: DatabaseSync, pages: readonly Ma
         const target = pageById.get(pageId);
         if (!target || !isActiveSourced(target) || !["note", "claim"].includes(target.summary.pageType) || pageId === page.summary.pageId) continue;
         insertEdge(insertRelation, "answers", page.summary.pageId, pageId, "question.answered_by", pageId);
+      }
+    }
+    if (page.summary.pageType === "concept" && page.summary.status === "active") {
+      for (const pageId of page.knowledge.conceptParents) {
+        const target = pageById.get(pageId);
+        if (!target || target.summary.pageType !== "concept" || target.summary.status !== "active" ||
+            pageId === page.summary.pageId) continue;
+        insertEdge(insertRelation, "broader_than", page.summary.pageId, pageId, "concept.parent_concepts", pageId);
       }
     }
   }

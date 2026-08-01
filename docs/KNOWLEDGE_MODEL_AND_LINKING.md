@@ -143,6 +143,12 @@ Concept rules:
 
 - A concept page should have aliases for common names and translations.
 - Concept pages can have broader, narrower, related, example, and evidence relationships.
+- For the first explicit hierarchy edit, the current concept stores only stable broader-concept IDs
+  in `concept.parent_concepts`. Narrower links and Knowledge Tree children are rebuilt from that
+  single durable direction; `concept.child_concepts` is not separately mutated or trusted.
+- Reader add/remove binds the active Vault, current concept render/revision, and exact current
+  broader concept. Main applies one atomic `update_page`; stale or ineligible input has no effect,
+  while Activity Undo/Redo and restart restore the exact prior/next hierarchy bytes.
 - Existing concepts evolve when evidence, user text, base hash, schema, and recovery pass.
 
 ### 5.4 Entities
@@ -379,7 +385,7 @@ only by language, and resolve supported-language aliases when indexes allow.
 
 Knowledge Tree is a derived semantic explorer, never a file tree/store. Topic/concept pages, typed relationships, sources/citations, page/chunk/recency, claims/questions, and tentative growth form domain trunks, topic/concept/project/question/entity branches, and knowledge-fragment leaves. Weight drives trunk/branch thickness; leaf count is fragmented quantity; leaf size/color express density/importance/evidence/freshness/confidence; `needs_review` or weak sourcing stays outlined/muted. It requires no v0.1 taxonomy; autonomous link changes use Activity/Undo and exceptional conflicts may use proposals.
 
-The bounded read-only slice rebuilds durable Markdown through Local Database Service into body-free domain/topic/concept/source aggregates and supporting-page links; missing indexes degrade typed-empty and renderer never reads vault. Evidence density is `fragmentPageCount + sourceCount` in `0`, `1–2`, `3–5`, `6+`; domain/topic size uses weight, deeper size uses relative density, exact leaf count never depth, and `needs_review` outlines without replacing text/a11y detail. Broader inputs, health/editing/taxonomy/force graph, incremental/10k, and packaged parity remain open.
+The bounded read-only slice rebuilds durable Markdown through Local Database Service into body-free domain/topic/concept/source aggregates and supporting-page links; missing indexes degrade typed-empty and renderer never reads vault. Evidence density is `fragmentPageCount + sourceCount` in `0`, `1–2`, `3–5`, `6+`; domain/topic size uses weight, deeper size uses relative density, exact leaf count never depth, and `needs_review` outlines without replacing text/a11y detail. Explicit concept-parent edits now feed the same rebuildable tree and backlink index. Health, broader taxonomy editing, force graph, incremental/10k, and packaged parity remain open.
 
 ## 11. Retrieval And Ranking
 

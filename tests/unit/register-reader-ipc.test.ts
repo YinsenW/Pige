@@ -18,6 +18,7 @@ import type { NoteRelateService } from "../../apps/desktop/src/main/services/not
 import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
+import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
 import { NoteChangeQuestionAnswerResultSchema } from "@pige/schemas";
 
 type IpcHandler = (event: IpcMainInvokeEvent, request?: unknown) => unknown;
@@ -52,7 +53,8 @@ function makeHarness(
   libraryTopicRenameService?: Partial<LibraryTopicRenameService>,
   questionStateService?: Partial<QuestionStateService>,
   questionAnswerService?: Partial<QuestionAnswerService>,
-  generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>
+  generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>,
+  conceptParentService?: Partial<ConceptParentService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -107,6 +109,10 @@ function makeHarness(
     },
     getClaimContradictionService: () => {
       throw new Error("Claim contradiction service was not expected.");
+    },
+    getConceptParentService: () => {
+      if (conceptParentService) return conceptParentService as ConceptParentService;
+      throw new Error("Concept parent service was not expected.");
     },
     getNoteTagService: () => {
       if (noteTagService) return noteTagService as NoteTagService;
@@ -179,6 +185,8 @@ describe("registerReaderIpc", () => {
       "notes.changeQuestionAnswer",
       "notes.searchClaimContradictions",
       "notes.changeClaimContradiction",
+      "notes.searchConceptParents",
+      "notes.changeConceptParent",
       "notes.addTag",
       "notes.editTaxonomy",
       "notes.rename",

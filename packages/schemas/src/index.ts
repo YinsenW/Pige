@@ -1771,6 +1771,7 @@ export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestore
 export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
 export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
 export const NoteClaimContradictionRequestIdSchema = z.string().regex(/^claimcontradictionreq_[a-z0-9]{16,64}$/);
+export const NoteConceptParentRequestIdSchema = z.string().regex(/^conceptparentreq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
 export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteRenameRequestIdSchema = z.string().regex(/^noterenamereq_[a-z0-9]{16,64}$/);
@@ -1905,6 +1906,16 @@ export const NoteClaimContradictionsSummarySchema = z.object({
   canEdit: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const NoteConceptParentItemSchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const NoteConceptParentsSummarySchema = z.object({
+  items: z.array(NoteConceptParentItemSchema).max(32),
+  canEdit: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteRevealGeneratedEligibilitySchema = z.object({
   canReveal: z.literal(true),
   revision: NoteEditorRevisionSchema
@@ -1927,6 +1938,7 @@ export const NoteRenderResultSchema = z.object({
   questionState: NoteQuestionStateSummarySchema.optional(),
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
+  conceptParents: NoteConceptParentsSummarySchema.optional(),
   refreshableSourceIds: z.array(SourceIdSchema).max(1_000).optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
@@ -2032,6 +2044,8 @@ export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers
 export const NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer" as const;
 export const NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContradictions" as const;
 export const NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL = "notes.changeClaimContradiction" as const;
+export const NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL = "notes.searchConceptParents" as const;
+export const NOTE_CHANGE_CONCEPT_PARENT_CHANNEL = "notes.changeConceptParent" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
@@ -2211,6 +2225,51 @@ export const NoteChangeClaimContradictionResultSchema = z.discriminatedUnion("st
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteChangeClaimContradictionResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
+]);
+const NoteConceptParentIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteConceptParentRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteSearchConceptParentsRequestSchema = NoteConceptParentIdentitySchema.extend({
+  query: z.string().trim().min(1).max(160)
+}).strict();
+export const NoteSearchConceptParentsResultSchema = z.discriminatedUnion("status", [
+  NoteSearchConceptParentsRequestSchema.extend({
+    status: z.literal("ready"),
+    candidates: z.array(NoteConceptParentItemSchema).max(20)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSearchConceptParentsRequestSchema.extend({ status: z.literal(status) }).strict())
+]);
+export const NoteChangeConceptParentRequestSchema = NoteConceptParentIdentitySchema.extend({
+  action: z.enum(["add", "remove"]),
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).superRefine((value, context) => {
+  if (value.action === "add" && !value.expectedTargetUpdatedAt) context.addIssue({
+    code: "custom", path: ["expectedTargetUpdatedAt"], message: "Adding a concept parent requires current target identity."
+  });
+  if (value.action === "remove" && value.expectedTargetUpdatedAt !== undefined) context.addIssue({
+    code: "custom", path: ["expectedTargetUpdatedAt"], message: "Removing a concept parent must not accept renderer target authority."
+  });
+});
+const NoteChangeConceptParentResultIdentitySchema = z.object({
+  apiVersion: z.literal(1), requestId: NoteConceptParentRequestIdSchema, activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema, expectedRevision: NoteEditorRevisionSchema,
+  action: z.enum(["add", "remove"]), targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+export const NoteChangeConceptParentResultSchema = z.discriminatedUnion("status", [
+  NoteChangeConceptParentResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteChangeConceptParentResultIdentitySchema.extend({ status: z.literal(status) }).strict())
 ]);
 export const NoteAddTagRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -11991,6 +12050,8 @@ export type NoteQuestionAnswerItem = z.infer<typeof NoteQuestionAnswerItemSchema
 export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSummarySchema>;
 export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
 export type NoteClaimContradictionsSummary = z.infer<typeof NoteClaimContradictionsSummarySchema>;
+export type NoteConceptParentItem = z.infer<typeof NoteConceptParentItemSchema>;
+export type NoteConceptParentsSummary = z.infer<typeof NoteConceptParentsSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
 export type NoteRevealGeneratedRequest = z.infer<typeof NoteRevealGeneratedRequestSchema>;
 export type NoteRevealGeneratedResult = z.infer<typeof NoteRevealGeneratedResultSchema>;
@@ -12028,6 +12089,10 @@ export type NoteSearchClaimContradictionsRequest = z.infer<typeof NoteSearchClai
 export type NoteSearchClaimContradictionsResult = z.infer<typeof NoteSearchClaimContradictionsResultSchema>;
 export type NoteChangeClaimContradictionRequest = z.infer<typeof NoteChangeClaimContradictionRequestSchema>;
 export type NoteChangeClaimContradictionResult = z.infer<typeof NoteChangeClaimContradictionResultSchema>;
+export type NoteSearchConceptParentsRequest = z.infer<typeof NoteSearchConceptParentsRequestSchema>;
+export type NoteSearchConceptParentsResult = z.infer<typeof NoteSearchConceptParentsResultSchema>;
+export type NoteChangeConceptParentRequest = z.infer<typeof NoteChangeConceptParentRequestSchema>;
+export type NoteChangeConceptParentResult = z.infer<typeof NoteChangeConceptParentResultSchema>;
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
 export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
 export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;

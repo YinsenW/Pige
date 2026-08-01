@@ -197,6 +197,10 @@ import type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteSearchConceptParentsRequest,
+  NoteSearchConceptParentsResult,
+  NoteChangeConceptParentRequest,
+  NoteChangeConceptParentResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -738,6 +742,12 @@ import {
   NoteSearchClaimContradictionsResultSchema,
   NoteChangeClaimContradictionRequestSchema,
   NoteChangeClaimContradictionResultSchema,
+  NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL,
+  NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
+  NoteSearchConceptParentsRequestSchema,
+  NoteSearchConceptParentsResultSchema,
+  NoteChangeConceptParentRequestSchema,
+  NoteChangeConceptParentResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -2294,6 +2304,20 @@ const api: PigeDesktopApi = {
       NoteChangeClaimContradictionResultSchema.parse(await ipcRenderer.invoke(
         NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL,
         NoteChangeClaimContradictionRequestSchema.parse(request)
+      )),
+    searchConceptParents: async (
+      request: NoteSearchConceptParentsRequest
+    ): Promise<NoteSearchConceptParentsResult> =>
+      NoteSearchConceptParentsResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL,
+        NoteSearchConceptParentsRequestSchema.parse(request)
+      )),
+    changeConceptParent: async (
+      request: NoteChangeConceptParentRequest
+    ): Promise<NoteChangeConceptParentResult> =>
+      NoteChangeConceptParentResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
+        NoteChangeConceptParentRequestSchema.parse(request)
       )),
     addTag: async (request: NoteAddTagRequest): Promise<NoteAddTagResult> =>
       NoteAddTagResultSchema.parse(

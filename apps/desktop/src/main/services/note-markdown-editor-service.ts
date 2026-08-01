@@ -100,14 +100,14 @@ interface RenderBinding {
 }
 interface NoteMarkdownEditorDependencies {
   readonly now?: () => Date; readonly randomId?: () => string;
-  readonly allowClaim?: boolean; readonly allowQuestion?: boolean; }
+  readonly allowClaim?: boolean; readonly allowQuestion?: boolean; readonly allowConcept?: boolean; }
 export interface NoteMarkdownEditorActivityRecoveryResult { readonly recovered: number; readonly failed: number }
 export class NoteMarkdownEditorService {
   readonly #vaults: NoteMarkdownEditorVaultPort;
   readonly #activity: NoteMarkdownEditorActivityPort;
   readonly #now: () => Date;
   readonly #randomId: () => string;
-  readonly #allowClaim: boolean; readonly #allowQuestion: boolean;
+  readonly #allowClaim: boolean; readonly #allowQuestion: boolean; readonly #allowConcept: boolean;
   readonly #bindings = new Map<string, RenderBinding>();
   constructor(
     vaults: NoteMarkdownEditorVaultPort,
@@ -118,7 +118,7 @@ export class NoteMarkdownEditorService {
     this.#activity = activity;
     this.#now = dependencies.now ?? (() => new Date());
     this.#randomId = dependencies.randomId ?? randomUUID;
-    this.#allowClaim = dependencies.allowClaim ?? false; this.#allowQuestion = dependencies.allowQuestion ?? false;
+    this.#allowClaim = dependencies.allowClaim ?? false; this.#allowQuestion = dependencies.allowQuestion ?? false; this.#allowConcept = dependencies.allowConcept ?? false;
   }
   open(request: NoteMarkdownEditorOpenRequest): NoteMarkdownEditorOpenResult {
     if (!isNonemptyBoundedString(request?.activeVaultId, 256) || !PageIdSchema.safeParse(request?.pageId).success) {
@@ -134,7 +134,7 @@ export class NoteMarkdownEditorService {
         located.signature,
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       );
-      if (!validateEditablePageMarkdown(content.markdown, request.pageId, this.#allowClaim, this.#allowQuestion)) return { status: "failed" };
+      if (!validateEditablePageMarkdown(content.markdown, request.pageId, this.#allowClaim, this.#allowQuestion, this.#allowConcept)) return { status: "failed" };
       if (!this.#scopeMatches(scope.activeVaultId, scope.vaultPath)) return { status: "failed" };
       const revisionId = hashMarkdown(content.markdown);
       const renderIdentity = createRenderIdentity({
@@ -170,7 +170,7 @@ export class NoteMarkdownEditorService {
     if (!validatePortableMarkdown(request.markdown, request.pageId)) {
       return { status: "invalid", ...identity };
     }
-    if (!isEditableMarkdownPageType(request.markdown, this.#allowClaim, this.#allowQuestion)) {
+    if (!isEditableMarkdownPageType(request.markdown, this.#allowClaim, this.#allowQuestion, this.#allowConcept)) {
       return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     const binding = this.#bindings.get(request.renderIdentity);
@@ -198,7 +198,7 @@ export class NoteMarkdownEditorService {
     if (hashMarkdown(beforeMarkdown) !== binding.revisionId) {
       return { status: "stale", ...identity };
     }
-    if (!preservesEditableMarkdownPageOwnership(beforeMarkdown, request.markdown, this.#allowClaim, this.#allowQuestion)) {
+    if (!preservesEditableMarkdownPageOwnership(beforeMarkdown, request.markdown, this.#allowClaim, this.#allowQuestion, this.#allowConcept)) {
       return { status: "invalid", ...identity, invalidReason: "unsupported_page_type" };
     }
     if (request.markdown === beforeMarkdown) {
@@ -306,7 +306,7 @@ export class NoteMarkdownEditorService {
         MAX_NOTE_MARKDOWN_EDITOR_BYTES + 1
       ).markdown;
       if (committed !== afterMarkdown ||
-        !validateEditablePageMarkdown(committed, binding.pageId, this.#allowClaim, this.#allowQuestion)) {
+        !validateEditablePageMarkdown(committed, binding.pageId, this.#allowClaim, this.#allowQuestion, this.#allowConcept)) {
         throw new Error("The committed Markdown page could not be verified.");
       }
       return signature;
@@ -372,7 +372,7 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
       hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
       !validateActivityMarkdown(input.beforeMarkdown, binding.pageId) ||
       !validateActivityMarkdown(input.afterMarkdown, binding.pageId) ||
-      !preservesEditableMarkdownPageOwnership(input.beforeMarkdown, input.afterMarkdown, true, true)
+      !preservesEditableMarkdownPageOwnership(input.beforeMarkdown, input.afterMarkdown, true, true, true)
     ) {
       throw new Error("The Markdown Activity update binding is invalid.");
     }
@@ -584,10 +584,10 @@ function validatePortableMarkdown(markdown: string, expectedPageId: string): boo
 export function validateEditableMarkdown(markdown: string, expectedPageId: string): boolean {
   return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPage(markdown);
 }
-function validateEditablePageMarkdown(markdown: string, expectedPageId: string, allowClaim: boolean, allowQuestion = false): boolean {
-  return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPageType(markdown, allowClaim, allowQuestion);
+function validateEditablePageMarkdown(markdown: string, expectedPageId: string, allowClaim: boolean, allowQuestion = false, allowConcept = false): boolean {
+  return validatePortableMarkdown(markdown, expectedPageId) && isEditableMarkdownPageType(markdown, allowClaim, allowQuestion, allowConcept);
 }
-export function validateActivityMarkdown(markdown: string, expectedPageId: string): boolean { return validateEditablePageMarkdown(markdown, expectedPageId, true, true); }
+export function validateActivityMarkdown(markdown: string, expectedPageId: string): boolean { return validateEditablePageMarkdown(markdown, expectedPageId, true, true, true); }
 function hasExactlyOneRequiredFrontmatterField(raw: string): boolean {
   const required = ["id", "schema_version", "title", "type", "created_at", "updated_at", "status"];
   return required.every((key) => raw.split(/\r?\n/u).filter((line) => line.startsWith(`${key}:`)).length === 1);

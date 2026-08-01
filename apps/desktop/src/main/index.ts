@@ -336,6 +336,7 @@ import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
+import { ConceptParentService } from "./services/concept-parent-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
@@ -482,6 +483,7 @@ let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
+let conceptParentService: ConceptParentService | undefined;
 let noteTagService: NoteTagService | undefined;
 let noteAliasService: NoteAliasService | undefined;
 let noteMergeService: NoteMergeService | undefined;
@@ -1898,6 +1900,16 @@ const getClaimContradictionService = (): ClaimContradictionService => {
     () => getVaultService().activeVaultPath()
   );
   return claimContradictionService;
+};
+const getConceptParentService = (): ConceptParentService => {
+  conceptParentService ??= new ConceptParentService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowConcept: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  return conceptParentService;
 };
 const getNoteTagService = (): NoteTagService => {
   noteTagService ??= new NoteTagService(getNotesService(), getNoteMarkdownEditorService());
@@ -3367,6 +3379,7 @@ registerReaderIpc({
   getQuestionStateService,
   getQuestionAnswerService,
   getClaimContradictionService,
+  getConceptParentService,
   getNoteTagService,
   getNoteAliasService,
   getNoteMergeService,
@@ -3865,6 +3878,13 @@ app.whenReady().then(async () => {
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
       allowClaim: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  conceptParentService = new ConceptParentService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowConcept: true
     }),
     () => getVaultService().activeVaultPath()
   );

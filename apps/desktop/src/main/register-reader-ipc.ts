@@ -121,6 +121,12 @@ import {
   NoteSearchClaimContradictionsResultSchema,
   NoteChangeClaimContradictionRequestSchema,
   NoteChangeClaimContradictionResultSchema,
+  NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL,
+  NOTE_CHANGE_CONCEPT_PARENT_CHANNEL,
+  NoteSearchConceptParentsRequestSchema,
+  NoteSearchConceptParentsResultSchema,
+  NoteChangeConceptParentRequestSchema,
+  NoteChangeConceptParentResultSchema,
   NOTE_ADD_TAG_CHANNEL,
   NoteAddTagRequestSchema,
   NoteAddTagResultSchema,
@@ -192,6 +198,7 @@ import type { LibraryTopicRenameService } from "./services/library-topic-rename-
 import type { QuestionStateService } from "./services/question-state-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
 import type { ClaimContradictionService } from "./services/claim-contradiction-service";
+import type { ConceptParentService } from "./services/concept-parent-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -213,6 +220,7 @@ interface RegisterReaderIpcOptions {
   readonly getQuestionStateService: () => QuestionStateService;
   readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getClaimContradictionService: () => ClaimContradictionService;
+  readonly getConceptParentService: () => ConceptParentService;
   readonly getNoteTagService: () => NoteTagService;
   readonly getNoteRenameService: () => NoteRenameService;
   readonly getNoteAliasService: () => NoteAliasService;
@@ -554,6 +562,35 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
         : NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
     } catch {
       return NoteChangeClaimContradictionResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL, (event, request: unknown) => {
+    const parsed = NoteSearchConceptParentsRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteSearchConceptParentsResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try {
+      return NoteSearchConceptParentsResultSchema.parse(options.getConceptParentService().search(ownerId, parsed));
+    } catch {
+      return NoteSearchConceptParentsResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_CONCEPT_PARENT_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeConceptParentRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) {
+      return NoteChangeConceptParentResultSchema.parse({ ...parsed, status: "failed" });
+    }
+    try {
+      const result = NoteChangeConceptParentResultSchema.parse(
+        await options.getConceptParentService().change(ownerId, parsed)
+      );
+      if (result.status === "committed") options.onNoteRelated();
+      return !event.sender.isDestroyed() && notesTrackedSenders.get(event.sender.id) === ownerId
+        ? result : NoteChangeConceptParentResultSchema.parse({ ...parsed, status: "failed" });
+    } catch {
+      return NoteChangeConceptParentResultSchema.parse({ ...parsed, status: "failed" });
     }
   });
   options.ipcMain.handle(NOTE_ADD_TAG_CHANNEL, async (event, request: unknown) => {

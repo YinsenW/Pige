@@ -4667,6 +4667,35 @@ References:
 - `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 - `docs/JOB_OPERATION_AND_RECOVERY.md`
 
+### D-20260801-Concept-Hierarchy-Single-Direction
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+The first user-editable concept hierarchy stores only stable broader-concept IDs in the current
+concept's `concept.parent_concepts`. Main derives narrower backlinks and Knowledge Tree children;
+it does not write a reciprocal `child_concepts` list.
+
+Rationale:
+
+One durable direction avoids partial two-page commits and conflicting hierarchy truth while keeping
+the edit atomic, reversible, Git-friendly, and rebuildable.
+
+Consequences:
+
+- Reader add/remove uses exact Vault/render/revision/target currentness and one `update_page` Operation.
+- Activity Undo/Redo and restart restore exact hierarchy bytes.
+- Cycles or additional-parent graph editing remain future bounded slices; the tree chooses a
+  deterministic primary parent and retains other valid parents as related-parent context.
+
+References:
+
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

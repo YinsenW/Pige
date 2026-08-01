@@ -419,6 +419,26 @@ describe("NoteMarkdownEditorActivityAdapter", () => {
     expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  answered_by: ["page_20260801_answer001"]');
   });
 
+  it("records an allowed concept hierarchy update and converges Undo and Redo after restart", () => {
+    const fixture = createAdapterFixture({ pageType: "concept", allowConcept: true });
+    const opened = requireOpened(fixture.service);
+    const markdown = opened.markdown
+      .replace("  parent_concepts: []", '  parent_concepts: ["page_20260801_parentconcept"]')
+      .replace('updated_at: "2026-07-27T10:00:00.000Z"', "updated_at: 2026-07-27T12:00:00.000Z");
+    const committed = fixture.service.save({ requestId: "noteeditreq_conceptparentfixture", activeVaultId: VAULT_ID,
+      pageId: PAGE_ID, expectedRevisionId: opened.revisionId, renderIdentity: opened.renderIdentity, markdown });
+    expect(committed.status).toBe("committed");
+    if (committed.status !== "committed") throw new Error("Expected concept parent update to commit.");
+    const operation = readOperation(fixture.vaultPath, committed.operationId);
+    const restarted = new NoteMarkdownEditorActivityAdapter(fixture.vaults);
+    expect(restarted.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
+    expect(restarted.undo(operation, committed.revisionId)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("  parent_concepts: []");
+    expect(new NoteMarkdownEditorRedoService(fixture.vaults).redo({ operationId: operation.id,
+      expectedRevisionId: operation.before?.id })).toMatchObject({ status: "redone", revisionId: committed.revisionId });
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain('  parent_concepts: ["page_20260801_parentconcept"]');
+  });
+
   it("recovers only an exact interrupted forward Undo and remains idempotent", () => {
     const fixture = createAdapterFixture();
     const committed = commitEdit(fixture);
@@ -522,6 +542,7 @@ function createFixture(options: {
   readonly pageType?: "note" | "source" | "concept" | "entity" | "topic" | "claim" | "question";
   readonly pageRelativePath?: string;
   readonly allowQuestion?: boolean;
+  readonly allowConcept?: boolean;
 } = {}): {
   readonly root: string;
   readonly vaultPath: string;
@@ -549,7 +570,8 @@ function createFixture(options: {
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
       randomId: () => "fixture-random-id",
-      allowQuestion: options.allowQuestion
+      allowQuestion: options.allowQuestion,
+      allowConcept: options.allowConcept
     }
   );
   return { root, vaultPath, pagePath, markdown, records, vaults, service };
@@ -564,7 +586,8 @@ function createAdapterFixture(options: Parameters<typeof createFixture>[0] = {})
     {
       now: () => new Date("2026-07-27T12:00:00.000Z"),
       randomId: () => "adapter-fixture-random-id",
-      allowQuestion: options.allowQuestion
+      allowQuestion: options.allowQuestion,
+      allowConcept: options.allowConcept
     }
   );
   return { ...fixture, adapter, service };
@@ -667,6 +690,10 @@ source:
   state: "open"
   answered_by: []
 ` : "";
+  const conceptHierarchy = pageType === "concept" ? `concept:
+  parent_concepts: []
+  child_concepts: []
+` : "";
   return `---
 id: "${PAGE_ID}"
 schema_version: 1
@@ -680,7 +707,7 @@ aliases: []
 tags: ["editing"]
 topics: []
 source_ids: ["${SOURCE_ID}"]
-${sourceOwnership}${questionState}---
+${sourceOwnership}${questionState}${conceptHierarchy}---
 
 # Markdown editor fixture
 

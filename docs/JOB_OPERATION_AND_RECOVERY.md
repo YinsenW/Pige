@@ -483,6 +483,11 @@ type RetryPolicyState = {
 };
 ```
 
+Concept hierarchy add/remove is a short synchronous Reader mutation, not a new Job class. It uses
+the Markdown editor's existing reversible `update_page` Operation: the before-image preserves the
+exact previous `concept.parent_concepts`, Activity Undo/Redo converges after restart, and derived
+narrower backlinks/Knowledge Tree are rebuilt only after the durable commit.
+
 Rules:
 
 - Retry must not duplicate large source bodies.
