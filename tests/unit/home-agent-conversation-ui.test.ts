@@ -287,6 +287,44 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("routes a structured runtime-capability wait to Local Capabilities instead of blind retry", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const root = createRoot(container);
+    let opened = 0;
+    await act(async () => {
+      root.render(createElement(HomeJobAction, {
+        job: {
+          ...sourceWaitingForModelJob(),
+          stage: "waiting_for_tool",
+          waitingDependency: {
+            dependencyKind: "runtime_capability",
+            dependencyId: "dataset_materializer",
+            requiredAction: "enable_capability",
+            messageKey: "errors.agent_runtime.runtime_capability_waiting"
+          }
+        },
+        sourceWaitingForModel: false,
+        ownsSourceModelAction: false,
+        retryEligible: false,
+        onOpenModels: () => undefined,
+        onOpenLocalCapabilities: () => { opened += 1; },
+        onCancelJob: () => undefined,
+        onRetryJob: () => undefined,
+        t: (key: string) => key
+      }));
+      await settle(dom);
+    });
+    await act(async () => {
+      buttons(container, "settings.section.capabilities")[0]!.click();
+      await settle(dom);
+    });
+    expect(opened).toBe(1);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("reconnects the exact referenced original Job and resumes through Home refresh only", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);

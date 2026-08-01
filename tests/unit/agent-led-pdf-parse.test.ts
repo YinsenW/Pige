@@ -480,7 +480,13 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
         class: "parse",
         state: "waiting_dependency",
         parentJobId: parent.id,
-        sourceId: captured.sourceId
+        sourceId: captured.sourceId,
+        waitingDependency: {
+          dependencyKind: "runtime_capability",
+          dependencyId: "document_parser",
+          requiredAction: "enable_capability",
+          messageKey: "errors.agent_runtime.runtime_capability_waiting"
+        }
       });
       expect(child.inputRefs?.filter((ref) => ref.role === "agent_tool_source_revision")).toHaveLength(1);
       expect(child.inputRefs?.filter((ref) => ref.role === "agent_tool_canonical_input")).toHaveLength(1);

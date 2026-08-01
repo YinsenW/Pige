@@ -49,9 +49,11 @@ export function HomeJobAction(props: {
     </button>;
   }
   if (props.sourceWaitingForModel) return null;
-  if (props.job.state === "waiting_dependency" &&
-    props.job.waitingDependency?.dependencyKind === "local_tool" &&
-    props.job.waitingDependency.requiredAction === "repair_tool") {
+  const localCapabilityWait = props.job.waitingDependency;
+  if (props.job.state === "waiting_dependency" && localCapabilityWait && (
+    (localCapabilityWait.dependencyKind === "local_tool" && localCapabilityWait.requiredAction === "repair_tool") ||
+    (localCapabilityWait.dependencyKind === "runtime_capability" && localCapabilityWait.requiredAction === "enable_capability")
+  )) {
     return <button className="job-action" type="button" onClick={(event) => void props.onOpenLocalCapabilities(event.currentTarget)}>
       {props.t("settings.section.capabilities")}
     </button>;
