@@ -6,6 +6,7 @@ import type {
   MemorySummary,
 } from "@pige/schemas";
 import { PigeIcon } from "./PigeIcon";
+import { AgentMemoryTrashRestorePanel } from "./AgentMemoryTrashRestorePanel";
 
 type Translate = (key: string) => string;
 type PendingAction =
@@ -845,6 +846,18 @@ export function AgentMemorySettingsPanel(
             icon="memory"
             title={props.t("memory.emptyTitle")}
             description={props.t("memory.emptyDescription")}
+          />
+        ) : null}
+        {summary ? (
+          <AgentMemoryTrashRestorePanel
+            activeVaultId={summary.activeVaultId}
+            revision={summary.revision}
+            disabled={busy || editDraft !== null || resetConfirmationOpen}
+            onCommitted={(next) => {
+              setSummary(next);
+              setReadState("ready");
+            }}
+            t={props.t}
           />
         ) : null}
         {summary ? (

@@ -753,10 +753,11 @@ issue classes, and exact eligible broken-link, orphan-parent, duplicate-topic an
 unsourced-claim repairs commit through reversible Operations/Undo while drift and broader
 rewrites fail closed.
 
-B9.08 now includes a direct Library recovery path for a trashed managed Dataset: the safe
-inventory survives restart and exact restore reuses its Operation/Undo receipt without
-exposing paths or private tree facts. Other durable classes, compaction, reset, permanent-delete
-confirmation and cross-platform lifecycle breadth remain open, so E9.04 is not promoted.
+B9.08 now includes direct recovery paths for trashed managed Datasets and individually deleted
+Agent memory: safe inventories survive restart and exact restore reuses each domain's existing
+Operation/Undo receipt without exposing paths, bodies, provenance or private tree facts. Other
+durable classes, compaction, reset-wide inventory, permanent-delete confirmation and cross-platform
+lifecycle breadth remain open, so E9.04 is not promoted.
 
 Deferred from this phase:
 

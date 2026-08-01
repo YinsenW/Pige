@@ -175,6 +175,9 @@ import {
   MemoryLifecycleMutationResultSchema,
   MemoryResetRequestSchema,
   MemorySummarySchema,
+  MemoryTrashRestoreRequestSchema,
+  MemoryTrashRestoreResultSchema,
+  MemoryTrashSummarySchema,
   NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES,
   NoteEditorOpenRequestSchema,
   NoteEditorOpenResultSchema,
@@ -5544,6 +5547,35 @@ describe("schemas", () => {
       summary,
       sourceEventId: "evt_private"
     })).toThrow();
+
+    const trash = MemoryTrashSummarySchema.parse({
+      apiVersion: 1,
+      activeVaultId: identity.activeVaultId,
+      revision: 8,
+      records: [{
+        memoryId: recordRequest.memoryId,
+        trashOperationId: "op_20260727_memorytrash01",
+        kind: "preference",
+        title: "Concise replies",
+        trashedAt: "2026-07-27T10:02:00.000Z"
+      }]
+    });
+    expect(JSON.stringify(trash)).not.toMatch(/body|path|provenance/u);
+    const restoreRequest = MemoryTrashRestoreRequestSchema.parse({
+      ...recordRequest,
+      trashOperationId: trash.records[0]!.trashOperationId
+    });
+    expect(MemoryTrashRestoreResultSchema.parse({
+      apiVersion: 1,
+      requestId: restoreRequest.requestId,
+      activeVaultId: restoreRequest.activeVaultId,
+      status: "committed",
+      operationId: "op_20260727_memoryrestore01",
+      summary,
+      trash: { ...trash, revision: 9, records: [] }
+    })).toMatchObject({ status: "committed", trash: { records: [] } });
+    expect(() => MemoryTrashRestoreRequestSchema.parse({ ...restoreRequest, receiptPath: ".pige/trash/memory/private.json" }))
+      .toThrow();
 
     expect(MemoryExportRequestSchema.parse(resetRequest)).toEqual(resetRequest);
     for (const status of ["exported", "cancelled", "stale", "failed"] as const) {

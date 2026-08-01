@@ -10,7 +10,11 @@ import type {
   MemoryListRequest,
   MemoryMutationResult,
   MemoryResetRequest,
-  MemorySummary
+  MemorySummary,
+  MemoryTrashListRequest,
+  MemoryTrashRestoreRequest,
+  MemoryTrashRestoreResult,
+  MemoryTrashSummary
 } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
@@ -24,7 +28,11 @@ import {
   MemoryListRequestSchema,
   MemoryMutationResultSchema,
   MemoryResetRequestSchema,
-  MemorySummarySchema
+  MemorySummarySchema,
+  MemoryTrashListRequestSchema,
+  MemoryTrashRestoreRequestSchema,
+  MemoryTrashRestoreResultSchema,
+  MemoryTrashSummarySchema
 } from "@pige/schemas";
 
 export interface MemoryVaultBinding {
@@ -43,6 +51,14 @@ export interface RegisterMemoryIpcOptions {
   }>;
   readonly getActiveVaultBinding: () => MemoryVaultBinding | undefined;
   readonly listMemory: (binding: MemoryVaultBinding, request: MemoryListRequest) => Awaitable<MemorySummary>;
+  readonly listMemoryTrash: (
+    binding: MemoryVaultBinding,
+    request: MemoryTrashListRequest
+  ) => Awaitable<MemoryTrashSummary>;
+  readonly restoreMemoryTrash: (
+    binding: MemoryVaultBinding,
+    request: MemoryTrashRestoreRequest
+  ) => Awaitable<MemoryTrashRestoreResult>;
   readonly disableMemory: (
     binding: MemoryVaultBinding,
     request: MemoryDisableRequest
@@ -78,6 +94,26 @@ export function registerMemoryIpc(options: RegisterMemoryIpcOptions): void {
     const summary = MemorySummarySchema.parse(await options.listMemory(binding, parsed));
     assertSummaryIdentity(parsed.activeVaultId, summary);
     return summary;
+  });
+
+  options.ipcMain.handle("memory.listTrash", async (_event, request: unknown) => {
+    const parsed = MemoryTrashListRequestSchema.parse(request);
+    const binding = requireVaultBinding(options, parsed.activeVaultId);
+    const summary = MemoryTrashSummarySchema.parse(await options.listMemoryTrash(binding, parsed));
+    assertTrashIdentity(parsed.activeVaultId, summary);
+    return summary;
+  });
+
+  options.ipcMain.handle("memory.restoreTrash", async (_event, request: unknown) => {
+    const parsed = MemoryTrashRestoreRequestSchema.parse(request);
+    const binding = requireVaultBinding(options, parsed.activeVaultId);
+    const result = MemoryTrashRestoreResultSchema.parse(await options.restoreMemoryTrash(binding, parsed));
+    if (
+      result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+      result.summary.activeVaultId !== parsed.activeVaultId || result.trash.activeVaultId !== parsed.activeVaultId
+    ) throw new PigeDomainError("memory.request_conflict", "The memory trash result identity changed during restore.");
+    publishCommitted(options, result);
+    return result;
   });
 
   options.ipcMain.handle("memory.disable", async (_event, request: unknown) => {
@@ -168,6 +204,12 @@ function assertSummaryIdentity(activeVaultId: string, summary: MemorySummary): v
   }
 }
 
+function assertTrashIdentity(activeVaultId: string, summary: MemoryTrashSummary): void {
+  if (summary.activeVaultId !== activeVaultId) {
+    throw new PigeDomainError("vault.binding_changed", "The memory trash result belongs to another vault.");
+  }
+}
+
 function assertLifecycleIdentity(
   request: LifecycleRequest,
   result: MemoryLifecycleMutationResult
@@ -207,7 +249,7 @@ function exportStatus(
 
 function publishCommitted(
   options: Pick<RegisterMemoryIpcOptions, "publishMemoryChanged">,
-  result: MemoryMutationResult | MemoryLifecycleMutationResult
+  result: MemoryMutationResult | MemoryLifecycleMutationResult | MemoryTrashRestoreResult
 ): void {
   if (result.status === "committed") options.publishMemoryChanged(result.summary);
 }

@@ -1005,7 +1005,10 @@ Active-vault summary shows bounded content/status/time/safe provenance. Active a
 disabled atoms re-enable; delete/reset is reversible Activity/Undo. Mutations use exact
 revision CAS and retain the list on stale/not-found. Activity Open binds vault/operation/safe memory
 ID and focuses exact Edit or heading. Export uses Main save dialog; cancel is quiet; results
-pathless. No permanent erase, autonomous/global memory or new permission control ships.
+pathless. A compact **Deleted memories** list shows title, kind and deletion time only; Restore binds
+the exact current registry and original trash Operation, then adopts the authoritative live and trash
+summaries. Stale/failure retains the visible list and never exposes body, path, receipt or provenance.
+No permanent erase, autonomous/global memory or new permission control ships.
 
 One simple switch, **Include Agent memory in backups**, defaults on and controls future
 Backups only. It loads from the active Vault, disables while Backup work is active or a save

@@ -6109,6 +6109,68 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("lists deleted Memory without bodies and restores it through exact trash authority", async () => {
+    const dom = createDom();
+    const summary = memorySummary(4, "active");
+    const restoredRecord = {
+      ...summary.records[0],
+      id: "memory_20260802_restoreditem",
+      title: "Restored preference",
+      body: "Private restored body that is absent from trash inventory."
+    } as const;
+    const listTrash = vi.fn(async () => ({
+      apiVersion: 1 as const,
+      activeVaultId: summary.activeVaultId,
+      revision: summary.revision,
+      records: [{
+        memoryId: restoredRecord.id,
+        trashOperationId: "op_20260802_memorytrashui",
+        kind: "preference" as const,
+        title: restoredRecord.title,
+        trashedAt: "2026-08-02T01:00:00.000Z"
+      }]
+    }));
+    const restoreTrash = vi.fn(async (request) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "committed" as const,
+      operationId: "op_20260802_memoryrestoreui",
+      summary: { ...summary, revision: 5, records: [...summary.records, restoredRecord] },
+      trash: { apiVersion: 1 as const, activeVaultId: summary.activeVaultId, revision: 5, records: [] }
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { memory: {
+        list: vi.fn(async () => summary), listTrash, restoreTrash,
+        disable: vi.fn(), edit: vi.fn(), enable: vi.fn(), delete: vi.fn(), export: vi.fn(), reset: vi.fn()
+      } }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, { activeVaultId: summary.activeVaultId, t }));
+      await settle(dom);
+    });
+    expect(dom.window.document.body.textContent).toContain("Restored preference");
+    expect(dom.window.document.body.textContent).not.toContain(restoredRecord.body);
+
+    await act(async () => {
+      buttonNamed(dom.window.document, "Restore: Restored preference").click();
+      await settle(dom);
+    });
+    expect(restoreTrash).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: summary.activeVaultId,
+      memoryId: restoredRecord.id,
+      trashOperationId: "op_20260802_memorytrashui",
+      expectedRevision: 4
+    }));
+    expect(dom.window.document.body.textContent).toContain(restoredRecord.body);
+    expect(dom.window.document.body.textContent).toContain("The memory was restored.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("focuses an authoritative Memory Activity target and falls back to the panel heading", async () => {
     const dom = createDom();
     const summary = memorySummary(4, "active");
