@@ -269,6 +269,7 @@ import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
+import { ManagedCollectionRedoService } from "./services/managed-collection-redo-service";
 import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionViewRedoService } from "./services/managed-collection-view-redo-service";
@@ -479,6 +480,7 @@ let knowledgeHealthService: KnowledgeHealthService | undefined;
 let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService | undefined;
 let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
+let managedCollectionRedoService: ManagedCollectionRedoService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionViewRedoService: ManagedCollectionViewRedoService | undefined;
 let managedCollectionCitationService: ManagedCollectionCitationService | undefined;
@@ -2242,6 +2244,8 @@ const getManagedCollectionViewService = (): ManagedCollectionViewService => {
 };
 const getManagedCollectionViewRedoService = (): ManagedCollectionViewRedoService =>
   managedCollectionViewRedoService ??= new ManagedCollectionViewRedoService(getVaultService());
+const getManagedCollectionRedoService = (): ManagedCollectionRedoService =>
+  managedCollectionRedoService ??= new ManagedCollectionRedoService(getVaultService());
 
 const getManagedDatasetLifecycleService = (): ManagedDatasetLifecycleService => {
   if (!managedDatasetLifecycleService) managedDatasetLifecycleService = new ManagedDatasetLifecycleService(getVaultService());
@@ -2276,20 +2280,24 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   return {
     activitySummary: (operation, undo) => {
       const summary = owner(operation).activitySummary(operation, undo);
-      const redo = summary && getManagedCollectionViewRedoService().activityState(operation, undo);
+      const redo = summary && (getManagedCollectionRedoService().activityState(operation, undo) ??
+        getManagedCollectionViewRedoService().activityState(operation, undo));
       return summary && redo ? { ...summary, ...redo } : summary;
     },
     findUndoOperation: (operation, operations) => owner(operation).findUndoOperation(operation, operations),
     undo: (operation, expectedRevisionId) => Promise.resolve(owner(operation).undo(operation, expectedRevisionId)),
     recoverIncompleteOperations: () => {
+      const collectionRedoResult = getManagedCollectionRedoService().recoverIncompleteRedos();
       const viewRedoResult = getManagedCollectionViewRedoService().recoverIncompleteRedos();
       const collectionResult = collections.recoverIncompleteOperations();
       const viewResult = views.recoverIncompleteOperations();
       const datasetResult = datasets.recoverIncompleteOperations();
       const titleResult = titles.recoverIncompleteOperations();
       return {
-        recovered: viewRedoResult.recovered + collectionResult.recovered + viewResult.recovered + datasetResult.recovered + titleResult.recovered,
-        failed: viewRedoResult.failed + collectionResult.failed + viewResult.failed + datasetResult.failed + titleResult.failed
+        recovered: collectionRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
+          viewResult.recovered + datasetResult.recovered + titleResult.recovered,
+        failed: collectionRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
+          viewResult.failed + datasetResult.failed + titleResult.failed
       };
     }
   };
@@ -3439,7 +3447,10 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
   return result;
 });
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
-  const viewResult = getManagedCollectionViewRedoService().redo(request);
+  const collectionResult = getManagedCollectionRedoService().redo(request);
+  const viewResult = collectionResult.status === "not_found"
+    ? getManagedCollectionViewRedoService().redo(request)
+    : collectionResult;
   const datasetResult = viewResult.status === "not_found" ? getManagedDatasetLifecycleService().redo(request) : viewResult;
   const trashResult = datasetResult.status === "not_found" ? getNoteTrashRedoService().redo(request) : datasetResult;
   const renameResult = trashResult.status === "not_found" ? getNoteRenameService().redo(request) : trashResult;
@@ -3994,6 +4005,7 @@ app.whenReady().then(async () => {
   );
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
+  managedCollectionRedoService = new ManagedCollectionRedoService(getVaultService());
   managedCollectionViewService = new ManagedCollectionViewService(getVaultService());
   managedCollectionViewRedoService = new ManagedCollectionViewRedoService(getVaultService());
   managedCollectionCitationService = new ManagedCollectionCitationService(

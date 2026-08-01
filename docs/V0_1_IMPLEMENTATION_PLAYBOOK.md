@@ -610,7 +610,7 @@ Deferred from this phase:
 
 Exit criteria:
 
-- [E7.01] Evidence-bound reversible edits auto-apply with Operation/Undo; irreversible/security/destination/conflict/stricter-policy exceptions use durable stale-checked decisions. Evidence covers exact create, cited append, bounded tags, one directed link, exact user note-edit and saved Collection view lifecycle Redo, and stable page Open; broad history, other mutations, broader restore/redo, exceptions, CAS, and packaged platforms remain open.
+- [E7.01] Evidence-bound reversible edits auto-apply with Operation/Undo; irreversible/security/destination/conflict/stricter-policy exceptions use durable stale-checked decisions. Evidence covers exact create, cited append, bounded tags, one directed link, exact user note-edit, saved Collection view lifecycle Redo, complete current Collection cell/row/column/formula/relation/lookup/rollup Redo, and stable page Open; broad history, non-Collection mutations, broader restore, exceptions, CAS, and packaged platforms remain open.
 `PIGE-KNOW-003` is verified within that still-broader Exit: exact relation, merge, contradiction,
   Concept/Topic hierarchy and conflict paths now auto-apply only when current and reversible, with
   pathless closed outcomes plus restart-safe Activity Undo/Redo; E7.01 remains partial for unrelated

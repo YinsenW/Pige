@@ -5035,7 +5035,38 @@ Consequences:
 - Dataset/vault/view identity, the original Operation and matching Undo are re-proved before effect.
 - Drift fails closed; interrupted revision/pointer/Operation publication is adopted once at restart.
 - Existing Activity Redo UI and IPC remain generic; no new renderer channel or visible setting exists.
-- Other Collection mutation Redo families remain open under E7.01/E7.06.
+- Non-view Collection mutation Redo is owned by the later complete-family decision below.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
+### D-20260802-Managed-Collection-Mutation-Redo
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Current Collection cell, row, column, formula, relation, lookup and rollup Operations support
+restart-safe Activity Redo only while the deterministic matching Undo revision remains current. Redo
+copies the original integrity-bound after-revision into one new immutable forward Dataset revision and
+Operation rather than re-running renderer input or mutation-specific business logic.
+
+Rationale:
+
+Every supported Collection mutation already persists its exact before/after Dataset revisions and a
+stable reversible Operation. Replaying that durable after-image closes all current non-view families
+uniformly, preserves imported and derived data exactly, and avoids fourteen divergent Redo paths.
+
+Consequences:
+
+- Vault, Dataset, Operation, matching Undo, schema, payload and current manifest revision are re-proved.
+- Drift fails closed; interrupted schema/payload/revision/manifest/Operation publication is adopted once.
+- The new forward Operation remains undoable, so repeated Undo/Redo converges through immutable revisions.
+- Existing Activity IPC and UI stay generic; no renderer mutation authority or new visible control is added.
 
 References:
 
