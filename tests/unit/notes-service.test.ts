@@ -1380,15 +1380,20 @@ status: "active"
     const { vaultPath, vault } = makeVault();
     const generatedPageId = "page_20260801_generated1";
     writePage({ vaultPath, fileName: "generated.md", pageId: generatedPageId, title: "Generated",
-      extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
+      pageType: "claim", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
     writePage({ vaultPath, fileName: "imported.md", pageId: "page_20260801_imported01", title: "Imported",
       extraFrontmatter: 'provenance:\n  generated_by: "user"' });
+    writePage({ vaultPath, fileName: "imported-claim.md", pageId: "page_20260801_imported02", title: "Imported claim",
+      pageType: "claim", extraFrontmatter: 'provenance:\n  generated_by: "user"' });
     writePage({ vaultPath, fileName: "generated-source.md", pageId: "page_20260801_source001", title: "Source",
       pageType: "source", extraFrontmatter: 'provenance:\n  generated_by: "pige"' });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId: generatedPageId }, OWNER_ID);
     expect(rendered.revealGeneratedEligibility).toEqual({
       canReveal: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
+    });
+    expect(rendered.trashEligibility).toEqual({
+      canTrash: true, revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
     const request = {
       apiVersion: 1 as const, requestId: "notegeneratedreveal_abcdefghijklmnop",
@@ -1405,6 +1410,8 @@ status: "active"
       ...request, currentPageId: imported.summary.pageId, renderContextId: imported.renderContextId!,
       expectedRevision: imported.trashEligibility!.revision
     })).toEqual({ status: "ineligible" });
+    const importedClaim = await notes.render({ pageId: "page_20260801_imported02" }, OWNER_ID);
+    expect(importedClaim.trashEligibility).toBeUndefined();
     const source = await notes.render({ pageId: "page_20260801_source001" }, OWNER_ID);
     expect(source.revealGeneratedEligibility).toBeUndefined();
 

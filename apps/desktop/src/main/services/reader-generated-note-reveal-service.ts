@@ -22,6 +22,11 @@ export function isPigeGeneratedFrontmatter(raw: string): boolean {
   try { return (value.startsWith('"') ? JSON.parse(value) : value) === "pige"; } catch { return false; }
 }
 
+const TRASHABLE_GENERATED_PAGE_TYPES = new Set(["claim", "concept", "entity", "question", "topic"]);
+export function isTrashableKnowledgePage(pageType: string | undefined, status: string | undefined, generatedByPige: boolean): boolean {
+  return pageType === "note" || Boolean(generatedByPige && status === "active" && pageType && TRASHABLE_GENERATED_PAGE_TYPES.has(pageType));
+}
+
 export function resolveGeneratedNoteReveal(request: NoteRevealGeneratedRequest, input: {
   readonly vaultId: string | undefined; readonly vaultPath: string | undefined;
   readonly ownerEpoch: number | undefined; readonly context: GeneratedNoteRevealContext | undefined;

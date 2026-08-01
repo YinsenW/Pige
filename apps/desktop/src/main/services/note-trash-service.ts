@@ -22,6 +22,7 @@ import {
 } from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import type { NotesTrashResolution } from "./notes-service";
+import { isPigeGeneratedFrontmatter, isTrashableKnowledgePage } from "./reader-generated-note-reveal-service";
 const MAX_NOTE_BYTES = 4 * 1024 * 1024;
 const MAX_RECEIPT_BYTES = 64 * 1024;
 const MAX_RECEIPTS = 10_000;
@@ -850,8 +851,11 @@ function restorableCandidate(vaultPath: string, receipt: NoteTrashReceipt): Note
   if (hashBytes(payload.bytes) !== receipt.contentHash) return undefined;
   const markdown = payload.bytes.toString("utf8");
   if (markdown.includes("\uFFFD")) return undefined;
-  const parsed = parsePigeFrontmatter(markdown)?.frontmatter;
-  if (parsed?.id !== receipt.pageId || parsed.type !== "note" || boundedTitle(parsed.title ?? "") !== receipt.title) {
+  const parsed = parsePigeFrontmatter(markdown);
+  const frontmatter = parsed?.frontmatter;
+  const trashable = isTrashableKnowledgePage(frontmatter?.type, frontmatter?.status,
+    Boolean(parsed && isPigeGeneratedFrontmatter(parsed.raw)));
+  if (!trashable || frontmatter?.id !== receipt.pageId || boundedTitle(frontmatter.title ?? "") !== receipt.title) {
     return undefined;
   }
   return {

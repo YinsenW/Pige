@@ -1540,7 +1540,7 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
-  it("browses pathless note Trash after restart and opens one restored page through Library", async () => {
+  it("browses pathless knowledge-page Trash after restart and opens one restored claim through Library", async () => {
     const dom = createDom();
     const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
     const root = createRoot(container);
@@ -1559,7 +1559,7 @@ describe("full UI Settings surface", () => {
       ? { ...request, status: "stale" }
       : { ...request, status: "committed", operationId: "op_20260731_restorenoteui12", render: {
         summary: { pageId: mode === "wrong_render" ? "page_20260731_wrongrestoreui" : note.pageId,
-          title: note.title, pageType: "note", status: "active",
+          title: note.title, pageType: "claim", status: "active",
           pagePath: "wiki/restored.md", createdAt: "2026-07-31T07:00:00.000Z",
           updatedAt: "2026-07-31T08:00:00.000Z", sourceIds: [] },
         html: "<h1>Restore after restart</h1>", byteSize: 64,
@@ -1593,13 +1593,13 @@ describe("full UI Settings surface", () => {
     }));
     expect(opened).toEqual([note.pageId]);
     expect(container.querySelector("[data-restorable-note-id]")).toBeNull();
-    expect(container.textContent).toContain("restored and opened");
+    expect(container.textContent).toContain("knowledge page was restored and opened");
     expect(dom.window.document.activeElement).toBe(container.querySelector("[aria-labelledby='activity-trash-title']"));
     await act(async () => root.unmount());
     dom.window.close();
   });
 
-  it("keeps recoverable-note load failures distinct and retries only the exact current vault request", async () => {
+  it("keeps recoverable-page load failures distinct and retries only the exact current vault request", async () => {
     const dom = createDom();
     const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
     const root = createRoot(container);
@@ -1616,12 +1616,12 @@ describe("full UI Settings surface", () => {
         onCommitted: async () => false, t }));
       await settle(dom); await settle(dom);
     });
-    expect(container.textContent).toContain("could not check recoverable notes");
-    expect(container.textContent).not.toContain("No recoverable notes");
+    expect(container.textContent).toContain("could not check recoverable knowledge pages");
+    expect(container.textContent).not.toContain("No recoverable knowledge pages");
     returnWrongIdentity = false;
     await act(async () => { buttonNamed(container, "Try again").click(); await settle(dom); await settle(dom); });
     expect(listTrash).toHaveBeenCalledTimes(2);
-    expect(container.textContent).toContain("No recoverable notes");
+    expect(container.textContent).toContain("No recoverable knowledge pages");
     await act(async () => root.unmount());
     dom.window.close();
   });
