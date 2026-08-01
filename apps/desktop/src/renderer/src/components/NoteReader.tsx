@@ -7,6 +7,8 @@ import type {
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
   NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
+  NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
+  NoteChangeClaimContradictionRequest, NoteChangeClaimContradictionResult,
   NoteUnlinkRelationRequest, NoteUnlinkRelationResult,
   ReaderSelectionActionRequest,
   ReaderSelectionActionResult,
@@ -27,6 +29,7 @@ import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createR
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
+import { ReaderClaimContradictions } from "./ReaderClaimContradictions";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 
 function readerSelectionEndpoint(
@@ -91,6 +94,12 @@ export function NoteReader(props: {
   readonly onQuestionStateChanged?: (render: NoteRenderResult) => void;
   readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
   readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
+  readonly onSearchClaimContradictions?: (
+    request: NoteSearchClaimContradictionsRequest
+  ) => Promise<NoteSearchClaimContradictionsResult>;
+  readonly onChangeClaimContradiction?: (
+    request: NoteChangeClaimContradictionRequest
+  ) => Promise<NoteChangeClaimContradictionResult>;
   readonly onOpenSourceReference?: (
     request: NoteOpenSourceReferenceRequest
   ) => Promise<NoteOpenSourceReferenceResult>;
@@ -868,6 +877,16 @@ export function NoteReader(props: {
         <ReaderQuestionAnswers activeVaultId={props.activeVaultId} note={props.note}
           search={props.onSearchQuestionAnswers} change={props.onChangeQuestionAnswer}
           onCommitted={props.onQuestionStateChanged} t={props.t} />
+      ) : null}
+      {props.activeVaultId && props.onSearchClaimContradictions && props.onChangeClaimContradiction && props.onQuestionStateChanged ? (
+        <ReaderClaimContradictions
+          activeVaultId={props.activeVaultId}
+          note={props.note}
+          search={props.onSearchClaimContradictions}
+          change={props.onChangeClaimContradiction}
+          onCommitted={props.onQuestionStateChanged}
+          t={props.t}
+        />
       ) : null}
       <ReaderInlineReferenceSurface
         ref={markdownBodyRef}

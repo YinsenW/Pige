@@ -99,6 +99,9 @@ function makeHarness(
       if (questionAnswerService) return questionAnswerService as QuestionAnswerService;
       throw new Error("Question answer service was not expected.");
     },
+    getClaimContradictionService: () => {
+      throw new Error("Claim contradiction service was not expected.");
+    },
     getNoteTagService: () => {
       if (noteTagService) return noteTagService as NoteTagService;
       throw new Error("Note tag service was not expected.");
@@ -156,6 +159,8 @@ describe("registerReaderIpc", () => {
       "notes.setQuestionState",
       "notes.searchQuestionAnswers",
       "notes.changeQuestionAnswer",
+      "notes.searchClaimContradictions",
+      "notes.changeClaimContradiction",
       "notes.addTag",
       "notes.editTaxonomy",
       "notes.rename",

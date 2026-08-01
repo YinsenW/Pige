@@ -38,8 +38,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
-import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service";
-
+import { readQuestionState } from "./question-state-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 export interface NotesVaultPort {
@@ -188,8 +187,7 @@ export class NotesService {
     }
 
     const hrefs = extractRenderedInternalHrefs(rendered.html), parsedFrontmatter = parsePigeFrontmatter(stable.markdown), frontmatter = parsedFrontmatter?.frontmatter, rawAliases = frontmatter?.aliases ?? [], aliases = rawAliases.filter((alias, index) => alias.length > 0 && alias.length <= 120 && alias === alias.normalize("NFKC").replace(/\s+/gu, " ").trim() && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias) && Boolean(normalizeMarkdownPageReferenceKey(alias)) && rawAliases.findIndex((value) => normalizeMarkdownPageReferenceKey(value) === normalizeMarkdownPageReferenceKey(alias)) === index);
-    const questionState = parsedFrontmatter && stable.document.summary.pageType === "question" ? readQuestionState(parsedFrontmatter.raw) : undefined, questionAnswers = parsedFrontmatter && stable.document.summary.pageType === "question" ? projectQuestionAnswers(vaultPath, parsedFrontmatter.raw) : undefined;
-    const referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
+    const questionState = parsedFrontmatter && stable.document.summary.pageType === "question" ? readQuestionState(parsedFrontmatter.raw) : undefined, questionAnswers = parsedFrontmatter && stable.document.summary.pageType === "question" ? projectQuestionAnswers(vaultPath, parsedFrontmatter.raw) : undefined, claimContradictions = parsedFrontmatter && stable.document.summary.pageType === "claim" ? projectClaimContradictions(vaultPath, parsedFrontmatter.raw) : undefined, referenceIndexRevision = this.#referenceIndex?.inlineReferenceRevision(vaultPath);
     const renderContextId = ownerId === undefined
       ? undefined
       : this.#registerRenderContext(ownerId, {
@@ -232,7 +230,9 @@ export class NotesService {
             }
           : {}),
         ...(stable.document.summary.pageType === "topic" ? { topicRenameEligibility: { canRename: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
-        ...(questionState ? { questionState: { state: questionState, canChange: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}), ...(questionAnswers ? { questionAnswers: { items: [...questionAnswers], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
+        ...(questionState ? { questionState: { state: questionState, canChange: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(questionAnswers ? { questionAnswers: { items: [...questionAnswers], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {}),
+        ...(claimContradictions ? { claimContradictions: { items: [...claimContradictions], canEdit: stable.document.summary.status === "active", revision: publicEditorRevision(stable.pageContentHash) } } : {})
       } : {})
     };
   }
@@ -481,7 +481,7 @@ export class NotesService {
     };
   }
   resolveTrashTarget(ownerId: string, input: NotesManagedPageTargetInput): NotesTrashResolution { return this.resolveManagedPageTarget(ownerId, input, "note"); }
-  resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question"): NotesTrashResolution {
+  resolveManagedPageTarget(ownerId: string, input: NotesManagedPageTargetInput, pageType: "note" | "question" | "claim"): NotesTrashResolution {
     const vault = this.#vaults.current();
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vault || !vaultPath || vault.vaultId !== input.activeVaultId) return { status: "stale" };

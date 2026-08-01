@@ -284,6 +284,12 @@ import type {
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
   NoteChangeQuestionAnswerResult,
+  NoteClaimContradictionItem,
+  NoteClaimContradictionsSummary,
+  NoteSearchClaimContradictionsRequest,
+  NoteSearchClaimContradictionsResult,
+  NoteChangeClaimContradictionRequest,
+  NoteChangeClaimContradictionResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -715,6 +721,12 @@ export type {
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
   NoteChangeQuestionAnswerResult,
+  NoteClaimContradictionItem,
+  NoteClaimContradictionsSummary,
+  NoteSearchClaimContradictionsRequest,
+  NoteSearchClaimContradictionsResult,
+  NoteChangeClaimContradictionRequest,
+  NoteChangeClaimContradictionResult,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -2419,6 +2431,12 @@ export interface PigeDesktopApi {
     readonly changeQuestionAnswer: (
       request: NoteChangeQuestionAnswerRequest
     ) => Promise<NoteChangeQuestionAnswerResult>;
+    readonly searchClaimContradictions: (
+      request: NoteSearchClaimContradictionsRequest
+    ) => Promise<NoteSearchClaimContradictionsResult>;
+    readonly changeClaimContradiction: (
+      request: NoteChangeClaimContradictionRequest
+    ) => Promise<NoteChangeClaimContradictionResult>;
     readonly addTag: (request: NoteAddTagRequest) => Promise<NoteAddTagResult>;
     readonly editTaxonomy: (request: NoteEditTaxonomyRequest) => Promise<NoteEditTaxonomyResult>;
     readonly rename: (request: NoteRenameRequest) => Promise<NoteRenameResult>;

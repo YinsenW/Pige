@@ -342,6 +342,26 @@ describe("desktop shell build contract", () => {
       expect(answerSchemas).not.toContain(privateField);
     }
   });
+  it("freezes pathless Claim contradiction search and mutation authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const claimSchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContradictions"'),
+      schemasSource.indexOf("export const NoteAddTagRequestSchema")
+    );
+    expect(claimSchemas).toContain('NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL = "notes.changeClaimContradiction"');
+    expect(claimSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(claimSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(claimSchemas).toContain("expectedTargetUpdatedAt");
+    expect(contractsSource).toContain("readonly searchClaimContradictions: (");
+    expect(contractsSource).toContain("readonly changeClaimContradiction: (");
+    expect(preloadSource).toContain("NoteSearchClaimContradictionsRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeClaimContradictionResultSchema.parse(");
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(claimSchemas).not.toContain(privateField);
+    }
+  });
 
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
