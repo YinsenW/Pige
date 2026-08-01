@@ -1,19 +1,70 @@
 import http, { type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   PiAgentRuntimeAdapter,
   type PigeAgentToolDefinition
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
+import { ModelProviderRegistry } from "../../apps/desktop/src/main/services/model-provider-registry";
+import { ModelProviderConnectionTester } from "../../apps/desktop/src/main/services/model-provider-connection";
 import { createModelRuntimeBindingIdentity } from "../../apps/desktop/src/main/services/model-runtime-binding";
+import { JsonSecretStore } from "../../apps/desktop/src/main/services/secret-store";
 
 const servers: Server[] = [];
+const tempRoots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  for (const root of tempRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
 describe("Pi AI provider binding", () => {
+  it("uses one restarted machine credential and invalidates it after Provider deletion", async () => {
+    const requests: CapturedRequest[] = [];
+    const baseUrl = await startLifecycleServer(requests);
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-provider-secret-roundtrip-")));
+    tempRoots.push(root);
+    const connect = new ModelProviderConnectionTester();
+    const probe = { probe: async () => undefined };
+    const first = new ModelProviderRegistry(root, new JsonSecretStore(root), connect, probe);
+    const connected = await first.addManualProvider({
+      displayName: "Local roundtrip",
+      providerKind: "openai_compatible",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: `${baseUrl}/v1`,
+      apiKey: "synthetic-roundtrip-key",
+      manualModelId: "roundtrip-model",
+      cloudBoundary: "local"
+    });
+    if ("status" in connected) throw new Error("Provider did not connect.");
+
+    const restarted = new ModelProviderRegistry(root, new JsonSecretStore(root), connect, probe);
+    const runtimeConfig = restarted.getDefaultRuntimeConfig();
+    if (!runtimeConfig) throw new Error("Restarted Provider binding is unavailable.");
+    const result = await new PiAgentRuntimeAdapter().run({
+      runtimeConfig,
+      jobId: "job_20260801_secret_roundtrip",
+      systemPrompt: "Return a bounded acknowledgement.",
+      userPrompt: "Acknowledge this synthetic local request.",
+      tools: []
+    });
+    expect(result.assistantText).toBe("openai binding ok");
+    expect(requests.find((request) => request.path === "/v1/chat/completions")?.authorization)
+      .toBe("Bearer synthetic-roundtrip-key");
+
+    await restarted.deleteProvider({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      expectedRevision: restarted.summary().revision ?? ""
+    });
+    expect(new ModelProviderRegistry(root, new JsonSecretStore(root), connect, probe).getDefaultRuntimeConfig())
+      .toBeUndefined();
+    expect(fs.readFileSync(path.join(root, "secrets.json"), "utf8"))
+      .not.toContain("synthetic-roundtrip-key");
+  });
+
   it("dispatches OpenAI Chat Completions by explicit protocol rather than compatible kind", async () => {
     const requests: CapturedRequest[] = [];
     const baseUrl = await startServer(requests, respondOpenAi);
@@ -324,6 +375,30 @@ async function startServer(
       body: await readBody(request)
     });
     responder(response);
+  });
+  servers.push(server);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected a local TCP address.");
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function startLifecycleServer(requests: CapturedRequest[]): Promise<string> {
+  const server = http.createServer(async (request, response) => {
+    requests.push({
+      path: request.url ?? "",
+      ...(typeof request.headers.authorization === "string" ? { authorization: request.headers.authorization } : {}),
+      body: await readBody(request)
+    });
+    if (request.url === "/v1/models") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ data: [{ id: "roundtrip-model" }] }));
+      return;
+    }
+    respondOpenAi(response);
   });
   servers.push(server);
   await new Promise<void>((resolve, reject) => {

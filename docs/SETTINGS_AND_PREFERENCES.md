@@ -378,6 +378,8 @@ Required tests:
 
 - Setting registry has no unclassified user-visible setting.
 - No secret setting is stored in Markdown, SQLite, logs, prompts, diagnostics, operation records, or default backups.
+- The machine credential store rejects links, multiple-link files, oversized payloads,
+  permission widening and root/file identity drift before a Provider secret is read or changed.
 - Active vault path and recent vault list never appear in `.pige/manifest.json`.
 - `.pige/config.json` contains only portable non-secret vault preferences.
 - External-root tests cover identity, disclosure, waits, restore, and warnings.
@@ -388,6 +390,8 @@ Required tests:
   confirmed, probed, and atomic; failure preserves the old key.
 - Deletion is renderer/native-confirmed and fenced; it removes owned models/credential,
   rebinds or clears default, and restart-recovers orphan-free.
+- A Settings-written synthetic Provider key survives restart, is consumed only by the
+  reviewed Pi Provider adapter, and is unavailable after Provider deletion.
 - Session status separates configured/discovery/generation; Refresh is not chat proof.
 - The next profile revision stores an explicit Responses, Chat Completions, or Anthropic
   Messages protocol. New custom setup requires a choice; legacy compatible/custom

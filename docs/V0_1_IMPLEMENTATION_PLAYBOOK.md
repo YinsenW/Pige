@@ -185,7 +185,7 @@ Build:
 - [B1.16 -> E1.09] Reset Local Database repair action.
 - [B1.17 -> E1.13] Agent-first Home/navigation contract: essential empty state, no modes, collapsible sidebar, layout continuity, and a browsable three-level Library tree.
 - [B1.18 -> E1.14] Version-pinned bundled core toolchain manifest, readiness check, and visible repair path for missing or damaged tools.
-- [B1.19 -> E1.15] Machine-local secret-storage adapter foundation that can protect values without writing them to the vault; provider API-key use remains a P3 concern.
+- [B1.19 -> E1.15] Machine-local secret-storage adapter with bounded no-follow file identity, restart-safe Provider references, reviewed Pi authentication use, and deletion invalidation without writing values to the vault.
 - [B1.20 -> E1.16] Shared namespaced error schemas for API/IPC, durable Job warnings/errors, diagnostics, localization, and retry/repair actions.
 - [B1.21 -> E1.17] Stable path-independent ID and sync-conflict metadata foundation for durable records.
 - [B1.22 -> E1.18] Runtime capability contracts for Agent, tool, parser, OCR, and RAG adapters with explicit unavailable/degraded states.
@@ -217,7 +217,7 @@ Exit criteria:
 - [E1.12] One default model profile can be stored and resolved through the adapter contract without exposing ineffective Advanced/Fast controls.
 - [E1.13] Home opens Agent-first with an essential mode-free empty state; layout changes preserve context and the sidebar exposes three Library levels when available.
 - [E1.14] Packaged core tools are version-pinned, report ready/missing/damaged state, and expose a user-visible repair path without an ordinary job improvising a download.
-- [E1.15] The secret-storage adapter protects a synthetic value outside vault files, SQLite, logs, diagnostics, and backups; P3 proves provider-key integration.
+- [E1.15] A Settings-written synthetic Provider key remains only in the owner-restricted machine credential store, survives restart, authenticates one reviewed Pi Provider call, becomes unusable after Provider deletion, and never enters vault files, SQLite, logs, diagnostics, operations, or backups.
 - [E1.16] API errors, durable Job warnings/errors, diagnostics, and UI failure actions validate against one shared taxonomy; malformed codes or unstructured private details are rejected, and every locale covers release-visible message keys.
 - [E1.17] Stable IDs remain valid across rename/path changes and durable contracts expose explicit sync-conflict metadata without using a path as identity.
 - [E1.18] Agent, tool, parser, OCR, and RAG work resolves through typed runtime-capability adapters; unavailable capabilities fail visibly without renderer or domain-layer runtime assumptions.

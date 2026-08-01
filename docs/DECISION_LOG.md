@@ -622,6 +622,7 @@ References:
 
 Status: Accepted
 Date: 2026-07-30
+Revised: 2026-08-01
 Supersedes: D-20260709-Encrypted-Default-Secrets
 
 Decision:
@@ -638,6 +639,10 @@ Consequences:
 
 - Exclude the file from Vaults, logs, diagnostics and backups; use owner-only POSIX mode
   and Windows user-data ACLs.
+- Bound reads, revision hashing and mutations to one regular, single-link, bounded file
+  under the captured machine app-data root; identity drift and malformed state fail closed.
+- Restart resolves the same Provider reference only for the reviewed authentication adapter;
+  Provider deletion removes the owned secret and invalidates later runtime resolution.
 - Disclose same-OS-user readability; add no recurring warning or mode selector.
 - Production never calls `safeStorage` or unlocks a keychain.
 
