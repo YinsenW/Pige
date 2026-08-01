@@ -527,6 +527,12 @@ expose no body/path.
 Operation before removing exact checksum-bound trash bytes; stale, missing and failed results expose
 no paths, bodies, hashes or recovery records.
 
+Home conversation lifecycle exposes `agent.trashConversation`, `agent.conversationTrash`,
+`agent.restoreConversation` and `agent.purgeConversation`. Permanent deletion binds the exact pathless trash entry, conversation and
+revision plus the literal `delete_permanently` confirmation. Main persists a purge intent, tombstone
+and irreversible `purge_conversation` Operation before removing checksum-bound JSONL and receipt;
+renderer results contain only request identity, closed status and committed Operation ID.
+
 `notes.editTaxonomy` replaces the complete tags/topics projection only for one active `note`. Its
 strict request binds active Vault, page, render context and immutable revision, with at most 12
 canonical tags and 8 canonical topic references. Main re-proves the same note, preserves body and

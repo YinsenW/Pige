@@ -443,7 +443,7 @@ boundary; restart, Vault change, or Operation drift invalidates them.
 | Referenced original files | Reveal, relink, mark missing | Never modify/delete | Never | Source availability warning or relink operation | Path/URI listed as external dependency |
 | Source records | Archive with owner; permanent delete confirms | Pige updates provenance; no independent delete | No | Operation/tombstone | Included |
 | Durable artifacts | Regenerate/trash recoverably | Pige replaces/cleans only with proven source/recovery | Proven temp/duplicate only | Deletion Operation | Included until trashed/excluded |
-| Conversation events | Keep by default; future delete/export must be explicit | Never delete | Compact references only, not turns | Compaction summary if reduced | Included by default |
+| Conversation events | Keep by default; export, recoverable trash and permanent trash deletion are explicit | Never delete | Compact references only, not turns | Conversation lifecycle Operation or compaction summary | Included by default |
 | Job records | Compact successful jobs after retention; unresolved stays | No direct delete | Yes, after retention and durable effects are represented | Compaction summary | Included until compacted |
 | Proposals | Decide/archive | Exceptional boundaries only | No unresolved cleanup | Proposal/decision | Included |
 | Operation records | Append-only; no normal deletion | Append only through service | No | Existing record is the audit trail | Included by default |
@@ -471,6 +471,11 @@ Trash rules:
   checksum; it fsyncs a purge intent, sync-ready tombstone and irreversible `purge_page` Operation
   before unlinking the payload and restore receipt. Restart adopts the same purge once, while stale,
   tampered or cross-Vault requests preserve the trash item.
+- Home may permanently delete one exact recoverable conversation only after a second explicit user
+  confirmation. Main re-proves the trash receipt, revision, `trash_conversation` Operation and JSONL
+  checksum; it fsyncs a purge intent, sync-ready tombstone and irreversible `purge_conversation`
+  Operation before unlinking the payload and receipt. Restart adopts the same purge once, while stale,
+  tampered, restored or cross-Vault requests preserve the recoverable conversation.
 
 Compaction rules:
 

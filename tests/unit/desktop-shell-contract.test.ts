@@ -885,15 +885,17 @@ describe("desktop shell build contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
-    for (const method of ["trashConversation", "conversationTrash", "restoreConversation"]) {
+    for (const method of ["trashConversation", "conversationTrash", "restoreConversation", "purgeConversation"]) {
       expect(contractsSource).toContain(`readonly ${method}: (`);
     }
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.trashConversation", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.conversationTrash", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("agent.restoreConversation", parsedRequest)');
+    expect(preloadSource).toContain('ipcRenderer.invoke("agent.purgeConversation", parsedRequest)');
     expect(mainSource).toContain('ipcMain.handle("agent.trashConversation"');
     expect(mainSource).toContain('ipcMain.handle("agent.conversationTrash"');
     expect(mainSource).toContain('ipcMain.handle("agent.restoreConversation"');
+    expect(mainSource).toContain('ipcMain.handle("agent.purgeConversation"');
     expect(preloadSource).not.toContain("originalPath:");
     expect(preloadSource).not.toContain("trashPath:");
   });

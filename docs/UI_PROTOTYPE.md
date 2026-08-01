@@ -484,7 +484,8 @@ failure once.
 The durable Pi final replaces the draft; failure/cancel clears or marks it; restart shows durable
 messages. History locally searches title/preview; selection survives polling/search failure and
 alone gates follow-up. Rename sets/clears one bounded title under tail/title-revision CAS; stale
-retains its draft. Trash confirms/restores by opaque identity. Drift retains timeline/focus;
+retains its draft. Trash confirms/restores by opaque identity; permanent deletion requires a second
+explicit confirmation and removes only the selected recoverable entry. Drift retains timeline/focus;
 `Current` rereads truth; vault change resets browsing. Export failure preserves history.
 
 Prototype:

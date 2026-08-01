@@ -10404,6 +10404,7 @@ export const AgentConversationHistoryCursorSchema = z.string()
   .max(96);
 export const ConversationRevisionSchema = z.string().regex(/^conversationrev_[a-f0-9]{64}$/);
 export const ConversationTrashRequestIdSchema = z.string().regex(/^conversationtrashreq_[a-z0-9]{16,64}$/);
+export const ConversationPurgeRequestIdSchema = z.string().regex(/^conversationpurgereq_[a-z0-9]{16,64}$/);
 export const ConversationTrashEntryIdSchema = z.string().regex(/^conversationtrash_[a-f0-9]{32}$/);
 export const AgentConversationHistoryQuerySchema = z.string()
   .min(1)
@@ -10581,6 +10582,23 @@ export const ConversationRestoreResultSchema = z.discriminatedUnion("status", [
     operationId: OperationIdSchema
   }).strict(),
   ConversationRestoreResultIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
+]);
+export const ConversationPurgeRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: ConversationPurgeRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  trashEntryId: ConversationTrashEntryIdSchema,
+  conversationId: ConversationIdSchema,
+  expectedRevision: ConversationRevisionSchema,
+  confirmation: z.literal("delete_permanently")
+}).strict();
+const ConversationPurgeResultIdentitySchema = ConversationPurgeRequestSchema;
+export const ConversationPurgeResultSchema = z.discriminatedUnion("status", [
+  ConversationPurgeResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  ConversationPurgeResultIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
 ]);
 export const AGENT_CONVERSATION_EXPORT_CHANNEL = "agent.exportConversation" as const;
 export const AGENT_CONVERSATION_EXPORT_EVENT_MAX = 4_096;
@@ -12156,6 +12174,7 @@ export const OperationRecordSchema = z.object({
     "purge_page",
     "trash_conversation",
     "restore_conversation",
+    "purge_conversation",
     "update_index",
     "create_memory",
     "update_memory",
@@ -12645,6 +12664,8 @@ export type ConversationTrashSummary = z.output<typeof ConversationTrashSummaryS
 export type ConversationTrashListResult = z.output<typeof ConversationTrashListResultSchema>;
 export type ConversationRestoreRequest = z.input<typeof ConversationRestoreRequestSchema>;
 export type ConversationRestoreResult = z.output<typeof ConversationRestoreResultSchema>;
+export type ConversationPurgeRequest = z.input<typeof ConversationPurgeRequestSchema>;
+export type ConversationPurgeResult = z.output<typeof ConversationPurgeResultSchema>;
 export type AgentConversationTitle = z.output<typeof AgentConversationTitleSchema>;
 export type AgentConversationSetTitleRequest = z.input<typeof AgentConversationSetTitleRequestSchema>;
 export type AgentConversationSetTitleResult = z.output<typeof AgentConversationSetTitleResultSchema>;

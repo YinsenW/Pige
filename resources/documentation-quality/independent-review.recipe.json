@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T04:30:00.000Z",
+  "reviewedAt": "2026-08-02T05:05:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review full durable Activity safe-summary search, applied/undone filtering, filter-bound paging, and failure retention without widening Operation authority.",
+    "scope": "Conversation permanent deletion is a second-confirmed, pathless trash-only lifecycle whose durable intent, tombstone and irreversible Operation precede exact JSONL removal and restart adoption.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "e3f227bf127f4aaa67f087a01e12ce6e4a836f86be7fa58ffe9be32f8beeef75"
+    "reviewedSha256": "0d3754c1636c2c5a53270447186cafa61ad928bf4399b6070c866f7313ebd880"
   },
   "reviewers": [
     {
-      "reviewerId": "activity-history-search-review",
-      "task": "Review authoritative Activity History query and filter workflow",
+      "reviewerId": "conversation-purge-combined-review",
+      "task": "Review exact conversation trash purge ordering, restart safety and renderer disclosure",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,51 +70,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the public query contract, durable search owner, renderer state retention and exact evidence separately from implementation authorship."
+      "independence": "Project review checks the user-visible destructive confirmation and durable recovery boundaries separately from the Main implementation and direct service tests."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "activity-history-search-review",
+      "reviewerId": "conversation-purge-combined-review",
       "blockerCount": 0,
-      "summary": "Search spans durable Operation truth while failed or stale requests retain visible history and initiating focus."
+      "summary": "Home exposes permanent deletion only inside recoverable conversation Trash and requires a second explicit confirmation."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "activity-history-search-review",
+      "reviewerId": "conversation-purge-combined-review",
       "blockerCount": 0,
-      "summary": "Schema, contract, service cursor, App paging and Settings controls bind the same canonical query and status."
+      "summary": "Schema, IPC, Main lifecycle, Home UI and owner docs bind the same pathless trash identity and closed outcomes."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "activity-history-search-review",
+      "reviewerId": "conversation-purge-combined-review",
       "blockerCount": 0,
-      "summary": "PIGE-JOB-007 and E2.09 cite exact service and UI tests while packaged proof remains explicitly open."
+      "summary": "PIGE-VAULT-004 and PIGE-JOB-006 cite exact purge evidence while remaining partial for their explicitly open breadth."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "activity-history-search-review",
+      "reviewerId": "conversation-purge-combined-review",
       "blockerCount": 0,
-      "summary": "One existing activity.list channel gains bounded optional filters; Open, Undo and Redo owners remain unchanged."
+      "summary": "The existing conversation trash owner gains one bounded irreversible lifecycle without Provider replay or new durable bodies."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "activity-history-search-review",
+      "reviewerId": "conversation-purge-combined-review",
       "blockerCount": 0,
-      "summary": "Existing API, Job, UI and trace owners capture the behavior without a new design document."
+      "summary": "Existing Data, Job, API, UI and trace owners capture the behavior without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/knowledge-activity-service.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/conversation-trash-service.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct service, UI and contract tests prove full-history filtering, filter-bound cursors, single-flight behavior and failure retention."
+      "evidence": "Direct service, UI and contract tests prove second confirmation, durable-before-delete ordering, replay and restart convergence."
     },
     {
       "command": "npm run typecheck && npm run verify:architecture-reset",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "activity-history-search-20260802",
-    "taskTitle": "Close full Activity History search and status filtering",
+    "taskId": "conversation-purge-20260802",
+    "taskTitle": "Permanently delete one recoverable conversation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing unfiltered requests and cursors preserve their behavior; query/status are optional and carry no Operation authority.",
-    "acknowledgement": "The user-visible history workflow is bound while final packaged proof remains open."
+    "compatibility": "Existing conversation list, export, trash and restore behavior is unchanged; purge requires a new explicit confirmation.",
+    "acknowledgement": "The exact user-visible conversation purge workflow is bound while broader trash-first acceptance remains open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

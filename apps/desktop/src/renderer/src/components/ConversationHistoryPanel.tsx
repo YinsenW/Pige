@@ -47,7 +47,8 @@ export function ConversationHistoryPanel(props: {
   const [trashExpanded, setTrashExpanded] = useState(false);
   const [trashed, setTrashed] = useState<readonly ConversationTrashSummary[]>([]);
   const [pendingTrash, setPendingTrash] = useState<AgentConversationHistorySummary | null>(null);
-  const [lifecycleNotice, setLifecycleNotice] = useState<"trashed" | "restored" | "failed" | null>(null);
+  const [pendingPurge, setPendingPurge] = useState<ConversationTrashSummary | null>(null);
+  const [lifecycleNotice, setLifecycleNotice] = useState<"trashed" | "restored" | "purged" | "failed" | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const [exportNotice, setExportNotice] = useState<{ readonly conversationId: string; readonly status: "exported" | "stale" | "not_found" | "failed" } | null>(null);
   const [titleEditor, setTitleEditor] = useState<TitleEditorState | null>(null);
@@ -71,6 +72,7 @@ export function ConversationHistoryPanel(props: {
     setTrashExpanded(false);
     setTrashed([]);
     setPendingTrash(null);
+    setPendingPurge(null);
     setLifecycleNotice(null);
     setExportingId(null);
     setExportNotice(null);
@@ -309,6 +311,39 @@ export function ConversationHistoryPanel(props: {
     }
   };
 
+  const purge = async (): Promise<void> => {
+    const conversation = pendingPurge;
+    if (!conversation || operationRef.current || props.disabled) return;
+    operationRef.current = true;
+    setLoading(true);
+    setLifecycleNotice(null);
+    const vaultId = props.activeVaultId;
+    try {
+      const result = await window.pige.agent.purgeConversation({
+        apiVersion: 1,
+        requestId: `conversationpurgereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+        activeVaultId: vaultId,
+        trashEntryId: conversation.trashEntryId,
+        conversationId: conversation.conversationId,
+        expectedRevision: conversation.revision,
+        confirmation: "delete_permanently"
+      });
+      if (activeVaultIdRef.current !== vaultId) return;
+      if (result.status !== "committed") { setLifecycleNotice("failed"); return; }
+      setTrashed((current) => current.filter(({ trashEntryId }) => trashEntryId !== conversation.trashEntryId));
+      setPendingPurge(null);
+      setLifecycleNotice("purged");
+      window.requestAnimationFrame(() => {
+        document.querySelector<HTMLButtonElement>("[data-conversation-trash-toggle='true']")?.focus({ preventScroll: true });
+      });
+    } catch {
+      setLifecycleNotice("failed");
+    } finally {
+      operationRef.current = false;
+      setLoading(false);
+    }
+  };
+
   const loadTrashUnlocked = async (vaultId: string): Promise<void> => {
     const result = await window.pige.agent.conversationTrash({ apiVersion: 1, activeVaultId: vaultId });
     if (activeVaultIdRef.current === vaultId && result.status === "ready") setTrashed(result.conversations);
@@ -416,7 +451,7 @@ export function ConversationHistoryPanel(props: {
             {props.t("conversation.current")}
           </button>
         ) : null}
-        <button type="button" className="quiet-button" disabled={props.disabled || loading} aria-expanded={trashExpanded} onClick={() => void toggleTrash()}>
+        <button type="button" className="quiet-button" data-conversation-trash-toggle="true" disabled={props.disabled || loading} aria-expanded={trashExpanded} onClick={() => void toggleTrash()}>
           {props.t("conversation.trash")}
         </button>
       </div>
@@ -557,7 +592,25 @@ export function ConversationHistoryPanel(props: {
           {trashed.map((conversation) => (
             <div className="settings-row conversation-history-row" key={conversation.trashEntryId}>
               <span><strong>{conversation.safePreview}</strong><small>{formatUpdatedAt(conversation.trashedAt, props.locale)}</small></span>
-              <button type="button" className="quiet-button" disabled={props.disabled || loading} onClick={() => void restore(conversation)}>{props.t("conversation.restore")}</button>
+              <div className="settings-inline-actions">
+                <button type="button" className="quiet-button" disabled={props.disabled || loading || pendingPurge !== null}
+                  onClick={() => void restore(conversation)}>{props.t("conversation.restore")}</button>
+                <button type="button" className="quiet-button" disabled={props.disabled || loading || pendingPurge !== null}
+                  onClick={() => { setPendingPurge(conversation); setLifecycleNotice(null); }}>
+                  {props.t("conversation.deletePermanently")}
+                </button>
+              </div>
+              {pendingPurge?.trashEntryId === conversation.trashEntryId ? (
+                <div className="conversation-trash-confirm" role="group" aria-label={props.t("conversation.purgeConfirmPrompt") }>
+                  <p className="settings-note">{props.t("conversation.purgeConfirmPrompt")}</p>
+                  <div className="settings-inline-actions">
+                    <button type="button" className="quiet-button" disabled={loading}
+                      onClick={() => setPendingPurge(null)}>{props.t("conversation.trashCancel")}</button>
+                    <button type="button" className="quiet-button" disabled={loading}
+                      onClick={() => void purge()}>{props.t("conversation.purgeConfirm")}</button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ))}
           {!loading && trashed.length === 0 ? <p className="settings-note">{props.t("conversation.trashEmpty")}</p> : null}

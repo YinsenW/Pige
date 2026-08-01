@@ -11,6 +11,8 @@ import type {
   AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
+  ConversationPurgeRequest,
+  ConversationPurgeResult,
   ConversationTrashListRequest,
   ConversationTrashListResult,
   ConversationTrashRequest,
@@ -442,6 +444,8 @@ import {
   AgentConversationExportResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
+  ConversationPurgeRequestSchema,
+  ConversationPurgeResultSchema,
   ConversationTrashListRequestSchema,
   ConversationTrashListResultSchema,
   ConversationTrashRequestSchema,
@@ -1940,6 +1944,10 @@ const api: PigeDesktopApi = {
     restoreConversation: async (request: ConversationRestoreRequest): Promise<ConversationRestoreResult> => {
       const parsedRequest = ConversationRestoreRequestSchema.parse(request);
       return ConversationRestoreResultSchema.parse(await ipcRenderer.invoke("agent.restoreConversation", parsedRequest));
+    },
+    purgeConversation: async (request: ConversationPurgeRequest): Promise<ConversationPurgeResult> => {
+      const parsedRequest = ConversationPurgeRequestSchema.parse(request);
+      return ConversationPurgeResultSchema.parse(await ipcRenderer.invoke("agent.purgeConversation", parsedRequest));
     },
     setConversationTitle: async (
       request: AgentConversationSetTitleRequest

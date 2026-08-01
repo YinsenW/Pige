@@ -11,6 +11,8 @@ import type {
   AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
+  ConversationPurgeRequest,
+  ConversationPurgeResult,
   ConversationTrashListRequest,
   ConversationTrashListResult,
   ConversationTrashRequest,
@@ -562,6 +564,8 @@ export type {
   AgentConversationExportResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
+  ConversationPurgeRequest,
+  ConversationPurgeResult,
   ConversationTrashListRequest,
   ConversationTrashListResult,
   ConversationTrashRequest,
@@ -2358,6 +2362,9 @@ export interface PigeDesktopApi {
     readonly restoreConversation: (
       request: ConversationRestoreRequest
     ) => Promise<ConversationRestoreResult>;
+    readonly purgeConversation: (
+      request: ConversationPurgeRequest
+    ) => Promise<ConversationPurgeResult>;
     readonly setConversationTitle: (
       request: AgentConversationSetTitleRequest
     ) => Promise<AgentConversationSetTitleResult>;

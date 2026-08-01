@@ -11,6 +11,8 @@ import {
   AgentSaveAnswerAsNoteResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
+  ConversationPurgeRequestSchema,
+  ConversationPurgeResultSchema,
   ConversationTrashListResultSchema,
   ConversationTrashRequestSchema,
   ConversationTrashResultSchema,
@@ -699,10 +701,20 @@ describe("schemas", () => {
     expect(ConversationRestoreRequestSchema.parse(restore)).toEqual(restore);
     expect(ConversationRestoreResultSchema.parse({ ...restore, status: "restored", operationId: "op_20260731_conversationrestore" }))
       .toMatchObject({ status: "restored" });
+    const purge = {
+      ...restore,
+      requestId: "conversationpurgereq_abcdefghijklmnop",
+      confirmation: "delete_permanently" as const
+    };
+    expect(ConversationPurgeRequestSchema.parse(purge)).toEqual(purge);
+    expect(ConversationPurgeResultSchema.parse({ ...purge, status: "committed", operationId: "op_20260731_conversationpurge" }))
+      .toMatchObject({ status: "committed" });
     for (const privateField of ["path", "body", "providerResponse"] as const) {
       expect(() => ConversationTrashRequestSchema.parse({ ...request, [privateField]: "private" })).toThrow();
       expect(() => ConversationRestoreRequestSchema.parse({ ...restore, [privateField]: "private" })).toThrow();
+      expect(() => ConversationPurgeRequestSchema.parse({ ...purge, [privateField]: "private" })).toThrow();
     }
+    expect(() => ConversationPurgeRequestSchema.parse({ ...purge, confirmation: "delete" })).toThrow();
   });
 
   it("strictly binds bounded pathless conversation title mutations to the exact tail and revision", () => {
