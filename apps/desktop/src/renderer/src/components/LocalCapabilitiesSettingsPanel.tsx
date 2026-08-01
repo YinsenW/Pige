@@ -41,6 +41,10 @@ import {
   type OcrEnginePreferenceApi
 } from "./OcrEnginePreferenceControl";
 import { OcrImageTestControl, type OcrImageTestApi } from "./OcrImageTestControl";
+import {
+  OcrSummaryPreferenceControl,
+  type OcrSummaryPreferenceApi
+} from "./OcrSummaryPreferenceControl";
 export type { OcrEnginePreferenceApi } from "./OcrEnginePreferenceControl";
 
 type Translate = (key: string) => string;
@@ -92,6 +96,7 @@ export interface LocalCapabilitiesSettingsPanelProps {
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly ocrEnginePreferenceApi?: OcrEnginePreferenceApi;
   readonly ocrImageTestApi?: OcrImageTestApi;
+  readonly ocrSummaryPreferenceApi?: OcrSummaryPreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
   readonly rerankerApi: LocalRerankerApi;
@@ -626,7 +631,7 @@ function PaddleOcrLifecyclePanel(props: {
 export function LocalCapabilitiesSettingsPanel(
   props: LocalCapabilitiesSettingsPanelProps
 ): React.JSX.Element {
-  const ocrEnginePreferenceApi = props.ocrEnginePreferenceApi ?? window.pige?.localCapabilities;
+  const ocrEnginePreferenceApi = props.ocrEnginePreferenceApi;
   const [refreshing, setRefreshing] = useState(false);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const [toolchainReinstallPending, setToolchainReinstallPending] = useState(false);
@@ -920,6 +925,9 @@ export function LocalCapabilitiesSettingsPanel(
             <OcrLanguagePreferenceControl api={props.ocrLanguagePreferenceApi} t={props.t} />
           ) : null}
           {props.ocrImageTestApi ? <OcrImageTestControl api={props.ocrImageTestApi} t={props.t} /> : null}
+          {props.ocrSummaryPreferenceApi ? (
+            <OcrSummaryPreferenceControl api={props.ocrSummaryPreferenceApi} t={props.t} />
+          ) : null}
           {props.dictationLanguagePreferenceApi ? (
             <DictationLanguagePreferenceControl
               api={props.dictationLanguagePreferenceApi}

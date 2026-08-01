@@ -52,6 +52,16 @@ describe("settings registry", () => {
       applyBehavior: "immediate",
       permissionRequirement: "none"
     });
+    expect(byKey.get("ocr.excludeLowConfidenceFromSummaries")).toMatchObject({
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "OCR Service, Agent Orchestrator",
+      storage: "OS app data/ocr-summary-preference.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none",
+      agentPolicyEffect: "localCapabilities.excludeLowConfidenceOcrFromSummaries"
+    });
     expect(registry.entries.every((entry) => SettingPermissionRequirementSchema.safeParse(entry.permissionRequirement).success)).toBe(true);
     expect(byKey.get("vault.activePath")?.permissionRequirement).toBe("permission_and_confirmation");
     expect(byKey.get("models.providerProfiles")?.permissionRequirement).toBe("explicit_confirmation");

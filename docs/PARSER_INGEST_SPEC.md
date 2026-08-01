@@ -206,6 +206,9 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Preserve first; run OCR only after the Agent selects OCR and a supported local engine is available.
 - Store OCR confidence and engine metadata.
+- New Agent jobs snapshot the default-on machine-local summary preference. When enabled,
+  OCR fragments below confidence `0.65` remain preserved locally but do not enter the
+  model evidence pack or generated summary citations.
 - If OCR is unavailable, keep the source and mark it searchable by filename/metadata only.
 - Current macOS 26 adapter accepts preserved direct `image_file` sources only. It preflights actual image type, one-frame support, source dimensions/pixels, and bounded decode before Apple Vision document recognition with text-recognition fallback.
 - The app-owned helper runs in a separate native process with a versioned bounded stdin/stdout protocol, no shell, no OCR network access, and a reduced environment. It caps source bytes at 50 MiB, source pixels at 40 million, each dimension at 20,000, decoded long edge at 4,096, frames at one, blocks at 10,000, recognized characters at 1,000,000, protocol output at 8 MiB, and execution at 60 seconds.

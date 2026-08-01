@@ -140,4 +140,16 @@ describe("agent runtime policy context", () => {
     });
     expect(policy.retrieval.lexicalSearchAvailable).toBe(true);
   });
+
+  it("binds the low-confidence OCR summary setting into each new Agent policy", () => {
+    const vaultPath = makeVault();
+    const safe = buildAgentRuntimePolicyContext(vaultPath);
+    const permissive = buildAgentRuntimePolicyContext(vaultPath, {
+      excludeLowConfidenceOcrFromSummaries: false
+    });
+
+    expect(safe.localCapabilities.excludeLowConfidenceOcrFromSummaries).toBe(true);
+    expect(permissive.localCapabilities.excludeLowConfidenceOcrFromSummaries).toBe(false);
+    expect(permissive.policyHash).not.toBe(safe.policyHash);
+  });
 });

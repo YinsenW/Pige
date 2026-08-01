@@ -18,6 +18,7 @@ export interface BuildAgentRuntimePolicyContextOptions {
   readonly lexicalSearchAvailable?: boolean;
   readonly vectorSearchAvailable?: boolean;
   readonly rerankerAvailable?: boolean;
+  readonly excludeLowConfidenceOcrFromSummaries?: boolean;
 }
 
 export function buildAgentRuntimePolicyContext(
@@ -72,7 +73,8 @@ export function buildAgentRuntimePolicyContext(
       ocrEngines: options.ocrEngines ?? [],
       speechInputAvailable: options.speechInputAvailable ?? false,
       embeddingModelInstalled: options.embeddingModelInstalled ?? false,
-      hiddenDownloadsAllowed: false as const
+      hiddenDownloadsAllowed: false as const,
+      excludeLowConfidenceOcrFromSummaries: options.excludeLowConfidenceOcrFromSummaries ?? true
     }
   };
   const policyDigest = createHash("sha256").update(JSON.stringify(policyWithoutHash)).digest("hex");

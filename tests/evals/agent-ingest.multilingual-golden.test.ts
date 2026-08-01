@@ -61,7 +61,11 @@ describe("Agent ingest multilingual golden evaluation", () => {
 
       const { vaultPath, vault } = makeVault(fixture.id);
       const { sourceRecord, job } = await createFixtureSource(vaultPath, vault, fixture);
-      const service = new AgentIngestService(modelPort, new StaticFixtureModelClient(fixture.modelOutput));
+      const service = new AgentIngestService(
+        modelPort,
+        new StaticFixtureModelClient(fixture.modelOutput),
+        legacyOcrSummaryCapabilityPort
+      );
       const result = await service.ingestSource(vaultPath, sourceRecord, job);
       const note = fs.readFileSync(path.join(vaultPath, result.pagePath), "utf8");
 
@@ -334,6 +338,20 @@ const modelPort: AgentIngestModelConfigPort = {
   getDefaultProvider: () => runtimeConfig.provider,
   hasDefaultRuntimeBinding: () => true,
   getDefaultRuntimeConfig: () => runtimeConfig
+};
+
+const legacyOcrSummaryCapabilityPort = {
+  snapshot: () => ({
+    localDatabaseStatus: "not_initialized" as const,
+    parserToolchainReady: false,
+    ocrEngines: [],
+    speechInputAvailable: false,
+    embeddingModelInstalled: false,
+    lexicalSearchAvailable: false,
+    vectorSearchAvailable: false,
+    rerankerAvailable: false,
+    excludeLowConfidenceOcrFromSummaries: false
+  })
 };
 
 class StaticFixtureModelClient extends ScriptedAgentIngestRuntime {}

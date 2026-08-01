@@ -1053,6 +1053,34 @@ Consequences:
 References:
 
 - `docs/FUTURE_MOBILE_AND_CLOUD_ARCHITECTURE.md`
+
+### D-20260801-Low-Confidence-OCR-Summary-Policy
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+New Agent jobs default to excluding OCR fragments below confidence `0.65` from model
+summary evidence. Users may change this machine-local preference in Local Capabilities.
+The original image, OCR text Artifact, metadata, and local provenance remain preserved.
+
+Rationale:
+
+Uncertain recognition should not silently become durable generated knowledge, while local
+source ownership and an explicit user override must remain intact.
+
+Consequences:
+
+- The effective value is bound into `AgentRuntimePolicyContext` and its policy hash.
+- Setting changes affect only new Agent jobs; running jobs retain their captured policy.
+- Exclusion changes model evidence and citation authority, not source preservation.
+
+References:
+
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/DATA_ARCHITECTURE.md`
 

@@ -214,6 +214,17 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       backedUpByDefault: false,
       applyBehavior: "immediate",
       permissionRequirement: "none"
+    },
+    {
+      key: "ocr.excludeLowConfidenceFromSummaries",
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "OCR Service, Agent Orchestrator",
+      storage: "OS app data/ocr-summary-preference.json",
+      backedUpByDefault: false,
+      applyBehavior: "new_jobs",
+      permissionRequirement: "none",
+      agentPolicyEffect: "localCapabilities.excludeLowConfidenceOcrFromSummaries"
     }
   ]
 };

@@ -152,6 +152,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Local reranker model lifecycle | Local Capabilities | `derived_status` plus machine asset | Local Reranker Service | OS app data | No | `permission_and_confirmation` | Exact Install Job; Enable/Disable CAS; Remove owned bytes; every non-ready or slow state keeps the existing retrieval result order |
 | OCR engine preference | Local Capabilities | `machine_local` | OCR Service | OS app data | No | `none` | New OCR jobs |
 | OCR language hints | Local Capabilities | `machine_local` | OCR Service, I18N Service | OS app data | No | `none` | New OCR jobs |
+| Exclude low-confidence OCR from summaries | Local Capabilities | `machine_local` | OCR Service, Agent Orchestrator | OS app data `ocr-summary-preference.json` | No | `none` | New Agent jobs; default on; original image and local OCR Artifact remain preserved |
 | Speech input availability | Local Capabilities | `derived_status` | Speech Service | None | No | `os_permission` on start | Re-probe per language; not persisted |
 | Dictation language | Local Capabilities | `machine_local` | Speech Service, I18N Service | OS app data `settings.json` | No | `none` | New speech sessions; explicit resource install remains separate |
 | Parser/toolchain health | Local Capabilities/System | `derived_status` | Runtime Capability Service, Local Tool Service | `resources/toolchain-manifest/` plus resolved bundled paths | No | `none` | Recomputed/repair job |
@@ -218,6 +219,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Generated knowledge language | `language.generatedKnowledgeLanguage` | Yes | Appearance Service, Agent Orchestrator | New Agent jobs; source bodies remain untranslated |
 | OCR language hints | `language.ocrLanguageHints` | Maybe | OCR Service | New OCR jobs |
 | OCR engine preference | `none` | No | OCR Service | New OCR jobs; changes real Main-owned adapter order and preserves a safe local fallback |
+| Exclude low-confidence OCR from summaries | `localCapabilities.excludeLowConfidenceOcrFromSummaries` | No | OCR Service, Agent Orchestrator | New Agent jobs; OCR fragments below `0.65` are excluded from the model evidence pack while durable source evidence remains local |
 | Agent behavior preferences | Workflow-specific policy fields | Yes | Agent Orchestrator | New Agent jobs |
 | Memory enabled state | `memory.vaultMemoryEnabled` | Yes | Agent Memory Service | New memory reads/writes |
 | Memory backup inclusion | `memory.includeMemoryInBackup` | No | Backup Service | Next backup |

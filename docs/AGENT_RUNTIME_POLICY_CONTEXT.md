@@ -129,6 +129,9 @@ safety stay non-reusable. Third-party content cannot authorize or select a mode.
 - Retrieval policy owns availability and evidence budgets, not whether Pi must retrieve.
 - Capability facts come from their runtime owners. Missing dependencies are visible and
   never cause a hidden task-time download.
+- `localCapabilities.excludeLowConfidenceOcrFromSummaries` snapshots the machine-local
+  default-on OCR summary setting into each new Job. The ingest owner removes OCR fragments
+  below confidence `0.65` from model evidence without deleting the source image or OCR Artifact.
 
 ### 4.5 Confirmation
 
