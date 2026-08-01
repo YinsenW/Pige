@@ -3871,7 +3871,10 @@ ipcMain.handle("models.addManualProvider", async (_event, request: AddManualProv
   });
 });
 ipcMain.handle("models.refreshProviderModels", async (_event, request: RefreshProviderModelsRequest) =>
-  getModelProviderRegistry().refreshProviderModels(RefreshProviderModelsRequestSchema.parse(request))
+  getModelProviderRegistry().refreshProviderModels(RefreshProviderModelsRequestSchema.parse(request)).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
+  })
 );
 ipcMain.handle("models.updateProviderCredential", async (event, request: UpdateProviderCredentialRequest) => {
   const validatedRequest = UpdateProviderCredentialRequestSchema.parse(request);
@@ -3880,7 +3883,10 @@ ipcMain.handle("models.updateProviderCredential", async (event, request: UpdateP
     message: "Pige will test the replacement credential without displaying the existing credential. The current credential remains active unless the replacement is verified and saved successfully.",
     confirmLabel: "Replace credential"
   });
-  return getModelProviderRegistry().updateProviderCredential(validatedRequest);
+  return getModelProviderRegistry().updateProviderCredential(validatedRequest).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
+  });
 });
 ipcMain.handle("models.deleteProvider", async (event, request: DeleteProviderRequest) => {
   const validatedRequest = DeleteProviderRequestSchema.parse(request);
@@ -3889,7 +3895,10 @@ ipcMain.handle("models.deleteProvider", async (event, request: DeleteProviderReq
     message: "Pige will remove this Provider Profile, its protected credential reference, and its owned model profiles. If it owns the default model, Pige will select a usable remaining model or clear the default.",
     confirmLabel: "Delete service"
   });
-  return getModelProviderRegistry().deleteProvider(validatedRequest);
+  return getModelProviderRegistry().deleteProvider(validatedRequest).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
+  });
 });
 ipcMain.handle("models.addManualModel", async (_event, request: AddManualModelRequest) =>
   {
@@ -3898,6 +3907,9 @@ ipcMain.handle("models.addManualModel", async (_event, request: AddManualModelRe
       providerProfileId: parsed.providerProfileId,
       modelId: parsed.modelId,
       ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName })
+    }).then((result) => {
+      scheduleWaitingAgentIngestAfterModelReady();
+      return result;
     });
   }
 );
@@ -3907,6 +3919,9 @@ ipcMain.handle("models.updateModel", async (_event, request: UpdateModelRequest)
     modelProfileId: parsed.modelProfileId,
     ...(parsed.enabled === undefined ? {} : { enabled: parsed.enabled }),
     ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName })
+  }).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
   });
 }
 );
