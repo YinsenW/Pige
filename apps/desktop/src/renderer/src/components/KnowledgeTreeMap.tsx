@@ -632,7 +632,8 @@ function KnowledgeTreeRelatedGroup(props: {
           const focusKey = `${props.ownerFocusKey}:${relation}:${relationType}:${summary.pageId}`;
           return (
             <article className="related-row" key={`${relation}:${relationType}:${summary.pageId}`}>
-              <div><strong>{summary.title}</strong></div>
+              <div><strong>{summary.title}</strong>{relationType === "contradicts" || relationType === "answers"
+                ? <span>{props.t(`note.relatedType.${relationType}`)}</span> : null}</div>
               <button
                 type="button"
                 className="ghost"

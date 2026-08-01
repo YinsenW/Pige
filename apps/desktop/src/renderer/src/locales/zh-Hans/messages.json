@@ -1034,6 +1034,8 @@
   "note.preview": "预览",
   "note.reader": "阅读器",
   "note.related": "相关",
+  "note.relatedType.answers": "回答此问题",
+  "note.relatedType.contradicts": "与此声明矛盾",
   "note.relatedEmpty": "还没有相关笔记。",
   "note.relatedLoading": "正在读取相关笔记...",
   "note.relatedUnavailable": "暂时无法读取相关笔记。",

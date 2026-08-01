@@ -224,6 +224,7 @@ describe("Knowledge Tree renderer", () => {
     });
     expect(mount.container.textContent).toContain("Exact related note");
     expect(mount.container.textContent).toContain("Exact backlink note");
+    expect(mount.container.textContent).toContain("Answers this question");
     expect(mount.container.textContent).toContain("Outgoing links");
     expect(mount.container.textContent).toContain("Backlinks");
     expect(mount.container.textContent).not.toContain("Wrong old relation");
@@ -235,7 +236,7 @@ describe("Knowledge Tree renderer", () => {
     await click(dom, relatedOpen);
     expect(opened).toEqual([{
       pageId: "page_20260713_related01",
-      focusKey: "root-0-child-0-child-0-node:outgoing:links_to:page_20260713_related01"
+      focusKey: "root-0-child-0-child-0-node:outgoing:answers:page_20260713_related01"
     }]);
 
     const rankingNote = treeItemNamed(mount.container, "Ranking note");
@@ -524,7 +525,7 @@ function relatedResult(pageId: string, title: string): LibraryRelatedResult {
     totalBacklinks: 1,
     outgoing: [{
       relation: "outgoing",
-      relationType: "links_to",
+      relationType: "answers",
       target: "heading:private",
       summary: {
         pageId: "page_20260713_related01",

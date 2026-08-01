@@ -7,7 +7,8 @@ import {
 } from "./local-database-knowledge-health";
 import type { MarkdownPageRecord } from "./markdown-page-index";
 
-export type DurableKnowledgeRelationType = "has_topic" | "links_to" | "mentions_entity" | "related_to";
+export type DurableKnowledgeRelationType =
+  | "has_topic" | "links_to" | "mentions_entity" | "related_to" | "contradicts" | "answers";
 
 export interface KnowledgeTreeEntityInput {
   readonly entityId: string;
@@ -72,7 +73,25 @@ export function indexPageKnowledgeRelations(db: DatabaseSync, pages: readonly Ma
       if (!target || target.summary.pageId === page.summary.pageId) continue;
       insertEdge(insertRelation, "related_to", page.summary.pageId, target.summary.pageId, "related_page_ids", pageRef);
     }
+    if (page.summary.pageType === "claim" && isActiveSourced(page)) {
+      for (const pageId of page.knowledge.claimContradicts) {
+        const target = pageById.get(pageId);
+        if (!target || target.summary.pageType !== "claim" || !isActiveSourced(target) || pageId === page.summary.pageId) continue;
+        insertEdge(insertRelation, "contradicts", page.summary.pageId, pageId, "claim.contradicts", pageId);
+      }
+    }
+    if (page.summary.pageType === "question" && page.summary.status === "active") {
+      for (const pageId of page.knowledge.questionAnswers) {
+        const target = pageById.get(pageId);
+        if (!target || !isActiveSourced(target) || !["note", "claim"].includes(target.summary.pageType) || pageId === page.summary.pageId) continue;
+        insertEdge(insertRelation, "answers", page.summary.pageId, pageId, "question.answered_by", pageId);
+      }
+    }
   }
+}
+
+function isActiveSourced(page: MarkdownPageRecord): boolean {
+  return page.summary.status === "active" && page.summary.sourceIds.length > 0;
 }
 
 export function createSyntheticEntityId(name: string): string {

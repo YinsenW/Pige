@@ -62,15 +62,17 @@ describe("Reader note relationships", () => {
     await act(async () => root.unmount()); dom.window.close();
   });
 
-  it("does not offer related-page mutation authority for derived inline or entity edges", async () => {
+  it("does not offer related-page mutation authority for derived or typed knowledge edges", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
     const derived = {
       ...related,
-      totalOutgoing: 2,
+      totalOutgoing: 4,
       outgoing: [
         { ...related.outgoing[0]!, relationType: "links_to" as const },
-        { ...related.outgoing[0]!, relationType: "mentions_entity" as const }
+        { ...related.outgoing[0]!, relationType: "mentions_entity" as const },
+        { ...related.outgoing[0]!, relationType: "contradicts" as const },
+        { ...related.outgoing[0]!, relationType: "answers" as const }
       ]
     } satisfies LibraryRelatedResult;
     await act(async () => { root.render(createElement(ReaderNoteRelatedPanel, {
@@ -78,6 +80,8 @@ describe("Reader note relationships", () => {
       onOpen: async () => undefined, onUnlink: vi.fn(), t,
     })); await settle(dom); });
     expect([...dom.window.document.querySelectorAll("button")].some((entry) => entry.textContent === "Unlink")).toBe(false);
+    expect(dom.window.document.body.textContent).toContain("Contradicts this claim");
+    expect(dom.window.document.body.textContent).toContain("Answers this question");
     await act(async () => root.unmount()); dom.window.close();
   });
 });
@@ -105,7 +109,9 @@ function t(key: string): string {
     "note.unlink.title": "Remove this relationship?", "note.unlink.description": "Only this relationship is removed.",
     "note.unlink.cancel": "Cancel", "note.unlink.confirm": "Remove relationship", "note.unlink.pending": "Removing...",
     "note.unlink.failed": "The relationship could not be removed.", "note.relatedLoading": "Loading",
-    "note.relatedUnavailable": "Unavailable", "note.relatedEmpty": "Empty" } as Record<string, string>)[key] ?? key;
+    "note.relatedUnavailable": "Unavailable", "note.relatedEmpty": "Empty",
+    "note.relatedType.answers": "Answers this question",
+    "note.relatedType.contradicts": "Contradicts this claim" } as Record<string, string>)[key] ?? key;
 }
 
 function createDom(): JSDOM {

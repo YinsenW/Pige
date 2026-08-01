@@ -544,6 +544,49 @@ Beta conclusion.`
     expect(JSON.stringify(outgoing)).not.toContain("example.com");
   });
 
+  it("projects only current source-grounded Claim contradictions and Question answers", () => {
+    const vaultPath = makeVaultRoot();
+    const service = new LocalDatabaseService();
+    const claimA = "page_20260801_claimalpha";
+    const claimB = "page_20260801_claimbravo";
+    const answer = "page_20260801_answernote";
+    writePage(vaultPath, "wiki/claim-a.md", {
+      id: claimA, title: "Claim A", type: "claim", sourceIds: ["src_20260801_claimalpha"], body: "Claim A.",
+      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: ["${claimB}"]`
+    });
+    writePage(vaultPath, "wiki/claim-b.md", {
+      id: claimB, title: "Claim B", type: "claim", sourceIds: ["src_20260801_claimbravo"], body: "Claim B.",
+      extraFrontmatter: "claim:\n  confidence: \"medium\"\n  evidence: []\n  contradicts: []"
+    });
+    writePage(vaultPath, "wiki/answer.md", {
+      id: answer, title: "Answer", sourceIds: ["src_20260801_answernote"], body: "Grounded answer."
+    });
+    writePage(vaultPath, "wiki/question.md", {
+      id: "page_20260801_questionone", title: "Question", type: "question", body: "Question.",
+      extraFrontmatter: `question:\n  state: "answered"\n  answered_by: ["${answer}"]`
+    });
+    writePage(vaultPath, "wiki/unsafe-question.md", {
+      id: "page_20260801_questionbad", title: "Unsafe question", type: "question", body: "Unsafe.",
+      extraFrontmatter: `question:\n  state: "answered"\n  answered_by: ["${claimA}", "not-a-page-id"]`
+    });
+
+    service.rebuild(vaultPath);
+
+    expect(service.relatedPages(vaultPath, { pageId: claimA })?.outgoing).toMatchObject([
+      { relationType: "contradicts", summary: { pageId: claimB } }
+    ]);
+    expect(service.relatedPages(vaultPath, { pageId: claimB })?.backlinks).toMatchObject([
+      { relationType: "contradicts", summary: { pageId: claimA } }
+    ]);
+    expect(service.relatedPages(vaultPath, { pageId: "page_20260801_questionone" })?.outgoing).toMatchObject([
+      { relationType: "answers", summary: { pageId: answer } }
+    ]);
+    expect(service.relatedPages(vaultPath, { pageId: answer })?.backlinks).toMatchObject([
+      { relationType: "answers", summary: { pageId: "page_20260801_questionone" } }
+    ]);
+    expect(service.relatedPages(vaultPath, { pageId: "page_20260801_questionbad" })?.outgoing).toEqual([]);
+  });
+
   it("rebuilds canonical tag facets from Markdown without treating SQLite as durable knowledge", () => {
     const vaultPath = makeVaultRoot();
     const service = new LocalDatabaseService();
@@ -809,6 +852,7 @@ function writePage(vaultPath: string, relativePath: string, input: {
   readonly entities?: readonly string[];
   readonly relatedPageIds?: readonly string[];
   readonly status?: string;
+  readonly extraFrontmatter?: string;
 }): void {
   const filePath = path.join(vaultPath, ...relativePath.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -827,7 +871,7 @@ topics: ${JSON.stringify(input.topics ?? [])}
 entities: ${JSON.stringify(input.entities ?? [])}
 source_ids: ${JSON.stringify(input.sourceIds ?? [])}
 related_page_ids: ${JSON.stringify(input.relatedPageIds ?? [])}
----
+${input.extraFrontmatter ? `${input.extraFrontmatter}\n` : ""}---
 
 ${input.body}
 `, "utf8");
