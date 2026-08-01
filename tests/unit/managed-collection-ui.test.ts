@@ -1967,6 +1967,15 @@ describe("ManagedCollectionPanel", () => {
       root.render(createElement(ActivityHistorySettingsPanel, {
         activities: [
           {
+            operationId: "op_20260730_memorycreate01",
+            kind: "create_memory",
+            createdAt: "2026-07-30T07:59:00.000Z",
+            targetLabel: "Weekly planning",
+            target: { kind: "memory", memoryId: "memory_20260730_weeklyplanning" },
+            status: "applied",
+            canUndo: true,
+          },
+          {
             operationId: "op_20260730_memoryupdate01",
             kind: "update_memory",
             createdAt: "2026-07-30T08:00:00.000Z",
@@ -2008,6 +2017,7 @@ describe("ManagedCollectionPanel", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
+    expect(container.textContent).toContain("Memory saved: Weekly planning");
     expect(container.textContent).toContain("Memory updated: Concise summaries");
     expect(container.textContent).toContain("Memory moved to trash: Review preference");
     expect(container.textContent).toContain("Memory restored: Writing style");

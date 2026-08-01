@@ -165,6 +165,7 @@ import {
   MemoryExportResultSchema,
   MemoryLifecycleMutationResultSchema,
   MemoryResetRequestSchema,
+  MemorySummarySchema,
   NOTE_EDITOR_MAX_MARKDOWN_UTF8_BYTES,
   NoteEditorOpenRequestSchema,
   NoteEditorOpenResultSchema,
@@ -5097,6 +5098,22 @@ describe("schemas", () => {
         updatedAt: "2026-07-27T10:01:00.000Z"
       }]
     } as const;
+    expect(MemorySummarySchema.parse({
+      ...summary,
+      records: summary.records.map((record) => ({
+        ...record,
+        kind: "correction" as const,
+        provenance: { ...record.provenance, kind: "authored_user_statement" as const }
+      }))
+    })).toMatchObject({ records: [{ kind: "correction", provenance: { kind: "authored_user_statement" } }] });
+    expect(KnowledgeActivitySummarySchema.parse({
+      operationId: "op_20260727_memorycreate01",
+      kind: "create_memory",
+      createdAt: "2026-07-27T10:00:00.000Z",
+      target: { kind: "memory", memoryId: recordRequest.memoryId },
+      status: "applied",
+      canUndo: true
+    })).toMatchObject({ kind: "create_memory", canUndo: true });
 
     expect(MemoryEnableRequestSchema.parse(recordRequest)).toEqual(recordRequest);
     expect(MemoryDeleteRequestSchema.parse(recordRequest)).toEqual(recordRequest);

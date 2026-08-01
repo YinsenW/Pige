@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "已更新集合查找字段",
   "activity.addedCollectionRollup": "已添加集合汇总字段",
   "activity.updatedCollectionRollup": "已更新集合汇总字段",
+  "activity.createdMemory": "已保存记忆",
   "activity.updatedMemory": "记忆已更新",
   "activity.trashedMemory": "记忆已移入废纸篓",
   "activity.restoredMemory": "记忆已恢复",

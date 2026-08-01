@@ -1538,6 +1538,7 @@ export interface KnowledgeActivitySummary {
     | "restore_collection_view"
     | "trash_collection_column"
     | "trash_collection_row"
+    | "create_memory"
     | "update_memory"
     | "trash_memory"
     | "restore_memory"

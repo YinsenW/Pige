@@ -1289,6 +1289,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "restore_collection_view",
     "trash_collection_column",
     "trash_collection_row",
+    "create_memory",
     "update_memory",
     "trash_memory",
     "restore_memory",
@@ -3803,7 +3804,7 @@ export const MemoryRecordSummarySchema = z.object({
   body: z.string().trim().min(1).max(2_000),
   status: MemoryStatusSchema,
   provenance: z.object({
-    kind: z.literal("explicit_user_request"),
+    kind: z.enum(["explicit_user_request", "authored_user_statement"]),
     occurredAt: z.string().datetime({ offset: true })
   }).strict(),
   createdAt: z.string().datetime({ offset: true }),

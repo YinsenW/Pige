@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "Champ de recherche de collection mis à jour",
   "activity.addedCollectionRollup": "Champ de synthèse de collection ajouté",
   "activity.updatedCollectionRollup": "Champ de synthèse de collection mis à jour",
+  "activity.createdMemory": "Mémoire enregistrée",
   "activity.updatedMemory": "Mémoire mise à jour",
   "activity.trashedMemory": "Mémoire placée dans la corbeille",
   "activity.restoredMemory": "Mémoire restaurée",

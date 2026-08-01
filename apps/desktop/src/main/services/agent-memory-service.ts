@@ -2,68 +2,31 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import type {
-  KnowledgeActivitySummary,
-  KnowledgeActivityUndoResult
-} from "@pige/contracts";
+import type { KnowledgeActivitySummary, KnowledgeActivityUndoResult } from "@pige/contracts";
 import {
-  MemoryDeleteRequestSchema,
-  MemoryDisableRequestSchema,
-  MemoryEditRequestSchema,
-  MemoryEnableRequestSchema,
-  MemoryExportRequestSchema,
-  MemoryExportResultSchema,
-  MemoryLifecycleMutationResultSchema,
-  MemoryLanguageFactSchema,
-  MemoryMutationResultSchema,
-  MemoryRecordSummarySchema,
-  MemoryResetRequestSchema,
-  MemorySummarySchema,
-  OperationRecordSchema,
-  type MemoryDeleteRequest,
-  type MemoryDisableRequest,
-  type MemoryEditRequest,
-  type MemoryEnableRequest,
-  type MemoryExportRequest,
-  type MemoryExportResult,
-  type MemoryLifecycleMutationResult,
-  type MemoryLanguageFact,
-  type MemoryMutationResult,
-  type MemoryRecordSummary,
-  type MemoryResetRequest,
-  type MemorySummary,
-  type OperationRecord
+  MemoryDeleteRequestSchema, MemoryDisableRequestSchema, MemoryEditRequestSchema,
+  MemoryEnableRequestSchema, MemoryExportRequestSchema, MemoryExportResultSchema,
+  MemoryLifecycleMutationResultSchema, MemoryLanguageFactSchema, MemoryMutationResultSchema,
+  MemoryRecordSummarySchema, MemoryResetRequestSchema, MemorySummarySchema, OperationRecordSchema,
+  type MemoryDeleteRequest, type MemoryDisableRequest, type MemoryEditRequest,
+  type MemoryEnableRequest, type MemoryExportRequest, type MemoryExportResult,
+  type MemoryLifecycleMutationResult, type MemoryLanguageFact, type MemoryMutationResult,
+  type MemoryRecordSummary, type MemoryResetRequest, type MemorySummary, type OperationRecord
 } from "@pige/schemas";
 import { flushDirectoryWhereSupported } from "./durable-directory-sync";
 import {
   MEMORY_OPERATION_ID_PATTERN as OPERATION_ID_PATTERN,
-  applyMemoryReceipt as applyReceipt,
-  assertMemoryRegistryBindings as assertRegistryBindings,
-  createMemoryEventId,
-  createMemoryId,
-  createMemoryLifecycleOperation as createLifecycleOperation,
-  createMemoryOperationId as createOperationId,
-  createMemoryRestoreOperation as createRestoreOperation,
-  createMemoryUndoOperationId as createUndoOperationId,
-  createMemoryUndoRegistry as createUndoRegistry,
-  hashMemoryRegistry as hashRegistry,
-  isMatchingMemoryRestoreOperation as isMatchingRestoreOperation,
-  isValidMemoryEditTransition,
-  memoryLifecycleConflict as lifecycleConflict,
-  memoryOperationRelativePath as operationRelativePath,
-  memoryReceiptRelativePath as receiptRelativePath,
-  memoryRestoreIntentRelativePath as restoreIntentRelativePath,
-  memoryUndoUnavailableReason as undoUnavailableReason,
-  prepareMemoryMutation as prepareMutation,
-  readMemoryOperationBinding,
-  restoredMemoryRecords as restoredRecords,
-  stableJson,
-  type MemoryEventRecord,
-  type MemoryLifecycleAction,
-  type MemoryLifecycleReceipt,
-  type MemoryRegistry,
-  type MemoryRestoreIntent,
-  type StoredMemoryRecord
+  applyMemoryReceipt as applyReceipt, assertMemoryRegistryBindings as assertRegistryBindings,
+  createMemoryId, createMemoryRequestId, createMemoryLifecycleOperation as createLifecycleOperation,
+  createMemoryOperationId as createOperationId, createMemoryRestoreOperation as createRestoreOperation,
+  createMemoryUndoOperationId as createUndoOperationId, createMemoryUndoRegistry as createUndoRegistry,
+  hashMemoryRegistry as hashRegistry, isMatchingMemoryRestoreOperation as isMatchingRestoreOperation,
+  isValidMemoryEditTransition, memoryLifecycleConflict as lifecycleConflict,
+  memoryOperationRelativePath as operationRelativePath, memoryReceiptRelativePath as receiptRelativePath,
+  memoryRestoreIntentRelativePath as restoreIntentRelativePath, memoryUndoUnavailableReason as undoUnavailableReason,
+  prepareMemoryMutation as prepareMutation, prepareMemoryCreation, readMemoryOperationBinding, stableJson,
+  type MemoryEventRecord, type MemoryLifecycleMutationAction, type MemoryLifecycleReceipt,
+  type MemoryRegistry, type MemoryRestoreIntent, type StoredMemoryRecord
 } from "./agent-memory-lifecycle";
 import { containsRestrictedModelContent } from "./model-egress-content";
 
@@ -76,6 +39,10 @@ export interface RememberVaultPreferenceRequest {
   readonly activeVaultId: string;
   readonly title: string;
   readonly body: string;
+  readonly kind?: "preference" | "correction" | "workflow_lesson";
+  readonly provenanceKind?: "explicit_user_request" | "authored_user_statement";
+  readonly actorKind?: "user" | "pige_agent";
+  readonly modelProfileId?: string;
   readonly sourceConversationId: string;
   readonly sourceEventId: string;
   readonly parentJobId: string;
@@ -87,11 +54,7 @@ export interface AgentMemoryServiceDependencies {
   readonly randomBytes?: (size: number) => Buffer;
   readonly activeVaultPath?: () => string | undefined;
 }
-
-export interface AgentMemoryRecoveryResult {
-  readonly recovered: number;
-  readonly failed: number;
-}
+export interface AgentMemoryRecoveryResult { readonly recovered: number; readonly failed: number; }
 
 export class AgentMemoryService {
   readonly #now: () => Date;
@@ -113,20 +76,6 @@ export class AgentMemoryService {
 
   rememberPreference(request: RememberVaultPreferenceRequest): MemoryRecordSummary {
     this.#rememberVault(request.vaultPath);
-    const id = createMemoryId(request.sourceEventId);
-    const registry = this.#readRegistry(request.vaultPath);
-    const existing = registry.records.find((record) => record.id === id);
-    if (existing) {
-      if (
-        existing.conversationId !== request.sourceConversationId ||
-        existing.userEventId !== request.sourceEventId ||
-        existing.parentJobId !== request.parentJobId
-      ) {
-        throw new PigeDomainError("memory.provenance_conflict", "The memory event provenance changed during retry.");
-      }
-      this.#writeInspectableRecord(request.vaultPath, existing);
-      return existing;
-    }
     const title = request.title.trim();
     const body = request.body.trim();
     if (!title || !body) {
@@ -135,49 +84,57 @@ export class AgentMemoryService {
     if (containsRestrictedModelContent(`${title}\n${body}`)) {
       throw new PigeDomainError("memory.secret_blocked", "Secret-like content cannot be saved as Agent memory.");
     }
+    const id = createMemoryId(request.sourceEventId);
+    const requestId = createMemoryRequestId(request.sourceEventId);
+    const registry = this.#readRegistry(request.vaultPath);
+    const receipt = this.#findReceiptByRequest(request.vaultPath, requestId);
+    const existing = registry.records.find((record) => record.id === id);
+    if (existing) {
+      if (
+        existing.conversationId !== request.sourceConversationId ||
+        existing.userEventId !== request.sourceEventId ||
+        existing.parentJobId !== request.parentJobId || existing.kind !== (request.kind ?? "preference") ||
+        existing.title !== title || existing.body !== body ||
+        existing.provenance.kind !== (request.provenanceKind ?? "explicit_user_request")
+      ) {
+        throw new PigeDomainError("memory.provenance_conflict", "The memory event provenance changed during retry.");
+      }
+      if (receipt) {
+        assertMemoryCreationRequest(receipt, request, requestId, id, title, body);
+        this.#recoverReceipt(request.vaultPath, receipt);
+      } else if (request.actorKind === "pige_agent" || request.modelProfileId !== undefined) {
+        throw lifecycleConflict();
+      }
+      this.#writeInspectableRecord(request.vaultPath, existing);
+      return existing;
+    }
+    if (receipt) {
+      assertMemoryCreationRequest(receipt, request, requestId, id, title, body);
+      this.#recoverReceipt(request.vaultPath, receipt);
+      const recovered = this.#readRegistry(request.vaultPath).records.find((record) => record.id === id);
+      if (!recovered) throw lifecycleConflict();
+      return recovered;
+    }
     if (registry.revision === Number.MAX_SAFE_INTEGER || registry.records.length >= 1_000) {
       throw new PigeDomainError("memory.capacity_exhausted", "The vault memory registry is full.");
     }
-    const now = this.#now().toISOString();
-    const summary = MemoryRecordSummarySchema.parse({
-      id,
-      kind: "preference",
+    const prepared = prepareMemoryCreation(registry, {
+      requestId,
+      activeVaultId: request.activeVaultId,
+      kind: request.kind ?? "preference",
       title,
       body,
-      status: "active",
-      provenance: { kind: "explicit_user_request", occurredAt: now },
-      createdAt: now,
-      updatedAt: now
-    });
-    const eventId = createMemoryEventId(request.sourceEventId);
-    const event: MemoryEventRecord = {
-      id: eventId,
-      kind: "explicit_remember",
-      title,
-      body,
-      conversationId: request.sourceConversationId,
-      userEventId: request.sourceEventId,
+      sourceConversationId: request.sourceConversationId,
+      sourceEventId: request.sourceEventId,
       parentJobId: request.parentJobId,
       language: memoryLanguageOrLegacy(request.language),
-      occurredAt: now
-    };
-    const record: StoredMemoryRecord = {
-      ...summary,
-      eventId,
-      conversationId: request.sourceConversationId,
-      userEventId: request.sourceEventId,
-      parentJobId: request.parentJobId,
-      language: memoryLanguageOrLegacy(request.language)
-    };
-    const next = {
-      schemaVersion: 1 as const,
-      revision: registry.revision + 1,
-      events: [...registry.events, event],
-      records: [...registry.records, record]
-    };
-    this.#writeRegistry(request.vaultPath, next);
-    this.#writeInspectableRecord(request.vaultPath, record);
-    return record;
+      provenanceKind: request.provenanceKind ?? "explicit_user_request",
+      actorKind: request.actorKind ?? "user",
+      ...(request.modelProfileId ? { modelProfileId: request.modelProfileId } : {})
+    }, this.#now().toISOString());
+    this.#persistReceipt(request.vaultPath, prepared.receipt);
+    this.#recoverReceipt(request.vaultPath, prepared.receipt);
+    return prepared.record;
   }
 
   disable(vaultPath: string, request: MemoryDisableRequest): MemoryMutationResult {
@@ -291,7 +248,10 @@ export class AgentMemoryService {
 
   activitySummary(operation: OperationRecord, undoOperation?: OperationRecord): KnowledgeActivitySummary | undefined {
     const binding = readMemoryOperationBinding(operation);
-    if (!binding || (undoOperation && !isMatchingRestoreOperation(operation, undoOperation))) return undefined;
+    if (
+      !binding || binding.action === "restore" || binding.action === "undo_create" ||
+      (undoOperation && !isMatchingRestoreOperation(operation, undoOperation))
+    ) return undefined;
     const vaultPath = this.#currentVaultPath();
     let registry: MemoryRegistry | undefined;
     if (vaultPath) {
@@ -310,7 +270,7 @@ export class AgentMemoryService {
       : undoUnavailableReason(registry, receipt);
     return {
       operationId: operation.id,
-      kind: operation.kind as "update_memory" | "trash_memory" | "restore_memory",
+      kind: operation.kind as "create_memory" | "update_memory" | "trash_memory",
       createdAt: operation.createdAt,
       ...(binding.action === "reset" ? { targetLabel: "All Agent memory" } : {}),
       target,
@@ -324,14 +284,16 @@ export class AgentMemoryService {
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
     const binding = readMemoryOperationBinding(operation);
-    if (!binding || operation.kind === "restore_memory") return undefined;
+    if (!binding || binding.action === "restore" || binding.action === "undo_create") return undefined;
     const candidate = operations.find((entry) => entry.id === createUndoOperationId(operation.id));
     return candidate && isMatchingRestoreOperation(operation, candidate) ? candidate : undefined;
   }
 
   undo(operation: OperationRecord, expectedRevisionId?: string): KnowledgeActivityUndoResult {
     const binding = readMemoryOperationBinding(operation);
-    if (!binding || operation.kind === "restore_memory") return { status: "not_found", operationId: operation.id };
+    if (!binding || binding.action === "restore" || binding.action === "undo_create") {
+      return { status: "not_found", operationId: operation.id };
+    }
     if (expectedRevisionId !== undefined && expectedRevisionId !== String(binding.afterRevision)) {
       return { status: "stale", operationId: operation.id, currentRevisionId: String(binding.afterRevision) };
     }
@@ -402,7 +364,7 @@ export class AgentMemoryService {
     vaultPath: string,
     activeVaultId: string,
     input: {
-      readonly action: MemoryLifecycleAction;
+      readonly action: MemoryLifecycleMutationAction;
       readonly requestId: string;
       readonly expectedRevision: number;
       readonly memoryId?: string;
@@ -502,7 +464,7 @@ export class AgentMemoryService {
       throw lifecycleConflict();
     }
     const restoredRegistry = this.#readRegistry(vaultPath);
-    for (const record of restoredRecords(receipt, restoredRegistry)) this.#writeInspectableRecord(vaultPath, record);
+    this.#syncReceiptProjection(vaultPath, receipt, restoredRegistry);
     this.#persistOperation(vaultPath, restoreOperation);
     return true;
   }
@@ -598,11 +560,12 @@ export class AgentMemoryService {
   }
 
   #findReceiptByRequest(vaultPath: string, requestId: string): MemoryLifecycleReceipt | undefined {
+    const create = this.#readReceipt(vaultPath, `.pige/memory/creates/${requestId}.json`);
     const edit = this.#readReceipt(vaultPath, `.pige/memory/edits/${requestId}.json`);
     const mutation = this.#readReceipt(vaultPath, `.pige/memory/mutations/${requestId}.json`);
     const trash = this.#readReceipt(vaultPath, `.pige/trash/memory/${requestId}.json`);
-    if ([edit, mutation, trash].filter(Boolean).length > 1) throw lifecycleConflict();
-    return edit ?? mutation ?? trash;
+    if ([create, edit, mutation, trash].filter(Boolean).length > 1) throw lifecycleConflict();
+    return create ?? edit ?? mutation ?? trash;
   }
 
   #readReceiptForOperation(vaultPath: string, operation: OperationRecord): MemoryLifecycleReceipt | undefined {
@@ -621,7 +584,7 @@ export class AgentMemoryService {
   }
 
   #readAllReceipts(vaultPath: string): readonly MemoryLifecycleReceipt[] {
-    const relativeRoots = [".pige/memory/edits", ".pige/memory/mutations", ".pige/trash/memory"];
+    const relativeRoots = [".pige/memory/creates", ".pige/memory/edits", ".pige/memory/mutations", ".pige/trash/memory"];
     const receipts: MemoryLifecycleReceipt[] = [];
     for (const relativeRoot of relativeRoots) {
       const root = resolveVaultPrivatePath(vaultPath, relativeRoot);
@@ -686,6 +649,32 @@ export class AgentMemoryService {
   }
 }
 
+function assertMemoryCreationRequest(
+  receipt: MemoryLifecycleReceipt,
+  request: RememberVaultPreferenceRequest,
+  requestId: string,
+  memoryId: string,
+  title: string,
+  body: string
+): void {
+  const expectedActor = request.actorKind ?? "user";
+  const expectedProvenance = request.provenanceKind ?? "explicit_user_request";
+  const expectedLanguage = memoryLanguageOrLegacy(request.language);
+  if (
+    receipt.action !== "create" || receipt.requestId !== requestId ||
+    receipt.activeVaultId !== request.activeVaultId || receipt.memoryId !== memoryId ||
+    receipt.actorKind !== expectedActor || receipt.modelProfileId !== request.modelProfileId ||
+    receipt.jobId !== (expectedActor === "pige_agent" ? request.parentJobId : undefined) ||
+    receipt.createdEvent?.conversationId !== request.sourceConversationId ||
+    receipt.createdEvent.userEventId !== request.sourceEventId ||
+    receipt.createdEvent.parentJobId !== request.parentJobId ||
+    stableJson(receipt.createdEvent.language) !== stableJson(expectedLanguage) ||
+    receipt.afterRecord?.kind !== (request.kind ?? "preference") ||
+    receipt.afterRecord.title !== title || receipt.afterRecord.body !== body ||
+    receipt.afterRecord.provenance.kind !== expectedProvenance
+  ) throw lifecycleConflict();
+}
+
 function lifecycleResult(
   status: "committed" | "stale" | "not_found",
   activeVaultId: string,
@@ -742,7 +731,8 @@ function parseMemoryEvent(value: unknown): MemoryEventRecord {
   const event = value as Partial<MemoryEventRecord>;
   if (
     typeof event.id !== "string" || !/^memory_event_[a-f0-9]{20}$/u.test(event.id) ||
-    event.kind !== "explicit_remember" || typeof event.title !== "string" || typeof event.body !== "string" ||
+    !(event.kind === "explicit_remember" || event.kind === "authored_statement") ||
+    typeof event.title !== "string" || typeof event.body !== "string" ||
     typeof event.conversationId !== "string" || typeof event.userEventId !== "string" ||
     typeof event.parentJobId !== "string" || typeof event.occurredAt !== "string"
   ) throw registryInvalid("A memory event is invalid.");
@@ -793,7 +783,7 @@ export function parseMemoryLifecycleReceipt(value: unknown): MemoryLifecycleRece
   if (!value || typeof value !== "object") throw lifecycleConflict();
   const receipt = value as Partial<MemoryLifecycleReceipt>;
   if (
-    receipt.schemaVersion !== 1 || !(["edit", "enable", "delete", "reset"] as const).includes(receipt.action as never) ||
+    receipt.schemaVersion !== 1 || !(["create", "edit", "enable", "delete", "reset"] as const).includes(receipt.action as never) ||
     typeof receipt.requestId !== "string" || !/^memory_request_[a-z0-9]{16,64}$/u.test(receipt.requestId) ||
     typeof receipt.activeVaultId !== "string" || !OPERATION_ID_PATTERN.test(receipt.operationId ?? "") ||
     typeof receipt.createdAt !== "string" || !Number.isSafeInteger(receipt.expectedRevision) ||
@@ -804,8 +794,28 @@ export function parseMemoryLifecycleReceipt(value: unknown): MemoryLifecycleRece
   const removedEvents = receipt.removedEvents.map(parseMemoryEvent);
   const removedRecords = receipt.removedRecords.map(parseStoredMemoryRecord);
   assertRegistryBindings(removedEvents, removedRecords, (_event, record) => record.editProvenance !== undefined);
+  const createdEvent = receipt.createdEvent ? parseMemoryEvent(receipt.createdEvent) : undefined;
   const beforeRecord = receipt.beforeRecord ? parseStoredMemoryRecord(receipt.beforeRecord) : undefined;
   const afterRecord = receipt.afterRecord ? parseStoredMemoryRecord(receipt.afterRecord) : undefined;
+  if (receipt.action === "create") {
+    if (
+      !receipt.memoryId || !createdEvent || !afterRecord || beforeRecord !== undefined ||
+      removedRecords.length !== 0 || removedEvents.length !== 0 || receipt.memoryId !== afterRecord.id ||
+      !(receipt.actorKind === "user" || receipt.actorKind === "pige_agent") ||
+      (receipt.actorKind === "pige_agent"
+        ? receipt.jobId !== createdEvent.parentJobId || typeof receipt.modelProfileId !== "string" ||
+          !/^model_[a-z0-9_]+$/u.test(receipt.modelProfileId)
+        : receipt.jobId !== undefined || receipt.modelProfileId !== undefined)
+    ) throw lifecycleConflict();
+    assertRegistryBindings([createdEvent], [afterRecord]);
+    return {
+      ...(receipt as MemoryLifecycleReceipt),
+      removedEvents,
+      removedRecords,
+      createdEvent,
+      afterRecord
+    };
+  }
   if (
     (receipt.action === "edit" || receipt.action === "enable")
       ? (!receipt.memoryId || !beforeRecord || !afterRecord || removedRecords.length !== 0 || removedEvents.length !== 0 ||
@@ -813,6 +823,9 @@ export function parseMemoryLifecycleReceipt(value: unknown): MemoryLifecycleRece
       : (receipt.action === "delete" ? !receipt.memoryId || removedRecords.length !== 1 : !!receipt.memoryId) ||
         beforeRecord !== undefined || afterRecord !== undefined
   ) throw lifecycleConflict();
+  if (createdEvent !== undefined || receipt.actorKind !== undefined || receipt.jobId !== undefined || receipt.modelProfileId !== undefined) {
+    throw lifecycleConflict();
+  }
   return { ...(receipt as MemoryLifecycleReceipt), removedEvents, removedRecords, ...(beforeRecord ? { beforeRecord } : {}), ...(afterRecord ? { afterRecord } : {}) };
 }
 
@@ -832,7 +845,7 @@ function assertReceiptRequest(
   receipt: MemoryLifecycleReceipt,
   activeVaultId: string,
   input: {
-    readonly action: MemoryLifecycleAction;
+    readonly action: MemoryLifecycleMutationAction;
     readonly expectedRevision: number;
     readonly memoryId?: string;
     readonly title?: string;
@@ -981,10 +994,5 @@ function removeRegularFileIfPresent(filePath: string): void {
   flushDirectoryWhereSupported(path.dirname(filePath));
 }
 
-function isSha256(value: unknown): value is string {
-  return typeof value === "string" && /^sha256:[a-f0-9]{64}$/u.test(value);
-}
-
-function registryInvalid(message: string): PigeDomainError {
-  return new PigeDomainError("memory.registry_invalid", message);
-}
+function isSha256(value: unknown): value is string { return typeof value === "string" && /^sha256:[a-f0-9]{64}$/u.test(value); }
+function registryInvalid(message: string): PigeDomainError { return new PigeDomainError("memory.registry_invalid", message); }

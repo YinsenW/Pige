@@ -666,10 +666,10 @@ describe("Home Pi Agent service", () => {
   it("registers explicit memory, persists exact private provenance, and recalls active preferences", async () => {
     const fixture = makeFixture();
     const jobs = new JobsService(fixture.vaults);
-    const remembered: Array<Record<string, string>> = [];
+    const remembered: Array<Record<string, unknown>> = [];
     const memory = {
       recall: () => [{ title: "Concise summaries", body: "Prefer concise summaries." }],
-      rememberPreference: (request: Record<string, string>) => {
+      rememberPreference: (request: Record<string, unknown>) => {
         remembered.push(request);
         return { id: "memory_20260727_abcdefabcdefabcd" };
       }
@@ -681,13 +681,16 @@ describe("Home Pi Agent service", () => {
         observedSystemPrompt = request.systemPrompt;
         observedUserPrompt = request.userPrompt;
         await request.beforeModelTurn?.();
-        const tool = request.tools.find((candidate) => candidate.name === "pige_remember_preference");
+        const tool = request.tools.find((candidate) => candidate.name === "pige_remember_authored_memory");
         if (!tool) throw new Error("Missing explicit memory tool.");
         const signal = new AbortController().signal;
-        await tool.execute({ title: "Concise summaries", body: "Prefer concise summaries." }, signal, {
+        const args = { kind: "preference", quote: "I prefer concise summaries." };
+        const context = {
           toolCallId: "pi_tool_remember_preference",
           signal
-        });
+        };
+        await tool.authorize?.(args, context);
+        await tool.execute(args, signal, context);
         await request.beforeModelTurn?.();
         return makeRuntimeResult(request, tool.name, {
           answer: "I will remember that preference.",
@@ -725,7 +728,12 @@ describe("Home Pi Agent service", () => {
       activeVaultId: fixture.vault.vaultId,
       parentJobId: expect.stringMatching(/^job_/u),
       sourceConversationId: expect.stringMatching(/^conv_/u),
-      sourceEventId: expect.stringMatching(/^evt_/u)
+      sourceEventId: expect.stringMatching(/^evt_/u),
+      kind: "preference",
+      body: "I prefer concise summaries.",
+      provenanceKind: "authored_user_statement",
+      actorKind: "pige_agent",
+      modelProfileId: expect.stringMatching(/^model_/u)
     })]);
     expect(observedSystemPrompt).not.toContain("Prefer concise summaries.");
     expect(observedUserPrompt).toContain("lower-authority memory context");
@@ -778,7 +786,7 @@ describe("Home Pi Agent service", () => {
       clientTurnId: "turn_20260727_memorydisabled"
     })).resolves.toMatchObject({ state: "completed" });
     expect(recalls).toBe(0);
-    expect(observedTools).not.toContain("pige_remember_preference");
+    expect(observedTools).not.toContain("pige_remember_authored_memory");
     expect(observedUserPrompt).not.toContain("Disabled memory.");
   });
 
@@ -833,7 +841,7 @@ describe("Home Pi Agent service", () => {
     await expect(service.submitPreparedSourceTurn(prepared)).resolves.toMatchObject({ state: "completed" });
     expect(registrations).toBe(0);
     expect(observedToolNames).not.toContain("pige_execute_reviewed_plan");
-    expect(observedToolNames).not.toContain("pige_remember_preference");
+    expect(observedToolNames).not.toContain("pige_remember_authored_memory");
     expect(observedToolNames).toContain("pige_inspect_source");
   });
 

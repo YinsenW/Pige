@@ -53,6 +53,7 @@
   "activity.updatedCollectionLookup": "コレクションのルックアップフィールドを更新",
   "activity.addedCollectionRollup": "コレクションの集計フィールドを追加",
   "activity.updatedCollectionRollup": "コレクションの集計フィールドを更新",
+  "activity.createdMemory": "メモリを保存",
   "activity.updatedMemory": "メモリを更新",
   "activity.trashedMemory": "メモリをゴミ箱に移動",
   "activity.restoredMemory": "メモリを復元",

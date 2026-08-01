@@ -4510,10 +4510,10 @@ async function startProviderServer(requests, streamTiming, deniedCommandSentinel
       writeToolCallResponse(response, "pige_read_current_note", "call_rel003_note_read", "rel003-note-read-1");
       return;
     }
-    if (latestUserText.includes(PUBLIC_ALPHA_MEMORY_PROMPT) && serializedTools.includes("pige_remember_preference")) {
-      writeToolCallResponse(response, "pige_remember_preference", "call_rel003_memory", "rel003-memory-1", {
-        title: "Concise Public Alpha reports",
-        body: "Prefer concise Public Alpha reports."
+    if (latestUserText.includes(PUBLIC_ALPHA_MEMORY_PROMPT) && serializedTools.includes("pige_remember_authored_memory")) {
+      writeToolCallResponse(response, "pige_remember_authored_memory", "call_rel003_memory", "rel003-memory-1", {
+        kind: "preference",
+        quote: "Public Alpha reports should stay concise."
       });
       return;
     }
