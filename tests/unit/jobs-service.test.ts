@@ -167,6 +167,7 @@ describe("jobs service", () => {
     expect(result.jobs).toHaveLength(2);
     expect(result.jobs.map((job) => job.state)).toEqual(["queued", "queued"]);
     expect(result.jobs.every((job) => job.canCancel === true)).toBe(true);
+    expect(result.jobs.every((job) => job.canRetry === false)).toBe(true);
     expect(result.jobs.some((job) => job.sourceDisplayName === "drop.md")).toBe(true);
     expect(JSON.stringify(result.jobs)).not.toContain(sourcePath);
     expect(JSON.stringify(result.jobs)).not.toContain("raw/files");
@@ -3054,6 +3055,7 @@ describe("jobs service", () => {
 
     expect(jobs.retry({ jobId: captureResult.jobId }).status).toBe("not_allowed");
     expect(jobs.cancel({ jobId: captureResult.jobId }).status).toBe("cancelled");
+    expect(jobs.list({ states: ["cancelled"] }).jobs[0]?.canRetry).toBe(true);
 
     const retryResult = jobs.retry({ jobId: captureResult.jobId });
     const listedJob = jobs.list({ states: ["queued"] }).jobs[0];
@@ -3061,6 +3063,7 @@ describe("jobs service", () => {
     expect(retryResult.status).toBe("requeued");
     expect(listedJob?.id).toBe(captureResult.jobId);
     expect(listedJob?.state).toBe("queued");
+    expect(listedJob?.canRetry).toBe(false);
   });
 
   it("converges repeated same-Job retries to a newer retryable terminal state each time", () => {

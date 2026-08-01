@@ -193,6 +193,71 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("keeps recent background history visible and restores exact retry or refresh focus on failure", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let retryAttempts = 0;
+    const refresh = vi.fn(async () => false);
+    const jobs: readonly JobSummary[] = [
+      {
+        id: "job_20260801_activityretry01", class: "parse", state: "failed_retryable",
+        sourceDisplayName: "Archive.pdf", canReconnectDependency: false,
+        canReconnectBackupDestination: false, canContinueIncomplete: false,
+        canCancel: false, canRetry: true, message: "Parsing needs attention",
+        error: {
+          code: "parser.execution_failed", domain: "parser", messageKey: "error.generic",
+          retryable: true, severity: "error", userAction: "retry"
+        },
+        createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:02:00.000Z"
+      },
+      {
+        id: "job_20260801_activitydone01", class: "index_rebuild", state: "completed",
+        canReconnectDependency: false, canReconnectBackupDestination: false,
+        canContinueIncomplete: false, canCancel: false, canRetry: false,
+        message: "Index rebuilt", createdAt: "2026-08-01T07:00:00.000Z",
+        updatedAt: "2026-08-01T07:05:00.000Z"
+      }
+    ];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: null, activities: [], jobs, hasMore: false, loadingMore: false,
+        loadMoreFailed: false, undoingId: null, redoingId: null, openingId: null,
+        blockedIds: [], locale: "en", onOpen: async () => undefined,
+        onUndo: async () => undefined, onRedo: async () => undefined,
+        onLoadMore: async () => false, onRefreshJobs: refresh,
+        onRetryJob: async () => { retryAttempts += 1; return retryAttempts > 1; }, t
+      }));
+      await settle(dom);
+    });
+    const retryRow = requireElement(dom.window.document.querySelector<HTMLElement>(
+      '[data-activity-job-id="job_20260801_activityretry01"]'
+    ));
+    expect(retryRow.textContent).toContain("Needs attention");
+    expect(retryRow.textContent).toContain("Something went wrong");
+    expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activitydone01"]')?.textContent)
+      .toContain("Completed");
+    const retry = buttonNamed(retryRow, "Retry");
+    retry.focus();
+    await act(async () => { retry.click(); await settle(dom); await settle(dom); });
+    await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+    expect(retryRow.textContent).toContain("could not retry");
+    expect(dom.window.document.activeElement).toBe(retryRow);
+    await act(async () => { buttonNamed(retryRow, "Retry").click(); await settle(dom); await settle(dom); });
+    await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(dom.window.document.body.textContent).toContain("could not refresh background work");
+    const refreshButton = buttonNamed(dom.window.document, "Refresh");
+    refreshButton.focus();
+    await act(async () => { refreshButton.click(); await settle(dom); await settle(dom); });
+    await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(dom.window.document.activeElement).toBe(refreshButton);
+    expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activitydone01"]')).not.toBeNull();
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("loads older Activity once and returns focus to the history heading on the final page", async () => {
     const dom = createDom();
     installAnimationFrame(dom);

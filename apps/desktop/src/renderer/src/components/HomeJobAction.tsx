@@ -18,8 +18,8 @@ export function HomeJobAction(props: {
   readonly retryEligible: boolean;
   readonly repair?: HomeJobRepairAction;
   readonly onOpenModels: (opener: HTMLButtonElement) => Promise<void> | void;
-  readonly onCancelJob: (jobId: string) => Promise<void> | void;
-  readonly onRetryJob: (jobId: string) => Promise<void> | void;
+  readonly onCancelJob: (jobId: string) => Promise<unknown> | void;
+  readonly onRetryJob: (jobId: string) => Promise<unknown> | void;
   readonly t: (key: string) => string;
 }): React.JSX.Element | null {
   const repairButtonRef = useRef<HTMLButtonElement>(null);

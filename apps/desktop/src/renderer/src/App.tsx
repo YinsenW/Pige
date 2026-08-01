@@ -475,6 +475,7 @@ export function App(): React.JSX.Element {
   const [highRiskConfirmationFailed, setHighRiskConfirmationFailed] = useState(false);
   const [highRiskConfirmationReading, setHighRiskConfirmationReading] = useState(false);
   const [recentJobs, setRecentJobs] = useState<readonly JobSummary[]>([]);
+  const [activityJobs, setActivityJobs] = useState<readonly JobSummary[]>([]);
   const [activityList, setActivityList] = useState<KnowledgeActivityListResult | null>(null);
   const [activityHistoryLoadingMore, setActivityHistoryLoadingMore] = useState(false);
   const [activityHistoryLoadFailed, setActivityHistoryLoadFailed] = useState(false);
@@ -510,6 +511,7 @@ export function App(): React.JSX.Element {
   const activityOpenSequence = useRef(0);
   const activityOpenInFlightRef = useRef<string | null>(null);
   const activityHistoryLoadInFlightRef = useRef(false);
+  const activityJobsRefreshSequence = useRef(0);
   const activityListRef = useRef<KnowledgeActivityListResult | null>(activityList);
   const readerSelectionProposalSequence = useRef(0);
   const readerSelectionProposalDecisionInFlight = useRef(false);
@@ -878,6 +880,8 @@ export function App(): React.JSX.Element {
         setNoteLoadingPageId(null);
         setNoteAgentOpen(false);
         setActivityList(null);
+        activityJobsRefreshSequence.current += 1;
+        setActivityJobs([]);
         setActivityHistoryLoadingMore(false);
         setActivityHistoryLoadFailed(false);
         activityHistoryLoadInFlightRef.current = false;
@@ -909,6 +913,44 @@ export function App(): React.JSX.Element {
       if (refreshId === vaultRefreshSequence.current) throw caught;
     }
   };
+
+  const refreshActivityJobs = async (): Promise<boolean> => {
+    const activeVaultId = activeVaultIdRef.current;
+    const sequence = ++activityJobsRefreshSequence.current;
+    if (!activeVaultId) {
+      setActivityJobs([]);
+      return false;
+    }
+    try {
+      const result = await window.pige.jobs.list({ limit: 100 });
+      if (
+        sequence !== activityJobsRefreshSequence.current ||
+        activeVaultIdRef.current !== activeVaultId ||
+        result.activeVaultId !== activeVaultId
+      ) return false;
+      setActivityJobs(result.jobs);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    if (!settingsOpen || settingsSection !== "history" || !onboarding?.activeVault?.vaultId) return;
+    void refreshActivityJobs();
+  }, [settingsOpen, settingsSection, onboarding?.activeVault?.vaultId]);
+
+  useEffect(() => {
+    if (
+      !settingsOpen ||
+      settingsSection !== "history" ||
+      !activityJobs.some((job) => [
+        "queued", "running", "waiting_dependency", "waiting_permission", "awaiting_review", "cancel_requested"
+      ].includes(job.state))
+    ) return;
+    const timer = window.setTimeout(() => void refreshActivityJobs(), 1_200);
+    return () => window.clearTimeout(timer);
+  }, [activityJobs, settingsOpen, settingsSection]);
 
   const runVaultAction = async (action: () => Promise<void>): Promise<void> => {
     setBusy(true);
@@ -1907,7 +1949,7 @@ export function App(): React.JSX.Element {
     }
   };
 
-  const cancelJob = async (jobId: string): Promise<void> => {
+  const cancelJob = async (jobId: string): Promise<boolean> => {
     const result = await window.pige.jobs.cancel({ jobId });
     if (result.status === "cancelled" || result.status === "cancel_requested") {
       setCaptureToast({
@@ -1915,19 +1957,21 @@ export function App(): React.JSX.Element {
         message: t(result.status === "cancel_requested" ? "home.jobCancelRequested" : "home.jobCancelled")
       });
       await refreshVaultState();
-      return;
+      return true;
     }
     setCaptureToast({ kind: "error", message: t("error.generic") });
+    return false;
   };
 
-  const retryJob = async (jobId: string): Promise<void> => {
+  const retryJob = async (jobId: string): Promise<boolean> => {
     const result = await window.pige.jobs.retry({ jobId });
     if (result.status === "requeued") {
       setCaptureToast({ kind: "success", message: t("home.jobRequeued"), queuedJobId: jobId });
       await refreshVaultState();
-      return;
+      return true;
     }
     setCaptureToast({ kind: "error", message: t("error.generic") });
+    return false;
   };
 
   const loadMoreActivityHistory = async (): Promise<boolean> => {
@@ -3135,7 +3179,7 @@ export function App(): React.JSX.Element {
             <ActivityHistorySettingsPanel
               activeVaultId={activeVault?.vaultId ?? null}
               activities={activityList?.activities ?? []}
-              jobs={recentJobs}
+              jobs={activityJobs}
               hasMore={activityList?.hasMore === true}
               loadingMore={activityHistoryLoadingMore}
               loadMoreFailed={activityHistoryLoadFailed}
@@ -3146,6 +3190,8 @@ export function App(): React.JSX.Element {
               onUndo={undoActivity}
               onLoadMore={loadMoreActivityHistory}
               onCancelJob={cancelJob}
+              onRetryJob={retryJob}
+              onRefreshJobs={refreshActivityJobs}
               onRedo={redoActivity}
               t={t}
             />
@@ -4605,8 +4651,8 @@ function HomeComposer(props: {
     text: string | undefined,
     clientTurnId: string
   ) => Promise<AgentSubmitTurnResult | undefined>;
-  readonly onCancelJob: (jobId: string) => Promise<void>;
-  readonly onRetryJob: (jobId: string) => Promise<void>;
+  readonly onCancelJob: (jobId: string) => Promise<unknown>;
+  readonly onRetryJob: (jobId: string) => Promise<unknown>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;

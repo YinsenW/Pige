@@ -5606,6 +5606,18 @@ dd {
   font-weight: 600;
 }
 
+.settings-section-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-section-heading-row .settings-section-title {
+  margin-bottom: 0;
+}
+
 .settings-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
