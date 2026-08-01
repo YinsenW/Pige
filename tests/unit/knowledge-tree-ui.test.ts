@@ -215,6 +215,40 @@ describe("Knowledge Tree renderer", () => {
     await unmount(dom, mount.root);
   });
 
+  it("searches titles and types, preserves ancestor paths, and opens the keyboard-selected stable page", async () => {
+    const dom = createDom();
+    const opened: Array<{ readonly pageId: string; readonly focusKey: string }> = [];
+    const mount = await mountTree(dom, readyTree(), async (pageId, focusKey) => { opened.push({ pageId, focusKey }); });
+    const domain = treeItemNamed(mount.container, "Local-first");
+    await click(dom, domain);
+    await click(dom, buttonNamed(mount.container, "Collapse"));
+    expect(domain.getAttribute("aria-expanded")).toBe("false");
+
+    const search = mount.container.querySelector<HTMLInputElement>('input[type="search"]');
+    if (!search) throw new Error("Missing Knowledge Tree search.");
+    await inputText(dom, search, "L");
+    expect(domain.getAttribute("aria-expanded")).toBe("true");
+    expect(search.getAttribute("role")).toBe("combobox");
+    expect(search.getAttribute("aria-expanded")).toBe("true");
+    const options = Array.from(mount.container.querySelectorAll<HTMLElement>('[role="option"]'));
+    expect(options.map((option) => option.querySelector(".knowledge-tree-search-title")?.textContent))
+      .toEqual(["Lexical retrieval", "Local RAG", "Local-first"]);
+    expect(options[0]?.textContent).toContain("Local-first › Local RAG");
+    expect(options[0]?.getAttribute("aria-selected")).toBe("true");
+    await keyDown(dom, search, "ArrowDown");
+    expect(options[1]?.getAttribute("aria-selected")).toBe("true");
+    await keyDown(dom, search, "Enter");
+    expect(opened).toEqual([{ pageId: "page_20260713_topic001", focusKey: "root-0-child-0-node" }]);
+
+    await inputText(dom, search, "Concept");
+    expect(mount.container.querySelectorAll('[role="option"]')).toHaveLength(1);
+    expect(mount.container.querySelector('[role="option"]')?.textContent).toContain("Lexical retrieval");
+    await inputText(dom, search, "");
+    expect(domain.getAttribute("aria-expanded")).toBe("false");
+    expect(mount.container.querySelector('[role="treeitem"][aria-label="Local RAG"]')).toBeNull();
+    await unmount(dom, mount.root);
+  });
+
   it("deepens dense evidence leaves and outlines review-needed growth without hiding exact counts", async () => {
     const dom = createDom();
     const base = readyTree();
