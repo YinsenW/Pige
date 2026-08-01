@@ -1,6 +1,9 @@
 {
   "activity.alreadyUndone": "Diese Änderung wurde bereits rückgängig gemacht.",
   "activity.alreadyRedone": "Diese Änderung wurde bereits wiederholt.",
+  "activity.activeWork": "Aktive Vorgänge",
+  "activity.activeWorkEmpty": "Derzeit erfordert kein Vorgang Aufmerksamkeit.",
+  "activity.jobCancelFailed": "Pige konnte diesen Vorgang nicht abbrechen. Der aktuelle Status wurde beibehalten.",
   "activity.createdPage": "Wissensnotiz erstellt",
   "activity.archivedPage": "Wissensnotiz archiviert",
   "activity.restoredPage": "Wissensnotiz wiederhergestellt",

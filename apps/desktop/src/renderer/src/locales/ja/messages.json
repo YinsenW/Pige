@@ -1,6 +1,9 @@
 {
   "activity.alreadyUndone": "この変更はすでに元に戻されています。",
   "activity.alreadyRedone": "この変更はすでにやり直されています。",
+  "activity.activeWork": "進行中の作業",
+  "activity.activeWorkEmpty": "現在、確認が必要な作業はありません。",
+  "activity.jobCancelFailed": "この作業をキャンセルできませんでした。現在の状態は保持されています。",
   "activity.createdPage": "ナレッジノートを作成",
   "activity.archivedPage": "ナレッジノートをアーカイブ",
   "activity.restoredPage": "ナレッジノートを復元",

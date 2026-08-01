@@ -1,6 +1,9 @@
 {
   "activity.alreadyUndone": "That change was already undone.",
   "activity.alreadyRedone": "That change was already redone.",
+  "activity.activeWork": "Active work",
+  "activity.activeWorkEmpty": "No work needs attention right now.",
+  "activity.jobCancelFailed": "Pige could not cancel this work. Its current state was kept.",
   "activity.createdPage": "Knowledge note created",
   "activity.archivedPage": "Knowledge note archived",
   "activity.restoredPage": "Knowledge note restored",

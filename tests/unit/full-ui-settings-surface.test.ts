@@ -42,6 +42,7 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   DiagnosticsClearLocalResult,
+  JobSummary,
   KnowledgeActivitySummary,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
@@ -139,6 +140,57 @@ afterEach(() => {
 });
 
 describe("full UI Settings surface", () => {
+  it("shows non-Agent active work progress and cancels only Main-authorized Jobs", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const cancelled: string[] = [];
+    const jobs: readonly JobSummary[] = [
+      {
+        id: "job_20260801_activityparse01", class: "parse", state: "running",
+        progress: { completedUnits: 3, totalUnits: 4, unit: "page" },
+        sourceDisplayName: "Research.pdf", canReconnectDependency: false,
+        canReconnectBackupDestination: false, canContinueIncomplete: false, canCancel: true,
+        message: "Parsing source", createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:01:00.000Z"
+      },
+      {
+        id: "job_20260801_activitybackup01", class: "backup", state: "running",
+        canReconnectDependency: false, canReconnectBackupDestination: false,
+        canContinueIncomplete: false, canCancel: false, message: "Creating backup",
+        createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:01:00.000Z"
+      },
+      {
+        id: "job_20260801_activityagent01", class: "agent_turn", state: "running",
+        canReconnectDependency: false, canReconnectBackupDestination: false,
+        canContinueIncomplete: false, canCancel: true, message: "Agent turn",
+        createdAt: "2026-08-01T08:00:00.000Z", updatedAt: "2026-08-01T08:01:00.000Z"
+      }
+    ];
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: null, activities: [], jobs, hasMore: false, loadingMore: false,
+        loadMoreFailed: false, undoingId: null, redoingId: null, openingId: null,
+        blockedIds: [], locale: "en", onOpen: async () => undefined,
+        onUndo: async () => undefined, onRedo: async () => undefined,
+        onLoadMore: async () => false,
+        onCancelJob: async (jobId) => { cancelled.push(jobId); }, t
+      }));
+      await settle(dom);
+    });
+    expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activityparse01"]')?.textContent)
+      .toContain("75%");
+    expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activitybackup01"]')).not.toBeNull();
+    expect(dom.window.document.querySelector('[data-activity-job-id="job_20260801_activityagent01"]')).toBeNull();
+    expect(dom.window.document.querySelectorAll("[data-activity-cancel-job-id]")).toHaveLength(1);
+    await act(async () => {
+      buttonNamed(dom.window.document, "Cancel").click();
+      await settle(dom);
+    });
+    expect(cancelled).toEqual(["job_20260801_activityparse01"]);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("loads older Activity once and returns focus to the history heading on the final page", async () => {
     const dom = createDom();
     installAnimationFrame(dom);

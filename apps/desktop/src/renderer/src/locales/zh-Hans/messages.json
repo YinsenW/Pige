@@ -1,6 +1,9 @@
 {
   "activity.alreadyUndone": "这项更改已经撤销。",
   "activity.alreadyRedone": "这项更改已经重做。",
+  "activity.activeWork": "进行中的工作",
+  "activity.activeWorkEmpty": "当前没有需要关注的工作。",
+  "activity.jobCancelFailed": "Pige 无法取消此工作，当前状态已保留。",
   "activity.createdPage": "已创建知识笔记",
   "activity.archivedPage": "已归档知识笔记",
   "activity.restoredPage": "已恢复知识笔记",

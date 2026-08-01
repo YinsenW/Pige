@@ -166,6 +166,7 @@ describe("jobs service", () => {
     expect(result.invalidJobCount).toBe(0);
     expect(result.jobs).toHaveLength(2);
     expect(result.jobs.map((job) => job.state)).toEqual(["queued", "queued"]);
+    expect(result.jobs.every((job) => job.canCancel === true)).toBe(true);
     expect(result.jobs.some((job) => job.sourceDisplayName === "drop.md")).toBe(true);
     expect(JSON.stringify(result.jobs)).not.toContain(sourcePath);
     expect(JSON.stringify(result.jobs)).not.toContain("raw/files");
@@ -332,6 +333,7 @@ describe("jobs service", () => {
     ]));
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canReconnectDependency).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupwait1")?.canContinueIncomplete).toBe(true);
+    expect(summaries.every((job) => job.canCancel === false)).toBe(true);
     expect(summaries.find((job) => job.id === "job_20260710_backupdest1")?.canReconnectBackupDestination).toBe(true);
     expect(summaries.filter((job) => job.id !== "job_20260710_backupdest1")
       .every((job) => job.canReconnectBackupDestination === false)).toBe(true);
