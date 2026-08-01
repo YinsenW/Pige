@@ -3507,8 +3507,9 @@ Date: 2026-07-27
 Decision:
 
 A Collection keeps its imported ID. Row/field changes use immutable CAS revision/Operation and
-manifest-last; Undo advances. A saved view keeps a stable ID/private revisions; its optional one
-filter/sort leaves Dataset rows/revision unchanged.
+manifest-last; Undo advances. A saved view keeps a stable ID/private revisions; create and explicit
+definition updates accept an optional single typed filter and stable-column sort while leaving Dataset
+rows/revision unchanged.
 
 Rationale:
 
@@ -3517,7 +3518,8 @@ Enable reversible value, schema and view growth without rewriting history or exp
 Consequences:
 
 - Evidence/history stay immutable, including trashed rows/columns/views. Main owns IDs and
-  eligibility; channels fail closed and broader editing stays open.
+  eligibility; view-definition CAS conflicts fail closed, preserve the draft and restore the exact
+  prior filter/sort through forward Undo. Broader relation/formula/view shapes stay open.
 
 References:
 

@@ -654,8 +654,9 @@ Action behavior:
 
 Datasets stay in Library. Bound paging preserves rows/focus; citations are read-only. Stable-ID
 snapshots have Undo. Dialogs edit representable formulas, select one relation row, or derive its
-scalar lookup; Main owns eligibility and stale keeps drafts. Views rename/trash explicitly; trashing
-the active view returns to All Rows and Activity offers restore. Broader data and proof stay open.
+scalar lookup; Main owns eligibility and stale keeps drafts. Pige-owned views edit their optional
+filter/sort definition or rename/trash explicitly; trashing the active view returns to All Rows and
+Activity offers exact forward Undo. Broader data and proof stay open.
 
 ## 9. Sources View
 

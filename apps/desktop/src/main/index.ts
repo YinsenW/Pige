@@ -1974,7 +1974,7 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const collections = getManagedCollectionService();
   const views = getManagedCollectionViewService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
-    ["create_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
+    ["create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view"]
       .includes(operation.kind) ? views : collections;
   return {
     activitySummary: (operation, undo) => owner(operation).activitySummary(operation, undo),
@@ -2842,6 +2842,7 @@ registerManagedCollectionIpc({
   addLookupCollectionColumn: (request) => getManagedCollectionService().addLookupColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
   createCollectionView: (request) => getManagedCollectionViewService().createView(request),
+  updateCollectionView: (request) => getManagedCollectionViewService().updateView(request),
   renameCollectionView: (request) => getManagedCollectionViewService().renameView(request),
   trashCollectionView: (request) => getManagedCollectionViewService().trashView(request),
   trashCollectionColumn: (request) => getManagedCollectionService().trashColumn(request),

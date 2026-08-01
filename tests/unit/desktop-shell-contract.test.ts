@@ -2124,6 +2124,7 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.addNullableColumn", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.renameColumn", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.createView", parsedRequest)');
+    expect(preloadSource).toContain("ipcRenderer.invoke(COLLECTION_UPDATE_VIEW_CHANNEL, parsedRequest)");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.trashColumn", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.trashRow", parsedRequest)');
     expect(preloadSource).toContain("CollectionOpenRequestSchema.parse(request)");
@@ -2145,6 +2146,8 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("CollectionRenameColumnResultSchema.parse(");
     expect(preloadSource).toContain("CollectionCreateViewRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionCreateViewResultSchema.parse(");
+    expect(preloadSource).toContain("CollectionUpdateViewRequestSchema.parse(request)");
+    expect(preloadSource).toContain("CollectionUpdateViewResultSchema.parse(");
     expect(preloadSource).toContain("CollectionTrashColumnRequestSchema.parse(request)");
     expect(preloadSource).toContain("CollectionTrashColumnResultSchema.parse(");
     expect(preloadSource).toContain("CollectionTrashRowRequestSchema.parse(request)");
@@ -2201,6 +2204,8 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("CollectionRenameColumnRequest");
     expect(contractsSource).toContain("readonly createView:");
     expect(contractsSource).toContain("CollectionCreateViewRequest");
+    expect(contractsSource).toContain("readonly updateView:");
+    expect(contractsSource).toContain("CollectionUpdateViewRequest");
     expect(contractsSource).toContain("readonly trashColumn:");
     expect(contractsSource).toContain("CollectionTrashColumnRequest");
     expect(contractsSource).toContain("readonly trashRow:");

@@ -6,12 +6,10 @@ import type {
   CollectionAppendDefaultRowResult,
   CollectionCellEditRequest,
   CollectionCellEditResult,
-  CollectionCreateViewRequest,
-  CollectionCreateViewResult,
-  CollectionRenameViewRequest,
-  CollectionRenameViewResult,
-  CollectionTrashViewRequest,
-  CollectionTrashViewResult,
+  CollectionCreateViewRequest, CollectionCreateViewResult,
+  CollectionUpdateViewRequest, CollectionUpdateViewResult,
+  CollectionRenameViewRequest, CollectionRenameViewResult,
+  CollectionTrashViewRequest, CollectionTrashViewResult,
   CollectionOpenResult,
   CollectionOpenCitationResult,
   CollectionRenameColumnRequest,
@@ -120,6 +118,7 @@ export function ManagedCollectionPanel(props: {
   readonly onCreateView: (
     request: CollectionCreateViewRequest
   ) => Promise<CollectionCreateViewResult>;
+  readonly onUpdateView: (request: CollectionUpdateViewRequest) => Promise<CollectionUpdateViewResult>;
   readonly onRenameView: (request: CollectionRenameViewRequest) => Promise<CollectionRenameViewResult>;
   readonly onTrashView: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string) => boolean;
@@ -655,6 +654,7 @@ export function ManagedCollectionPanel(props: {
         blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
         onOpenView={props.onOpenView}
         onCreateView={props.onCreateView}
+        onUpdateView={props.onUpdateView}
         onRenameView={props.onRenameView}
         onTrashView={props.onTrashView}
         onAdoptSnapshot={props.onAdoptSnapshot}

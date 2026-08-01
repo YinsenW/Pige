@@ -55,7 +55,7 @@ import {
   type AgentMemoryFocusRequest,
 } from "./components/AgentMemorySettingsPanel";
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
-import { renameCollectionView, trashCollectionView } from "./collection-view-lifecycle";
+import { renameCollectionView, trashCollectionView, updateCollectionView } from "./collection-view-lifecycle";
 import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
@@ -2640,6 +2640,7 @@ export function App(): React.JSX.Element {
             onTrashColumn={trashCollectionColumn}
             onOpenView={openCollectionView}
             onCreateView={createCollectionView}
+            onUpdateView={(request) => updateCollectionView(request, () => void refreshVaultState())}
             onRenameView={(request) => renameCollectionView(request, () => void refreshVaultState())}
             onTrashView={(request) => trashCollectionView(request, () => void refreshVaultState())}
             onAppendDefaultRow={appendCollectionDefaultRow}
