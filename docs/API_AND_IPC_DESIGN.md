@@ -907,8 +907,8 @@ identity-only. Main adopts verified trees once.
 Memory list returns vault/revision and <=1,000 safe records; private provenance stays in Main. Edit
 binds record/revision/title/body, secret-scans, and changes L1 only. Lifecycle `committed | stale |
 not_found` returns authoritative summary; committed adds Operation ID. Delete/reset retain private
-trash; Activity owns Undo/restart. `listTrash` exposes only eligible single-delete title/kind/time and
-stable Memory/Operation identity. `restoreTrash` binds the current registry revision and reuses that
+trash; Activity owns Undo/restart. `listTrash` exposes only eligible single-delete title/kind/time or
+reset count/time plus stable Memory/Operation identity. `restoreTrash` binds the current registry revision and reuses that
 exact Activity restore Operation; bodies, paths, receipts and provenance never cross IPC. Export is revision-bound, Main-picked and pathless. Renderer
 cannot create memory, submit provenance/path, or permanently erase it.
 

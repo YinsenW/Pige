@@ -46,40 +46,55 @@ export class AgentMemoryTrashService {
     const trashRoot = existingDirectory(vaultPath, ".pige/trash/memory");
     if (!trashRoot) return trashSummary(parsed.activeVaultId, current.revision, []);
 
-    const records = fs.readdirSync(trashRoot, { withFileTypes: true })
+    const candidates = fs.readdirSync(trashRoot, { withFileTypes: true })
       .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRASH_RECEIPT_NAME.test(entry.name))
       .map((entry) => {
         const receiptPath = `.pige/trash/memory/${entry.name}`;
         const receipt = parseMemoryLifecycleReceipt(readJson(vaultPath, receiptPath));
-        if (receipt.action !== "delete" || receipt.activeVaultId !== parsed.activeVaultId || !receipt.memoryId) return undefined;
-        const removed = receipt.removedRecords[0];
-        if (!removed || removed.id !== receipt.memoryId) throw memoryLifecycleConflict();
+        if (!(receipt.action === "delete" || receipt.action === "reset") || receipt.activeVaultId !== parsed.activeVaultId) {
+          return undefined;
+        }
         const operation = readOperation(vaultPath, receipt.operationId);
         if (!operation || stableJson(operation) !== stableJson(createMemoryLifecycleOperation(receipt))) {
           throw memoryLifecycleConflict();
         }
         const binding = readMemoryOperationBinding(operation);
         if (
-          binding?.action !== "delete" || binding.memoryId !== removed.id ||
+          binding?.action !== receipt.action || binding.memoryId !== receipt.memoryId ||
           binding.receiptPath !== receiptPath || binding.afterRevision !== receipt.afterRevision
         ) throw memoryLifecycleConflict();
         const undo = readOperation(vaultPath, createMemoryUndoOperationId(operation.id));
         if (undo && !isMatchingMemoryRestoreOperation(operation, undo)) throw memoryLifecycleConflict();
         const activity = this.memory.activitySummary(operation, undo);
         if (!activity || activity.status !== "applied" || !activity.canUndo) return undefined;
-        return {
+        if (receipt.action === "reset") {
+          if (receipt.memoryId || receipt.removedRecords.length === 0) throw memoryLifecycleConflict();
+          return { type: "reset" as const, value: {
+            trashOperationId: operation.id,
+            itemCount: receipt.removedRecords.length,
+            trashedAt: receipt.createdAt
+          } };
+        }
+        const removed = receipt.removedRecords[0];
+        if (!receipt.memoryId || !removed || removed.id !== receipt.memoryId) throw memoryLifecycleConflict();
+        return { type: "record" as const, value: {
           memoryId: removed.id,
           trashOperationId: operation.id,
           kind: removed.kind,
           title: removed.title,
           trashedAt: receipt.createdAt
-        } as const;
+        } };
       })
-      .filter((record): record is NonNullable<typeof record> => record !== undefined)
+      .filter((record): record is NonNullable<typeof record> => record !== undefined);
+    const records = candidates.filter((candidate) => candidate.type === "record").map((candidate) => candidate.value)
       .sort((left, right) => right.trashedAt.localeCompare(left.trashedAt) ||
         left.trashOperationId.localeCompare(right.trashOperationId))
       .slice(0, 1_000);
-    return trashSummary(parsed.activeVaultId, current.revision, records);
+    const resets = candidates.filter((candidate) => candidate.type === "reset").map((candidate) => candidate.value)
+      .sort((left, right) => right.trashedAt.localeCompare(left.trashedAt) ||
+        left.trashOperationId.localeCompare(right.trashOperationId))
+      .slice(0, 1_000);
+    return trashSummary(parsed.activeVaultId, current.revision, records, resets);
   }
 
   restore(vaultPath: string, request: MemoryTrashRestoreRequest): MemoryTrashRestoreResult {
@@ -90,13 +105,14 @@ export class AgentMemoryTrashService {
     if (trash.revision !== parsed.expectedRevision || summary.revision !== parsed.expectedRevision) {
       return restoreResult(parsed, "stale", summary, trash);
     }
-    const candidate = trash.records.find((record) =>
-      record.memoryId === parsed.memoryId && record.trashOperationId === parsed.trashOperationId);
+    const candidate = parsed.memoryId
+      ? trash.records.find((record) => record.memoryId === parsed.memoryId && record.trashOperationId === parsed.trashOperationId)
+      : trash.resets.find((reset) => reset.trashOperationId === parsed.trashOperationId);
     if (!candidate) return restoreResult(parsed, "not_found", summary, trash);
     const operation = readOperation(vaultPath, candidate.trashOperationId);
     if (!operation) return restoreResult(parsed, "not_found", summary, trash);
     const binding = readMemoryOperationBinding(operation);
-    if (binding?.action !== "delete" || binding.memoryId !== parsed.memoryId) {
+    if (binding?.action !== (parsed.memoryId ? "delete" : "reset") || binding.memoryId !== parsed.memoryId) {
       throw memoryLifecycleConflict();
     }
     const result = this.memory.undo(operation, String(binding.afterRevision));
@@ -120,9 +136,10 @@ export class AgentMemoryTrashService {
 function trashSummary(
   activeVaultId: string,
   revision: number,
-  records: MemoryTrashSummary["records"]
+  records: MemoryTrashSummary["records"],
+  resets: MemoryTrashSummary["resets"] = []
 ): MemoryTrashSummary {
-  return MemoryTrashSummarySchema.parse({ apiVersion: 1, activeVaultId, revision, records });
+  return MemoryTrashSummarySchema.parse({ apiVersion: 1, activeVaultId, revision, records, resets });
 }
 
 function restoreResult(

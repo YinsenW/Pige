@@ -88,6 +88,45 @@ describe("AgentMemoryTrashService", () => {
     expect(() => service.list(vaultPath, { apiVersion: 1, activeVaultId: VAULT_ID }))
       .toThrowError(expect.objectContaining({ code: "memory.lifecycle_conflict" }));
   });
+
+  it("lists one body-free reset group and restores every exact item after restart", () => {
+    const vaultPath = createVault();
+    const memory = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const first = remember(memory, vaultPath, "resetfirst");
+    const second = remember(memory, vaultPath, "resetsecond");
+    const reset = memory.reset(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_resetallmemory00",
+      activeVaultId: VAULT_ID,
+      expectedRevision: 2
+    });
+    expect(reset.status).toBe("committed");
+
+    const restarted = new AgentMemoryService({ now: advancingClock(), activeVaultPath: () => vaultPath });
+    const service = new AgentMemoryTrashService(restarted);
+    const trash = service.list(vaultPath, { apiVersion: 1, activeVaultId: VAULT_ID });
+    expect(trash).toMatchObject({ revision: 3, records: [], resets: [{
+      trashOperationId: reset.operationId,
+      itemCount: 2
+    }] });
+    expect(JSON.stringify(trash)).not.toContain(first.body);
+    expect(JSON.stringify(trash)).not.toContain(second.body);
+
+    const restored = service.restore(vaultPath, {
+      apiVersion: 1,
+      requestId: "memory_request_restorereset0000",
+      activeVaultId: VAULT_ID,
+      trashOperationId: reset.operationId!,
+      expectedRevision: trash.revision
+    });
+    expect(restored).toMatchObject({
+      status: "committed",
+      summary: { revision: 4, records: expect.arrayContaining([
+        expect.objectContaining({ id: first.id }), expect.objectContaining({ id: second.id })
+      ]) },
+      trash: { revision: 4, records: [], resets: [] }
+    });
+  });
 });
 
 function remember(memory: AgentMemoryService, vaultPath: string, suffix: string) {

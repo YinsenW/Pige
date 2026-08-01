@@ -40,19 +40,19 @@ export function AgentMemoryTrashRestorePanel(props: {
     return () => { current = false; };
   }, [props.activeVaultId, props.revision, reload]);
 
-  const restore = async (record: MemoryTrashRecordSummary): Promise<void> => {
+  const restore = async (record: Pick<MemoryTrashRecordSummary, "trashOperationId"> & { readonly memoryId?: string }): Promise<void> => {
     const current = trash;
     const restoreTrash = window.pige.memory?.restoreTrash;
     if (!current || restoringId || props.disabled || !restoreTrash) return;
     const activeVaultId = current.activeVaultId;
-    setRestoringId(record.memoryId);
+    setRestoringId(record.trashOperationId);
     setStatusKey(null);
     try {
       const result = await restoreTrash({
         apiVersion: 1,
         requestId: `memory_request_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
         activeVaultId,
-        memoryId: record.memoryId,
+        ...(record.memoryId ? { memoryId: record.memoryId } : {}),
         trashOperationId: record.trashOperationId,
         expectedRevision: current.revision
       });
@@ -64,7 +64,7 @@ export function AgentMemoryTrashRestorePanel(props: {
         : result.status === "stale"
           ? "memory.trashRestoreStale"
           : "memory.trashRestoreNotFound");
-      window.setTimeout(() => restoreRefs.current.get(record.memoryId)?.focus(), 0);
+      window.setTimeout(() => restoreRefs.current.get(record.trashOperationId)?.focus(), 0);
     } catch {
       if (activeVaultIdRef.current === activeVaultId) setStatusKey("memory.trashRestoreFailed");
     } finally {
@@ -87,7 +87,8 @@ export function AgentMemoryTrashRestorePanel(props: {
           </button>
         </div>
       ) : null}
-      {state === "ready" && trash?.records.length === 0 ? <span>{props.t("memory.trashEmpty")}</span> : null}
+      {state === "ready" && trash?.records.length === 0 && trash.resets.length === 0
+        ? <span>{props.t("memory.trashEmpty")}</span> : null}
       {state === "ready" ? trash?.records.map((record) => (
         <div className="settings-row tall" data-memory-trash-id={record.memoryId} key={record.trashOperationId}>
           <div className="settings-row-copy">
@@ -97,8 +98,8 @@ export function AgentMemoryTrashRestorePanel(props: {
           </div>
           <button
             ref={(node) => {
-              if (node) restoreRefs.current.set(record.memoryId, node);
-              else restoreRefs.current.delete(record.memoryId);
+              if (node) restoreRefs.current.set(record.trashOperationId, node);
+              else restoreRefs.current.delete(record.trashOperationId);
             }}
             className="settings-button"
             type="button"
@@ -106,7 +107,29 @@ export function AgentMemoryTrashRestorePanel(props: {
             aria-label={`${props.t("memory.trashRestore")}: ${record.title}`}
             onClick={() => void restore(record)}
           >
-            {restoringId === record.memoryId ? props.t("memory.trashRestoring") : props.t("memory.trashRestore")}
+            {restoringId === record.trashOperationId ? props.t("memory.trashRestoring") : props.t("memory.trashRestore")}
+          </button>
+        </div>
+      )) : null}
+      {state === "ready" ? trash?.resets.map((reset) => (
+        <div className="settings-row tall" data-memory-trash-reset={reset.trashOperationId} key={reset.trashOperationId}>
+          <div className="settings-row-copy">
+            <strong>{props.t("memory.trashResetTitle")}</strong>
+            <span>{reset.itemCount} {props.t("memory.trashResetItems")}</span>
+            <time dateTime={reset.trashedAt}>{reset.trashedAt}</time>
+          </div>
+          <button
+            ref={(node) => {
+              if (node) restoreRefs.current.set(reset.trashOperationId, node);
+              else restoreRefs.current.delete(reset.trashOperationId);
+            }}
+            className="settings-button"
+            type="button"
+            disabled={props.disabled || restoringId !== null}
+            onClick={() => void restore(reset)}
+          >
+            {restoringId === reset.trashOperationId
+              ? props.t("memory.trashRestoring") : props.t("memory.trashRestoreReset")}
           </button>
         </div>
       )) : null}
