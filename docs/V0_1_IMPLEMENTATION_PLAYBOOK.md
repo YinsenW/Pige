@@ -580,9 +580,10 @@ Build:
   Job detail with exact reference retention, `compact_job` attribution, CAS drift
   rejection, and Operation-first restart adoption; conversation events remain intact.
 - [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update,
+  bounded acyclic same-table nested formula dependencies with stable downstream recomputation,
   one same-Dataset row relation, editable read-only scalar lookup, and editable count/numeric-sum
   rollup definitions use distinct Activity/Undo.
-  Nested formula, relation/lookup breadth, broader schema, scale/platform and exceptions stay open.
+  Relation/lookup breadth, broader schema, scale/platform and exceptions stay open.
 
 Deferred from this phase:
 

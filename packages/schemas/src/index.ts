@@ -6133,6 +6133,43 @@ function datasetColumnContainsImportedFormula(column: {
     .some((sourceType) => sourceType.toLocaleLowerCase("en-US").includes("formula"));
 }
 
+function datasetColumnIsPigeFormulaOperand(column: z.infer<typeof DatasetColumnSchema>): boolean {
+  return column.relation === undefined && column.lookup === undefined && column.rollup === undefined &&
+    (column.logicalType === "integer" || column.logicalType === "number") &&
+    (column.calculation?.kind === "pige_numeric_formula" ||
+      (column.calculation === undefined && !datasetColumnContainsImportedFormula(column)));
+}
+
+function datasetPigeFormulaGraphIsAcyclic(columns: readonly z.infer<typeof DatasetColumnSchema>[]): boolean {
+  const formulas = new Map(columns
+    .filter((column) => column.calculation?.kind === "pige_numeric_formula")
+    .map((column) => [column.id, column]));
+  const indegree = new Map([...formulas].map(([id]) => [id, 0]));
+  const downstream = new Map([...formulas].map(([id]) => [id, new Set<string>()]));
+  for (const [id, column] of formulas) {
+    for (const operandId of datasetPigeFormulaColumnRefs(column.calculation!.expression)) {
+      if (!formulas.has(operandId)) continue;
+      indegree.set(id, indegree.get(id)! + 1);
+      downstream.get(operandId)!.add(id);
+    }
+  }
+  const ready = [...indegree].filter(([, count]) => count === 0).map(([id]) => id).sort();
+  let visited = 0;
+  while (ready.length > 0) {
+    const id = ready.shift()!;
+    visited += 1;
+    for (const dependentId of [...downstream.get(id)!].sort()) {
+      const next = indegree.get(dependentId)! - 1;
+      indegree.set(dependentId, next);
+      if (next === 0) {
+        ready.push(dependentId);
+        ready.sort();
+      }
+    }
+  }
+  return visited === formulas.size;
+}
+
 export const DatasetColumnSchema = z.object({
   id: ColumnIdSchema,
   name: z.string().min(1).max(512),
@@ -6234,21 +6271,23 @@ export const DatasetTableSchema = z.object({
       const operand = columnsById.get(columnId);
       if (
         !operand ||
-        operand.id === column.id ||
-        operand.calculation !== undefined ||
-        operand.relation !== undefined ||
-        operand.lookup !== undefined || operand.rollup !== undefined ||
-        datasetColumnContainsImportedFormula(operand) ||
-        (operand.logicalType !== "integer" && operand.logicalType !== "number")
+        !datasetColumnIsPigeFormulaOperand(operand)
       ) {
         context.addIssue({
           code: "custom",
           path: ["columns", index, "calculation", "expression"],
-          message: "Pige Dataset formulas may reference only same-table editable non-formula numeric columns."
+          message: "Pige Dataset formulas may reference only same-table numeric scalar or acyclic Pige formula columns."
         });
         break;
       }
     }
+  }
+  if (!datasetPigeFormulaGraphIsAcyclic(table.columns)) {
+    context.addIssue({
+      code: "custom",
+      path: ["columns"],
+      message: "Pige Dataset formula dependencies must form an acyclic graph."
+    });
   }
 });
 
@@ -7072,13 +7111,14 @@ export const CollectionColumnSummarySchema = z.object({
   }
   if (
     column.canUseAsFormulaOperand &&
-    (column.calculation !== undefined || column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
+    ((column.calculation !== undefined && column.calculation.kind !== "pige_numeric_formula") ||
+      column.relation !== undefined || column.lookup !== undefined || column.rollup !== undefined ||
       (column.logicalType !== "integer" && column.logicalType !== "number"))
   ) {
     context.addIssue({
       code: "custom",
       path: ["canUseAsFormulaOperand"],
-      message: "Only non-formula numeric columns may be projected as formula operands."
+      message: "Only scalar numeric or Pige numeric formula columns may be projected as formula operands."
     });
   }
   if (column.calculation?.kind === "pige_numeric_formula" && column.logicalType !== "number") {
@@ -7402,6 +7442,35 @@ export const CollectionSnapshotSchema = z.object({
         });
       }
     }
+  }
+  const formulaIndegree = new Map(snapshot.columns
+    .filter((column) => column.calculation?.kind === "pige_numeric_formula")
+    .map((column) => [column.columnId, 0]));
+  const formulaDownstream = new Map([...formulaIndegree].map(([id]) => [id, new Set<string>()]));
+  for (const column of snapshot.columns) {
+    if (column.calculation?.kind !== "pige_numeric_formula") continue;
+    for (const operandId of datasetPigeFormulaColumnRefs(column.calculation.expression)) {
+      if (!formulaIndegree.has(operandId)) continue;
+      formulaIndegree.set(column.columnId, formulaIndegree.get(column.columnId)! + 1);
+      formulaDownstream.get(operandId)!.add(column.columnId);
+    }
+  }
+  const formulaReady = [...formulaIndegree].filter(([, count]) => count === 0).map(([id]) => id).sort();
+  let formulaVisited = 0;
+  while (formulaReady.length > 0) {
+    const id = formulaReady.shift()!;
+    formulaVisited += 1;
+    for (const dependentId of [...formulaDownstream.get(id)!].sort()) {
+      const next = formulaIndegree.get(dependentId)! - 1;
+      formulaIndegree.set(dependentId, next);
+      if (next === 0) {
+        formulaReady.push(dependentId);
+        formulaReady.sort();
+      }
+    }
+  }
+  if (formulaVisited !== formulaIndegree.size) {
+    context.addIssue({ code: "custom", path: ["columns"], message: "Projected Pige formula dependencies must be acyclic." });
   }
   for (const [index, column] of snapshot.columns.entries()) {
     if (!column.rollup) continue;

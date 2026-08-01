@@ -332,6 +332,48 @@ describe("ManagedCollectionPanel", () => {
     dom.window.close();
   });
 
+  it("offers formula operands while excluding the edited formula and every downstream dependent", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const initial = editableFormulaSnapshot("dataset_rev_20260729_formula0002");
+    const nested: CollectionSnapshot = {
+      ...initial,
+      columns: [...initial.columns.map((column) => column.columnId === "column_formula00001"
+        ? { ...column, canTrash: false }
+        : column), {
+        columnId: "column_formula00002",
+        label: "Downstream total",
+        logicalType: "number",
+        canRename: true,
+        canTrash: true,
+        canUseAsFormulaOperand: true,
+        canEditFormula: true,
+        calculation: { kind: "pige_numeric_formula", schemaVersion: 1, expression: {
+          kind: "binary", operator: "add", left: { kind: "column", columnId: "column_formula00001" },
+          right: { kind: "literal", value: 1 }
+        } }
+      }],
+      rows: initial.rows.map((row) => ({ ...row, cells: [...row.cells, {
+        columnId: "column_formula00002", value: 11.5, editable: false, readOnlyReason: "formula"
+      }] }))
+    };
+    await act(async () => {
+      root.render(createElement(FormulaCollectionHarness, { initialSnapshot: nested }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    await click(dom, buttonNamed(container, "Edit formula: Adjusted total"));
+    const values = Array.from(container.querySelectorAll<HTMLOptionElement>(
+      "#collection-formula-left option"
+    )).map((option) => option.value);
+    expect(values).toContain("column_total00001");
+    expect(values).not.toContain("column_formula00001");
+    expect(values).not.toContain("column_formula00002");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("preserves an update draft across stale and failed results while adopting the authoritative revision", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);
@@ -2615,7 +2657,7 @@ function withRelationColumn(
       logicalType: "string",
       canRename: true,
       canTrash: true,
-      canUseAsFormulaOperand: false,
+      canUseAsFormulaOperand: true,
       canEditFormula: false,
       canUseAsRelationDisplay: false,
       canEditRelation: true,

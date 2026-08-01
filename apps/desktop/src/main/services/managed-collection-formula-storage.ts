@@ -43,6 +43,14 @@ import {
   writeJsonImmutable,
   type BundleBinding, type CollectionCellBinding
 } from "./managed-collection-storage";
+import {
+  assertFormulaGraph,
+  formulaReferencedColumnIds,
+  isEligibleFormulaOperand,
+  isPigeFormulaColumn
+} from "./managed-collection-formula-graph";
+
+export { formulaReferencedColumnIds } from "./managed-collection-formula-graph";
 
 const MAX_COLLECTION_COLUMNS = 32;
 const FORMULA_SOURCE_TYPE = "pige_numeric_formula_v1";
@@ -84,18 +92,6 @@ export function evaluateFormulaExpression(
     return normalizeNumber(value);
   };
   return evaluate(parsed);
-}
-
-export function formulaReferencedColumnIds(expression: DatasetPigeFormulaExpression): readonly string[] {
-  const parsed = DatasetPigeFormulaExpressionSchema.parse(expression);
-  const found = new Set<string>();
-  const pending: DatasetPigeFormulaExpression[] = [parsed];
-  while (pending.length > 0) {
-    const node = pending.pop()!;
-    if (node.kind === "column") found.add(node.columnId);
-    if (node.kind === "binary") pending.push(node.right, node.left);
-  }
-  return [...found].sort((left, right) => left.localeCompare(right));
 }
 
 export function canonicalFormulaExpressionIdentity(expression: DatasetPigeFormulaExpression): string {
@@ -253,7 +249,7 @@ export function recomputeFormulaCellsForEditedRow(
   table: DatasetSchemaRecord["tables"][number],
   rowId: string
 ): ReadonlyMap<string, FormulaProjectionStats> {
-  const formulaColumns = table.columns.filter(isPigeFormulaColumn);
+  const formulaColumns = assertFormulaGraph({ table });
   const stats = new Map(formulaColumns.map((column) => [column.id, mutableStats()]));
   assertRowBelongsToTable(database, table.id, rowId);
   for (const column of formulaColumns) {
@@ -279,7 +275,7 @@ export function appendFormulaCellsForNewRow(
 ): ReadonlyMap<string, FormulaProjectionStats> {
   assertRowBelongsToTable(database, table.id, rowId);
   const stats = new Map<string, MutableFormulaStats>();
-  for (const column of table.columns.filter(isPigeFormulaColumn)) {
+  for (const column of assertFormulaGraph({ table })) {
     const encoded = evaluateFormulaCell(database, table, rowId, column);
     const inserted = database.prepare([
       "INSERT INTO pige_dataset_cells",
@@ -300,19 +296,27 @@ export function appendFormulaCellsForNewRow(
 export function recomputeFormulaProjectionsInStagedPayload(input: {
   readonly payloadPath: string;
   readonly datasetId: string;
+  readonly beforeRevisionId: string;
   readonly revisionId: string;
   readonly table: DatasetSchemaRecord["tables"][number];
-  readonly rowIds: readonly string[];
+  readonly rowIds?: readonly string[];
 }): ReadonlyMap<string, FormulaProjectionStats> {
   const database = new DatabaseSync(input.payloadPath);
   try {
     database.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
-    validatePayloadMeta(database, input.datasetId, input.revisionId);
+    validatePayloadMeta(database, input.datasetId, input.beforeRevisionId);
     database.exec("BEGIN IMMEDIATE");
     try {
-      const aggregate = new Map(input.table.columns.filter(isPigeFormulaColumn)
+      const aggregate = new Map(assertFormulaGraph({ table: input.table })
         .map((column) => [column.id, mutableStats()]));
-      for (const rowId of uniqueRowIds(input.rowIds)) {
+      const rowIds = input.rowIds ?? (database.prepare(
+        "SELECT row_id FROM pige_dataset_rows WHERE table_id = ? ORDER BY ordinal"
+      ).all(input.table.id) as Array<{ row_id?: unknown }>).map((row) => {
+        if (typeof row.row_id !== "string") throw payloadInvalid();
+        return row.row_id;
+      });
+      if (rowIds.length !== input.table.rowCount) throw payloadInvalid();
+      for (const rowId of uniqueRowIds(rowIds)) {
         const rowStats = recomputeFormulaCellsForEditedRow(database, input.table, rowId);
         for (const [columnId, value] of rowStats) {
           const total = aggregate.get(columnId);
@@ -321,6 +325,14 @@ export function recomputeFormulaProjectionsInStagedPayload(input: {
           total.value += value.value;
         }
       }
+      const updateStats = database.prepare(
+        "UPDATE pige_dataset_columns SET stats_json = ? WHERE table_id = ? AND column_id = ?"
+      );
+      for (const [columnId, value] of aggregate) {
+        if (updateStats.run(JSON.stringify(value), input.table.id, columnId).changes !== 1) throw payloadInvalid();
+      }
+      if (database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'")
+        .run(input.revisionId).changes !== 1) throw payloadInvalid();
       database.exec("COMMIT");
       assertPayloadIntegrity(database);
       return freezeStats(aggregate);
@@ -500,7 +512,7 @@ function readFormulaStats(
     "JOIN pige_dataset_rows AS r ON r.row_id = c.row_id",
     "WHERE r.table_id = ? AND c.column_id = ? GROUP BY state"
   ].join(" "));
-  for (const column of table.columns.filter(isPigeFormulaColumn)) {
+  for (const column of assertFormulaGraph({ table })) {
     const stats = mutableStats();
     for (const row of count.all(table.id, column.id) as Array<{ state?: unknown; count?: unknown }>) {
       if ((row.state !== "null" && row.state !== "value") || typeof row.count !== "number" || !Number.isSafeInteger(row.count)) {
@@ -563,7 +575,7 @@ function evaluateFormulaCell(
   const columnsById = new Map(table.columns.map((candidate) => [candidate.id, candidate]));
   const value = evaluateFormulaExpression(column.calculation.expression, (columnId) => {
     const operand = columnsById.get(columnId);
-    if (!operand || !isEligibleOperand(operand)) throw payloadInvalid();
+    if (!operand || !isEligibleFormulaOperand(operand)) throw payloadInvalid();
     const row = database.prepare(
       "SELECT state, projection_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?"
     ).get(rowId, columnId) as { state?: unknown; projection_json?: unknown } | undefined;
@@ -627,22 +639,12 @@ function assertEligibleOperands(
   const columns = new Map(table.columns.map((column) => [column.id, column]));
   for (const columnId of formulaReferencedColumnIds(expression)) {
     const column = columns.get(columnId);
-    if (!column || !isEligibleOperand(column)) {
+    if (!column || !isEligibleFormulaOperand(column)) {
       throw new PigeDomainError("collection.formula_operand_ineligible", "The Collection formula operand is unavailable.");
     }
   }
 }
 
-function isEligibleOperand(column: DatasetColumn): boolean {
-  return column.calculation === undefined && column.relation === undefined && column.lookup === undefined && column.rollup === undefined &&
-    (column.logicalType === "integer" || column.logicalType === "number") &&
-    ![column.sourceType, ...(column.sourceTypes ?? [])].some((value) => value.toLowerCase().includes("formula"));
-}
-function isPigeFormulaColumn(column: DatasetColumn): column is DatasetColumn & {
-  readonly calculation: { readonly kind: "pige_numeric_formula"; readonly schemaVersion: 1; readonly expression: DatasetPigeFormulaExpression };
-} {
-  return column.calculation?.kind === "pige_numeric_formula";
-}
 export function projectCollectionFormulaColumns(
   columns: readonly DatasetColumn[]
 ): readonly CollectionColumnSummary[] {
@@ -654,7 +656,7 @@ export function projectCollectionFormulaColumns(
     const pigeFormula = calculation?.kind === "pige_numeric_formula";
     const importedFormula = !pigeFormula && [column.sourceType, ...(column.sourceTypes ?? [])]
       .some((sourceType) => sourceType.toLowerCase().includes("formula"));
-    const canUseAsFormulaOperand = isEligibleOperand(column);
+    const canUseAsFormulaOperand = isEligibleFormulaOperand(column);
     return {
       columnId: column.id,
       label: column.name,

@@ -1911,14 +1911,49 @@ describe("schemas", () => {
       columns: [inputColumn, formulaColumn]
     } as const;
     expect(DatasetTableSchema.parse(table).columns[1]?.calculation).toEqual(calculation);
+    const downstreamFormula = {
+      ...formulaColumn,
+      id: "column_formula00002",
+      name: "Further adjusted",
+      ordinal: 2,
+      calculation: {
+        kind: "pige_numeric_formula" as const,
+        schemaVersion: 1 as const,
+        expression: {
+          kind: "binary" as const,
+          operator: "add" as const,
+          left: { kind: "column" as const, columnId: formulaColumn.id },
+          right: { kind: "literal" as const, value: 1 }
+        }
+      }
+    };
+    expect(DatasetTableSchema.parse({
+      ...table,
+      columnCount: 3,
+      columns: [inputColumn, formulaColumn, downstreamFormula]
+    }).columns[2]?.calculation).toEqual(downstreamFormula.calculation);
+    expect(() => DatasetTableSchema.parse({
+      ...table,
+      columnCount: 3,
+      columns: [inputColumn, {
+        ...formulaColumn,
+        calculation: {
+          ...calculation,
+          expression: { kind: "column" as const, columnId: downstreamFormula.id }
+        }
+      }, downstreamFormula]
+    })).toThrow("acyclic graph");
     for (const invalidInput of [
       { ...inputColumn, logicalType: "string" as const },
-      { ...inputColumn, sourceType: "xlsx.formula.number" },
-      { ...inputColumn, calculation }
+      { ...inputColumn, sourceType: "xlsx.formula.number" }
     ]) {
       expect(() => DatasetTableSchema.parse({ ...table, columns: [invalidInput, formulaColumn] }))
-        .toThrow("editable non-formula numeric columns");
+        .toThrow("numeric scalar or acyclic Pige formula columns");
     }
+    expect(() => DatasetTableSchema.parse({
+      ...table,
+      columns: [{ ...inputColumn, calculation }, formulaColumn]
+    })).toThrow("acyclic graph");
     expect(() => DatasetTableSchema.parse({
       ...table,
       columns: [inputColumn, { ...formulaColumn, logicalType: "integer" }]
@@ -1932,7 +1967,7 @@ describe("schemas", () => {
           expression: { kind: "column", columnId: formulaColumn.id }
         }
       }]
-    })).toThrow("editable non-formula numeric columns");
+    })).toThrow("acyclic graph");
 
     const request = {
       apiVersion: 1,
@@ -2366,7 +2401,7 @@ describe("schemas", () => {
           expression: { kind: "column", columnId: relationColumnId }
         }
       }]
-    })).toThrow("editable non-formula numeric columns");
+    })).toThrow("numeric scalar or acyclic Pige formula columns");
 
     const addRequest = {
       apiVersion: 1,
