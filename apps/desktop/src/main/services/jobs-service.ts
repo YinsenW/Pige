@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import type {
   JobActionRequest,
   JobActionResult,
+  JobCancelRequest,
   JobSummary,
   JobsListRequest,
   JobsListResult,
@@ -412,6 +413,25 @@ export class JobsService {
   readJobClass(jobId: string): JobClass | undefined {
     const vaultPath = this.#requireActiveVaultPath();
     return this.#readJobSnapshot(vaultPath, jobId)?.job.class;
+  }
+
+  inspectCancelCurrentness(request: JobCancelRequest):
+    | { readonly status: "current" | "stale"; readonly job: JobSummary }
+    | { readonly status: "not_found" } {
+    const activeVault = this.#vaults.current();
+    const vaultPath = this.#vaults.activeVaultPath();
+    if (!activeVault || !vaultPath || activeVault.vaultId !== request.activeVaultId) {
+      return { status: "not_found" };
+    }
+    const job = this.#readJobSnapshot(vaultPath, request.jobId)?.job;
+    if (!job || (job.activeVaultId !== undefined && job.activeVaultId !== request.activeVaultId)) {
+      return { status: "not_found" };
+    }
+    const summary = toJobSummary(vaultPath, job, this.#activeExecutions.has(job.id));
+    return {
+      status: summary.updatedAt === request.expectedUpdatedAt ? "current" : "stale",
+      job: summary
+    };
   }
 
   async approveProposal(

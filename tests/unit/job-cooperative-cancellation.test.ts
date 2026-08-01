@@ -117,7 +117,33 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const processing = jobs.documentParseExecutor().process({ sourceIds: [sourceId] });
     await extractor.started.promise;
     const running = requireValue(jobs.list({ classes: ["parse"], states: ["running"] }).jobs[0]);
+    const sourceBeforeCancel = readSourceRecord(fixture.vaultPath, sourceId);
+    const managedPath = path.join(fixture.vaultPath, requireValue(sourceBeforeCancel.managedCopy?.path));
+    const preservedBytes = fs.readFileSync(managedPath);
     expect(running.progress).toEqual({ completedUnits: 0, totalUnits: 1, unit: "document" });
+    expect(jobs.inspectCancelCurrentness({
+      apiVersion: 1,
+      requestId: "jobcancelreq_0000000000000001",
+      activeVaultId: fixture.vault.vaultId,
+      jobId: running.id,
+      expectedUpdatedAt: "2026-07-10T00:00:00.000Z"
+    })).toMatchObject({ status: "stale", job: { id: running.id, state: "running" } });
+    expect(jobs.inspectCancelCurrentness({
+      apiVersion: 1,
+      requestId: "jobcancelreq_0000000000000003",
+      activeVaultId: "vault_20260710_crossvault",
+      jobId: running.id,
+      expectedUpdatedAt: running.updatedAt
+    })).toEqual({ status: "not_found" });
+    expect(jobs.list({ classes: ["parse"], states: ["running"] }).jobs).toHaveLength(1);
+    expect(extractor.aborted).toBe(false);
+    expect(jobs.inspectCancelCurrentness({
+      apiVersion: 1,
+      requestId: "jobcancelreq_0000000000000002",
+      activeVaultId: fixture.vault.vaultId,
+      jobId: running.id,
+      expectedUpdatedAt: running.updatedAt
+    })).toMatchObject({ status: "current", job: { id: running.id, state: "running" } });
     expect(jobs.cancel({ jobId: running.id }).status).toBe("cancel_requested");
     expect(await processing).toMatchObject({ processed: 1, completed: 0, failed: 1 });
 
@@ -125,8 +151,17 @@ describe("cooperative durable job cancellation", { timeout: 15_000 }, () => {
     const source = readSourceRecord(fixture.vaultPath, sourceId);
     expect(cancelled.sourceId).toBe(sourceId);
     expect(source.artifacts).toEqual([]);
+    expect(fs.readFileSync(managedPath)).toEqual(preservedBytes);
     expect(extractor.snapshotPath).toBeDefined();
     expect(fs.existsSync(requireValue(extractor.snapshotPath))).toBe(false);
+    const restarted = makeServices(fixture, parser).jobs;
+    expect(restarted.list({ classes: ["parse"], states: ["cancelled"] }).jobs[0]).toMatchObject({
+      id: cancelled.id,
+      sourceId,
+      canRetry: true
+    });
+    expect(restarted.retry({ jobId: cancelled.id })).toMatchObject({ status: "requeued", job: { id: cancelled.id } });
+    expect(fs.readFileSync(managedPath)).toEqual(preservedBytes);
   });
 
   it("lets cancel_requested win before a durable guard mutation without rewriting the request pair", async () => {
@@ -705,6 +740,7 @@ class SecondCallUnavailableNativeOcrAdapter implements NativeImageOcrAdapterPort
 class BlockingPdfExtractor implements PdfTextExtractor {
   readonly started = deferred<void>();
   snapshotPath: string | undefined;
+  aborted = false;
 
   isAvailable(): boolean {
     return true;
@@ -712,6 +748,7 @@ class BlockingPdfExtractor implements PdfTextExtractor {
 
   extract(filePath: string, signal?: AbortSignal): ReturnType<PdfTextExtractor["extract"]> {
     this.snapshotPath = filePath;
+    signal?.addEventListener("abort", () => { this.aborted = true; }, { once: true });
     this.started.resolve();
     return rejectOnAbort(signal);
   }

@@ -73,6 +73,7 @@ import { DiagnosticsJobCard, PrivateExcerptSupportOption, ProviderMetadataSuppor
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
+import type { SettingsProfileTransferApi } from "./components/SettingsProfileTransferPanel";
 import {
   homeConversationStateForJob,
   isTerminalConversationTurn,
@@ -91,7 +92,7 @@ import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialo
 import { readerNoteRenameLabels, submitReaderNoteRename, type ReaderNoteRenameSubmit } from "./components/ReaderNoteRenameDialog";
 import { readerNoteAliasLabels, submitReaderNoteAliasChange, type ReaderNoteAliasSubmit } from "./components/ReaderNoteAliasDialog"; import { ReaderTopicRenameDialog } from "./components/ReaderTopicRenameDialog";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
-import { createReaderKnowledgePageTargetLoader } from "./reader-knowledge-page-targets";
+import { createReaderKnowledgePageTargetLoader } from "./reader-knowledge-page-targets"; import { cancelKnownJob } from "./job-cancel-request";
 import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { resolveAndOpenInlineReference } from "./reader-inline-reference-navigation";
@@ -239,10 +240,8 @@ export { LocalRerankerSettingsPanel } from "./components/LocalRerankerSettingsPa
 export { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 export { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 export { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
-const startupDestinationApi: StartupDestinationApi = {
-  load: () => window.pige.settings.startupDestination(),
-  set: (request) => window.pige.settings.setStartupDestination(request)
-};
+const startupDestinationApi: StartupDestinationApi = { load: () => window.pige.settings.startupDestination(), set: (request) => window.pige.settings.setStartupDestination(request) };
+const settingsProfileTransferApi: SettingsProfileTransferApi = { exportProfile: (request) => window.pige.settings.exportProfile(request), previewImport: (request) => window.pige.settings.previewProfileImport(request), applyImport: (request) => window.pige.settings.applyProfileImport(request) };
 const HOME_JOB_CLASSES = ["capture", "parse", "ocr", "dataset_import", "agent_ingest", "agent_turn", "index_rebuild"] as const;
 type View = "home" | "library" | "knowledgeTree";
 type EditableActiveCollection = {
@@ -1974,7 +1973,7 @@ export function App(): React.JSX.Element {
   };
 
   const cancelJob = async (jobId: string): Promise<boolean> => {
-    const result = await window.pige.jobs.cancel({ jobId });
+    const result = await cancelKnownJob(activeVaultIdRef.current, jobId, recentJobs, backupJobs, activityJobs);
     if (result.status === "cancelled" || result.status === "cancel_requested") {
       setCaptureToast({
         kind: "success",
@@ -1983,7 +1982,7 @@ export function App(): React.JSX.Element {
       await refreshVaultState();
       return true;
     }
-    setCaptureToast({ kind: "error", message: t("error.generic") });
+    if (result.status === "stale") await refreshVaultState(); setCaptureToast({ kind: "error", message: t("error.generic") });
     return false;
   };
 
@@ -3145,7 +3144,7 @@ export function App(): React.JSX.Element {
               alwaysOnTop={windowState?.alwaysOnTop ?? null}
               alwaysOnTopBusy={windowControls.busy}
               onAlwaysOnTopChange={windowControls.toggleAlwaysOnTop}
-              startupDestinationApi={startupDestinationApi}
+              startupDestinationApi={startupDestinationApi} settingsProfileTransferApi={settingsProfileTransferApi}
               onOpenAppearance={() => {
                 setSettingsSection("appearance");
                 setDevelopmentNotice(null);

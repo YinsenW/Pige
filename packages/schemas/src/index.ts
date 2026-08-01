@@ -11181,10 +11181,14 @@ export const AgentConversationTurnSummarySchema = z.object({
   jobId: JobIdSchema,
   userEventId: ConversationEventIdSchema,
   state: JobStateSchema,
+  updatedAt: z.string().datetime({ offset: true }).optional(),
   proposalId: ProposalIdSchema.optional(),
   currentNoteAppendApplied: z.literal(true).optional(),
   error: PigeErrorSummarySchema.optional()
 }).strict().superRefine((value, context) => {
+  if ((value.state === "running" || value.state === "cancel_requested") && !value.updatedAt) {
+    context.addIssue({ code: "custom", path: ["updatedAt"], message: "A cancelable turn requires its exact Job revision." });
+  }
   const ownsReview = value.state === "awaiting_review";
   if (ownsReview !== (value.proposalId !== undefined)) {
     context.addIssue({ code: "custom", path: ["proposalId"], message: "proposalId must exactly match awaiting_review ownership." });
@@ -12349,6 +12353,29 @@ export const JobChangedSummarySchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true })
 }).strict();
+export const JobCancelRequestIdSchema = z.string().regex(/^jobcancelreq_[a-z0-9]{16,64}$/);
+export const JobCancelRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: JobCancelRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  expectedUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+const JobCancelResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: JobCancelRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema
+}).strict();
+export const JobCancelResultSchema = z.discriminatedUnion("status", [
+  JobCancelResultIdentitySchema.extend({
+    status: z.enum(["cancel_requested", "cancelled", "stale", "not_allowed"]),
+    job: JobChangedSummarySchema
+  }).strict(),
+  JobCancelResultIdentitySchema.extend({
+    status: z.enum(["not_found", "failed"])
+  }).strict()
+]);
 export const JobChangedEventSchema = z.object({
   apiVersion: z.literal(1),
   sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -13376,6 +13403,9 @@ export type JobRef = z.infer<typeof JobRefSchema>;
 export type AgentKnowledgeOutcomeSummary = z.infer<typeof AgentKnowledgeOutcomeSummarySchema>;
 export type JobRecord = z.infer<typeof JobRecordSchema>;
 export type JobChangedEvent = z.infer<typeof JobChangedEventSchema>;
+export type JobCancelRequestId = z.infer<typeof JobCancelRequestIdSchema>;
+export type JobCancelRequest = z.infer<typeof JobCancelRequestSchema>;
+export type JobCancelResult = z.infer<typeof JobCancelResultSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;

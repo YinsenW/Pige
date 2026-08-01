@@ -20,6 +20,7 @@ import { RecentVaultLifecycleActions } from "./RecentVaultLifecycleActions";
 import { ReferencedOriginalConnections } from "./ReferencedOriginalConnections";
 import { BackupConversationPreferenceControl } from "./BackupConversationPreferenceControl";
 import { BackupTrashPreferenceControl } from "./BackupTrashPreferenceControl";
+import { createJobCancelRequest } from "../job-cancel-request";
 
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
@@ -680,7 +681,11 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
   });
   const cancelBackup = async (): Promise<void> => runBackupAction(async () => {
     if (!activeBackupJob) return;
-    await window.pige.jobs.cancel({ jobId: activeBackupJob.id });
+    await window.pige.jobs.cancel(createJobCancelRequest({
+      activeVaultId: props.vault.vaultId,
+      jobId: activeBackupJob.id,
+      expectedUpdatedAt: activeBackupJob.updatedAt
+    }));
     await props.onRefresh();
   });
   const retryBackup = async (): Promise<void> => runBackupAction(async () => {

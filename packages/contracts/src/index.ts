@@ -279,6 +279,8 @@ import type {
   MemoryTrashRestoreResult,
   MemoryTrashSummary,
   JobClass,
+  JobCancelRequest,
+  JobCancelResult,
   JobChangedEvent as JobChangedEventSchemaType,
   JobRecord,
   JobStage,
@@ -585,6 +587,8 @@ export type {
   SettingsProfileImportApplyResult,
   SettingsProfilePreferenceChange,
   AgentAttachmentCandidate,
+  JobCancelRequest,
+  JobCancelResult,
   AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
   AgentConversationHistoryQuery,
@@ -2143,6 +2147,7 @@ export interface AgentConversationTurnSummary {
   readonly jobId: string;
   readonly userEventId: string;
   readonly state: JobState;
+  readonly updatedAt?: string | undefined;
   readonly proposalId?: string | undefined;
   readonly currentNoteAppendApplied?: true;
   readonly error?: PigeErrorSummary;
@@ -2443,7 +2448,7 @@ export interface PigeDesktopApi {
   };
   readonly jobs: {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
-    readonly cancel: (request: JobActionRequest) => Promise<JobActionResult>;
+    readonly cancel: (request: JobCancelRequest) => Promise<JobCancelResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly onChanged: (listener: (event: JobChangedEvent) => void) => () => void;
     readonly reconnectOriginalSource: (

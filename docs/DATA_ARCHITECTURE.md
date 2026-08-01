@@ -511,7 +511,7 @@ Event types:
 
 Rules:
 
-- Short messages are stored directly. Large pastes remain one managed source with bounded ordered
+- Short messages are stored directly. Large pastes remain one managed text source with bounded ordered
   refs under `resources/large-paste-boundary.manifest.json`; retry reuses source IDs.
 - Trash moves exact JSONL with revision/hash receipt; restore requires the free original identity
   and restart adopts once without Provider replay. Public inventory is preview/opaque-ID only.

@@ -19,6 +19,7 @@ import {
   type NoteAgentModelOption
 } from "./NoteAgentPanel";
 import { useConversationPagination } from "./ConversationPagination";
+import { createJobCancelRequest } from "../job-cancel-request";
 
 type ActiveDraftBinding = {
   readonly clientTurnId: string;
@@ -403,8 +404,12 @@ export function CurrentNoteAgent(props: {
   };
 
   const cancel = async (): Promise<void> => {
-    if (!latestTurn || (latestTurn.state !== "running" && latestTurn.state !== "cancel_requested")) return;
-    await window.pige.jobs.cancel({ jobId: latestTurn.jobId }).catch(() => undefined);
+    if (!latestTurn?.updatedAt || (latestTurn.state !== "running" && latestTurn.state !== "cancel_requested")) return;
+    await window.pige.jobs.cancel(createJobCancelRequest({
+      activeVaultId: props.vaultId,
+      jobId: latestTurn.jobId,
+      expectedUpdatedAt: latestTurn.updatedAt
+    })).catch(() => undefined);
     await refreshTimeline();
   };
 

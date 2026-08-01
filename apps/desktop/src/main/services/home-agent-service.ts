@@ -507,6 +507,7 @@ export class HomeAgentService {
           jobId: job.id,
           userEventId: job.conversationEventId,
           state: job.state,
+          updatedAt: job.updatedAt,
           ...(hasCurrentNoteAppendOperation(job) ? { currentNoteAppendApplied: true as const } : {}),
           ...(job.state === "awaiting_review" && job.proposalIds?.length === 1
             ? { proposalId: job.proposalIds[0] }
