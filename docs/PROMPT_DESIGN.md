@@ -87,7 +87,8 @@ Required context:
 
 - Source record metadata.
 - Task-scoped tool descriptors; fragments/related summaries only from returned results.
-- `PIGE.md` rules.
+- Exact validated `PIGE.md` rules, escaped inside a dedicated system-context boundary and
+  revision-bound to the typed Agent Runtime Policy Context.
 - Knowledge model and linking rules from `docs/KNOWLEDGE_MODEL_AND_LINKING.md`.
 - Allowed action trust level.
 

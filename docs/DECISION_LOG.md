@@ -5394,6 +5394,43 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Agent-Policy-Is-Executable
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Every model-dependent Home and source-ingest turn uses one typed Agent Runtime Policy
+Context whose hash includes the exact validated `PIGE.md` revision. Owning services
+enforce model locality, memory scopes, retrieval budgets, OCR summary exclusion,
+permission currentness, and source-storage behavior; prompt prose only communicates
+language and the escaped vault policy.
+
+Rationale:
+
+A policy builder without effect-owner enforcement is descriptive metadata, while an
+unbound `PIGE.md` prompt can change between model turns without detection. One current
+typed snapshot makes the effective policy inspectable and gives every sensitive or
+model boundary an exact conflict fence.
+
+Consequences:
+
+- Invalid or secret-like `PIGE.md` bytes stop the Agent before model execution.
+- Cloud providers cannot run under `local_only`; verified loopback remains eligible.
+- Home filters memory scopes and passes the typed retrieval limit to the retrieval owner.
+- Home and ingest re-prove provider, capability, settings, permission, and `PIGE.md`
+  identity before later model turns and effects.
+- Jobs and context packs retain only policy IDs/hashes and the vault policy revision,
+  never the policy body.
+
+References:
+
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/PROMPT_DESIGN.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

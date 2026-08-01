@@ -38,6 +38,7 @@ type AgentRuntimePolicyContext = {
   policyContextId: string;
   policyHash: string;
   vaultId: string;
+  vaultPolicy: { revision: string };
   jobId: string;
   sourceStorage: SourceStoragePolicyContext;
   model: ModelPolicyContext;
@@ -144,6 +145,15 @@ Confirmation means only irreversible loss, authority/security escalation, destin
 drift, unresolved conflict, a risky Agent edit already owned by proposals/Operations, or
 an explicit stricter product contract. Confidence thresholds are not permission gates.
 
+### 4.6 Vault Policy
+
+Agent Orchestrator reads the exact no-follow `PIGE.md` bytes, validates the required
+sections and secret boundary, binds their revision into `policyHash`, and includes the
+escaped policy in Home and source-ingest system context. Every later model turn re-reads
+the policy and fails closed on revision drift; source, memory, tools, Skills, packages,
+and model output cannot replace it. The policy body is never copied into Job, Operation,
+conversation, or context-pack records.
+
 ## 5. Prompt And Service Enforcement
 
 Prompt assembly includes a short generated summary: storage behavior, selected Provider
@@ -161,6 +171,7 @@ availability. It does not include secrets, paths, old grants, or implementation 
 | Memory | Agent Memory Service |
 | Retrieval limits | Retrieval Service |
 | Local capability availability | Capability/service owner |
+| Vault `PIGE.md` rules and currentness | Vault Service + Agent Orchestrator |
 
 If a claimed guarantee exists only in prompt prose, it is a preference, not enforcement.
 

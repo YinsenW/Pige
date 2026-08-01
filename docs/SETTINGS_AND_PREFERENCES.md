@@ -185,7 +185,7 @@ This compact index mirrors every entry currently returned by `settings.registry`
 | `vault.recentVaults` | `none` | Main-process recent-vault store |
 | `vault.displayName` | `none` | Strict pathless Main IPC plus manifest metadata-revision CAS; rename and relocation are mutually exclusive while either action is pending |
 | `vault.id` | `explicit_confirmation` | Main-process create/open vault workflow; immutable after creation |
-| `vault.pigePolicy` | `explicit_confirmation` | Pathless `PIGE.md` read plus validation-before-confirmation, vault/revision CAS, atomic write, Activity/Undo and restart recovery |
+| `vault.pigePolicy` | `explicit_confirmation` | Pathless `PIGE.md` read plus validation-before-confirmation, vault/revision CAS, atomic write, Activity/Undo and restart recovery; Agent turns bind the exact validated revision and fail closed on drift |
 | `sourceStorage.defaultStrategy` | `none` | Capture Service reads the active vault value for every new file capture |
 | `backup.entryPoints` | `none` | Derived read-only status |
 | `memory.includeMemoryInBackup` | `none` | Revision-fenced active-Vault config write; active Backup work blocks mutation and the next Backup reads the durable choice |
@@ -213,6 +213,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Default source storage strategy | `sourceStorage.defaultStrategy` | Yes | Source Storage Service | New file captures only; text and URL inputs remain managed snapshots |
 | In-vault managed-copy root | `sourceStorage.sourceAssetRootKind` compatibility field | Sometimes | Source Storage Service | New managed sources; existing sources unchanged |
 | External managed-copy root binding | `sourceStorage.sourceAssetRootKind` plus stable root binding availability | Sometimes | Source Storage Service | New managed sources and source availability checks; existing sources resolve their recorded root ID |
+| `PIGE.md` policy | `vaultPolicy.revision` plus escaped system context | Yes | Vault Service, Agent Orchestrator | New model Jobs and every later model turn currentness check |
 | Default Pi Agent model | `model.defaultModelProfileId` | Yes | Model Provider Registry, Agent Orchestrator | New model calls |
 | Provider profile metadata | protocol-bound availability and internal `model.cloudBoundary` | Yes, redacted | Model Provider Registry | New model calls |
 | App language | `language.appLocale` | Yes | I18N Service, Renderer | UI immediately; generated text only when policy says so |
