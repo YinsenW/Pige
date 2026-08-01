@@ -838,6 +838,11 @@ not_found` returns authoritative summary; committed adds Operation ID. Delete/re
 trash; Activity owns Undo/restart. Export is revision-bound, Main-picked and pathless. Renderer
 cannot create memory, submit provenance/path, or permanently erase it.
 
+Home's internal `pige_remember_authored_memory` tool is not renderer IPC. Host binds one exact
+substring of the current authored turn, a vault/Job/conversation event and the executing model;
+only preference, correction and workflow-lesson kinds are accepted. Secret-like or authority-changing
+quotes fail before effect. One receipt owns `create_memory`, Activity Undo and restart adoption.
+
 Provider/model DTOs:
 
 ```ts
