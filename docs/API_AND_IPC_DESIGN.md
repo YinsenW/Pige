@@ -556,8 +556,9 @@ Dataset boundary:
   Drift is stale; citation keys yield only Main-derived read-only highlights.
 - Formula/relation/lookup writes bind revision, IDs and eligibility; relations store same-Dataset row
   IDs/labels and lookups stay derived. CAS/Undo exposes no path/query.
-- `collections.renameView`/`collections.trashView` bind Dataset, stable view and view revision;
-  committed/stale returns the safe snapshot.
+- `collections.updateView`/`collections.renameView`/`collections.trashView` bind Dataset, stable
+  view and view revision; definition updates accept only the bounded typed filter/sort shape.
+  Committed/stale returns the safe authoritative snapshot and update conflicts retain the renderer draft.
 
 ### 6.6 Retrieval
 
