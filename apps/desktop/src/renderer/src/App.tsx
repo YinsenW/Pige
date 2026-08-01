@@ -8822,6 +8822,11 @@ type ProviderMutationStatus =
   | { readonly kind: "provider_deleted" }
   | { readonly kind: "provider_delete_failed"; readonly providerId: string };
 
+type ProviderHelpStatus = {
+  readonly presetId: string;
+  readonly status: "opened" | "unavailable" | "failed";
+};
+
 function providerRuntimeStatusKey(
   provider: ModelProviderSettingsSummary["providers"][number]
 ): string {
@@ -8862,8 +8867,12 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
   const [providerMutationStatus, setProviderMutationStatus] = useState<ProviderMutationStatus | null>(null);
   const [deleteConfirmationProviderId, setDeleteConfirmationProviderId] = useState<string | null>(null);
   const [providerMutationInFlight, setProviderMutationInFlight] = useState(false);
+  const [providerHelpInFlight, setProviderHelpInFlight] = useState(false);
+  const [providerHelpStatus, setProviderHelpStatus] = useState<ProviderHelpStatus | null>(null);
   const refreshRequestSequence = useRef(0);
   const providerMutationSequence = useRef(0);
+  const providerHelpSequence = useRef(0);
+  const providerHelpInFlightRef = useRef(false);
   const deleteProviderButtonRef = useRef<HTMLButtonElement | null>(null);
   const keepProviderButtonRef = useRef<HTMLButtonElement | null>(null);
   const providerDeletedStatusRef = useRef<HTMLDivElement | null>(null);
@@ -8954,6 +8963,32 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
       return false;
     } finally {
       props.onBusy(false);
+    }
+  };
+
+  const openApiKeyManagement = async (presetId: string): Promise<void> => {
+    if (providerHelpInFlightRef.current) return;
+    providerHelpInFlightRef.current = true;
+    setProviderHelpInFlight(true);
+    setProviderHelpStatus(null);
+    const sequence = ++providerHelpSequence.current;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: `providerhelp_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      presetId
+    };
+    try {
+      const result = await window.pige.models.openApiKeyManagement(request);
+      if (sequence !== providerHelpSequence.current || result.apiVersion !== request.apiVersion ||
+        result.requestId !== request.requestId || result.presetId !== request.presetId) return;
+      setProviderHelpStatus({ presetId, status: result.status });
+    } catch {
+      if (sequence === providerHelpSequence.current) setProviderHelpStatus({ presetId, status: "failed" });
+    } finally {
+      if (sequence === providerHelpSequence.current) {
+        providerHelpInFlightRef.current = false;
+        setProviderHelpInFlight(false);
+      }
     }
   };
 
@@ -9150,12 +9185,16 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
 
   const navigate = (nextView: ModelSettingsView): void => {
     providerMutationSequence.current += 1;
+    providerHelpSequence.current += 1;
+    providerHelpInFlightRef.current = false;
     setFailure(null);
     setManualBootstrap(null);
     setProviderCredentialDraft("");
     setProviderMutationStatus(null);
     setDeleteConfirmationProviderId(null);
     setProviderMutationInFlight(false);
+    setProviderHelpInFlight(false);
+    setProviderHelpStatus(null);
     setView(nextView);
   };
 
@@ -9265,7 +9304,25 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
                 <span className="settings-status">{props.t("models.readyToConnect")}</span>
               </div>
             )}
+            {selectedPreset.canOpenApiKeyManagement ? (
+              <div className="settings-row">
+                <span className="settings-row-copy">
+                  <strong>{props.t("models.apiKeyHelpTitle")}</strong>
+                  <span>{props.t("models.apiKeyHelpDescription")}</span>
+                </span>
+                <button type="button" className="settings-button" disabled={props.busy || providerHelpInFlight}
+                  onClick={() => void openApiKeyManagement(selectedPreset.presetId)}>
+                  {props.t(providerHelpInFlight ? "models.openingApiKeyPage" : "models.getApiKey")}
+                </button>
+              </div>
+            ) : null}
           </div>
+          {providerHelpStatus?.presetId === selectedPreset.presetId ? (
+            <div className={`settings-warning${providerHelpStatus.status === "opened" ? "" : " model-settings-error"}`}
+              role={providerHelpStatus.status === "opened" ? "status" : "alert"}>
+              {props.t(`models.apiKeyPage.${providerHelpStatus.status}`)}
+            </div>
+          ) : null}
           {presetFailure ? (
             <div className="settings-warning model-settings-error" role="alert">
               {props.t(

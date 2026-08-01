@@ -11113,6 +11113,18 @@ export const AddPresetProviderRequestSchema = z.object({
   apiKey: z.string().trim().min(1).max(16_384).optional()
 }).strict();
 
+export const MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL = "models.openApiKeyManagement" as const;
+export const ProviderApiKeyManagementRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: z.string().regex(/^providerhelp_[a-z0-9]{16,64}$/u),
+  presetId: z.string().trim().min(1).max(64).regex(/^[a-z][a-z0-9_-]*$/u)
+}).strict();
+export const ProviderApiKeyManagementResultSchema = z.discriminatedUnion("status", [
+  ProviderApiKeyManagementRequestSchema.extend({ status: z.literal("opened") }).strict(),
+  ProviderApiKeyManagementRequestSchema.extend({ status: z.literal("unavailable") }).strict(),
+  ProviderApiKeyManagementRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
+
 export const AddManualProviderRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(80),
   providerKind: ProviderKindSchema,
@@ -11892,6 +11904,8 @@ export type ReaderSelectionResolveResult = z.infer<typeof ReaderSelectionResolve
 export type ReaderSelectionSegmentId = z.infer<typeof ReaderSelectionSegmentIdSchema>;
 export type ReaderSelectionUtf8ByteSpan = z.infer<typeof ReaderSelectionUtf8ByteSpanSchema>;
 export type ModelListStrategy = z.infer<typeof ModelListStrategySchema>;
+export type ProviderApiKeyManagementRequest = z.infer<typeof ProviderApiKeyManagementRequestSchema>;
+export type ProviderApiKeyManagementResult = z.infer<typeof ProviderApiKeyManagementResultSchema>;
 export type ModelProfilesFile = z.infer<typeof ModelProfilesFileSchema>;
 export type ModelProfile = z.infer<typeof ModelProfileSchema>;
 export type ModelProviderState = z.infer<typeof ModelProviderStateSchema>;

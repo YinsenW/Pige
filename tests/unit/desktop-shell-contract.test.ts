@@ -1267,6 +1267,25 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("keeps provider API key help Main-owned and renderer URL-free", () => {
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const presetsSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/model-provider-presets.ts"),
+      "utf8"
+    );
+
+    expect(mainSource).toContain("ipcMain.handle(MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL");
+    expect(mainSource).toContain("ProviderApiKeyManagementRequestSchema.parse(request)");
+    expect(mainSource).toContain("openReviewedProviderApiKeyManagement");
+    expect(preloadSource).toContain("ProviderApiKeyManagementRequestSchema.parse(request)");
+    expect(preloadSource).toContain("ProviderApiKeyManagementResultSchema.parse");
+    expect(contractsSource).toContain("readonly openApiKeyManagement:");
+    expect(contractsSource).not.toContain("readonly apiKeyManagementUrl?: string;");
+    expect(presetsSource).toContain("readonly apiKeyManagementUrl?: string;");
+  });
+
   it("binds support-bundle cancellation to one active renderer request", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
@@ -1557,7 +1576,7 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).not.toContain("function extractSingleCaptureUrl");
     expect(homeComposer).not.toContain("window.pige.capture.submitText");
     expect(homeComposer).not.toContain("window.pige.capture.submitUrl");
-    expect(homeComposer).toContain("classifyTextTransportKind(turnText)");
+    expect(rendererSource).toContain("classifyTextTransportKind(submittedText)");
     expect(rendererSource).toContain('if (view === "home")');
     expect(rendererSource).toContain("setHomeFileDropRequest({");
     expect(rendererSource).toContain('void submitFiles(files, "file_drop", undefined, clientTurnId, "shell")');

@@ -1,7 +1,12 @@
-import type { ProviderPresetSummary } from "@pige/contracts";
+import type {
+  ProviderApiKeyManagementRequest,
+  ProviderApiKeyManagementResult,
+  ProviderPresetSummary
+} from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 
 export interface ReviewedProviderPreset extends ProviderPresetSummary {
+  readonly apiKeyManagementUrl?: string;
   readonly bootstrapModelIds: readonly string[];
 }
 
@@ -14,6 +19,7 @@ const OPENAI_PRESET: ReviewedProviderPreset = {
   fixedBaseUrl: "https://api.openai.com/v1",
   modelListStrategy: "list_models",
   cloudBoundary: "cloud",
+  canOpenApiKeyManagement: true,
   apiKeyManagementUrl: "https://platform.openai.com/api-keys",
   bootstrapModelIds: ["gpt-5-mini", "gpt-4.1-mini"]
 };
@@ -27,6 +33,7 @@ const ANTHROPIC_PRESET: ReviewedProviderPreset = {
   fixedBaseUrl: "https://api.anthropic.com/v1",
   modelListStrategy: "list_models",
   cloudBoundary: "cloud",
+  canOpenApiKeyManagement: true,
   apiKeyManagementUrl: "https://console.anthropic.com/settings/keys",
   bootstrapModelIds: ["claude-sonnet-4-5", "claude-sonnet-4-20250514"]
 };
@@ -40,6 +47,7 @@ const DEEPSEEK_PRESET: ReviewedProviderPreset = {
   fixedBaseUrl: "https://api.deepseek.com",
   modelListStrategy: "list_models",
   cloudBoundary: "cloud",
+  canOpenApiKeyManagement: true,
   apiKeyManagementUrl: "https://platform.deepseek.com/api_keys",
   bootstrapModelIds: ["deepseek-chat", "deepseek-v4-pro", "deepseek-v4-flash"]
 };
@@ -53,6 +61,7 @@ const GEMINI_PRESET: ReviewedProviderPreset = {
   fixedBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
   modelListStrategy: "list_models",
   cloudBoundary: "cloud",
+  canOpenApiKeyManagement: true,
   apiKeyManagementUrl: "https://aistudio.google.com/app/apikey",
   bootstrapModelIds: ["gemini-2.5-flash", "gemini-2.0-flash"]
 };
@@ -66,13 +75,18 @@ const OLLAMA_PRESET: ReviewedProviderPreset = {
   fixedBaseUrl: "http://127.0.0.1:11434/v1",
   modelListStrategy: "list_models",
   cloudBoundary: "local",
+  canOpenApiKeyManagement: false,
   bootstrapModelIds: ["llama3.2", "qwen3", "gemma3"]
 };
 
 const PRESETS = [OPENAI_PRESET, ANTHROPIC_PRESET, GEMINI_PRESET, DEEPSEEK_PRESET, OLLAMA_PRESET] as const;
 
 export function listReviewedProviderPresets(): readonly ProviderPresetSummary[] {
-  return PRESETS.map(({ bootstrapModelIds: _bootstrapModelIds, ...summary }) => summary);
+  return PRESETS.map(({
+    bootstrapModelIds: _bootstrapModelIds,
+    apiKeyManagementUrl: _apiKeyManagementUrl,
+    ...summary
+  }) => summary);
 }
 
 export function getReviewedProviderPreset(presetId: string): ReviewedProviderPreset {
@@ -82,6 +96,35 @@ export function getReviewedProviderPreset(presetId: string): ReviewedProviderPre
     throw new PigeDomainError("model_provider.preset_missing", "The selected provider preset is unavailable.");
   }
   return preset;
+}
+
+export async function openReviewedProviderApiKeyManagement(
+  request: ProviderApiKeyManagementRequest,
+  openExternal: (url: string) => Promise<void>
+): Promise<ProviderApiKeyManagementResult> {
+  const identity = { ...request };
+  let url: string | undefined;
+  try {
+    url = getReviewedProviderPreset(request.presetId).apiKeyManagementUrl;
+  } catch {
+    return { ...identity, status: "unavailable" };
+  }
+  if (!url || !isReviewedExternalUrl(url)) return { ...identity, status: "unavailable" };
+  try {
+    await openExternal(url);
+    return { ...identity, status: "opened" };
+  } catch {
+    return { ...identity, status: "failed" };
+  }
+}
+
+function isReviewedExternalUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
+  } catch {
+    return false;
+  }
 }
 
 export function isReviewedPresetModel(presetId: string, modelId: string): boolean {

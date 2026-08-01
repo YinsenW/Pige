@@ -121,6 +121,42 @@ describe("Models error ownership", () => {
     await unmount(dom, mount.root);
   });
 
+  it("opens reviewed API key help once and retains the credential draft on failure", async () => {
+    const dom = createDom();
+    const requests: unknown[] = [];
+    let fail = true;
+    const api = modelApi({
+      openApiKeyManagement: async (request) => {
+        requests.push(request);
+        return { ...request, status: fail ? "failed" as const : "opened" as const };
+      }
+    });
+    const mount = await mountPanel(dom, presetSummary(), api);
+
+    await openPreset(dom, mount.container, "OpenAI");
+    await setInput(dom, mount.container, "preset-key-openai", "synthetic-key");
+    const trigger = buttonNamed(mount.container, enMessages["models.getApiKey"]);
+    trigger.focus();
+    await act(async () => {
+      trigger.click();
+      trigger.click();
+      await settle(dom);
+    });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({ apiVersion: 1, presetId: "openai" });
+    expect(inputNamed(mount.container, "preset-key-openai").value).toBe("synthetic-key");
+    expect(mount.container.textContent).toContain(enMessages["models.apiKeyPage.failed"]);
+    expect(dom.window.document.activeElement).toBe(trigger);
+
+    fail = false;
+    await click(dom, trigger);
+    await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.apiKeyPage.opened"]) === true);
+    expect(requests).toHaveLength(2);
+    expect(inputNamed(mount.container, "preset-key-openai").value).toBe("synthetic-key");
+    expect(dom.window.document.activeElement).toBe(trigger);
+    await unmount(dom, mount.root);
+  });
+
   it("does not blame an omitted optional API key for a preset probe failure", async () => {
     const dom = createDom();
     const summary = presetSummary("optional_api_key");
@@ -516,7 +552,8 @@ function presetSummary(
       authRequirement,
       fixedBaseUrl: "https://api.openai.com",
       modelListStrategy: "provider_api",
-      cloudBoundary: "cloud"
+      cloudBoundary: "cloud",
+      canOpenApiKeyManagement: true
     }],
     providers: [],
     models: [],
@@ -545,6 +582,16 @@ function connectedSummary(runtimeStatus?: ProviderProfileSummary["runtimeStatus"
 }
 
 function modelApi(overrides: {
+  readonly openApiKeyManagement?: (request: {
+    readonly apiVersion: 1;
+    readonly requestId: string;
+    readonly presetId: string;
+  }) => Promise<{
+    readonly apiVersion: 1;
+    readonly requestId: string;
+    readonly presetId: string;
+    readonly status: "opened" | "unavailable" | "failed";
+  }>;
   readonly addPresetProvider?: () => Promise<ProviderConnectResult>;
   readonly addManualProvider?: () => Promise<ProviderConnectResult>;
   readonly refreshProviderModels?: () => Promise<ModelProviderSettingsSummary>;
@@ -563,6 +610,7 @@ function modelApi(overrides: {
   return {
     models: {
       summary: async () => summary,
+      openApiKeyManagement: overrides.openApiKeyManagement ?? (async (request) => ({ ...request, status: "opened" })),
       addPresetProvider: overrides.addPresetProvider ?? (async () => summary),
       addManualProvider: overrides.addManualProvider ?? (async () => summary),
       setDefaultModel: async () => summary,
