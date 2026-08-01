@@ -89,6 +89,8 @@
   "backup.cancelRequested": "正在安全停止备份……",
   "backup.create": "创建备份",
   "backup.created": "备份已创建，文件数",
+  "backup.createdComplete": "备份完整：共 {files} 个文件，已包含 {included}/{total} 个外部项目。",
+  "backup.createdIncomplete": "备份已创建，但缺少 {missing} 个必需的外部项目。请在恢复前重新连接。",
   "backup.createdAt": "创建时间",
   "backup.conversations": "对话",
   "backup.contents": "备份内容",

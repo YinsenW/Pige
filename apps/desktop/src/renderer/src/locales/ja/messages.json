@@ -89,6 +89,8 @@
   "backup.cancelRequested": "バックアップを安全に停止しています...",
   "backup.create": "バックアップ作成",
   "backup.created": "バックアップを作成しました。ファイル数",
+  "backup.createdComplete": "バックアップ完了：{files} ファイル、外部項目 {total} 件中 {included} 件を含みます。",
+  "backup.createdIncomplete": "バックアップを作成しましたが、必須の外部項目が {missing} 件不足しています。復元前に再接続してください。",
   "backup.createdAt": "作成日時",
   "backup.conversations": "会話",
   "backup.contents": "バックアップ内容",

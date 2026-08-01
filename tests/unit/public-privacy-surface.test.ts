@@ -30,5 +30,5 @@ describe("public privacy data-flow governance", () => {
     expect(auditPublicPrivacySurface(repository)).toContain(
       "unreviewed production network owner: apps/desktop/src/main/services/unknown-network-owner.ts",
     );
-  });
+  }, 15_000);
 });

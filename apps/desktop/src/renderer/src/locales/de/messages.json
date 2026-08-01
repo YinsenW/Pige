@@ -89,6 +89,8 @@
   "backup.cancelRequested": "Backup wird sicher beendet...",
   "backup.create": "Backup erstellen",
   "backup.created": "Backup erstellt. Dateien",
+  "backup.createdComplete": "Backup vollständig: {files} Dateien; {included} von {total} externen Elementen enthalten.",
+  "backup.createdIncomplete": "Backup erstellt, aber {missing} erforderliche externe Elemente fehlen. Verbinden Sie sie vor der Wiederherstellung erneut.",
   "backup.createdAt": "Erstellt",
   "backup.conversations": "Unterhaltungen",
   "backup.contents": "Sicherungsinhalt",

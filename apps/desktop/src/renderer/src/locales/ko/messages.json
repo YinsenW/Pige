@@ -89,6 +89,8 @@
   "backup.cancelRequested": "백업을 안전하게 중지하는 중...",
   "backup.create": "백업 만들기",
   "backup.created": "백업이 생성되었습니다. 파일 수",
+  "backup.createdComplete": "백업 완료: 파일 {files}개, 외부 항목 {total}개 중 {included}개 포함.",
+  "backup.createdIncomplete": "백업이 생성되었지만 필수 외부 항목 {missing}개가 누락되었습니다. 복원 전에 다시 연결하세요.",
   "backup.createdAt": "생성 시간",
   "backup.conversations": "대화",
   "backup.contents": "백업 내용",

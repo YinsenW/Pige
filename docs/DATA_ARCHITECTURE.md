@@ -751,6 +751,9 @@ Backup execution contract:
 - Validate manifest/files before no-replace publish, then link one `backup_created`.
   Schema v1 binds Job/vault/Backup/archive digest; manifest remains authority for
   include/exclude, schema ranges, external dependencies and policy until migration.
+- A completed backup projects only total, included and missing-required external-dependency
+  counts. Legacy dependency entries fail closed as missing required; excluded optional originals
+  do not make the backup incomplete. No root, source, path or checksum crosses to the renderer.
 
 ## 12. Restore Policy
 

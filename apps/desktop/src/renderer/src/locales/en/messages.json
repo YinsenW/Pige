@@ -89,6 +89,8 @@
   "backup.cancelRequested": "Stopping the backup safely...",
   "backup.create": "Create Backup",
   "backup.created": "Backup created. Files",
+  "backup.createdComplete": "Backup complete: {files} files; {included} of {total} external items included.",
+  "backup.createdIncomplete": "Backup created, but {missing} required external items are missing. Reconnect them before restore.",
   "backup.createdAt": "Created",
   "backup.conversations": "Conversations",
   "backup.contents": "Backup contents",

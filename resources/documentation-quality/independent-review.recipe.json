@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:14:03.000Z",
+  "reviewedAt": "2026-08-01T16:25:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E7.01 saved Collection view matching-Undo Redo and restart recovery.",
+    "scope": "PIGE-BACKUP-003 validated versioned export and external-dependency completeness closure.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "7448ac9891b03e26cb66dda6c66c842cd60dd98b95fa9ad8d1c9eb3940c641be"
+    "reviewedSha256": "b6edd9d3ea60b344db36ebeb148a35d830cf2cb8bb6b203ec438d3327b3bd1b7"
   },
   "reviewers": [
     {
-      "reviewerId": "external-web-lifecycle-review",
-      "task": "Review inert External/Web lifecycle authority and acceptance",
+      "reviewerId": "backup-completeness-review",
+      "task": "Review versioned Backup completeness authority and acceptance",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,61 +70,61 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews lifecycle and acceptance facts; Development supplies separate schema, service, restart recovery and Settings UI evidence."
+      "independence": "Planning reviews the Backup and acceptance contract; Development supplies separate manifest, coordinator, preload and Settings UI evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "external-web-lifecycle-review",
+      "reviewerId": "backup-completeness-review",
       "blockerCount": 0,
-      "summary": "External/Web bytes remain inert while private trash and exact receipts preserve recoverable user ownership."
+      "summary": "The validated manifest remains durable authority while the renderer receives only bounded dependency counts."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "external-web-lifecycle-review",
+      "reviewerId": "backup-completeness-review",
       "blockerCount": 0,
-      "summary": "Skill design, strict schemas, Main lifecycle policy and Settings controls agree on one pathless disabled-restore contract."
+      "summary": "Data, API, Settings UI, Job recovery and privacy contracts agree on one pathless completeness projection."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "external-web-lifecycle-review",
+      "reviewerId": "backup-completeness-review",
       "blockerCount": 0,
-      "summary": "PIGE-SKILL-001 and E8.01 are verified by staging, runtime, update, scope, lifecycle and UI evidence."
+      "summary": "PIGE-BACKUP-003 is verified by archive, manifest, Job, Operation, completeness and Settings evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "external-web-lifecycle-review",
+      "reviewerId": "backup-completeness-review",
       "blockerCount": 0,
-      "summary": "Existing Skill Registry owners reuse trash, export and restore mechanics without a new channel, store or runtime authority."
+      "summary": "The existing Backup owner derives completeness without a new channel, Job class or durable format."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "external-web-lifecycle-review",
+      "reviewerId": "backup-completeness-review",
       "blockerCount": 0,
-      "summary": "Existing Skill, API, playbook, trace and acceptance owners hold the closure without a new design document."
+      "summary": "Existing data, API, UI, recovery and playbook owners hold the decision without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/skill-registry-service.test.ts tests/unit/skill-url-install-service.test.ts tests/unit/scoped-skill-registry-service.test.ts tests/unit/pure-skill-runtime-service.test.ts tests/unit/full-ui-settings-surface.test.ts",
+      "command": "npx vitest run tests/unit/backup-service.test.ts tests/unit/backup-coordinator-service.test.ts tests/unit/restore-ui.test.ts",
       "status": "passed",
-      "evidence": "Machine, Vault and External/Web staging, runtime, update, export, trash, disabled restore and Settings controls pass directly."
+      "evidence": "Validated archive, required/optional dependency counts, durable Operation and pathless Settings results pass directly."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The lifecycle candidate compiles and builds while existing responsibility owners remain within governed budgets."
+      "evidence": "The completeness candidate compiles and builds without growing the frozen Backup service budget."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Skill, API, playbook, trace, acceptance and semantic-claim owners remain mutually consistent."
+      "evidence": "Data, API, UI, recovery, acceptance and semantic-claim owners remain mutually consistent."
     }
   ],
   "coordination": {

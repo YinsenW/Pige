@@ -863,6 +863,9 @@ Required controls:
 - A bounded Referenced originals repair list shows only unavailable, Main-projected sources and one Reconnect action per item. It exposes no raw path, checksum, size, proof, or Job internals; cancel stays quiet, mismatch retains the item/action, and success refreshes current Settings truth.
 - This page alone owns restarted user Backup, valid actions and latest completion; never
   expose raw Job/path/error or rollback children.
+- After creation, show whether all required external items are present. Complete copy reports
+  file and included/total counts; incomplete copy reports only the missing-required count and
+  asks the user to reconnect before restore. Never show dependency identity or a raw path.
 - A Backup offers Reconnect only for `JobSummary.canReconnectDependency === true`; UI never
   infers private eligibility. Main completes
   chooser→proof→persistence→same-Job resume; renderer sends only vault/Job/request identity,

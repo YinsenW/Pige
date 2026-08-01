@@ -5011,6 +5011,34 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260801-Backup-External-Dependency-Completeness
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+A completed Backup reports whether every required external dependency is included, using only
+total, included and missing-required counts derived from the validated manifest in Main.
+
+Rationale:
+
+A successfully written archive can still omit an unavailable managed-copy root. Users need this
+distinction before relying on the archive, while renderer access to root IDs, source IDs, paths or
+checksums would violate the storage boundary.
+
+Consequences:
+
+- Optional referenced originals may remain excluded without marking the Backup incomplete.
+- Missing required managed roots and legacy dependency entries fail closed as incomplete.
+- Preload rejects contradictory counts, and Settings shows one localized complete/incomplete result.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
