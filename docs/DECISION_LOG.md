@@ -5076,6 +5076,40 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Agent-Page-Redo
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Agent-created pages and Agent page updates support restart-safe Activity Redo only while the exact
+matching Undo remains current. Create Redo restores the original receipt-bound page image from
+private trash into its still-vacant owned path. Update Redo publishes the original integrity-bound
+after image only after re-proving the live before image, referenced images, relationships and
+Operation chain.
+
+Rationale:
+
+Current autonomous and explicitly approved Agent page writes already persist attributable
+`create_page` or `update_page` Operations with exact private recovery material. Reusing those images
+closes their reversible lifecycle without re-running the model, renderer input or mutation planner.
+
+Consequences:
+
+- Each successful Redo writes one deterministic forward `restore_page` or `update_page` Operation.
+- Interrupted page and Operation publication is adopted once after restart; path, content, image,
+  relationship or Operation drift preserves live state and disables Redo.
+- Existing Activity IPC and UI remain generic; no new renderer authority or visible control exists.
+- Current autonomous and approved Agent writes have attributable Operations and recovery references,
+  so `PIGE-JOB-005` is verified without claiming future mutation families.
+
+References:
+
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+- `docs/SPEC_TRACEABILITY.md`
+
 ### D-20260801-Backup-External-Dependency-Completeness
 
 Status: Accepted

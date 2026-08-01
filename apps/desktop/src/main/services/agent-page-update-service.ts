@@ -1325,7 +1325,7 @@ function replaceUniqueNestedFrontmatterLine(
   return lines.join("\n");
 }
 
-function stageExact(vaultPath: string, relativePath: string, content: string, expectedHash: string): void {
+export function stageExact(vaultPath: string, relativePath: string, content: string, expectedHash: string): void {
   const absolutePath = resolveVaultPath(vaultPath, relativePath);
   const result = createGeneratedNoteExclusive(vaultPath, absolutePath, content);
   if (result === "exists") requireExact(vaultPath, relativePath, expectedHash);
@@ -1339,7 +1339,7 @@ function preserveBeforeBytes(
   stageExact(vaultPath, binding.beforePath, content, binding.beforeContentHash);
 }
 
-function requireExisting(vaultPath: string, relativePath: string): string {
+export function requireExisting(vaultPath: string, relativePath: string): string {
   const content = readGeneratedNoteExact(
     vaultPath,
     resolveVaultPath(vaultPath, relativePath),
@@ -1349,7 +1349,7 @@ function requireExisting(vaultPath: string, relativePath: string): string {
   return content;
 }
 
-function requireExact(vaultPath: string, relativePath: string, expectedHash: string): string {
+export function requireExact(vaultPath: string, relativePath: string, expectedHash: string): string {
   const content = requireExisting(vaultPath, relativePath);
   if (hashText(content) !== expectedHash) {
     throw pageConflict("A durable existing-note update file no longer matches its recorded checksum.");
@@ -1529,7 +1529,7 @@ function readCommittedOperation(vaultPath: string, expected: OperationRecord): O
   return parsed;
 }
 
-function commitUpdateOperation(vaultPath: string, operation: OperationRecord): OperationRecord {
+export function commitUpdateOperation(vaultPath: string, operation: OperationRecord): OperationRecord {
   const operationPath = resolveVaultPath(vaultPath, createOperationPath(operation.id));
   const content = `${JSON.stringify(operation, null, 2)}\n`;
   const result = createGeneratedNoteExclusive(vaultPath, operationPath, content);
@@ -1768,7 +1768,7 @@ function hashJson(value: unknown): string {
   return hashText(stableJson(value));
 }
 
-function hashText(value: string): string {
+export function hashText(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
