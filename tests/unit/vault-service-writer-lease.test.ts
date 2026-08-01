@@ -166,6 +166,31 @@ describe("VaultService writer lease lifecycle", () => {
     expect(startupService.current()).toMatchObject({ vaultId: openedVault.summary.vaultId });
   });
 
+  it("does not activate a Vault with missing or malformed readable root documents", () => {
+    const root = makeTempRoot();
+    const current = makeVault(root, "Current");
+    const malformed = makeVault(root, "Malformed");
+    fs.unlinkSync(path.join(malformed.path, "index.md"));
+    const settings = makeSettingsStore(root, "root-document-settings");
+    const harness = makeLeaseHarness();
+    const service = trackService(new VaultService(settings, () => false, harness.factory));
+    service.openPath(current.path);
+
+    expect(() => service.openPath(malformed.path)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+    expect(service.current()).toMatchObject({ vaultId: current.summary.vaultId });
+    expect(settings.getActiveVaultPath()).toBe(current.path);
+    service.close();
+
+    settings.setActiveVault(malformed.path, malformed.summary);
+    const restartedHarness = makeLeaseHarness();
+    const restarted = trackService(new VaultService(settings, () => false, restartedHarness.factory));
+    expect(restarted.current()).toBeUndefined();
+    expect(settings.getActiveVaultPath()).toBeUndefined();
+    expect(restartedHarness.acquiredPaths).toEqual([]);
+  });
+
   it("acquires the next vault lease before releasing the previous lease", () => {
     const root = makeTempRoot();
     const firstVault = makeVault(root, "First");

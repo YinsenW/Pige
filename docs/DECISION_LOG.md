@@ -4789,6 +4789,38 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/DATA_ARCHITECTURE.md`
 
+### D-20260801-Vault-Root-Markdown-Activation-Gate
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Creation, explicit open, and startup restoration treat `PIGE.md`, `index.md`, and `log.md` as
+required human-readable Vault compatibility documents. Main reads them with bounded no-follow
+regular-file authority and validates their owned structure before acquiring or replacing active
+Vault authority.
+
+Rationale:
+
+A manifest and config alone cannot prove that a Vault has the durable policy, visible index, and
+human-readable activity root promised by first run. Activating a partially deleted, linked, or
+malformed root would defer corruption into unrelated services and make restart behavior misleading.
+
+Consequences:
+
+- New Vault publication reuses the same validation applied by later open and restart.
+- Missing, linked, hard-linked, oversized, invalid UTF-8, or structurally malformed root documents
+  fail before active binding replacement; an already active healthy Vault remains selected.
+- Startup clears only the invalid machine-local active binding and does not acquire its writer lease.
+- Durable root Markdown and the compatibility manifest remain free of machine-local active paths.
+
+References:
+
+- `docs/ONBOARDING_AND_FIRST_RUN.md`
+- `docs/MARKDOWN_SCHEMA.md`
+- `docs/API_AND_IPC_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

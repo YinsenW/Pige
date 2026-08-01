@@ -74,7 +74,7 @@ Creation behavior:
 
 - `vault.create` uses a trusted OS folder picker for the parent folder and a user-visible vault name.
 - Main builds and validates a new Vault in a private sibling staging directory, then publishes it with one directory rename. A failed build removes only that private staging directory, preserves any current Vault and the first-run name draft, and leaves the same destination retryable.
-- Pige creates `PIGE.md`, `index.md`, `log.md`, `.pige/manifest.json`, `.pige/config.json`, and default folders.
+- Pige creates human-readable `PIGE.md`, `index.md`, and `log.md` plus `.pige/manifest.json`, `.pige/config.json`, and default folders. These durable files contain stable Vault facts and relative references only, never the machine-local active Vault, app-data, or temporary path.
 - If the suggested default folder already contains a compatible Pige vault, offer to open it.
 - If the suggested default folder exists but is not a Pige vault, offer to choose a different folder or create a named subfolder.
 
@@ -82,6 +82,7 @@ Opening behavior:
 
 - `vault.open` accepts a folder selected through a trusted OS folder picker.
 - v0.1 opens Pige-compatible vaults only.
+- Main revalidates `PIGE.md`, the special `index.md` frontmatter/body, and the `log.md` initialization prefix through bounded no-follow reads before activation. Missing, unsafe, malformed, or invalid UTF-8 root Markdown does not replace the current Vault; startup restoration clears that invalid machine-local binding without acquiring write authority.
 - Importing an existing Obsidian or generic Markdown folder is a separate post-v0.1/import workflow, not hidden inside first run.
 
 Path validation:

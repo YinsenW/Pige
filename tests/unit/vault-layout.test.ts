@@ -11,7 +11,8 @@ import {
   readVaultConfig,
   readVaultManifest,
   resetRebuildableVaultStorage,
-  updateVaultSourceStorageStrategy
+  updateVaultSourceStorageStrategy,
+  validateVaultRootDocuments
 } from "../../apps/desktop/src/main/services/vault-layout";
 
 const tempRoots: string[] = [];
@@ -119,6 +120,68 @@ describe("vault layout", () => {
     expect(vault.name).toBe("Existing Empty");
     expect(inspectVaultCompatibility(target).status).toBe("current");
     expect(fs.readdirSync(root).filter((entry) => entry.startsWith(".pige-vault-create-"))).toEqual([]);
+  });
+
+  it("validates all three human-readable root documents and rejects unsafe or malformed replacements", () => {
+    const root = makeTempRoot();
+    createVaultOnDisk({
+      parentDirectory: root,
+      vaultName: "Readable",
+      appDataPath: path.join(root, "app-data"),
+      tempPath: path.join(root, "temp")
+    });
+    const vaultPath = path.join(root, "Readable");
+    expect(() => validateVaultRootDocuments(vaultPath)).not.toThrow();
+
+    const policyPath = path.join(vaultPath, "PIGE.md");
+    const policy = fs.readFileSync(policyPath, "utf8");
+    fs.writeFileSync(policyPath, policy.replace("## Prompt Injection Rules", "## Missing Rules"), "utf8");
+    expect(() => loadVaultSummary(vaultPath)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+    fs.writeFileSync(policyPath, policy, "utf8");
+
+    const indexPath = path.join(vaultPath, "index.md");
+    const index = fs.readFileSync(indexPath, "utf8");
+    fs.writeFileSync(indexPath, index.replace('page_type: "index"', 'page_type: "source"'), "utf8");
+    expect(() => loadVaultSummary(vaultPath)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+    fs.writeFileSync(indexPath, index, "utf8");
+
+    const logPath = path.join(vaultPath, "log.md");
+    fs.writeFileSync(logPath, Buffer.from([0xff, 0xfe, 0x00]));
+    expect(() => loadVaultSummary(vaultPath)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+
+    const linkedLog = path.join(root, "linked-log.md");
+    fs.writeFileSync(linkedLog, "# Log\n\n- 2026-08-01T00:00:00.000Z Created vault.\n", "utf8");
+    fs.unlinkSync(logPath);
+    fs.symlinkSync(linkedLog, logPath);
+    expect(() => loadVaultSummary(vaultPath)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+    fs.unlinkSync(logPath);
+    fs.linkSync(linkedLog, logPath);
+    expect(() => loadVaultSummary(vaultPath)).toThrowError(expect.objectContaining({
+      code: "vault.root_documents_invalid"
+    }));
+  });
+
+  it("keeps every default human-readable file and manifest free of machine-local active paths", () => {
+    const root = makeTempRoot();
+    const appDataPath = path.join(root, "machine-app-data");
+    const tempPath = path.join(root, "machine-temp");
+    createVaultOnDisk({ parentDirectory: root, vaultName: "Portable", appDataPath, tempPath });
+    const vaultPath = path.join(root, "Portable");
+
+    for (const relative of ["PIGE.md", "index.md", "log.md", ".pige/manifest.json"] as const) {
+      const bytes = fs.readFileSync(path.join(vaultPath, relative), "utf8");
+      expect(bytes).not.toContain(vaultPath);
+      expect(bytes).not.toContain(appDataPath);
+      expect(bytes).not.toContain(tempPath);
+    }
   });
 
   it("keeps source storage policy in vault config and reflects it in the summary", () => {
