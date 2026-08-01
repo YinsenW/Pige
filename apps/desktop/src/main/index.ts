@@ -339,6 +339,7 @@ import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
 import { ClaimConfidenceService } from "./services/claim-confidence-service";
+import { EntityTypeService } from "./services/entity-type-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { ConceptParentService } from "./services/concept-parent-service";
@@ -491,6 +492,7 @@ let assistantAnswerNoteService: AssistantAnswerNoteService | undefined;
 let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let claimConfidenceService: ClaimConfidenceService | undefined;
+let entityTypeService: EntityTypeService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
 let conceptParentService: ConceptParentService | undefined;
@@ -1909,6 +1911,13 @@ const getClaimConfidenceService = (): ClaimConfidenceService => {
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true })
   );
   return claimConfidenceService;
+};
+const getEntityTypeService = (): EntityTypeService => {
+  entityTypeService ??= new EntityTypeService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowEntity: true })
+  );
+  return entityTypeService;
 };
 const getQuestionAnswerService = (): QuestionAnswerService => {
   questionAnswerService ??= new QuestionAnswerService(getNotesService(),
@@ -3447,6 +3456,7 @@ registerReaderIpc({
   getNoteArchiveService,
   getQuestionStateService,
   getClaimConfidenceService,
+  getEntityTypeService,
   getQuestionAnswerService,
   getClaimContradictionService,
   getConceptParentService,
@@ -3958,6 +3968,10 @@ app.whenReady().then(async () => {
   claimConfidenceService = new ClaimConfidenceService(
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true })
+  );
+  entityTypeService = new EntityTypeService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowEntity: true })
   );
   questionAnswerService = new QuestionAnswerService(getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowQuestion: true }),

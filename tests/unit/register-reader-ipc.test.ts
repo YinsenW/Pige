@@ -18,6 +18,7 @@ import type { NoteRelateService } from "../../apps/desktop/src/main/services/not
 import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/services/library-topic-rename-service";
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
 import type { ClaimConfidenceService } from "../../apps/desktop/src/main/services/claim-confidence-service";
+import type { EntityTypeService } from "../../apps/desktop/src/main/services/entity-type-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
 import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
 import { NoteChangeQuestionAnswerResultSchema } from "@pige/schemas";
@@ -56,7 +57,8 @@ function makeHarness(
   questionAnswerService?: Partial<QuestionAnswerService>,
   generatedRevealService?: Partial<ReaderGeneratedNoteRevealService>,
   conceptParentService?: Partial<ConceptParentService>,
-  claimConfidenceService?: Partial<ClaimConfidenceService>
+  claimConfidenceService?: Partial<ClaimConfidenceService>,
+  entityTypeService?: Partial<EntityTypeService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -108,6 +110,10 @@ function makeHarness(
     getClaimConfidenceService: () => {
       if (claimConfidenceService) return claimConfidenceService as ClaimConfidenceService;
       throw new Error("Claim confidence service was not expected.");
+    },
+    getEntityTypeService: () => {
+      if (entityTypeService) return entityTypeService as EntityTypeService;
+      throw new Error("Entity type service was not expected.");
     },
     getQuestionAnswerService: () => {
       if (questionAnswerService) return questionAnswerService as QuestionAnswerService;
@@ -188,6 +194,7 @@ describe("registerReaderIpc", () => {
       "notes.restoreArchived",
       "notes.setQuestionState",
       "notes.setClaimConfidence",
+      "notes.setEntityType",
       "notes.searchQuestionAnswers",
       "notes.changeQuestionAnswer",
       "notes.searchClaimContradictions",
@@ -299,6 +306,30 @@ describe("registerReaderIpc", () => {
     await expect(handlers.get("notes.setClaimConfidence")!({ sender } as IpcMainInvokeEvent, request))
       .resolves.toMatchObject({ status: "committed", render: { claimConfidence: { confidence: "high" } } });
     expect(setConfidence).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(refreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds Entity type correction to the tracked Reader owner and refreshes only after commit", async () => {
+    const request = { apiVersion: 1 as const, requestId: "noteentitytypereq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_entity", currentPageId: "page_20260801_entity01",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`, entityType: "organization" as const };
+    const render = { summary: { pageId: request.currentPageId, title: "Entity", pageType: "entity" as const,
+      status: "active" as const, pagePath: "entities/entity.md", createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T11:00:00.000Z", sourceIds: [] }, html: "<h1>Entity</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      entityType: { entityType: "organization" as const, canChange: true,
+        revision: `noteeditrev_${"b".repeat(64)}` } };
+    const setType = vi.fn(async () => ({ ...request, status: "committed" as const,
+      operationId: "op_20260801_entitytype1", render })), refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined,
+      vi.fn(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, { setType });
+    const sender = makeSender(62);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: request.currentPageId });
+    await expect(handlers.get("notes.setEntityType")!({ sender } as IpcMainInvokeEvent, request))
+      .resolves.toMatchObject({ status: "committed", render: { entityType: { entityType: "organization" } } });
+    expect(setType).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
     expect(refreshed).toHaveBeenCalledTimes(1);
   });
 

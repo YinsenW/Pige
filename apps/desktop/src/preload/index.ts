@@ -192,6 +192,8 @@ import type {
   NoteSetQuestionStateResult,
   NoteSetClaimConfidenceRequest,
   NoteSetClaimConfidenceResult,
+  NoteSetEntityTypeRequest,
+  NoteSetEntityTypeResult,
   NoteSearchQuestionAnswersRequest,
   NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest,
@@ -744,6 +746,9 @@ import {
   NOTE_SET_CLAIM_CONFIDENCE_CHANNEL,
   NoteSetClaimConfidenceRequestSchema,
   NoteSetClaimConfidenceResultSchema,
+  NOTE_SET_ENTITY_TYPE_CHANNEL,
+  NoteSetEntityTypeRequestSchema,
+  NoteSetEntityTypeResultSchema,
   NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL,
   NOTE_CHANGE_QUESTION_ANSWER_CHANNEL,
   NoteSearchQuestionAnswersRequestSchema,
@@ -2345,6 +2350,13 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           NOTE_SET_CLAIM_CONFIDENCE_CHANNEL,
           NoteSetClaimConfidenceRequestSchema.parse(request)
+        )
+      ),
+    setEntityType: async (request: NoteSetEntityTypeRequest): Promise<NoteSetEntityTypeResult> =>
+      NoteSetEntityTypeResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_SET_ENTITY_TYPE_CHANNEL,
+          NoteSetEntityTypeRequestSchema.parse(request)
         )
       ),
     searchQuestionAnswers: async (request: NoteSearchQuestionAnswersRequest): Promise<NoteSearchQuestionAnswersResult> =>

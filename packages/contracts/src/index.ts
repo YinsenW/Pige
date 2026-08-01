@@ -306,6 +306,10 @@ import type {
   NoteClaimConfidenceSummary,
   NoteSetClaimConfidenceRequest,
   NoteSetClaimConfidenceResult,
+  NoteEntityType,
+  NoteEntityTypeSummary,
+  NoteSetEntityTypeRequest,
+  NoteSetEntityTypeResult,
   NoteQuestionAnswerItem,
   NoteQuestionAnswersSummary,
   NoteSearchQuestionAnswersRequest,
@@ -767,6 +771,10 @@ export type {
   NoteClaimConfidenceSummary,
   NoteSetClaimConfidenceRequest,
   NoteSetClaimConfidenceResult,
+  NoteEntityType,
+  NoteEntityTypeSummary,
+  NoteSetEntityTypeRequest,
+  NoteSetEntityTypeResult,
   NoteQuestionAnswerItem,
   NoteQuestionAnswersSummary,
   NoteSearchQuestionAnswersRequest,
@@ -2523,6 +2531,9 @@ export interface PigeDesktopApi {
     readonly setClaimConfidence: (
       request: NoteSetClaimConfidenceRequest
     ) => Promise<NoteSetClaimConfidenceResult>;
+    readonly setEntityType: (
+      request: NoteSetEntityTypeRequest
+    ) => Promise<NoteSetEntityTypeResult>;
     readonly searchQuestionAnswers: (
       request: NoteSearchQuestionAnswersRequest
     ) => Promise<NoteSearchQuestionAnswersResult>;
