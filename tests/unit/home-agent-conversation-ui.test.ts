@@ -5336,6 +5336,13 @@ describe("Home durable Agent conversation UI", () => {
   it("relates a selected note from the Home-opened Reader and adopts the authoritative related surface", async () => {
     const dom = createDom();
     const harness = createHarness(completedGroundedTimeline());
+    const listRequests: { readonly pageTypes?: readonly string[] }[] = [];
+    const relationTarget = {
+      ...testLibraryList().pages[1]!,
+      pageId: "page_20260715_question1",
+      title: "Open design question",
+      pageType: "question" as const,
+    };
     const revision = `noteeditrev_${"d".repeat(32)}`;
     harness.renderNote = async (pageId) => ({
       ...testRenderedNote(pageId),
@@ -5350,13 +5357,29 @@ describe("Home durable Agent conversation UI", () => {
         trashEligibility: { canTrash: true, revision: `noteeditrev_${"e".repeat(32)}` },
       },
     });
-    const mount = await mountHome(dom, makePigeApi(harness));
+    const api = makePigeApi(harness) as {
+      library: { list: (request?: { readonly pageTypes?: readonly string[] }) => Promise<LibraryListResult> };
+    };
+    api.library.list = async (request) => {
+      listRequests.push(request ?? {});
+      const result = testLibraryList();
+      return request?.pageTypes?.includes("question")
+        ? { ...result, total: result.pages.length + 1, pages: [...result.pages, relationTarget] }
+        : result;
+    };
+    const mount = await mountHome(dom, api);
     await clickElement(dom, requireElement(mount.container.querySelector<HTMLButtonElement>(".conversation-citations .citation-row")));
     await waitFor(dom, () => mount.container.querySelector(".note-reader") !== null);
 
     await clickButtonByAriaLabel(dom, mount.container, enMessages["note.moreActions"]);
     await clickButton(dom, mount.container, enMessages["note.relate.title"]);
     await waitFor(dom, () => mount.container.querySelector("select")?.value === "page_20260715_note0002");
+    const select = requireElement(mount.container.querySelector<HTMLSelectElement>("select"));
+    expect(Array.from(select.options, (option) => option.value)).toContain(relationTarget.pageId);
+    expect(listRequests).toContainEqual({ pageTypes: ["note", "claim", "question", "concept", "entity"], limit: 50 });
+    select.value = relationTarget.pageId;
+    select.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
+    await act(async () => settle(dom));
     await clickButton(dom, mount.container, enMessages["note.relate.confirm"]);
     await waitFor(dom, () => harness.noteRelateRequests.length === 1);
     expect(harness.noteRelateRequests[0]).toMatchObject({
@@ -5364,8 +5387,8 @@ describe("Home durable Agent conversation UI", () => {
       currentPageId: "page_20260715_note0001",
       renderContextId: `notectx_${"a".repeat(32)}`,
       expectedRevision: revision,
-      targetPageId: "page_20260715_note0002",
-      expectedTargetUpdatedAt: "2026-07-15T08:01:00.000Z",
+      targetPageId: relationTarget.pageId,
+      expectedTargetUpdatedAt: relationTarget.updatedAt,
     });
     expect(harness.noteRelateRequests[0]?.requestId).toMatch(/^noterelatereq_[a-z0-9]{16,64}$/u);
     expect(JSON.stringify(harness.noteRelateRequests[0])).not.toContain("wiki/note");

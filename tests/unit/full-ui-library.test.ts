@@ -2057,6 +2057,7 @@ describe("full UI Library", () => {
         developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
         activeVaultId: "vault_20260715_fullui01",
         onLoadNoteMergeTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
+        onLoadNoteRelateTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
         onMergeCurrentNote,
         onCurrentNoteMerged: (render) => adopted.push(render),
         onDevelopment: () => undefined, t
@@ -2113,7 +2114,10 @@ describe("full UI Library", () => {
       summary: { ...readerNote().summary, pageType: "claim" },
       trashEligibility: { canTrash: true, revision: `noteeditrev_${"a".repeat(32)}` },
     };
-    const target = libraryList().pages.find((page) => page.pageId !== note.summary.pageId && page.pageType === "note")!;
+    const target = {
+      ...libraryPage("page_20260715_question1", "Open design question", "2026-07-15T10:05:00.000Z"),
+      pageType: "question" as const,
+    };
     const committedRender: NoteRenderResult = {
       ...note,
       html: "<p>Authoritative body with related note.</p>",
@@ -2135,6 +2139,7 @@ describe("full UI Library", () => {
         developmentNotice: null, onClearDevelopment: () => undefined, onCopyNote: async () => true,
         activeVaultId: "vault_20260715_fullui01",
         onLoadNoteMergeTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
+        onLoadNoteRelateTargets: async () => [{ pageId: target.pageId, title: target.title, updatedAt: target.updatedAt }],
         onRelateCurrentNote,
         onCurrentNoteRelated: (render) => adopted.push(render),
         onDevelopment: () => undefined, t,
@@ -2145,7 +2150,7 @@ describe("full UI Library", () => {
     const trigger = buttonWithLabel(container, "More note actions");
     trigger.focus();
     await clickButton(dom, trigger);
-    await clickButton(dom, buttonNamed(container, "Relate note"));
+    await clickButton(dom, buttonNamed(container, "Relate knowledge page"));
     expect(container.querySelector("select")?.value).toBe(target.pageId);
     await clickButton(dom, buttonNamed(container, "Add relation"));
     expect(requests[0]).toMatchObject({

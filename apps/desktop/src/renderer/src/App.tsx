@@ -92,6 +92,7 @@ import { NoteRevisionHistoryDialog } from "./components/NoteRevisionHistoryDialo
 import { readerNoteRenameLabels, submitReaderNoteRename, type ReaderNoteRenameSubmit } from "./components/ReaderNoteRenameDialog";
 import { readerNoteAliasLabels, submitReaderNoteAliasChange, type ReaderNoteAliasSubmit } from "./components/ReaderNoteAliasDialog"; import { ReaderTopicRenameDialog } from "./components/ReaderTopicRenameDialog";
 import type { ReaderNoteMergeOutcome, ReaderNoteMergeTarget } from "./components/ReaderNoteMergeDialog";
+import { createReaderKnowledgePageTargetLoader } from "./reader-knowledge-page-targets";
 import { readerNoteRelateLabels, submitReaderNoteRelation, type ReaderNoteRelateOutcome } from "./components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "./components/ReaderInlineReferenceSurface";
 import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
@@ -1259,19 +1260,11 @@ export function App(): React.JSX.Element {
   ): void => {
     setDevelopmentNotice({ surface, capability, state });
   };
-
-
-  const loadNoteMergeTargets = async (currentPageId: string): Promise<readonly ReaderNoteMergeTarget[]> => {
-    const vaultId = activeVaultIdRef.current;
-    if (!vaultId) throw new Error("Note merge target owner is unavailable.");
-    const result = await window.pige.library.list({ limit: 50, pageTypes: ["note"] });
-    if (activeVaultIdRef.current !== vaultId || result.activeVaultId !== vaultId) {
-      throw new Error("Note merge target owner changed.");
-    }
-    return result.pages
-      .filter((page) => page.pageType === "note" && page.pageId !== currentPageId)
-      .map((page) => ({ pageId: page.pageId, title: page.title, updatedAt: page.updatedAt }));
-  };
+  const loadKnowledgePageTargets = createReaderKnowledgePageTargetLoader(() => activeVaultIdRef.current);
+  const loadNoteMergeTargets = (currentPageId: string): Promise<readonly ReaderNoteMergeTarget[]> =>
+    loadKnowledgePageTargets(currentPageId, ["note"]);
+  const loadNoteRelateTargets = (currentPageId: string): Promise<readonly ReaderNoteMergeTarget[]> =>
+    loadKnowledgePageTargets(currentPageId, ["note", "claim", "question", "concept", "entity"]);
 
   const adoptMergedNote = (render: NoteRenderResult): void => {
     const vaultId = activeVaultIdRef.current;
@@ -2807,6 +2800,7 @@ export function App(): React.JSX.Element {
             onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onRenameCurrentNote={(request) => window.pige.notes.rename(request)} onCurrentNoteRenamed={adoptMergedNote} onChangeNoteAlias={(request) => window.pige.notes.changeAlias(request)} onCurrentNoteAliasChanged={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.editTaxonomy(request)} onRemoveNoteTag={(request) => window.pige.notes.removeTag(request)} onCurrentNoteTagged={adoptMergedNote}
             onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
             onLoadNoteMergeTargets={loadNoteMergeTargets}
+            onLoadNoteRelateTargets={loadNoteRelateTargets}
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
             onCurrentNoteMerged={adoptMergedNote}
             onRelateCurrentNote={submitNoteRelation}
@@ -2878,6 +2872,7 @@ export function App(): React.JSX.Element {
               onCurrentNoteSourceReconnected={adoptReconnectedNote} onArchiveCurrentNote={(request) => window.pige.notes.archiveCurrent(request)} onCurrentNoteArchived={adoptMergedNote} onRestoreArchivedNote={(request) => window.pige.notes.restoreArchived(request)} onCurrentNoteRestored={adoptMergedNote} onRenameCurrentNote={(request) => window.pige.notes.rename(request)} onCurrentNoteRenamed={adoptMergedNote} onChangeNoteAlias={(request) => window.pige.notes.changeAlias(request)} onCurrentNoteAliasChanged={adoptMergedNote} onAddNoteTag={(request) => window.pige.notes.editTaxonomy(request)} onRemoveNoteTag={(request) => window.pige.notes.removeTag(request)} onCurrentNoteTagged={adoptMergedNote}
               onTrashCurrentNote={(request) => window.pige.notes.trashCurrent(request)}
               onLoadNoteMergeTargets={loadNoteMergeTargets}
+              onLoadNoteRelateTargets={loadNoteRelateTargets}
               onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
               onCurrentNoteMerged={adoptMergedNote}
               onRelateCurrentNote={submitNoteRelation}
@@ -2957,6 +2952,7 @@ export function App(): React.JSX.Element {
             onSaveNoteEditor={(request) => window.pige.notes.saveEditor(request)}
             onReloadNoteEditor={reloadNoteEditor}
             onLoadNoteMergeTargets={loadNoteMergeTargets}
+            onLoadNoteRelateTargets={loadNoteRelateTargets}
             onMergeCurrentNote={(request) => window.pige.notes.merge(request)}
             onRelateCurrentNote={submitNoteRelation}
             onOpenCollection={(datasetId, tableId) => openCollection(datasetId, tableId, "home")}
@@ -3461,6 +3457,7 @@ export function LibraryPanel(props: {
   readonly onArchiveCurrentNote?: ReaderNoteArchiveSubmit; readonly onCurrentNoteArchived?: (render: NoteRenderResult) => void; readonly onRestoreArchivedNote?: ReaderNoteRestoreSubmit; readonly onCurrentNoteRestored?: (render: NoteRenderResult) => void; readonly onRenameCurrentNote?: ReaderNoteRenameSubmit; readonly onCurrentNoteRenamed?: (render: NoteRenderResult) => void; readonly onChangeNoteAlias?: ReaderNoteAliasSubmit; readonly onCurrentNoteAliasChanged?: (render: NoteRenderResult) => void; readonly onAddNoteTag?: ReaderNoteTagSubmit; readonly onRemoveNoteTag?: ReaderNoteTagRemoveSubmit; readonly onCurrentNoteTagged?: (render: NoteRenderResult) => void;
   readonly onTrashCurrentNote?: (request: NoteTrashCurrentRequest) => Promise<NoteTrashCurrentResult>;
   readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onLoadNoteRelateTargets?: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onCurrentNoteMerged: (render: NoteRenderResult) => void;
   readonly onRelateCurrentNote?: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
@@ -3817,7 +3814,7 @@ export function LibraryPanel(props: {
               onArchive={archiveSelectedNote} onArchiveCommitted={props.onCurrentNoteArchived ?? props.onCurrentNoteMerged} onRestore={restoreSelectedNote} onRestoreCommitted={props.onCurrentNoteRestored ?? props.onCurrentNoteMerged} onRename={renameSelectedNote} onRenameCommitted={props.onCurrentNoteRenamed ?? props.onCurrentNoteMerged} onAliasChange={changeSelectedNoteAlias} onAliasCommitted={props.onCurrentNoteAliasChanged ?? props.onCurrentNoteMerged} onAddTag={addTagToSelectedNote} onRemoveTag={removeTagFromSelectedNote} onTagCommitted={props.onCurrentNoteTagged ?? props.onCurrentNoteMerged}
               onLoadMergeTargets={() => props.onLoadNoteMergeTargets(summary.pageId)}
               onMerge={mergeSelectedNote}
-              onLoadRelateTargets={() => props.onLoadNoteMergeTargets(summary.pageId)}
+              onLoadRelateTargets={() => (props.onLoadNoteRelateTargets ?? props.onLoadNoteMergeTargets)(summary.pageId)}
               onRelate={relateSelectedNote}
               onCommitted={() => props.onCurrentNoteTrashed?.()}
               onMergeCommitted={props.onCurrentNoteMerged}
@@ -4640,6 +4637,7 @@ function HomeComposer(props: {
   readonly onSaveNoteEditor: (request: NoteEditorSaveRequest) => Promise<NoteEditorSaveResult>;
   readonly onReloadNoteEditor: (request: NoteEditorOpenRequest) => Promise<NoteEditorOpenResult>;
   readonly onLoadNoteMergeTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
+  readonly onLoadNoteRelateTargets: (currentPageId: string) => Promise<readonly ReaderNoteMergeTarget[]>;
   readonly onMergeCurrentNote: (request: NoteMergeRequest) => Promise<NoteMergeResult>;
   readonly onRelateCurrentNote: (request: NoteRelateRequest) => Promise<NoteRelateResult>;
   readonly onOpenCollection: (datasetId: string, tableId: string) => Promise<boolean>;
@@ -6796,7 +6794,7 @@ function HomeComposer(props: {
                   onArchive={archiveSelectedHomeNote} onArchiveCommitted={adoptMergedHomeNote} onRestore={restoreSelectedHomeNote} onRestoreCommitted={adoptMergedHomeNote} onRename={renameSelectedHomeNote} onRenameCommitted={adoptMergedHomeNote} onAliasChange={changeSelectedHomeNoteAlias} onAliasCommitted={adoptMergedHomeNote} onAddTag={addTagToSelectedHomeNote} onRemoveTag={removeTagFromSelectedHomeNote} onTagCommitted={adoptMergedHomeNote}
                   onLoadMergeTargets={() => props.onLoadNoteMergeTargets(selectedNote.summary.pageId)}
                   onMerge={mergeSelectedHomeNote}
-                  onLoadRelateTargets={() => props.onLoadNoteMergeTargets(selectedNote.summary.pageId)}
+                  onLoadRelateTargets={() => props.onLoadNoteRelateTargets(selectedNote.summary.pageId)}
                   onRelate={relateSelectedHomeNote}
                   onCommitted={() => {
                     noteOpenSequence.current += 1;
