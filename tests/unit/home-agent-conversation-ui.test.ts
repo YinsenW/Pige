@@ -3229,6 +3229,68 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("prepares one pasted standalone URL and submits durable pasted provenance", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const url = "https://example.com/pasted-source";
+
+    expect(await pasteText(dom, container, url)).toBe(true);
+    await setTextareaValue(dom, container, url);
+    expect(container.querySelector('[role="status"]')?.textContent).toContain("Web source queued");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+
+    expect(harness.submitRequests[0]).toMatchObject({ text: url, inputKind: "pasted_url" });
+    expect(harness.submitRequests[0]).not.toHaveProperty("stagedItems");
+    expect(container.textContent).not.toContain("Web source queued");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("drops pasted-URL provenance after editing and preserves it for an exact failed retry", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    const resolvers: Array<(result: AgentStagedSubmitTurnResult) => void> = [];
+    harness.submitTurn = (request) => {
+      harness.submitRequests.push(request);
+      return new Promise((resolve) => resolvers.push(resolve));
+    };
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+    const url = "https://example.com/retry-source";
+
+    await pasteText(dom, container, url);
+    await setTextareaValue(dom, container, url);
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 1);
+    await act(async () => {
+      resolvers.shift()?.({ requestId: "request_20260801_url_failed", state: "failed", modelUsage: "none",
+        sourceIds: [], error: turnConflictError() });
+      await settle(dom);
+    });
+    expect(textareaValue(container)).toBe(url);
+    expect(container.textContent).toContain("Web source queued");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 2);
+    expect(harness.submitRequests.map(({ inputKind }) => inputKind)).toEqual(["pasted_url", "pasted_url"]);
+    expect(harness.submitRequests[1]?.clientTurnId).toBe(harness.submitRequests[0]?.clientTurnId);
+
+    await act(async () => {
+      resolvers.shift()?.(completedResult());
+      await settle(dom);
+    });
+    await pasteText(dom, container, url);
+    await setTextareaValue(dom, container, `${url} summarize this`);
+    expect(container.textContent).not.toContain("Web source queued");
+    await clickButton(dom, container, "Send");
+    await waitFor(dom, () => harness.submitRequests.length === 3);
+    expect(harness.submitRequests[2]?.inputKind).not.toBe("pasted_url");
+
+    await act(async () => { resolvers.shift()?.(completedResult()); await root.unmount(); });
+    dom.window.close();
+  });
+
   it("stages oversized pasted text locally without rendering its body or causing side effects", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
