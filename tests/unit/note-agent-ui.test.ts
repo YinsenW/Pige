@@ -352,7 +352,7 @@ describe("Note Agent production UI", () => {
     await unmount(dom, root);
   });
 
-  it("shows an exact conflict diff and durably keeps the current note", async () => {
+  it("shows an exact conflict diff and explicitly applies the proposed version", async () => {
     const dom = createDom();
     const vaultId = "vault_current_note_conflict";
     const pageId = "page_current_note_conflict";
@@ -378,8 +378,9 @@ describe("Note Agent production UI", () => {
     const currentNoteAppendProposal = vi.fn().mockResolvedValue({ apiVersion: 1, status: "available", proposal: preview });
     const decideCurrentNoteAppendProposal = vi.fn().mockResolvedValue({
       apiVersion: 1,
-      status: "rejected",
-      proposal: { ...preview, state: "rejected", revision: 4, currentRevision: undefined }
+      status: "applied",
+      proposal: { ...preview, state: "applied", revision: 4, currentRevision: undefined },
+      operationId: "op_20260801_currentnoteconflict01"
     });
     const onClose = vi.fn();
     Object.defineProperty(dom.window, "pige", {
@@ -408,10 +409,11 @@ describe("Note Agent production UI", () => {
     expect(container.querySelector('[data-kind="removed"]')?.textContent).toContain("Reviewed base line");
     expect(buttonNamed(container, t("note.proposal.manual_edit"))).toBeTruthy();
     expect(buttonNamed(container, t("note.proposal.keep_current"))).toBeTruthy();
+    expect(buttonNamed(container, t("note.proposal.apply_proposed"))).toBeTruthy();
     await click(dom, required(buttonNamed(container, t("note.proposal.manual_edit"))));
     expect(onClose).toHaveBeenCalledOnce();
-    await click(dom, required(buttonNamed(container, t("note.proposal.keep_current"))));
-    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.status.rejected")) === true);
+    await click(dom, required(buttonNamed(container, t("note.proposal.apply_proposed"))));
+    await waitFor(dom, () => container.textContent?.includes(t("note.proposal.status.applied")) === true);
     expect(decideCurrentNoteAppendProposal).toHaveBeenCalledWith({
       apiVersion: 1,
       activeVaultId: vaultId,
@@ -419,7 +421,7 @@ describe("Note Agent production UI", () => {
       jobId,
       proposalId,
       expectedRevision: 3,
-      decision: "keep_current",
+      decision: "apply_proposed",
       expectedCurrentRevision: currentRevision
     });
     await unmount(dom, root);

@@ -287,7 +287,7 @@ export class CurrentNoteReplaceService {
     readonly jobId: string;
     readonly proposalId: string;
     readonly expectedRevision: number;
-    readonly decision: "approve" | "reject" | "keep_current";
+    readonly decision: "approve" | "reject" | "keep_current" | "apply_proposed";
     readonly expectedCurrentRevision?: string;
   }): CurrentNoteReplaceProposalDecisionResult {
     const proposal = readProposal(input.vaultPath, input.proposalId);
@@ -308,30 +308,99 @@ export class CurrentNoteReplaceService {
     const existingDecision = readDecision(input.vaultPath, proposal.proposalId);
     const existingOutcome = readOutcome(input.vaultPath, proposal.proposalId);
     if (existingOutcome) {
-      if (existingOutcome.outcome !== "conflicted" || input.decision !== "keep_current") {
+      const resolvingConflict = input.decision === "keep_current" || input.decision === "apply_proposed";
+      if (existingOutcome.outcome !== "conflicted" || !resolvingConflict) {
         if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) {
           throw turnConflict("The current-note replacement proposal already has another durable decision.");
         }
         return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
       }
+      const durableResolution = conflictReviews.read({
+        vaultPath: input.vaultPath,
+        mutationKind: "replace",
+        proposalId: proposal.proposalId,
+        intentHash
+      });
+      if (durableResolution) {
+        if (durableResolution.decision !== input.decision) throw turnConflict("The current-note replacement conflict already has another durable resolution.");
+        return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+      }
+      if (input.decision === "apply_proposed") {
+        const adopted = this.#adoptCommitted(input.vaultPath, intent, intentHash);
+        if (adopted) {
+          const before = readGeneratedNoteExact(input.vaultPath, resolveVaultPath(input.vaultPath, intent.beforePath), MAX_PAGE_BYTES);
+          if (before === undefined) throw turnConflict("The applied replacement conflict is missing its exact before-image.");
+          const reviewedRevision = currentNoteConflictRevision(before);
+          if (input.expectedRevision !== 3 || reviewedRevision !== input.expectedCurrentRevision) {
+            return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+          }
+          conflictReviews.resolve({
+            vaultPath: input.vaultPath,
+            mutationKind: "replace",
+            proposalId: proposal.proposalId,
+            intentHash,
+            currentRevision: reviewedRevision,
+            lines: projectCurrentNoteConflictLines(proposal.preview, before),
+            decision: "apply_proposed",
+            operationId: adopted.operation.id
+          });
+          return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+        }
+        const before = readGeneratedNoteExact(input.vaultPath, resolveVaultPath(input.vaultPath, intent.beforePath), MAX_PAGE_BYTES);
+        if (before !== undefined && input.expectedRevision === 3 && currentNoteConflictRevision(before) === input.expectedCurrentRevision) {
+          const live = readCurrentTarget(input.vaultPath, intent);
+          const recovered = this.#adoptPageEffect(input.vaultPath, intent, intentHash, live.contentHash, hashText(before));
+          if (recovered) {
+            conflictReviews.resolve({
+              vaultPath: input.vaultPath,
+              mutationKind: "replace",
+              proposalId: proposal.proposalId,
+              intentHash,
+              currentRevision: currentNoteConflictRevision(before),
+              lines: projectCurrentNoteConflictLines(proposal.preview, before),
+              decision: "apply_proposed",
+              operationId: recovered.operation.id
+            });
+            return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+          }
+        }
+      }
       const currentPreview = this.#preview(input.vaultPath, proposal, intent, existingOutcome);
-      if (currentPreview.state === "rejected") return { status: "rejected", proposal: currentPreview };
       if (
         currentPreview.state !== "conflicted" || !currentPreview.currentRevision ||
         currentPreview.revision !== input.expectedRevision ||
         currentPreview.currentRevision !== input.expectedCurrentRevision
       ) return { status: "stale", proposal: currentPreview };
-      conflictReviews.keepCurrent({
+      if (input.decision === "apply_proposed") {
+        const current = readCurrentTarget(input.vaultPath, intent);
+        if (currentNoteConflictRevision(current.markdown) !== currentPreview.currentRevision) {
+          return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+        }
+        const committed = this.#commit(input.vaultPath, intent, intentHash, current.markdown, current.contentHash, false);
+        conflictReviews.resolve({
+          vaultPath: input.vaultPath,
+          mutationKind: "replace",
+          proposalId: proposal.proposalId,
+          intentHash,
+          currentRevision: currentPreview.currentRevision,
+          lines: currentPreview.lines,
+          decision: "apply_proposed",
+          operationId: committed.operation.id
+        });
+        return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+      }
+      conflictReviews.resolve({
         vaultPath: input.vaultPath,
         mutationKind: "replace",
         proposalId: proposal.proposalId,
         intentHash,
         currentRevision: currentPreview.currentRevision,
-        lines: currentPreview.lines
+        lines: currentPreview.lines,
+        decision: "keep_current"
       });
       return { status: "rejected", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
     }
-    if (input.decision === "keep_current") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
+    if (input.decision === "keep_current" || input.decision === "apply_proposed") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
     if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) throw turnConflict("The current-note replacement proposal already has another durable decision.");
     if (!existingDecision) {
       const currentPreview = this.#preview(input.vaultPath, proposal, intent);
@@ -463,7 +532,7 @@ export class CurrentNoteReplaceService {
       return {
         proposalId: proposal.proposalId,
         kind: "replace_current_note",
-        state: "rejected",
+        state: resolution.decision === "apply_proposed" ? "applied" : "rejected",
         revision: 4,
         activeVaultId: intent.activeVaultId,
         pageId: intent.pageId,
@@ -487,9 +556,10 @@ export class CurrentNoteReplaceService {
 
   #decisionResult(vaultPath: string, proposal: ReplaceProposalRecord, intent: ReplaceIntentRecord, outcome: ProposalOutcomeRecord): CurrentNoteReplaceProposalDecisionResult {
     const preview = this.#preview(vaultPath, proposal, intent, outcome);
-    if (outcome.outcome === "applied") {
+    if (outcome.outcome === "applied" || preview.state === "applied") {
       const operation = readOperation(vaultPath, intent.operationId);
-      if (!operation || outcome.operationId !== operation.id) throw turnConflict("The applied replacement proposal is missing its exact Operation.");
+      const resolution = conflictReviews.read({ vaultPath, mutationKind: "replace", proposalId: proposal.proposalId, intentHash: proposal.intentHash });
+      if (!operation || (outcome.operationId ?? resolution?.operationId) !== operation.id) throw turnConflict("The applied replacement proposal is missing its exact Operation.");
       assertOperationMatchesIntent(operation, intent);
       return { status: "applied", proposal: preview, operation };
     }

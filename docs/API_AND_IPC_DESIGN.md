@@ -562,7 +562,9 @@ Replace needs authored intent plus same-turn read and always enters review.
 vault/Job/proposal/revision and <=8 redacted lines; Main owns CAS, one reversible `update_page`
 and restart convergence. Append/replace conflicts additionally expose only an opaque current-note
 revision and bounded base/current/proposed lines. Exact `keep_current` records a durable no-write
-resolution; revision drift returns the refreshed conflict, while manual edit remains renderer-local.
+resolution. Exact `apply_proposed` rechecks that same reviewed current revision, records the current
+bytes as the reversible before-image, and then applies the immutable proposal; revision drift returns
+the refreshed conflict, while manual edit remains renderer-local.
 
 Dataset boundary:
 

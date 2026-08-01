@@ -534,8 +534,10 @@ expired | applied`.
 
 Current-note append/replace target drift keeps the exact Job in `awaiting_review` and projects
 one bounded base/current/proposed text diff. `keep_current` binds the current note revision,
-persists an exact resolution, settles the proposal as rejected and writes no page or Operation;
-further drift returns a refreshed conflict instead of acknowledging different bytes.
+persists an exact resolution, settles the proposal as rejected and writes no page or Operation.
+`apply_proposed` binds the same revision, preserves those current bytes as the exact reversible
+before-image, applies the immutable proposal, and settles the original Job with its Operation;
+further drift returns a refreshed conflict instead of acknowledging or overwriting different bytes.
 
 Executable `ConfirmationProposalSchema` owns the durable record: identity/state/trust,
 Job/source/target/diff refs, operations, warnings and base hashes.

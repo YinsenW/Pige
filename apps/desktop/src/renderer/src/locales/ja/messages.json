@@ -1236,6 +1236,7 @@
   "note.proposal.decisionFailed": "確認結果を保存できませんでした。変更は行われていません。",
   "note.proposal.later": "後で",
   "note.proposal.keep_current": "現在のノートを保持",
+  "note.proposal.apply_proposed": "提案された版を適用",
   "note.proposal.manual_edit": "手動で編集",
   "note.proposal.line.added": "追加されたテキスト",
   "note.proposal.line.context": "変更されない文脈",

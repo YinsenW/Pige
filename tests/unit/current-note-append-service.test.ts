@@ -292,6 +292,38 @@ describe("CurrentNoteAppendService", () => {
     expect(listOperationFiles(rejected.vaultPath)).toEqual([]);
   });
 
+  it("applies the proposal only against the exact reviewed conflict revision and Undo restores those live bytes", () => {
+    const fixture = createFixture();
+    fs.writeFileSync(fixture.pagePath, fixture.initialMarkdown.replace("Initial durable body.", "First drift."), "utf8");
+    const staged = requireReview(fixture.service.append(fixture.request));
+    const reviewedLive = fixture.initialMarkdown.replace("Initial durable body.", "Second drift.");
+    fs.writeFileSync(fixture.pagePath, reviewedLive, "utf8");
+    const conflicted = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: staged.proposal.revision, decision: "approve"
+    });
+    if (conflicted.status !== "conflicted" || !conflicted.proposal.currentRevision) throw new Error("Expected an exact conflict review.");
+    const applied = fixture.service.decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: conflicted.proposal.revision,
+      decision: "apply_proposed", expectedCurrentRevision: conflicted.proposal.currentRevision
+    });
+    expect(applied).toMatchObject({ status: "applied", proposal: { state: "applied", revision: 4 } });
+    if (applied.status !== "applied") throw new Error("Expected the conflicted append to apply.");
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toContain("Second drift.");
+    const resolutionFile = listPrivateFiles(fixture.vaultPath).find((file) => file.endsWith(".conflict-resolution.json"));
+    if (!resolutionFile) throw new Error("Expected a durable conflict resolution.");
+    fs.unlinkSync(resolutionFile);
+    fs.unlinkSync(operationFile(fixture.vaultPath, applied.operation.id));
+    expect(new CurrentNoteAppendService().decideProposal({
+      vaultPath: fixture.vaultPath, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: staged.proposal.proposalId, expectedRevision: 3,
+      decision: "apply_proposed", expectedCurrentRevision: conflicted.proposal.currentRevision
+    })).toMatchObject({ status: "applied", operation: { id: applied.operation.id } });
+    finalizeAgentPageUpdateUndo(fixture.vaultPath, applied.operation, true);
+    expect(fs.readFileSync(fixture.pagePath, "utf8")).toBe(reviewedLive);
+  });
+
   it("rejects missing inspect authority, invented evidence, secrets, controls, and oversized text before persistence", () => {
     const fixture = createFixture();
     const invalidRequests: CurrentNoteAppendRequest[] = [

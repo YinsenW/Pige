@@ -9973,11 +9973,11 @@ export const CurrentNoteAppendProposalGetResultSchema = z.discriminatedUnion("st
 ]);
 export const CurrentNoteAppendProposalDecisionRequestSchema = CurrentNoteAppendProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject", "keep_current"]),
+  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed"]),
   expectedCurrentRevision: NoteEditorRevisionSchema.optional()
 }).strict().superRefine((value, context) => {
-  if ((value.decision === "keep_current") !== (value.expectedCurrentRevision !== undefined)) {
-    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Keeping current requires the exact reviewed note revision." });
+  if ((value.decision === "keep_current" || value.decision === "apply_proposed") !== (value.expectedCurrentRevision !== undefined)) {
+    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Conflict resolution requires the exact reviewed note revision." });
   }
 });
 export const CurrentNoteAppendProposalDecisionResultSchema = z.discriminatedUnion("status", [
@@ -10059,11 +10059,11 @@ export const CurrentNoteReplaceProposalGetResultSchema = z.discriminatedUnion("s
 ]);
 export const CurrentNoteReplaceProposalDecisionRequestSchema = CurrentNoteReplaceProposalGetRequestSchema.extend({
   expectedRevision: z.number().int().min(1),
-  decision: z.enum(["approve", "reject", "keep_current"]),
+  decision: z.enum(["approve", "reject", "keep_current", "apply_proposed"]),
   expectedCurrentRevision: NoteEditorRevisionSchema.optional()
 }).strict().superRefine((value, context) => {
-  if ((value.decision === "keep_current") !== (value.expectedCurrentRevision !== undefined)) {
-    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Keeping current requires the exact reviewed note revision." });
+  if ((value.decision === "keep_current" || value.decision === "apply_proposed") !== (value.expectedCurrentRevision !== undefined)) {
+    context.addIssue({ code: "custom", path: ["expectedCurrentRevision"], message: "Conflict resolution requires the exact reviewed note revision." });
   }
 });
 export const CurrentNoteReplaceProposalDecisionResultSchema = z.discriminatedUnion("status", [

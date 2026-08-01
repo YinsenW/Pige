@@ -746,6 +746,16 @@ describe("schemas", () => {
       decision: "keep_current",
       expectedCurrentRevision: conflictRevision
     })).toMatchObject({ decision: "keep_current", expectedCurrentRevision: conflictRevision });
+    expect(CurrentNoteAppendProposalDecisionRequestSchema.parse({
+      apiVersion: 1,
+      activeVaultId: proposal.activeVaultId,
+      pageId: proposal.pageId,
+      jobId: proposal.jobId,
+      proposalId: proposal.proposalId,
+      expectedRevision: 3,
+      decision: "apply_proposed",
+      expectedCurrentRevision: conflictRevision
+    })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: conflictRevision });
     expect(() => CurrentNoteAppendProposalDecisionRequestSchema.parse({
       apiVersion: 1,
       activeVaultId: proposal.activeVaultId,
@@ -812,6 +822,12 @@ describe("schemas", () => {
       expectedCurrentRevision: `noteeditrev_${"b".repeat(64)}`
     } as const;
     expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse(keepCurrent)).toEqual(keepCurrent);
+    expect(CurrentNoteReplaceProposalDecisionRequestSchema.parse({
+      ...request,
+      expectedRevision: 3,
+      decision: "apply_proposed",
+      expectedCurrentRevision: keepCurrent.expectedCurrentRevision
+    })).toMatchObject({ decision: "apply_proposed", expectedCurrentRevision: keepCurrent.expectedCurrentRevision });
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({ ...keepCurrent, expectedCurrentRevision: undefined })).toThrow();
     expect(() => CurrentNoteReplaceProposalDecisionRequestSchema.parse({
       ...decision,

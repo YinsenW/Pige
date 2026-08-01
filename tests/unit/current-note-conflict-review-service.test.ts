@@ -36,14 +36,19 @@ describe("CurrentNoteConflictReviewService", () => {
       currentRevision,
       lines
     };
-    expect(service.keepCurrent(input)).toEqual({
+    expect(service.resolve({ ...input, decision: "keep_current" })).toEqual({
       proposalId: input.proposalId,
       intentHash: input.intentHash,
       currentRevision,
-      lines
+      lines,
+      decision: "keep_current"
     });
     expect(new CurrentNoteConflictReviewService().read(input)).toEqual(service.read(input));
-    expect(() => service.keepCurrent({ ...input, currentRevision: currentNoteConflictRevision("other bytes") })).toThrow("another revision");
+    expect(() => service.resolve({ ...input, currentRevision: currentNoteConflictRevision("other bytes"), decision: "keep_current" })).toThrow("another revision");
+
+    const applied = { ...input, proposalId: "proposal_20260801_conflict003", decision: "apply_proposed" as const, operationId: "op_20260801_conflictapply01" };
+    expect(service.resolve(applied)).toMatchObject({ decision: "apply_proposed", operationId: applied.operationId });
+    expect(() => service.resolve({ ...applied, operationId: undefined })).toThrow("outside its safe bound");
   });
 
   it.skipIf(process.platform === "win32")("fails closed when the private proposal parent is a symlink", () => {
@@ -52,13 +57,14 @@ describe("CurrentNoteConflictReviewService", () => {
     roots.push(outside);
     fs.mkdirSync(path.join(vaultPath, ".pige", "agent"), { recursive: true });
     fs.symlinkSync(outside, path.join(vaultPath, ".pige", "agent", "current-note-append-proposals"));
-    expect(() => new CurrentNoteConflictReviewService().keepCurrent({
+    expect(() => new CurrentNoteConflictReviewService().resolve({
       vaultPath,
       mutationKind: "append",
       proposalId: "proposal_20260801_conflict002",
       intentHash: `sha256:${"b".repeat(64)}`,
       currentRevision: currentNoteConflictRevision("current bytes"),
-      lines: [{ kind: "context", text: "Current" }]
+      lines: [{ kind: "context", text: "Current" }],
+      decision: "keep_current"
     })).toThrow();
     expect(fs.readdirSync(outside)).toEqual([]);
   });

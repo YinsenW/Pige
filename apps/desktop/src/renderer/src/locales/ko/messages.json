@@ -1236,6 +1236,7 @@
   "note.proposal.decisionFailed": "검토 결정을 저장하지 못했습니다. 변경된 내용은 없습니다.",
   "note.proposal.later": "나중에",
   "note.proposal.keep_current": "현재 노트 유지",
+  "note.proposal.apply_proposed": "제안된 버전 적용",
   "note.proposal.manual_edit": "직접 편집",
   "note.proposal.line.added": "추가된 텍스트",
   "note.proposal.line.context": "변경되지 않은 문맥",
