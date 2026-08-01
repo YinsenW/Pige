@@ -2,7 +2,7 @@ import { createPublicKey, randomUUID, type KeyLike } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
-import { PADDLE_OCR_ENGINE_ID } from "@pige/schemas";
+import { PADDLE_OCR_ENGINE_ID, type OcrEnginePreference } from "@pige/schemas";
 import { LocalToolJobRecorder } from "./local-tool-job-recorder";
 import { LocalToolManagerService } from "./local-tool-manager-service";
 import type {
@@ -52,6 +52,7 @@ export interface PaddleOcrRuntimeCompositionOptions {
   readonly bundleMaterializer?: PaddleOcrBundleMaterializerPort;
   readonly nativeAdapter?: NativeImageOcrAdapterPort;
   readonly processRunner?: PaddleOcrProcessRunner;
+  readonly enginePreference?: () => OcrEnginePreference;
   readonly platform?: NodeJS.Platform;
   readonly architecture?: NodeJS.Architecture;
   readonly now?: () => Date;
@@ -72,7 +73,14 @@ export function createPaddleOcrRuntimeComposition(
   const reviewed = readPaddleOcrReviewedManifest(options.manifestPath, platform, architecture);
   const release = reviewed.releaseBundle?.state === "available" ? reviewed.releaseBundle : undefined;
   if (!release) {
-    return unavailableComposition(options.manifestPath, nativeAdapter, options.processRunner, platform, architecture);
+    return unavailableComposition(
+      options.manifestPath,
+      nativeAdapter,
+      options.processRunner,
+      platform,
+      architecture,
+      options.enginePreference
+    );
   }
 
   const appDataRoot = requirePrivateAppDataRoot(options.appDataRoot);
@@ -84,7 +92,14 @@ export function createPaddleOcrRuntimeComposition(
     reviewed.trustedReleaseOrigins
   );
   if (!bundleMaterializer) {
-    return unavailableComposition(options.manifestPath, nativeAdapter, options.processRunner, platform, architecture);
+    return unavailableComposition(
+      options.manifestPath,
+      nativeAdapter,
+      options.processRunner,
+      platform,
+      architecture,
+      options.enginePreference
+    );
   }
   const packageLimits = resolveLocalToolPackageLimits(release.packageLimits);
   const definition: LocalToolDefinition = {
@@ -131,7 +146,11 @@ export function createPaddleOcrRuntimeComposition(
       manager: new PaddleLifecycleManagerBridge(manager),
       materializer
     }),
-    adapter: new NativeOcrAdapterRouter(nativeAdapter, new PaddleOcrAdapter(leasePort, processRunner)),
+    adapter: new NativeOcrAdapterRouter(
+      nativeAdapter,
+      new PaddleOcrAdapter(leasePort, processRunner),
+      options.enginePreference
+    ),
     recoverStaging: () => {
       options.assertAppInstanceWriterLease();
       return manager.recoverStaging({
@@ -314,13 +333,15 @@ function unavailableComposition(
   nativeAdapter: NativeImageOcrAdapterPort,
   processRunner: PaddleOcrProcessRunner | undefined,
   platform: NodeJS.Platform,
-  architecture: NodeJS.Architecture
+  architecture: NodeJS.Architecture,
+  enginePreference?: () => OcrEnginePreference
 ): PaddleOcrRuntimeComposition {
   return {
     lifecycle: createUnavailablePaddleOcrLifecycleService(manifestPath, platform, architecture),
     adapter: new NativeOcrAdapterRouter(
       nativeAdapter,
-      new PaddleOcrAdapter(unavailableLeasePort(), processRunner ?? new SpawnPaddleOcrProcessRunner())
+      new PaddleOcrAdapter(unavailableLeasePort(), processRunner ?? new SpawnPaddleOcrProcessRunner()),
+      enginePreference
     ),
     recoverStaging: () => undefined
   };

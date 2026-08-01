@@ -4511,7 +4511,37 @@ References:
 - `docs/SETTINGS_AND_PREFERENCES.md`
 - `docs/UI_PROTOTYPE.md`
 
-## 4. Deferred Decisions
+### D-20260801-Machine-Local-OCR-Engine-Preference
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Expose one machine-local, revision-fenced OCR engine preference with three calm choices:
+automatic, prefer the platform adapter, or prefer verified managed PaddleOCR. The choice changes
+the actual Main-owned adapter order for new OCR jobs; unavailable preferred adapters fall back to
+the available local adapter without an implicit download.
+
+Rationale:
+
+The Settings contract already promises an OCR engine preference. A renderer-only label would be
+misleading, while binding the preference directly to the typed adapter router keeps tool paths,
+leases and installation authority out of the renderer.
+
+Consequences:
+
+- The preference is machine-local, backup-excluded and permission-free.
+- CAS-stale results return the authoritative current choice; failures disclose no path or body.
+- Choosing PaddleOCR does not install, enable or authorize it; its existing lifecycle remains the
+  sole owner of verified runtime availability.
+
+References:
+
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/UI_PROTOTYPE.md`
 
 ### D-20260801-Search-Result-Reader-Focus
 
@@ -4540,6 +4570,8 @@ References:
 - `docs/API_AND_IPC_DESIGN.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+
+## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
 

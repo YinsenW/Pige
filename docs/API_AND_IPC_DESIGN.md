@@ -753,6 +753,7 @@ Commands:
 - `settings.setKnowledgeLanguage`
 - `settings.setStartupDestination`
 - `settings.updatePigePolicy`
+- `localCapabilities.setOcrEnginePreference`
 - `agentPolicy.preview`
 - `agent.runtimeStatus`
 - `models.addPresetProvider`
@@ -792,6 +793,7 @@ Queries:
 - `settings.appearance`
 - `settings.startupDestination`
 - `settings.pigePolicy`
+- `localCapabilities.ocrEnginePreference`
 - `models.summary`
 - `memory.list`
 - `piPackages.summary`
@@ -804,6 +806,13 @@ binds that vault and revision, validates the canonical heading structure and rej
 content before confirmation, then re-proves the same bytes and authority before an atomic write.
 Settled updates publish a `change_setting` Operation for Activity/Undo and restart recovery;
 invalid, denied, stale, or failed attempts preserve the renderer draft and do not mutate policy.
+
+`localCapabilities.ocrEnginePreference` returns strict machine-local
+`automatic | platform_native | paddleocr_local` preference plus an integer revision.
+`setOcrEnginePreference` is permission-free CAS: `committed | stale` includes the authoritative
+summary while `failed` is identity-only. The renderer receives no executable path, tool lease or
+artifact identity. The choice applies to new OCR jobs; explicit Paddle preference reverses the
+adapter order, and an unavailable preferred adapter still falls back to the available local one.
 
 Events:
 

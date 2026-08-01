@@ -117,6 +117,28 @@ function makeHarness(overrides: Record<string, unknown> = {}) {
         appliesTo: "new_ocr_jobs" as const
       }
     })),
+    ocrEnginePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "ready" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 4,
+        preference: "automatic" as const,
+        appliesTo: "new_ocr_jobs" as const
+      }
+    })),
+    setOcrEnginePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "committed" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 5,
+        preference: "paddleocr_local" as const,
+        appliesTo: "new_ocr_jobs" as const
+      }
+    })),
     paddleOcrSummary: vi.fn(() => notInstalledSummary),
     installPaddleOcr: vi.fn((input: typeof request) => ({
       apiVersion: 1 as const,
@@ -193,6 +215,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       "setDictationLanguagePreference",
       "ocrLanguagePreference",
       "setOcrLanguagePreference",
+      "ocrEnginePreference",
+      "setOcrEnginePreference",
       "paddleOcrSummary",
       "installPaddleOcr",
       "enablePaddleOcr",
@@ -211,6 +235,8 @@ describe("registerLocalCapabilitiesIpc", () => {
       "localCapabilities.dictationLanguagePreference",
       "localCapabilities.setDictationLanguagePreference",
       "localCapabilities.ocrLanguagePreference",
+      "localCapabilities.ocrEnginePreference",
+      "localCapabilities.setOcrEnginePreference",
       "localCapabilities.setOcrLanguagePreference",
       "localCapabilities.paddleOcrSummary",
       "localCapabilities.installPaddleOcr",
@@ -250,6 +276,19 @@ describe("registerLocalCapabilitiesIpc", () => {
       .resolves.toMatchObject({ status: "committed", summary: { revision: 3 } });
     expect(callbacks.ocrLanguagePreference).toHaveBeenCalledWith(preferenceRead);
     expect(callbacks.setOcrLanguagePreference).toHaveBeenCalledWith(preferenceSet);
+
+    const engineRead = { apiVersion: 1, requestId: "ocrenginereq_abcdefghijklmnop" } as const;
+    const engineSet = {
+      ...engineRead,
+      expectedRevision: 4,
+      preference: "paddleocr_local"
+    } as const;
+    await expect(call(handlers, "localCapabilities.ocrEnginePreference", engineRead))
+      .resolves.toMatchObject({ status: "ready", summary: { preference: "automatic" } });
+    await expect(call(handlers, "localCapabilities.setOcrEnginePreference", engineSet))
+      .resolves.toMatchObject({ status: "committed", summary: { preference: "paddleocr_local" } });
+    expect(callbacks.ocrEnginePreference).toHaveBeenCalledWith(engineRead);
+    expect(callbacks.setOcrEnginePreference).toHaveBeenCalledWith(engineSet);
 
     await expect(call(handlers, "localCapabilities.paddleOcrSummary", { apiVersion: 1 }))
       .resolves.toEqual(notInstalledSummary);

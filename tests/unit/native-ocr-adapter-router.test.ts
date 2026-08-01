@@ -60,6 +60,21 @@ describe("native OCR adapter router", () => {
     expect(fallback.calls).toBe(1);
   });
 
+  it("honors an explicit PaddleOCR preference and safely falls back to native", async () => {
+    let preference: "paddleocr_local" | "platform_native" = "paddleocr_local";
+    const native = new RecordingAdapter(true);
+    const fallback = new RecordingAdapter(true);
+    const router = new NativeOcrAdapterRouter(native, fallback, () => preference);
+
+    await router.recognize("/private/input.png", []);
+    expect(fallback.calls).toBe(1);
+    expect(native.calls).toBe(0);
+
+    preference = "platform_native";
+    await router.recognize("/private/input.png", []);
+    expect(native.calls).toBe(1);
+  });
+
   it("fails closed without invoking either adapter when no verified adapter is available", async () => {
     const native = new RecordingAdapter(false);
     const fallback = new RecordingAdapter(false);

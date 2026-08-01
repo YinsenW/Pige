@@ -599,6 +599,24 @@ describe("desktop shell build contract", () => {
     }
   });
 
+  it("bridges machine-local OCR engine preference into the actual local-capability owner", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const apiStart = preloadSource.indexOf("localCapabilities: {");
+    const localCapabilitiesApi = preloadSource.slice(
+      apiStart,
+      preloadSource.indexOf("retrieval: {", apiStart)
+    );
+
+    expect(contractsSource).toContain("readonly ocrEnginePreference: (");
+    expect(contractsSource).toContain("request: SetOcrEnginePreferenceRequest");
+    expect(localCapabilitiesApi).toContain("OCR_ENGINE_PREFERENCE_CHANNEL");
+    expect(localCapabilitiesApi).toContain("SET_OCR_ENGINE_PREFERENCE_CHANNEL");
+    expect(localCapabilitiesApi).toContain("OcrEnginePreferenceResultSchema.parse(");
+    expect(mainSource).toContain("enginePreference: () => getOcrEnginePreferenceService().preference()");
+  });
+
   it("bridges Pi package lifecycle and freezes the local curated catalog contract", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");

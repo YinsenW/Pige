@@ -1042,7 +1042,11 @@ Qwen3 Reranker 0.6B
   Install
 
 OCR engine
-Auto
+Automatic ▾
+
+Choices: Automatic / Prefer system OCR / Prefer PaddleOCR
+The choice affects new OCR jobs. If the preferred local engine is unavailable, Pige uses the
+available local engine and does not download one implicitly.
 
 Available engines
 Apple Vision Document OCR

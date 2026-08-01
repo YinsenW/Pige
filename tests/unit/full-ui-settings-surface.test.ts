@@ -24,6 +24,7 @@ import {
 import {
   LocalCapabilitiesSettingsPanel,
   type DictationLanguagePreferenceApi,
+  type OcrEnginePreferenceApi,
   type OcrLanguagePreferenceApi,
   type PaddleOcrApi,
   type SpeechAssetApi
@@ -5528,6 +5529,74 @@ describe("full UI Settings surface", () => {
     expect(select.value).toBe("ja");
     expect(container.querySelector("#capabilities-ocr-language-notice")).toBeNull();
     expect(dom.window.document.activeElement).toBe(select);
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("changes the actual OCR engine preference with CAS and keeps authoritative stale state", async () => {
+    const dom = createDom();
+    const update = vi.fn(async (request) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      status: "stale" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 2,
+        preference: "platform_native" as const,
+        appliesTo: "new_ocr_jobs" as const
+      }
+    }));
+    const api: OcrEnginePreferenceApi = {
+      ocrEnginePreference: vi.fn(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "ready",
+        summary: {
+          apiVersion: 1,
+          revision: 1,
+          preference: "automatic",
+          appliesTo: "new_ocr_jobs"
+        }
+      })),
+      setOcrEnginePreference: update
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        ocrEnginePreferenceApi: api,
+        paddleOcrApi: paddleOcrApi("not_installed"),
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: null,
+        onRefresh: vi.fn(async () => undefined),
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const select = requireElement(dom.window.document.querySelector<HTMLSelectElement>(
+      'select[aria-label="OCR engine"]'
+    ));
+    expect(Array.from(select.options).map((option) => [option.value, option.textContent])).toEqual([
+      ["automatic", "Automatic"],
+      ["platform_native", "Prefer system OCR"],
+      ["paddleocr_local", "Prefer PaddleOCR"]
+    ]);
+    await act(async () => {
+      selectValue(dom, select, "paddleocr_local");
+      await settle(dom);
+    });
+    expect(update).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^ocrenginereq_[a-z0-9]{16,64}$/u),
+      expectedRevision: 1,
+      preference: "paddleocr_local"
+    });
+    expect(select.value).toBe("platform_native");
+    expect(dom.window.document.activeElement).toBe(select);
+    expect(dom.window.document.querySelector("#capabilities-ocr-engine-notice")?.textContent)
+      .toContain("changed elsewhere");
 
     await act(async () => root.unmount());
     dom.window.close();
