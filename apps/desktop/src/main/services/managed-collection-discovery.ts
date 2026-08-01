@@ -259,6 +259,7 @@ function toSummary(binding: BundleBinding): CollectionDatasetSummary {
     datasetId: binding.manifest.datasetId,
     title: binding.manifest.title,
     activeRevisionId: binding.manifest.activeRevision,
+    canRename: true,
     canTrash: true,
     tableCount: binding.schema.tables.length,
     tables,

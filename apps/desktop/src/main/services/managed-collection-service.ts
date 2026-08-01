@@ -795,6 +795,7 @@ function createUndoOperationId(operationId: string): string {
 function createOperationForRevision(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
   const change = revision.change;
   if (!change || change.kind === "initial_import" || !revision.parentRevisionId) throw operationConflict();
+  if (change.kind === "dataset_title_rename" || change.kind === "dataset_title_rename_undo") throw operationConflict();
   const beforeRevision = readRevisionById(binding, revision.parentRevisionId);
   const schema = DatasetSchemaRecordSchema.parse(readJsonRef(binding.bundlePath, revision.schema));
   const table = schema.tables.find((candidate) => candidate.id === change.tableId);

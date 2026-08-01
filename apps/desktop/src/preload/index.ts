@@ -513,6 +513,7 @@ import {
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   COLLECTION_TRASH_DATASET_CHANNEL,
+  COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
@@ -546,6 +547,8 @@ import {
   CollectionTrashViewResultSchema,
   CollectionTrashDatasetRequestSchema,
   CollectionTrashDatasetResultSchema,
+  CollectionRenameDatasetRequestSchema,
+  CollectionRenameDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
   CollectionOpenRequestSchema,
@@ -952,6 +955,8 @@ import type {
   CollectionTrashViewResult,
   CollectionTrashDatasetRequest,
   CollectionTrashDatasetResult,
+  CollectionRenameDatasetRequest,
+  CollectionRenameDatasetResult,
   CollectionOpenCitationRequest,
   CollectionOpenCitationResult,
   CollectionOpenRequest,
@@ -1499,6 +1504,20 @@ async function invokeCollectionTrashDataset(
   if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
       result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId) {
     throw new Error("Invalid Managed Dataset trash response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionRenameDataset(
+  request: CollectionRenameDatasetRequest
+): Promise<CollectionRenameDatasetResult> {
+  const parsedRequest = CollectionRenameDatasetRequestSchema.parse(request);
+  const result = CollectionRenameDatasetResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_RENAME_DATASET_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.expectedRevisionId !== parsedRequest.expectedRevisionId) {
+    throw new Error("Invalid Managed Dataset rename response identity.");
   }
   return result;
 }
@@ -2199,6 +2218,7 @@ const api: PigeDesktopApi = {
     renameView: invokeCollectionRenameView,
     trashView: invokeCollectionTrashView,
     trashDataset: invokeCollectionTrashDataset,
+    renameDataset: invokeCollectionRenameDataset,
     trashColumn: invokeCollectionTrashColumn,
     trashRow: invokeCollectionTrashRow
   },

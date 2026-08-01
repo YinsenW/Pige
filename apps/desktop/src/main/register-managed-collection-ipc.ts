@@ -13,6 +13,7 @@ import {
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   COLLECTION_TRASH_DATASET_CHANNEL,
+  COLLECTION_RENAME_DATASET_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
@@ -48,6 +49,8 @@ import {
   CollectionTrashViewResultSchema,
   CollectionTrashDatasetRequestSchema,
   CollectionTrashDatasetResultSchema,
+  CollectionRenameDatasetRequestSchema,
+  CollectionRenameDatasetResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
   CollectionListRequestSchema,
@@ -94,6 +97,8 @@ import {
   type CollectionTrashViewResult,
   type CollectionTrashDatasetRequest,
   type CollectionTrashDatasetResult,
+  type CollectionRenameDatasetRequest,
+  type CollectionRenameDatasetResult,
   type CollectionOpenCitationRequest,
   type CollectionOpenCitationResult,
   type CollectionListRequest,
@@ -182,6 +187,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly trashDataset: (
     request: CollectionTrashDatasetRequest
   ) => CollectionTrashDatasetResult | Promise<CollectionTrashDatasetResult>;
+  readonly renameDataset: (
+    request: CollectionRenameDatasetRequest
+  ) => CollectionRenameDatasetResult | Promise<CollectionRenameDatasetResult>;
   readonly trashCollectionColumn: (
     request: CollectionTrashColumnRequest
   ) => CollectionTrashColumnResult | Promise<CollectionTrashColumnResult>;
@@ -423,6 +431,12 @@ function failedTrashView(request: CollectionTrashViewRequest): CollectionTrashVi
 
 function failedTrashDataset(request: CollectionTrashDatasetRequest): CollectionTrashDatasetResult {
   return CollectionTrashDatasetResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
+    activeVaultId: request.activeVaultId, datasetId: request.datasetId,
+    expectedRevisionId: request.expectedRevisionId, status: "failed" });
+}
+
+function failedRenameDataset(request: CollectionRenameDatasetRequest): CollectionRenameDatasetResult {
+  return CollectionRenameDatasetResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
     activeVaultId: request.activeVaultId, datasetId: request.datasetId,
     expectedRevisionId: request.expectedRevisionId, status: "failed" });
 }
@@ -881,6 +895,22 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedTrashDataset(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_RENAME_DATASET_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionRenameDatasetRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedRenameDataset(parsed);
+    }
+    let rawResult: CollectionRenameDatasetResult;
+    try { rawResult = await options.renameDataset(parsed); } catch { return failedRenameDataset(parsed); }
+    const result = CollectionRenameDatasetResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.expectedRevisionId !== parsed.expectedRevisionId) {
+      throw new Error("Managed Dataset rename response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedRenameDataset(parsed);
   });
 
   options.ipcMain.handle("collections.trashColumn", async (event, request: unknown) => {
