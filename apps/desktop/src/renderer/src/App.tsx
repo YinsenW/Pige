@@ -4257,6 +4257,7 @@ export function KnowledgeTreePanel(props: {
           <KnowledgeTreeMap
             roots={roots}
             activeVaultId={props.tree.activeVaultId}
+            treeOwnerKey={`${props.tree.activeVaultId}:${props.tree.queriedAt}`}
             noteLoadingPageId={props.noteLoadingPageId}
             onLoadRelated={props.onLoadRelated}
             onOpenNote={props.onOpenNote}

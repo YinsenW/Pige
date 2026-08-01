@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T21:52:25.000Z",
+  "reviewedAt": "2026-08-01T21:54:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review stable-ID Managed Collection table display-name rename, immutable revision publication, Activity Undo/restart and stale draft retention.",
+    "scope": "Review bounded renderer-local Knowledge Tree title/type search, ancestor reveal, collapse restoration, keyboard selection and stable-ID Reader navigation.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "d81d73924e706ba6ffec83c14ae83769fdd4321938d26ce992e74e7e3caf635b"
+    "reviewedSha256": "3d2f5ef93ecf7fb6ff8d151e924dd445d0b1d2580e64e46fa443a7d7daad8b26"
   },
   "reviewers": [
     {
-      "reviewerId": "collection-table-rename-review",
-      "task": "Review stable-ID Managed Collection table rename",
+      "reviewerId": "knowledge-tree-search-review",
+      "task": "Review Knowledge Tree search and stable navigation",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks stable table identity, immutable revision and payload preservation, recovery, UI draft retention and renderer authority separately from implementation authorship."
+      "independence": "Project review checks query normalization, bounded result identity, ancestor/collapse behavior, keyboard focus and Reader navigation separately from renderer implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "collection-table-rename-review",
+      "reviewerId": "knowledge-tree-search-review",
       "blockerCount": 0,
-      "summary": "One bounded inline action renames only the display label, preserves the stable table identity and restores focus after the committed mutation."
+      "summary": "Search temporarily expands exact hit ancestry, clear restores the prior collapse set, and owner drift clears stale results without navigating Reader."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "collection-table-rename-review",
+      "reviewerId": "knowledge-tree-search-review",
       "blockerCount": 0,
-      "summary": "Schema, IPC, durable Dataset revision, Activity vocabulary, six locales and direct UI tests express the same stable-ID rename contract."
+      "summary": "Knowledge model, UI owner, six locale catalogs, renderer model and direct tests express the same bounded body-free search contract."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "collection-table-rename-review",
+      "reviewerId": "knowledge-tree-search-review",
       "blockerCount": 0,
-      "summary": "The bounded table rename advances PIGE-VAULT-002 and PIGE-DATA-003 without promoting either broader partial requirement."
+      "summary": "PIGE-KNOW-002 and PIGE-KNOW-004 cite the direct search evidence while remaining partial for aggregate scale, incremental rebuild and packaged parity."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "collection-table-rename-review",
+      "reviewerId": "knowledge-tree-search-review",
       "blockerCount": 0,
-      "summary": "The private table service owns CAS, immutable publication and recovery while the renderer retains only a bounded display-name draft."
+      "summary": "The feature stays renderer-local, reuses the existing body-free tree and Reader callback, and adds no IPC, model, network or persistent state."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "collection-table-rename-review",
+      "reviewerId": "knowledge-tree-search-review",
       "blockerCount": 0,
-      "summary": "Four concise owner-document edits and the existing inventory record the behavior without adding a new design document."
+      "summary": "Two concise owner updates plus existing acceptance and review artifacts record the behavior without a new design document or decision."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/managed-collection-table-contract.test.ts tests/unit/managed-collection-service.test.ts tests/unit/register-managed-collection-ipc.test.ts tests/unit/managed-collection-table-rename-ui.test.ts",
+      "command": "npx vitest run tests/unit/knowledge-tree-search-model.test.ts tests/unit/knowledge-tree-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused contract, service, IPC and UI tests prove stable identity, immutable payload preservation, restart adoption, exact Undo and stale draft retention."
+      "evidence": "Ten focused model and renderer tests prove normalized title/type results, ancestor paths, collapse restoration, keyboard selection and stable-ID open."
     },
     {
       "command": "git diff --check",
       "status": "passed",
-      "evidence": "The focused schema, service, renderer, locale and governance delta has no whitespace or conflict-marker defects."
+      "evidence": "The focused renderer, locale, tests and governance delta has no whitespace or conflict-marker defects."
     },
     {
       "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "The current Dataset owner, exact test selector, Operation vocabulary and five-dimensional review snapshot agree on the bounded rename workflow."
+      "evidence": "The current Knowledge/UI owners, exact test selector, semantic lock and five-dimensional review agree on bounded local tree search."
     }
   ],
   "coordination": {
-    "taskId": "collection-table-rename-20260802",
-    "taskTitle": "Rename one stable Managed Collection table",
+    "taskId": "knowledge-tree-search-20260802",
+    "taskTitle": "Locate and open Knowledge Tree search results",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Rows, columns, formulas, relations, views, source names, active table identity and existing Collection mutations remain unchanged.",
-    "acknowledgement": "The stable-ID table display-name rename is bound while PIGE-VAULT-002 and PIGE-DATA-003 remain partial for broader open work."
+    "compatibility": "Existing tree, network, list, branch collapse, review filter, related pages and Reader Back behavior remain unchanged; search adds only renderer-local navigation.",
+    "acknowledgement": "The bounded search workflow is bound while PIGE-KNOW-002 and PIGE-KNOW-004 remain partial for broader aggregate and platform work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
