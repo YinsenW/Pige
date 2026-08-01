@@ -234,6 +234,8 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteTrashPurgeRequest,
+  NoteTrashPurgeResult,
   NoteRevisionHistoryListRequest,
   NoteRevisionHistoryListResult,
   NoteRevisionHistoryOpenRequest,
@@ -827,10 +829,13 @@ import {
   NoteTrashCurrentResultSchema,
   NOTE_TRASH_LIST_CHANNEL,
   NOTE_TRASH_RESTORE_CHANNEL,
+  NOTE_TRASH_PURGE_CHANNEL,
   NoteTrashListRequestSchema,
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  NoteTrashPurgeRequestSchema,
+  NoteTrashPurgeResultSchema,
   NOTE_REVISION_HISTORY_LIST_CHANNEL,
   NOTE_REVISION_HISTORY_OPEN_CHANNEL,
   NOTE_REVISION_HISTORY_RESTORE_CHANNEL,
@@ -2569,6 +2574,10 @@ const api: PigeDesktopApi = {
     restoreTrash: async (request: NoteTrashRestoreRequest): Promise<NoteTrashRestoreResult> =>
       NoteTrashRestoreResultSchema.parse(
         await ipcRenderer.invoke(NOTE_TRASH_RESTORE_CHANNEL, NoteTrashRestoreRequestSchema.parse(request))
+      ),
+    purgeTrash: async (request: NoteTrashPurgeRequest): Promise<NoteTrashPurgeResult> =>
+      NoteTrashPurgeResultSchema.parse(
+        await ipcRenderer.invoke(NOTE_TRASH_PURGE_CHANNEL, NoteTrashPurgeRequestSchema.parse(request))
       ),
     listRevisionHistory: async (
       request: NoteRevisionHistoryListRequest

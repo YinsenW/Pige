@@ -346,6 +346,7 @@ import { PiPackageInstallTaskService } from "./services/pi-package-install-task-
 import { NotesService } from "./services/notes-service";
 import { ReaderSourceCitationService } from "./services/reader-source-citation-service";
 import { NoteTrashService } from "./services/note-trash-service";
+import { NoteTrashPurgeService } from "./services/note-trash-purge-service";
 import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
@@ -510,6 +511,7 @@ let libraryTopicRenameService: LibraryTopicRenameService | undefined;
 let notesService: NotesService | undefined;
 let readerSourceCitationService: ReaderSourceCitationService | undefined;
 let noteTrashService: NoteTrashService | undefined;
+let noteTrashPurgeService: NoteTrashPurgeService | undefined;
 let noteTrashRedoService: NoteTrashRedoService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
 let assistantAnswerNoteService: AssistantAnswerNoteService | undefined;
@@ -1951,6 +1953,8 @@ const getNoteTrashService = (): NoteTrashService => {
   noteTrashService ??= new NoteTrashService(getVaultService(), getNotesService());
   return noteTrashService;
 };
+const getNoteTrashPurgeService = (): NoteTrashPurgeService =>
+  noteTrashPurgeService ??= new NoteTrashPurgeService(getVaultService());
 const getNoteTrashRedoService = (): NoteTrashRedoService =>
   noteTrashRedoService ??= new NoteTrashRedoService(getVaultService());
 const getConversationTrashService = (): ConversationTrashService => {
@@ -2119,6 +2123,7 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
     findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
     undo: (operation) => pigePolicy.activitySummary(operation) ? pigePolicy.undo(operation) : backupConversationPreference.activitySummary(operation) ? backupConversationPreference.undo(operation) : duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
+      const purgeResult = getNoteTrashPurgeService().recoverIncompletePurges();
       const topicRenameResult = topicRename.recoverIncompleteOperations();
       const tagRenameResult = tagRename.recoverIncompleteOperations();
       const mergeResult = merge.recoverIncompleteOperations();
@@ -2128,8 +2133,8 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
       const backupConversationPreferenceResult = backupConversationPreference.recoverIncompleteOperations();
       const pigePolicyResult = pigePolicy.recoverIncompleteOperations();
       return {
-        recovered: pigePolicyResult.recovered + backupConversationPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
-        failed: pigePolicyResult.failed + backupConversationPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
+        recovered: purgeResult.recovered + pigePolicyResult.recovered + backupConversationPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
+        failed: purgeResult.failed + pigePolicyResult.failed + backupConversationPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
       };
     }
   };
@@ -3598,6 +3603,7 @@ registerReaderIpc({
   getReaderSourceReconnectService,
   getSourceRefreshService,
   getNoteTrashService,
+  getNoteTrashPurgeService,
   getNoteArchiveService,
   getQuestionStateService,
   getClaimConfidenceService,
@@ -4102,6 +4108,7 @@ app.whenReady().then(async () => {
     getNotesService()
   );
   noteTrashService = new NoteTrashService(getVaultService(), getNotesService());
+  noteTrashPurgeService = new NoteTrashPurgeService(getVaultService());
   noteTrashRedoService = new NoteTrashRedoService(getVaultService());
   conversationTrashService = new ConversationTrashService(getVaultService(), collectionCitationConversationHistory);
   assistantAnswerNoteService = new AssistantAnswerNoteService(getVaultService(), homeConversationHistory);

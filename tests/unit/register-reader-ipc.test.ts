@@ -8,6 +8,7 @@ import type { ReaderGeneratedNoteRevealService } from "../../apps/desktop/src/ma
 import type { ReaderSourceReconnectService } from "../../apps/desktop/src/main/services/reader-source-reconnect-service";
 import type { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
+import type { NoteTrashPurgeService } from "../../apps/desktop/src/main/services/note-trash-purge-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
 import type { NoteTagService } from "../../apps/desktop/src/main/services/note-tag-service";
@@ -102,6 +103,10 @@ function makeHarness(
     getNoteTrashService: () => {
       if (noteTrashService) return noteTrashService as NoteTrashService;
       throw new Error("Note trash service was not expected.");
+    },
+    getNoteTrashPurgeService: () => {
+      if (noteTrashService && "purge" in noteTrashService) return noteTrashService as unknown as NoteTrashPurgeService;
+      throw new Error("Note trash purge service was not expected.");
     },
     getNoteArchiveService: () => {
       if (noteArchiveService) return noteArchiveService as NoteArchiveService;
@@ -202,6 +207,7 @@ describe("registerReaderIpc", () => {
       "notes.trashCurrent",
       "notes.listTrash",
       "notes.restoreTrash",
+      "notes.purgeTrash",
       "notes.archiveCurrent",
       "notes.restoreArchived",
       "notes.setQuestionState",
@@ -773,6 +779,8 @@ describe("registerReaderIpc", () => {
         trashedAt: "2026-07-30T12:00:00.000Z", canRestore: true as const }]
     }));
     const restore = vi.fn(() => ({ status: "committed" as const, operationId: "op_20260730_restored123456" }));
+    const purge = vi.fn((request) => ({ ...request, status: "committed" as const,
+      operationId: "op_20260730_purgednote1234" }));
     const render = vi.fn(async () => ({
       summary: { pageId, title: "Restore me", pageType: "note" as const, status: "active" as const,
         pagePath: "wiki/restore-me.md", createdAt: "2026-07-30T10:00:00.000Z",
@@ -781,7 +789,7 @@ describe("registerReaderIpc", () => {
       renderContextId: "notectx_fedcba9876543210fedcba9876543210"
     }));
     const refreshed = vi.fn();
-    const handlers = makeHarness({ render }, undefined, { list, restore }, refreshed);
+    const handlers = makeHarness({ render }, undefined, { list, restore, purge } as Partial<NoteTrashService>, refreshed);
     const sender = makeSender(41);
     const listRequest = { apiVersion: 1 as const, requestId: "notetrashlistreq_abcdefghijklmnop", activeVaultId };
     expect(handlers.get("notes.listTrash")!({ sender } as IpcMainInvokeEvent, listRequest))
@@ -794,6 +802,12 @@ describe("registerReaderIpc", () => {
     expect(restore).toHaveBeenCalledWith(restoreRequest);
     expect(render).toHaveBeenCalledWith({ pageId }, expect.stringMatching(/^notes_owner_/u));
     expect(refreshed).toHaveBeenCalledTimes(1);
+    const purgeRequest = { ...restoreRequest, requestId: "notetrashpurgereq_abcdefghijklmnop",
+      confirmation: "delete_permanently" as const };
+    expect(handlers.get("notes.purgeTrash")!({ sender } as IpcMainInvokeEvent, purgeRequest))
+      .toMatchObject({ status: "committed", operationId: "op_20260730_purgednote1234" });
+    expect(purge).toHaveBeenCalledWith(purgeRequest);
+    expect(refreshed).toHaveBeenCalledTimes(2);
   });
 
   it("renders authoritative survivor state only after a tracked note merge commits", async () => {

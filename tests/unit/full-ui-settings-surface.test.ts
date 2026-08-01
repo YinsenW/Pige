@@ -90,6 +90,8 @@ import type {
   NoteTrashListRequest,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteTrashPurgeRequest,
+  NoteTrashPurgeResult,
   SpeechAssetInstallEvent,
   SpeechAvailabilityResult
 } from "@pige/contracts";
@@ -1635,6 +1637,49 @@ describe("full UI Settings surface", () => {
     await act(async () => { buttonNamed(container, "Try again").click(); await settle(dom); await settle(dom); });
     expect(listTrash).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("No recoverable knowledge pages");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("requires explicit confirmation before permanently deleting one exact knowledge-page trash item", async () => {
+    const dom = createDom();
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    const root = createRoot(container);
+    const activeVaultId = "vault_20260802_notepurgeui";
+    const note = { trashOperationId: "op_20260802_notepurgeui12",
+      expectedTrashRevision: `notetrashrev_${"a".repeat(64)}` as const,
+      pageId: "page_20260802_notepurgeui", title: "Remove exact draft",
+      trashedAt: "2026-08-02T08:00:00.000Z", canRestore: true as const };
+    const listTrash = vi.fn(async (request: NoteTrashListRequest) => ({ ...request, status: "ready" as const, notes: [note] }));
+    let mode: "stale" | "committed" = "stale";
+    const purgeTrash = vi.fn(async (request: NoteTrashPurgeRequest): Promise<NoteTrashPurgeResult> => mode === "stale"
+      ? { ...request, status: "stale" }
+      : { ...request, status: "committed", operationId: "op_20260802_notepurged1234" });
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      notes: { listTrash, restoreTrash: vi.fn(), purgeTrash },
+      vault: { current: async () => ({ vaultId: activeVaultId }) }
+    } });
+    await act(async () => {
+      root.render(createElement(NoteTrashRestorePanel, { activeVaultId, locale: "en",
+        onCommitted: async () => false, t }));
+      await settle(dom); await settle(dom);
+    });
+    const trigger = buttonNamed(container, `Delete permanently: ${note.title}`);
+    expect(purgeTrash).not.toHaveBeenCalled();
+    await act(async () => { trigger.click(); await settle(dom); });
+    expect(container.textContent).toContain("This cannot be undone");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Delete forever"));
+    await act(async () => { buttonNamed(container, "Delete forever").click(); await settle(dom); await settle(dom); });
+    expect(purgeTrash).toHaveBeenCalledWith(expect.objectContaining({ activeVaultId, pageId: note.pageId,
+      trashOperationId: note.trashOperationId, expectedTrashRevision: note.expectedTrashRevision,
+      confirmation: "delete_permanently" }));
+    expect(container.querySelector("[data-restorable-note-id]")).not.toBeNull();
+    expect(container.textContent).toContain("changed");
+    mode = "committed";
+    await act(async () => { buttonNamed(container, "Delete forever").click(); await settle(dom); await settle(dom); });
+    expect(container.querySelector("[data-restorable-note-id]")).toBeNull();
+    expect(container.textContent).toContain("permanently deleted from Trash");
+    expect(dom.window.document.activeElement).toBe(container.querySelector("[aria-labelledby='activity-trash-title']"));
     await act(async () => root.unmount());
     dom.window.close();
   });

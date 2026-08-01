@@ -466,6 +466,11 @@ Trash rules:
   Direct Settings restore binds the current registry revision and reuses the same `restore_memory`
   Operation as Activity Undo; private L0/L1 content, provenance, receipt paths and hashes stay in Main.
 - Permanent deletion from trash is out of scope for ordinary Agent actions and should require explicit user confirmation if exposed.
+- Settings may permanently delete one exact recoverable knowledge page only after a second explicit
+  user confirmation. Main re-proves the trash receipt, revision, `trash_page` Operation and payload
+  checksum; it fsyncs a purge intent, sync-ready tombstone and irreversible `purge_page` Operation
+  before unlinking the payload and restore receipt. Restart adopts the same purge once, while stale,
+  tampered or cross-Vault requests preserve the trash item.
 
 Compaction rules:
 

@@ -989,6 +989,7 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly trashCurrent:");
     expect(contractsSource).toContain("readonly listTrash:");
     expect(contractsSource).toContain("readonly restoreTrash:");
+    expect(contractsSource).toContain("readonly purgeTrash:");
     expect(contractsSource).toContain("readonly archiveCurrent:");
     expect(contractsSource).toContain("readonly openEditor:");
     expect(contractsSource).toContain("readonly saveEditor:");
@@ -1029,6 +1030,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain("NOTE_TRASH_RESTORE_CHANNEL");
     expect(preloadSource).toContain("NoteTrashRestoreRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteTrashRestoreResultSchema.parse(");
+    expect(preloadSource).toContain("NOTE_TRASH_PURGE_CHANNEL");
+    expect(preloadSource).toContain("NoteTrashPurgeRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteTrashPurgeResultSchema.parse(");
     expect(preloadSource).toContain("NOTE_ARCHIVE_CURRENT_CHANNEL");
     expect(preloadSource).toContain("NoteArchiveCurrentRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteArchiveCurrentResultSchema.parse(");
@@ -1057,6 +1061,7 @@ describe("desktop shell build contract", () => {
     expect(notesApi).toContain(") => Promise<NoteTrashCurrentResult>;");
     expect(notesApi).toContain("readonly listTrash: (request: NoteTrashListRequest) => Promise<NoteTrashListResult>;");
     expect(notesApi).toContain("readonly restoreTrash: (request: NoteTrashRestoreRequest) => Promise<NoteTrashRestoreResult>;");
+    expect(notesApi).toContain("readonly purgeTrash: (request: NoteTrashPurgeRequest) => Promise<NoteTrashPurgeResult>;");
     expect(notesApi).toContain("request: NoteArchiveCurrentRequest");
     expect(notesApi).toContain(") => Promise<NoteArchiveCurrentResult>;");
     expect(notesApi).toContain("request: NoteRestoreArchivedRequest");
