@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe("LibraryTagRenameService", () => {
-  it("renames every exact page once, adopts replay, and restores exact bytes through Activity Undo", () => {
+  it("renames every exact page once and supports restart-safe repeatable Activity Undo and Redo", () => {
     const fixture = makeFixture();
     const before = fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"));
     const request = renameRequest(fixture);
@@ -35,9 +35,39 @@ describe("LibraryTagRenameService", () => {
 
     const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
     expect(fixture.service.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
-    expect(fixture.service.undo(operation)).toMatchObject({ status: "undone", operationId: operation.id });
+    const undone = fixture.service.undo(operation);
+    expect(undone).toMatchObject({ status: "undone", operationId: operation.id });
     expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
     expect(fixture.service.undo(operation)).toMatchObject({ status: "already_undone" });
+    const undoOperation = findOperations(fixture.vaultPath).find((item) => item.id === undone.undoOperationId)!;
+    expect(fixture.service.activitySummary(operation, undoOperation)).toMatchObject({
+      status: "undone", canUndo: false, canRedo: true
+    });
+
+    const redone = fixture.service.redo({ operationId: operation.id });
+    expect(redone).toMatchObject({ status: "redone", operationId: operation.id,
+      undoOperationId: undoOperation.id, redoOperationId: expect.stringMatching(/^op_/u) });
+    const after = fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"));
+    expect(after.every((markdown) => markdown.includes('"Renamed tag"'))).toBe(true);
+    expect(fixture.service.redo({ operationId: operation.id })).toEqual({ ...redone, status: "already_redone" });
+    expect(fixture.service.activitySummary(operation, undoOperation)).toMatchObject({
+      status: "undone", canRedo: false, redoUnavailableReason: "already_redone"
+    });
+
+    const redoOperation = findOperations(fixture.vaultPath).find((item) => item.id === redone.redoOperationId)!;
+    const redoUndone = fixture.service.undo(redoOperation);
+    expect(redoUndone).toMatchObject({ status: "undone", operationId: redoOperation.id });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+    const redoUndoOperation = findOperations(fixture.vaultPath).find((item) => item.id === redoUndone.undoOperationId)!;
+    expect(fixture.service.activitySummary(redoOperation, redoUndoOperation)).toMatchObject({ canRedo: true });
+
+    const repeated = fixture.service.redo({ operationId: redoOperation.id });
+    expect(repeated).toMatchObject({ status: "redone", operationId: redoOperation.id });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(after);
+    const repeatedFile = findOperationFiles(fixture.vaultPath).find((file) => file.endsWith(`${repeated.redoOperationId}.json`))!;
+    fs.unlinkSync(repeatedFile);
+    expect(new LibraryTagRenameService(fixture.vaults).recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(findOperations(fixture.vaultPath).some((item) => item.id === repeated.redoOperationId)).toBe(true);
   });
 
   it("rejects target collisions and snapshot drift before changing any page", () => {
@@ -87,6 +117,8 @@ describe("LibraryTagRenameService", () => {
     expect(restarted.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
     expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
     expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+    expect(restarted.redo({ operationId: operation.id })).toMatchObject({ status: "redone" });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(merged);
   });
 
   it("fails a merge closed when either tag count or exact snapshot drifts", () => {
@@ -123,6 +155,8 @@ describe("LibraryTagRenameService", () => {
     expect(restarted.activitySummary(operation)).toMatchObject({ status: "applied", canUndo: true });
     expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
     expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
+    expect(restarted.redo({ operationId: operation.id })).toMatchObject({ status: "redone" });
+    expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(removed);
   });
 
   it("fails tag removal before mutation when count or snapshot authority drifts", () => {
@@ -134,6 +168,19 @@ describe("LibraryTagRenameService", () => {
     expect(fixture.service.remove(removeRequest(fixture))).toMatchObject({ status: "stale" });
     expect(fixture.taggedPaths.map((file) => fs.readFileSync(file, "utf8"))).toEqual(before);
     expect(findOperations(fixture.vaultPath)).toHaveLength(0);
+  });
+
+  it("fails Redo closed when any exact page changed after Undo", () => {
+    const fixture = makeFixture();
+    const committed = fixture.service.remove(removeRequest(fixture));
+    if (committed.status !== "committed") throw new Error("tag removal did not commit");
+    const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
+    expect(fixture.service.undo(operation)).toMatchObject({ status: "undone" });
+    fs.appendFileSync(fixture.taggedPaths[0]!, "\nExternal edit\n", "utf8");
+    const changed = fs.readFileSync(fixture.taggedPaths[0]!, "utf8");
+    expect(fixture.service.redo({ operationId: operation.id })).toMatchObject({ status: "stale" });
+    expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toBe(changed);
+    expect(findOperations(fixture.vaultPath).some((item) => item.id !== operation.id && !item.id.endsWith("undo"))).toBe(false);
   });
 
   it("removes a tag from one exact page, adopts restart, and restores it through Undo", () => {
@@ -153,6 +200,8 @@ describe("LibraryTagRenameService", () => {
     const operation = findOperations(fixture.vaultPath).find((item) => item.id === committed.operationId)!;
     expect(restarted.undo(operation)).toMatchObject({ status: "undone" });
     expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toBe(before);
+    expect(restarted.redo({ operationId: operation.id })).toMatchObject({ status: "redone" });
+    expect(fs.readFileSync(fixture.taggedPaths[0]!, "utf8")).toContain("tags: []");
   });
 
   it("fails one-page tag removal closed on page or snapshot drift", () => {

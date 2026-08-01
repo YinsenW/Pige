@@ -3036,9 +3036,8 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
 });
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
   const trashResult = getNoteTrashRedoService().redo(request);
-  const result = trashResult.status === "not_found"
-    ? getNoteMarkdownEditorRedoService().redo(request)
-    : trashResult;
+  const tagResult = trashResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : trashResult;
+  const result = tagResult.status === "not_found" ? getNoteMarkdownEditorRedoService().redo(request) : tagResult;
   if (result.status === "redone" || result.status === "already_redone") scheduleActivityIndexRebuild();
   return result;
 });
