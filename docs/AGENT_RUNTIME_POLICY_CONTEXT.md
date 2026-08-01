@@ -118,6 +118,11 @@ before sensitive effects. YOLO removes eligible prompts, not validation; permane
 original overwrite, raw credentials, risky edits, protected authority, OS/SSRF/signature/path
 safety stay non-reusable. Third-party content cannot authorize or select a mode.
 
+The machine-local Permission Policy Store is the single source for both fields. Main snapshots
+that store into every new Agent policy; a mode or revision change alters the policy hash, so a
+pending sensitive effect must re-prove current policy before execution. Restart restores the same
+mode/revision before the Permission Broker evaluates a saved grant or Full Access eligibility.
+
 ### 4.4 Language, Memory, Retrieval, And Capabilities
 
 - Language policy owns app locale, generated-knowledge language, source-language
@@ -152,6 +157,7 @@ availability. It does not include secrets, paths, old grants, or implementation 
 | Generated knowledge language | Appearance Service + Agent Orchestrator |
 | Exact selected payload and context bounds | Context Assembly + Provider adapter |
 | High-risk effect | Effect owner + high-risk confirmation boundary |
+| Permission mode and saved-grant eligibility | Permission Policy Store + Permission Broker |
 | Memory | Agent Memory Service |
 | Retrieval limits | Retrieval Service |
 | Local capability availability | Capability/service owner |

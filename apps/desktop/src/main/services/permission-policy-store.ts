@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs, { constants as fsConstants, type Stats } from "node:fs";
 import path from "node:path";
-import type { HighRiskConfirmationSummary, PermissionPolicySummary } from "@pige/contracts";
+import type { AgentRuntimePolicyContext, HighRiskConfirmationSummary, PermissionPolicySummary } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
 import {
   HighRiskConfirmationSummarySchema,
@@ -169,6 +169,17 @@ export class PermissionPolicyStore implements PermissionPolicyStorePort {
 
   read(): PermissionPolicySnapshot {
     return projectSnapshot(this.#readRecord());
+  }
+
+  agentRuntimePolicyContext(): {
+    readonly permissionMode: AgentRuntimePolicyContext["authority"]["permissionMode"];
+    readonly permissionPolicyRevision: number;
+  } {
+    const snapshot = this.read();
+    return {
+      permissionMode: snapshot.defaultMode,
+      permissionPolicyRevision: snapshot.revision
+    };
   }
 
   onChanged(listener: () => void): () => void {

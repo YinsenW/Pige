@@ -293,6 +293,8 @@ Rules:
 ## 8.1 Agent-Affecting Settings
 
 Settings that affect Agent goals, storage behavior, model behavior, confirmation behavior, language, memory, retrieval, permissions, or local capabilities must be compiled into Agent Runtime Policy Context.
+Permission mode and policy revision remain typed Host authority fields: prompt text does not expose
+saved-grant matchers and cannot select, widen, or inherit a permission mode.
 
 Rules:
 

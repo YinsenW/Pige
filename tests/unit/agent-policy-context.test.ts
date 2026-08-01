@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildAgentRuntimePolicyContext } from "../../apps/desktop/src/main/services/agent-policy-context";
+import { PermissionPolicyStore } from "../../apps/desktop/src/main/services/permission-policy-store";
 import {
   createVaultOnDisk,
   updateVaultSourceStorageStrategy
@@ -151,5 +152,48 @@ describe("agent runtime policy context", () => {
     expect(safe.localCapabilities.excludeLowConfidenceOcrFromSummaries).toBe(true);
     expect(permissive.localCapabilities.excludeLowConfidenceOcrFromSummaries).toBe(false);
     expect(permissive.policyHash).not.toBe(safe.policyHash);
+  });
+
+  it("binds the authoritative permission mode and revision into each new Agent policy", () => {
+    const vaultPath = makeVault();
+    const ask = buildAgentRuntimePolicyContext(vaultPath, {
+      permissionMode: "ask_every_time",
+      permissionPolicyRevision: 0
+    });
+    const remembered = buildAgentRuntimePolicyContext(vaultPath, {
+      permissionMode: "remember_scoped_grants",
+      permissionPolicyRevision: 1
+    });
+
+    expect(ask.authority).toEqual({
+      firstPartyTurnAuthority: true,
+      highRiskConfirmation: "closed_list",
+      permissionMode: "ask_every_time",
+      permissionPolicyRevision: 0,
+      thirdPartyInheritance: false
+    });
+    expect(remembered.authority).toMatchObject({
+      permissionMode: "remember_scoped_grants",
+      permissionPolicyRevision: 1
+    });
+    expect(remembered.policyHash).not.toBe(ask.policyHash);
+    expect(remembered.policyContextId).not.toBe(ask.policyContextId);
+  });
+
+  it("compiles the restarted permission store into the typed Agent authority context", () => {
+    const vaultPath = makeVault();
+    const appDataPath = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "pige-policy-app-data-")));
+    tempRoots.push(appDataPath);
+    fs.chmodSync(appDataPath, 0o700);
+    const first = new PermissionPolicyStore(appDataPath, () => undefined);
+    expect(first.setDefaultMode(0, "remember_scoped_grants")).toBe("committed");
+
+    const restarted = new PermissionPolicyStore(appDataPath, () => undefined);
+    const policy = buildAgentRuntimePolicyContext(vaultPath, restarted.agentRuntimePolicyContext());
+
+    expect(policy.authority).toMatchObject({
+      permissionMode: "remember_scoped_grants",
+      permissionPolicyRevision: 1
+    });
   });
 });

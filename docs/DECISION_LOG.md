@@ -4821,6 +4821,37 @@ References:
 - `docs/MARKDOWN_SCHEMA.md`
 - `docs/API_AND_IPC_DESIGN.md`
 
+### D-20260801-Permission-Mode-Agent-Policy-Binding
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+Compile the machine-local permission mode and Permission Policy revision into the canonical typed
+Agent Runtime Policy Context. The same Permission Policy Store remains the source used by the
+Permission Broker to enforce Ask, saved scoped grants, and Full Access eligibility.
+
+Rationale:
+
+Broker-only enforcement can still leave a durable Agent Job hash unaware that its authority mode
+changed. Binding the store revision to the Job policy closes that gap without exposing grant
+matchers, permission records, paths, or secrets to prompts or the renderer.
+
+Consequences:
+
+- New Agent Jobs snapshot `authority.permissionMode` and `authority.permissionPolicyRevision`.
+- A permission mode or revision change invalidates the next policy-bound sensitive effect before
+  execution; it does not manufacture approval or expand lower-authority content.
+- Restart restores the same store snapshot before policy construction and Broker enforcement.
+- Prompt text, model output, source content, Skills, and packages cannot select or inherit a mode.
+
+References:
+
+- `docs/AGENT_RUNTIME_POLICY_CONTEXT.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/PROMPT_DESIGN.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

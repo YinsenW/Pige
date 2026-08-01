@@ -4119,6 +4119,79 @@ export const PermissionDefaultModeSchema = z.enum([
   "yolo_full_access"
 ]);
 
+export const AgentRuntimePolicyContextSchema = z.object({
+  schemaVersion: z.literal(1),
+  policyContextId: z.string().regex(/^policy_[a-f0-9]{16}$/),
+  builtAt: z.string().datetime({ offset: true }),
+  jobId: z.string().min(1).max(160),
+  policyHash: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  vaultId: VaultIdSchema,
+  sourceStorage: z.object({
+    defaultStrategy: SourceStorageStrategySchema,
+    sourceAssetRootKind: SourceAssetRootKindSchema,
+    allowPerCaptureOverride: z.boolean(),
+    linkStrategyEnabled: z.literal(false)
+  }).strict(),
+  model: z.object({
+    defaultModelProfileId: z.string().min(1).optional(),
+    modelConfigured: z.boolean(),
+    cloudBoundary: CloudBoundarySchema,
+    boundaryVerification: BoundaryVerificationSchema,
+    cloudSendPolicy: CloudSendPolicySchema,
+    modelRoutingMode: z.enum([
+      "default_model_only",
+      "pi_upstream_model_slots",
+      "pige_model_routing_service"
+    ])
+  }).strict(),
+  authority: z.object({
+    firstPartyTurnAuthority: z.literal(true),
+    highRiskConfirmation: z.literal("closed_list"),
+    permissionMode: PermissionDefaultModeSchema,
+    permissionPolicyRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    thirdPartyInheritance: z.literal(false)
+  }).strict(),
+  language: z.object({
+    appLocale: LocaleSchema,
+    generatedKnowledgeLanguage: GeneratedKnowledgeLanguageSchema,
+    preserveSourceLanguage: z.boolean(),
+    ocrLanguageHints: z.array(z.string().min(1).max(64)).max(32),
+    voiceInputLanguage: z.string().min(1).max(64).optional()
+  }).strict(),
+  confirmation: z.object({
+    safeAutoApplyThreshold: z.number().min(0).max(1),
+    mutatingReviewThreshold: z.number().min(0).max(1),
+    riskyChangeRequiresConfirmation: z.boolean()
+  }).strict(),
+  memory: z.object({
+    vaultMemoryEnabled: z.boolean(),
+    allowedMemoryScopes: z.array(z.enum([
+      "preference",
+      "correction",
+      "workflow_lesson",
+      "profile"
+    ])).max(4),
+    includeMemoryInBackup: z.boolean()
+  }).strict(),
+  retrieval: z.object({
+    lexicalSearchAvailable: z.boolean(),
+    vectorSearchAvailable: z.boolean(),
+    rerankerAvailable: z.boolean(),
+    maxSnippetsForCloudSynthesis: z.number().int().positive().max(64)
+  }).strict(),
+  localCapabilities: z.object({
+    localDatabase: z.enum(["not_initialized", "ready", "needs_rebuild", "error"]),
+    parserToolchainReady: z.boolean(),
+    ocrEngines: z.array(z.enum(["apple_vision", "windows_ai", "paddleocr_local"])).max(3),
+    speechInputAvailable: z.boolean(),
+    embeddingModelInstalled: z.boolean(),
+    hiddenDownloadsAllowed: z.literal(false),
+    excludeLowConfidenceOcrFromSummaries: z.boolean()
+  }).strict()
+}).strict();
+
+export type AgentRuntimePolicyContext = z.infer<typeof AgentRuntimePolicyContextSchema>;
+
 export const PERMISSION_YOLO_HARD_BOUNDARIES = [
   "permanent_delete",
   "overwrite_user_original",

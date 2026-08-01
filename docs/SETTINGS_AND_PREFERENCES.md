@@ -224,6 +224,7 @@ Agent-affecting settings are not free-form prompt snippets. They compile into ty
 | Memory enabled state | `memory.vaultMemoryEnabled` | Yes | Agent Memory Service | New memory reads/writes |
 | Memory backup inclusion | `memory.includeMemoryInBackup` | No | Backup Service | Next backup |
 | Exceptional intervention compatibility | `confirmation.*` | Yes | Agent Orchestrator, Change Proposal Service | New jobs |
+| Permission mode and policy revision | `authority.permissionMode`, `authority.permissionPolicyRevision` | No | Permission Policy Store, Agent Orchestrator, Permission Broker | New Agent jobs; current sensitive effects re-prove the exact policy hash before execution |
 | Local embedding model status | `retrieval.vectorSearchAvailable` | Maybe | Local RAG Engine | New retrieval/index jobs |
 | Local reranker model status | `retrieval.rerankerAvailable` | Maybe | Local RAG Engine | New retrieval calls after one bounded successful runtime admission |
 | Parser/toolchain health | `localCapabilities.parserToolchainReady` | Maybe | Local Tool Service, Parser Service | New parser jobs |
