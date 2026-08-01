@@ -93,6 +93,7 @@ import {
   isSupportedRelationshipProposal,
   relationshipProposalOperationId
 } from "./agent-relationship-proposal-service";
+import { assertAgentIngestPublicationAuthorityCurrent } from "./agent-ingest-publication-authority";
 import {
   JobRecordStore,
   type JobRecordSnapshot
@@ -1824,6 +1825,14 @@ export class JobsService {
               "The selected source evidence changed while Agent ingest was running."
             );
           }
+          assertAgentIngestPublicationAuthorityCurrent({
+            vaultPath,
+            activeVaultPath: this.#vaults.activeVaultPath(),
+            activeVault: this.#vaults.current(),
+            expectedJob: runningJob,
+            currentJob: this.#jobRecordStore(vaultPath).read(jobFile.path).job,
+            sourceRecord: currentSource
+          });
         },
         parseCurrentSource: (request) => this.#runAgentSelectedParseTool(
           vaultPath,
@@ -1934,7 +1943,8 @@ export class JobsService {
           : "";
         appendLog(
           vaultPath,
-          `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`
+          `${new Date().toISOString()} ${result.knowledgeAction === "linked" ? "Linked related knowledge from" : result.mutationKind === "update_page" ? "Updated" : "Created"} wiki note [${result.title}](${result.pagePath}) from source \`${sourceRecordFile.sourceRecord.id}\`.${warningSuffix}`,
+          result.operationId
         );
         const completedJob = this.#completeCooperativeExecution(
           jobFile.path,
@@ -6372,8 +6382,11 @@ function isConfinedConversationLocator(locator: string): boolean {
   return /^\.pige\/conversations\/\d{4}\/\d{2}\/conv_\d{8}(?:_[a-z0-9]{4,})?\.jsonl$/u.test(locator);
 }
 
-function appendLog(vaultPath: string, line: string): void {
-  fs.appendFileSync(path.join(vaultPath, "log.md"), `- ${line}\n`, "utf8");
+function appendLog(vaultPath: string, line: string, idempotencyKey?: string): void {
+  const logPath = path.join(vaultPath, "log.md");
+  const marker = idempotencyKey ? `<!-- pige-operation:${idempotencyKey} -->` : undefined;
+  if (marker && fs.readFileSync(logPath, "utf8").includes(marker)) return;
+  fs.appendFileSync(logPath, `- ${line}${marker ? ` ${marker}` : ""}\n`, "utf8");
 }
 
 function writeJsonAtomic(filePath: string, value: unknown): void {
