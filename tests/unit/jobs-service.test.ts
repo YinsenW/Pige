@@ -2515,6 +2515,12 @@ describe("jobs service", () => {
 
     expect(processResult).toEqual({ processed: 1, completed: 1, failed: 0 });
     expect(completed?.sourceId).toBe(captureResult.sourceId);
+    expect(completed?.agentKnowledgeOutcome).toMatchObject({
+      kind: "created",
+      knowledgeFields: ["title", "summary", "key_points", "citations", "tags"],
+      citationRefs: [{ kind: "source", id: captureResult.sourceId }],
+      undoOperationIds: completed?.operationIds
+    });
     const completedRecord = JSON.parse(fs.readFileSync(
       findFile(path.join(vaultPath, ".pige/jobs"), `${completed?.id}.json`),
       "utf8"
@@ -2571,6 +2577,11 @@ describe("jobs service", () => {
     expect(run).toHaveBeenCalledTimes(1);
     expect(completed.operationIds ?? []).toEqual([]);
     expect(completed.message).toBe("Historical Agent ingest completed without a durable knowledge effect.");
+    expect(completed.agentKnowledgeOutcome).toMatchObject({
+      kind: "skipped",
+      writeRefs: [],
+      undoOperationIds: []
+    });
     expect(readOperationBodies(vaultPath)).toEqual([]);
     expect(listFiles(path.join(vaultPath, ".pige", "conversations"))).toEqual(conversationFilesBefore);
     expect(conversationFilesBefore.map((filePath) => fs.readFileSync(filePath, "utf8")))
@@ -2635,6 +2646,10 @@ describe("jobs service", () => {
 
     expect(result).toEqual({ processed: 1, completed: 0, failed: 1 });
     const failed = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["failed_retryable"] }).jobs[0]);
+    expect(failed.agentKnowledgeOutcome).toMatchObject({
+      kind: "failed",
+      failureCode: "agent_runtime.source_turn_failed"
+    });
     expect(readJobCancellation(vaultPath, failed.id)).toEqual({
       safeCheckpointId: "agent_note_publication_started",
       durableWritesApplied: true
@@ -2657,6 +2672,8 @@ describe("jobs service", () => {
     expect(firstPlannedHash).toMatch(/^sha256:[a-f0-9]{64}$/u);
     expect(completedCheckpoint).toMatchObject({ state: "done" });
     expect(completedCheckpoint?.checksumAfter).not.toBe(firstPlannedHash);
+    expect(requireValue(jobs.list({ classes: ["agent_ingest"], states: ["completed"] }).jobs[0])
+      .agentKnowledgeOutcome?.kind).toBe("created");
   });
 
   it("preserves a verified Agent note when cancellation races its create-only commit", async () => {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T15:07:39Z",
+  "reviewedAt": "2026-08-01T15:26:43.444Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E4.04 durable citation, Source Record and managed-section relationship rebuild.",
+    "scope": "E3.07 durable deterministic Agent knowledge outcomes and recovery references.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "5b46490a77606aa4a0b36845580495ce93fc7fe8576a2cb9b095fc37f7bb0f81"
+    "reviewedSha256": "142fbe796741cb3d8a9c9406e4561fe685e36cd53b77832940de652f27da4e41"
   },
   "reviewers": [
     {
-      "reviewerId": "durable-relation-rebuild-review",
-      "task": "Review E4.04 durable relationship rebuild and source/page endpoint separation",
+      "reviewerId": "agent-knowledge-outcome-review",
+      "task": "Review E3.07 durable outcome and recovery authority",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,75 +70,72 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews durable relationship and migration contracts; Development supplies separate parser, database deletion/rebuild, tamper and deterministic projection evidence."
+      "independence": "Planning reviews the outcome and recovery contract; Development supplies separate schema, settlement, restart projection and UI evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "durable-relation-rebuild-review",
+      "reviewerId": "agent-knowledge-outcome-review",
       "blockerCount": 0,
-      "summary": "Deleting the derived database and rebuilding restores links, backlinks, citations, source edges and exact managed Related relationships without touching durable files."
+      "summary": "Every terminal Agent knowledge path settles one strict reference-only outcome in the same durable Job transition."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "durable-relation-rebuild-review",
+      "reviewerId": "agent-knowledge-outcome-review",
       "blockerCount": 0,
-      "summary": "Markdown, knowledge-model, local-database and migration contracts agree on strict citations, validated Source Records and separate page/source endpoints."
+      "summary": "Job schema, contracts, renderer events, Activity History, Playbook and acceptance share one outcome vocabulary."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "durable-relation-rebuild-review",
+      "reviewerId": "agent-knowledge-outcome-review",
       "blockerCount": 0,
-      "summary": "E4.04 is verified by existing page-link evidence plus one direct deletion/rebuild test covering citations, source records, managed sections and tamper rejection."
+      "summary": "E3.07 and PIGE-KNOW-006 are verified by executable created, updated, linked, skipped, failed and needs-attention evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "durable-relation-rebuild-review",
+      "reviewerId": "agent-knowledge-outcome-review",
       "blockerCount": 0,
-      "summary": "A bounded relation-index owner contains citation/source/managed parsing while LocalDatabaseService stays at its frozen architecture ceiling."
+      "summary": "A bounded outcome owner leaves mutation services unchanged while retry clears stale terminal facts before new work."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "durable-relation-rebuild-review",
+      "reviewerId": "agent-knowledge-outcome-review",
       "blockerCount": 0,
-      "summary": "Existing knowledge, database, recovery and decision owners record the schema change; no parallel design document or renderer contract was added."
+      "summary": "Existing Job and Playbook owners already define the behavior, so no new design document or duplicate status surface is introduced."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/markdown-renderer.test.ts tests/unit/local-database-service.test.ts",
+      "command": "npx vitest run tests/unit/agent-knowledge-outcome.test.ts tests/unit/jobs-service.test.ts",
       "status": "passed",
-      "evidence": "Strict citation extraction and complete database deletion/rebuild projection pass 56 focused tests including tampered Source Record rejection."
+      "evidence": "All six outcomes retain bounded fields, citations, writes, Operations, Undo and recovery references across exact Job settlement."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The schema migration and relation owner compile/build while LocalDatabaseService remains at its governed line ceiling."
+      "evidence": "The outcome candidate compiles and builds while Jobs remains below its frozen architecture budget and the new owner is inventory-bound."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Knowledge, database, migration, Operation vocabulary, acceptance projection and durable decision owners remain aligned."
+      "evidence": "Job recovery, Playbook, acceptance projection and semantic-claim lock remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "durable-relation-rebuild-bind-20260801",
-    "taskTitle": "Bind E4.04 durable relationship rebuild",
+    "taskId": "agent-knowledge-outcome-bind-20260801",
+    "taskTitle": "Bind E3.07 deterministic Agent outcomes",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing renderer and Library relationship DTOs remain unchanged; the derived schema gains a nullable source endpoint and deterministic migration.",
-    "acknowledgement": "Planning promotes E4.04 from direct deletion/rebuild, strict citation, Source Record and managed-section evidence while broader knowledge lifecycle exits remain open."
+    "compatibility": "Legacy Job records remain readable; new source-bound terminal facts are reference-only and existing mutation authorities remain unchanged.",
+    "acknowledgement": "Planning promotes E3.07 and PIGE-KNOW-006 from direct settlement, restart projection and Activity History evidence."
   },
   "resolvedBlockers": [],
-  "nonBlockingRisks": [
-    "macOS signed-package qualification remains open.",
-    "Windows public qualification is deferred by current project policy."
-  ]
+  "nonBlockingRisks": []
 }

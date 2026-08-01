@@ -134,5 +134,15 @@ describe("Agent knowledge outcome summaries", () => {
       undoOperationIds: [],
       recoveryRefs: [{ kind: "source", id: job.sourceId }]
     })).toThrow();
+    expect(() => AgentKnowledgeOutcomeSummarySchema.parse({
+      schemaVersion: 1,
+      kind: "created",
+      knowledgeFields: [],
+      citationRefs: [],
+      writeRefs: [{ kind: "page", id: "page_20260709_abcdef123456", role: "write", path: "private.md" }],
+      operationIds: [],
+      undoOperationIds: [],
+      recoveryRefs: [{ kind: "source", id: job.sourceId, role: "source" }]
+    })).toThrow();
   });
 });
