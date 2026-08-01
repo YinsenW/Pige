@@ -342,6 +342,7 @@ import { PiPackageUpdateService } from "./services/pi-package-update-service";
 import { PiPackageRuntimeService, createReviewedPiBtwCapabilityAdapter } from "./services/pi-package-runtime-service";
 import { PiPackageInstallTaskService } from "./services/pi-package-install-task-service";
 import { NotesService } from "./services/notes-service";
+import { ReaderSourceCitationService } from "./services/reader-source-citation-service";
 import { NoteTrashService } from "./services/note-trash-service";
 import { NoteTrashRedoService } from "./services/note-trash-redo-service";
 import { NoteArchiveService } from "./services/note-archive-service";
@@ -505,6 +506,7 @@ let libraryTagsService: LibraryTagsService | undefined;
 let libraryTagRenameService: LibraryTagRenameService | undefined;
 let libraryTopicRenameService: LibraryTopicRenameService | undefined;
 let notesService: NotesService | undefined;
+let readerSourceCitationService: ReaderSourceCitationService | undefined;
 let noteTrashService: NoteTrashService | undefined;
 let noteTrashRedoService: NoteTrashRedoService | undefined;
 let conversationTrashService: ConversationTrashService | undefined;
@@ -1908,6 +1910,11 @@ const getNotesService = (): NotesService => {
     );
   }
   return notesService;
+};
+
+const getReaderSourceCitationService = (): ReaderSourceCitationService => {
+  readerSourceCitationService ??= new ReaderSourceCitationService(getVaultService(), getNotesService());
+  return readerSourceCitationService;
 };
 
 const getNoteRevisionHistoryService = (): NoteRevisionHistoryService => {
@@ -3561,6 +3568,7 @@ registerReaderIpc({
   getWindow: (sender) => BrowserWindow.fromWebContents(sender) ?? undefined,
   showOpenDialog: (window, options) => dialog.showOpenDialog(window, options),
   getNotesService,
+  getReaderSourceCitationService,
   getReaderSelectionActionService,
   getReaderSelectionProposalService,
   getReaderSelectionCreateNoteService: getReaderSelectionCreateNoteActionService,

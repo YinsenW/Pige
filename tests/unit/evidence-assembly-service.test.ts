@@ -67,6 +67,34 @@ describe("evidence assembly service", () => {
     expect(pack.warnings).toEqual([]);
   });
 
+  it("projects one exact citation locator as a bounded body-free preview", async () => {
+    const vaultPath = makeVault();
+    const sourceId = "src_20260710_preview123456";
+    const body = `Exact cited passage ${"detail ".repeat(220)}`;
+    const artifacts = writePairedTextArtifact(vaultPath, sourceId, "preview", "extracted_text", body, [{
+      locator: "page:7",
+      characterStart: 0,
+      characterEnd: body.length
+    }]);
+    const service = new EvidenceAssemblyService();
+
+    await expect(service.previewCitation(
+      vaultPath,
+      makeSource(sourceId, "pdf_file", artifacts),
+      "p7"
+    )).resolves.toEqual({
+      locator: "p7",
+      artifactKind: "extracted_text",
+      excerpt: expect.stringMatching(/^Exact cited passage/u),
+      truncated: true
+    });
+    await expect(service.previewCitation(
+      vaultPath,
+      makeSource(sourceId, "pdf_file", artifacts),
+      "p8"
+    )).resolves.toBeUndefined();
+  });
+
   it("pairs PPTX media OCR metadata and emits stable slide-media citation locators", async () => {
     const vaultPath = makeVault();
     const sourceId = "src_20260710_cdefab345678";

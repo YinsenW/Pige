@@ -1408,6 +1408,7 @@
   "note.refreshSource.confirm": "Refresh source",
   "note.readerLinkUnavailable": "Opening linked notes and sources is temporarily unavailable. Nothing was changed.",
   "note.sources": "Sources",
+  "note.citationPreview": "Cited source passage",
   "noteAgent.hide": "Hide note conversation",
   "noteAgent.modelUnavailable": "Model unavailable",
   "noteAgent.placeholder": "Ask about the current note...",
