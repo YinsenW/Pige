@@ -23,16 +23,18 @@ export interface CurrentNoteConflictResolution {
   readonly intentHash: string;
   readonly currentRevision: `noteeditrev_${string}`;
   readonly lines: readonly CurrentNoteConflictLine[];
-  readonly decision: "keep_current" | "apply_proposed";
+  readonly decision: "keep_current" | "apply_proposed" | "save_proposed_as_new_page";
   readonly operationId?: string;
+  readonly pageId?: string;
 }
 
 interface ResolutionRecord extends CurrentNoteConflictResolution {
   readonly schemaVersion: 1;
   readonly kind: "current_note_conflict_resolution";
   readonly mutationKind: CurrentNoteConflictMutationKind;
-  readonly decision: "keep_current" | "apply_proposed";
+  readonly decision: "keep_current" | "apply_proposed" | "save_proposed_as_new_page";
   readonly operationId?: string;
+  readonly pageId?: string;
   readonly decidedAt: string;
 }
 
@@ -83,13 +85,15 @@ export class CurrentNoteConflictReviewService {
     readonly intentHash: string;
     readonly currentRevision: `noteeditrev_${string}`;
     readonly lines: readonly CurrentNoteConflictLine[];
-    readonly decision: "keep_current" | "apply_proposed";
+    readonly decision: "keep_current" | "apply_proposed" | "save_proposed_as_new_page";
     readonly operationId?: string;
+    readonly pageId?: string;
   }): CurrentNoteConflictResolution {
     assertIdentity(input.proposalId, input.intentHash);
     if (
       !NOTE_REVISION.test(input.currentRevision) || !validLines(input.lines) ||
-      (input.decision === "apply_proposed") !== (input.operationId !== undefined) ||
+      (input.decision !== "keep_current") !== (input.operationId !== undefined) ||
+      (input.decision === "save_proposed_as_new_page") !== (input.pageId !== undefined) ||
       (input.operationId !== undefined && !OperationIdSchema.safeParse(input.operationId).success)
     ) {
       throw conflict("The current-note conflict review is outside its safe bound.");
@@ -104,6 +108,7 @@ export class CurrentNoteConflictReviewService {
       lines: input.lines,
       decision: input.decision,
       ...(input.operationId ? { operationId: input.operationId } : {}),
+      ...(input.pageId ? { pageId: input.pageId } : {}),
       decidedAt: new Date().toISOString()
     };
     const target = resolutionPath(input.vaultPath, input.mutationKind, input.proposalId);
@@ -130,9 +135,11 @@ function isResolution(value: unknown): value is ResolutionRecord {
   const record = value as Partial<ResolutionRecord>;
   return record.schemaVersion === 1 && record.kind === "current_note_conflict_resolution" &&
     (record.mutationKind === "append" || record.mutationKind === "replace") &&
-    (record.decision === "keep_current" || record.decision === "apply_proposed") &&
-    (record.decision === "apply_proposed") === (record.operationId !== undefined) &&
+    (record.decision === "keep_current" || record.decision === "apply_proposed" || record.decision === "save_proposed_as_new_page") &&
+    (record.decision !== "keep_current") === (record.operationId !== undefined) &&
+    (record.decision === "save_proposed_as_new_page") === (record.pageId !== undefined) &&
     (record.operationId === undefined || OperationIdSchema.safeParse(record.operationId).success) &&
+    (record.pageId === undefined || /^page_\d{8}_[a-z0-9]{16}$/u.test(record.pageId)) &&
     typeof record.decidedAt === "string" &&
     typeof record.proposalId === "string" && PROPOSAL_ID.test(record.proposalId) &&
     typeof record.intentHash === "string" && INTENT_HASH.test(record.intentHash) &&
@@ -157,7 +164,8 @@ function projectResolution(record: ResolutionRecord): CurrentNoteConflictResolut
     currentRevision: record.currentRevision,
     lines: record.lines,
     decision: record.decision,
-    ...(record.operationId ? { operationId: record.operationId } : {})
+    ...(record.operationId ? { operationId: record.operationId } : {}),
+    ...(record.pageId ? { pageId: record.pageId } : {})
   };
 }
 

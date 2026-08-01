@@ -3416,14 +3416,16 @@ registerCurrentNoteAppendIpc({
   currentVault: () => getVaultService().current(),
   activeVaultPath: () => getVaultService().activeVaultPath(),
   getService: getCurrentNoteAppendService,
-  getJobsService
+  getJobsService,
+  onCreatedPage: (vaultPath) => getLocalDatabaseService().rebuild(vaultPath)
 });
 registerCurrentNoteReplaceIpc({
   ipcMain,
   currentVault: () => getVaultService().current(),
   activeVaultPath: () => getVaultService().activeVaultPath(),
   getService: getCurrentNoteReplaceService,
-  getJobsService
+  getJobsService,
+  onCreatedPage: (vaultPath) => getLocalDatabaseService().rebuild(vaultPath)
 });
 registerBackupRestoreIpc({
   ipcMain,

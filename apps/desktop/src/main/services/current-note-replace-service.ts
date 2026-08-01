@@ -29,13 +29,14 @@ import {
   currentNoteConflictRevision,
   projectCurrentNoteConflictLines
 } from "./current-note-conflict-review-service";
-
+import { CurrentNoteConflictSaveService, currentNoteConflictSavedOperationMatches, readCurrentNoteConflictReviewBase } from "./current-note-conflict-save-service";
 const MAX_REPLACEMENT_TEXT_BYTES = 16 * 1024;
 const MAX_PAGE_BYTES = 1024 * 1024;
 const MAX_RECORD_BYTES = 256 * 1024;
 const REPLACE_TOOL_ID = "pige_replace_current_note";
 const REPLACE_TOOL_VERSION = "1";
 const conflictReviews = new CurrentNoteConflictReviewService();
+const conflictSaves = new CurrentNoteConflictSaveService();
 
 export interface CurrentNoteReplaceInspection {
   readonly pageId: string;
@@ -81,7 +82,7 @@ export type CurrentNoteReplaceResult =
     };
 
 export type CurrentNoteReplaceProposalDecisionResult =
-  | { readonly status: "applied"; readonly proposal: CurrentNoteReplaceProposalPreview; readonly operation: OperationRecord }
+  | { readonly status: "applied"; readonly proposal: CurrentNoteReplaceProposalPreview; readonly operation: OperationRecord; readonly createdPageId?: string }
   | { readonly status: "rejected" | "conflicted"; readonly proposal: CurrentNoteReplaceProposalPreview }
   | { readonly status: "stale"; readonly proposal?: CurrentNoteReplaceProposalPreview }
   | { readonly status: "not_found" };
@@ -287,7 +288,7 @@ export class CurrentNoteReplaceService {
     readonly jobId: string;
     readonly proposalId: string;
     readonly expectedRevision: number;
-    readonly decision: "approve" | "reject" | "keep_current" | "apply_proposed";
+    readonly decision: "approve" | "reject" | "keep_current" | "apply_proposed" | "save_proposed_as_new_page";
     readonly expectedCurrentRevision?: string;
   }): CurrentNoteReplaceProposalDecisionResult {
     const proposal = readProposal(input.vaultPath, input.proposalId);
@@ -308,7 +309,7 @@ export class CurrentNoteReplaceService {
     const existingDecision = readDecision(input.vaultPath, proposal.proposalId);
     const existingOutcome = readOutcome(input.vaultPath, proposal.proposalId);
     if (existingOutcome) {
-      const resolvingConflict = input.decision === "keep_current" || input.decision === "apply_proposed";
+      const resolvingConflict = input.decision === "keep_current" || input.decision === "apply_proposed" || input.decision === "save_proposed_as_new_page";
       if (existingOutcome.outcome !== "conflicted" || !resolvingConflict) {
         if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) {
           throw turnConflict("The current-note replacement proposal already has another durable decision.");
@@ -365,6 +366,23 @@ export class CurrentNoteReplaceService {
           }
         }
       }
+      if (input.decision === "save_proposed_as_new_page") {
+        if (input.expectedRevision !== 3 || !input.expectedCurrentRevision) return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+        const reviewBase = readCurrentNoteConflictReviewBase(input.vaultPath, conflictReviewBasePath(proposal.proposalId), proposal.reviewBaseHash);
+        const parsedBase = parsePigeFrontmatter(reviewBase);
+        if (!parsedBase) throw turnConflict("The replacement conflict review base is invalid.");
+        const saved = conflictSaves.resolve({
+          vaultPath: input.vaultPath, mutationKind: "replace" as const, proposalId: proposal.proposalId,
+          intentHash, jobId: intent.jobId, createdAt: intent.createdAt, sourcePageId: intent.pageId,
+          sourceTitle: parsedBase.frontmatter.title ?? "Untitled note", body: `${intent.markdown.trim()}\n\nEvidence: [citation_1]`,
+          modelProfileId: intent.modelProfileId, policyContextId: intent.policyContextId, policyHash: intent.policyHash,
+          currentRevision: input.expectedCurrentRevision as `noteeditrev_${string}`, expectedRevision: input.expectedRevision,
+          expectedCurrentRevision: input.expectedCurrentRevision,
+          readPreview: () => this.#preview(input.vaultPath, proposal, intent, existingOutcome)
+        });
+        if (!saved) return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
+        return this.#decisionResult(input.vaultPath, proposal, intent, existingOutcome);
+      }
       const currentPreview = this.#preview(input.vaultPath, proposal, intent, existingOutcome);
       if (
         currentPreview.state !== "conflicted" || !currentPreview.currentRevision ||
@@ -400,7 +418,7 @@ export class CurrentNoteReplaceService {
       });
       return { status: "rejected", proposal: this.#preview(input.vaultPath, proposal, intent, existingOutcome) };
     }
-    if (input.decision === "keep_current" || input.decision === "apply_proposed") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
+    if (input.decision === "keep_current" || input.decision === "apply_proposed" || input.decision === "save_proposed_as_new_page") return { status: "stale", proposal: this.#preview(input.vaultPath, proposal, intent) };
     if (existingDecision && (existingDecision.intentHash !== intentHash || existingDecision.decision !== input.decision)) throw turnConflict("The current-note replacement proposal already has another durable decision.");
     if (!existingDecision) {
       const currentPreview = this.#preview(input.vaultPath, proposal, intent);
@@ -516,6 +534,7 @@ export class CurrentNoteReplaceService {
       createdAt: intent.createdAt,
       preview: createSafePreview(current, intent.markdown)
     };
+    stageExact(vaultPath, conflictReviewBasePath(proposal.proposalId), current, currentHash);
     persistExactJson(vaultPath, proposalPath(proposal.proposalId), proposal);
     const durable = readProposal(vaultPath, proposal.proposalId);
     if (!durable || stableJson(durable) !== stableJson(proposal)) throw turnConflict("The current-note replacement proposal identity is occupied by another review.");
@@ -532,7 +551,7 @@ export class CurrentNoteReplaceService {
       return {
         proposalId: proposal.proposalId,
         kind: "replace_current_note",
-        state: resolution.decision === "apply_proposed" ? "applied" : "rejected",
+        state: resolution.decision === "keep_current" ? "rejected" : "applied",
         revision: 4,
         activeVaultId: intent.activeVaultId,
         pageId: intent.pageId,
@@ -557,11 +576,14 @@ export class CurrentNoteReplaceService {
   #decisionResult(vaultPath: string, proposal: ReplaceProposalRecord, intent: ReplaceIntentRecord, outcome: ProposalOutcomeRecord): CurrentNoteReplaceProposalDecisionResult {
     const preview = this.#preview(vaultPath, proposal, intent, outcome);
     if (outcome.outcome === "applied" || preview.state === "applied") {
-      const operation = readOperation(vaultPath, intent.operationId);
       const resolution = conflictReviews.read({ vaultPath, mutationKind: "replace", proposalId: proposal.proposalId, intentHash: proposal.intentHash });
-      if (!operation || (outcome.operationId ?? resolution?.operationId) !== operation.id) throw turnConflict("The applied replacement proposal is missing its exact Operation.");
-      assertOperationMatchesIntent(operation, intent);
-      return { status: "applied", proposal: preview, operation };
+      const operationId = outcome.operationId ?? resolution?.operationId;
+      const operation = operationId ? readOperation(vaultPath, operationId) : undefined;
+      if (!operation) throw turnConflict("The applied replacement proposal is missing its exact Operation.");
+      if (resolution?.decision === "save_proposed_as_new_page") {
+        if (!currentNoteConflictSavedOperationMatches(operation, intent, proposal.proposalId, resolution.pageId)) throw turnConflict("The saved replacement proposal Operation changed immutable identity.");
+      } else assertOperationMatchesIntent(operation, intent);
+      return { status: "applied", proposal: preview, operation, ...(resolution?.pageId ? { createdPageId: resolution.pageId } : {}) };
     }
     return { status: outcome.outcome, proposal: preview };
   }
@@ -942,6 +964,7 @@ function jobBindingPath(jobId: string): string {
   return `.pige/agent/current-note-replaces/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${jobId}.binding.json`;
 }
 function proposalPath(proposalId: string): string { return `.pige/agent/current-note-replace-proposals/${proposalId}.json`; }
+function conflictReviewBasePath(proposalId: string): string { return `.pige/agent/current-note-replace-proposals/${proposalId}.review-base.md`; }
 function decisionPath(proposalId: string): string { return `.pige/agent/current-note-replace-proposals/${proposalId}.decision.json`; }
 function outcomePath(proposalId: string): string { return `.pige/agent/current-note-replace-proposals/${proposalId}.outcome.json`; }
 function operationPath(operationId: string): string {

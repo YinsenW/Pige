@@ -87,6 +87,48 @@ describe("registerCurrentNoteAppendIpc", () => {
     expect(JSON.stringify(decision)).not.toContain("/synthetic/vault");
   });
 
+  it("projects and indexes the authoritative page created from a conflicted proposal", async () => {
+    const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
+    const operationId = "op_20260728_appendipc0002";
+    const createdPageId = "page_20260728_savedappendipc1";
+    const currentRevision = `noteeditrev_${"c".repeat(64)}` as const;
+    const onCreatedPage = vi.fn();
+    let job = waitingJob();
+    registerCurrentNoteAppendIpc({
+      ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler); } },
+      currentVault: () => ({ vaultId: VAULT_ID } as VaultSummary),
+      activeVaultPath: () => "/synthetic/vault",
+      getService: () => ({
+        decideProposal: () => ({
+          status: "applied",
+          proposal: { ...appendPreview(), state: "applied", revision: 4 },
+          operation: { id: operationId },
+          createdPageId
+        })
+      } as unknown as CurrentNoteAppendService),
+      getJobsService: () => ({
+        readAgentTurnJob: () => job,
+        resolveAgentTurnReview: (input: any) => {
+          job = { ...input.job, state: "completed", proposalIds: [PROPOSAL_ID], ...input.facts } as JobRecord;
+          return job;
+        }
+      } as unknown as JobsService),
+      onCreatedPage
+    });
+
+    const result = await handlers.get("agent.decideCurrentNoteAppendProposal")?.({}, {
+      apiVersion: 1, activeVaultId: VAULT_ID, pageId: PAGE_ID, jobId: JOB_ID,
+      proposalId: PROPOSAL_ID, expectedRevision: 3,
+      decision: "save_proposed_as_new_page", expectedCurrentRevision: currentRevision
+    });
+    expect(result).toMatchObject({ status: "applied", operationId, createdPageId });
+    expect(onCreatedPage).toHaveBeenCalledWith("/synthetic/vault", createdPageId);
+    expect(job.outputRefs).toEqual(expect.arrayContaining([
+      { kind: "operation", id: operationId, role: "current_note_append_operation" },
+      { kind: "page", id: createdPageId, role: "current_note_conflict_saved_page" }
+    ]));
+  });
+
   it("rejects a stale Job before the proposal service can mutate", async () => {
     const handlers = new Map<string, (_event: unknown, request: unknown) => unknown>();
     const decideProposal = vi.fn();
