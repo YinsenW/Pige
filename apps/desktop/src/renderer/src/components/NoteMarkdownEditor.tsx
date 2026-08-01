@@ -22,12 +22,18 @@ export type NoteMarkdownEditorLabels = Readonly<{
   save: string;
   saving: string;
   cancel: string;
-  reload: string;
-  reloading: string;
+  review: string;
+  reviewing: string;
+  conflictTitle: string;
+  currentFile: string;
+  draft: string;
+  useCurrent: string;
+  continueDraft: string;
   stale: string;
   failed: string;
   notFound: string;
-  reloaded: string;
+  currentAccepted: string;
+  mergeReady: string;
   invalid: Readonly<Record<NoteEditorInvalidReason, string>>;
 }>;
 
@@ -41,7 +47,13 @@ export type NoteMarkdownEditorProps = Readonly<{
   onCancel: () => void;
 }>;
 
-type Notice = "stale" | "failed" | "notFound" | "reloaded" | NoteEditorInvalidReason;
+type Notice =
+  | "stale"
+  | "failed"
+  | "notFound"
+  | "currentAccepted"
+  | "mergeReady"
+  | NoteEditorInvalidReason;
 
 export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.Element {
   const propIdentityKey = editorIdentityKey(props.ready);
@@ -49,25 +61,41 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
   renderedIdentityKeyRef.current = propIdentityKey;
   const [base, setBase] = useState(props.ready);
   const [draft, setDraft] = useState(props.ready.markdown);
+  const [conflictReview, setConflictReview] = useState<NoteMarkdownEditorReady | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [pending, setPending] = useState<"save" | "reload" | null>(null);
+  const [pending, setPending] = useState<"save" | "review" | null>(null);
   const requestSequenceRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const currentFileRef = useRef<HTMLTextAreaElement>(null);
+  const focusEditorAfterReviewRef = useRef(false);
 
   useEffect(() => {
     requestSequenceRef.current += 1;
     setBase(props.ready);
     setDraft(props.ready.markdown);
+    setConflictReview(null);
     setNotice(null);
     setPending(null);
+    focusEditorAfterReviewRef.current = false;
   }, [propIdentityKey]);
+
+  useEffect(() => {
+    if (conflictReview) {
+      currentFileRef.current?.focus();
+      return;
+    }
+    if (focusEditorAfterReviewRef.current) {
+      focusEditorAfterReviewRef.current = false;
+      textareaRef.current?.focus();
+    }
+  }, [conflictReview]);
 
   const requestIsCurrent = (sequence: number, expectedPropIdentityKey: string): boolean =>
     sequence === requestSequenceRef.current &&
     renderedIdentityKeyRef.current === expectedPropIdentityKey;
 
   const save = async (): Promise<void> => {
-    if (pending) return;
+    if (pending || conflictReview) return;
     const request: NoteEditorSaveRequest = {
       apiVersion: 1,
       requestId: createNoteEditorRequestId(),
@@ -100,6 +128,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
         props.onCommitted(result);
         return;
       }
+      setConflictReview(null);
       setNotice(result.status === "not_found"
         ? "notFound"
         : result.status === "invalid"
@@ -112,7 +141,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     }
   };
 
-  const reload = async (): Promise<void> => {
+  const reviewConflict = async (): Promise<void> => {
     if (pending) return;
     const request: NoteEditorOpenRequest = {
       apiVersion: 1,
@@ -124,7 +153,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     const sequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = sequence;
     const expectedPropIdentityKey = propIdentityKey;
-    setPending("reload");
+    setPending("review");
     try {
       const result = await props.onReload(request);
       if (!requestIsCurrent(sequence, expectedPropIdentityKey)) return;
@@ -132,14 +161,30 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
         setNotice(result.status === "not_found" ? "notFound" : "failed");
         return;
       }
-      setBase(result);
-      setNotice("reloaded");
-      textareaRef.current?.focus();
+      setConflictReview(result);
+      setNotice(null);
     } catch {
       if (requestIsCurrent(sequence, expectedPropIdentityKey)) setNotice("failed");
     } finally {
       if (requestIsCurrent(sequence, expectedPropIdentityKey)) setPending(null);
     }
+  };
+
+  const useCurrentFile = (): void => {
+    if (!conflictReview || pending) return;
+    setBase(conflictReview);
+    setDraft(conflictReview.markdown);
+    focusEditorAfterReviewRef.current = true;
+    setConflictReview(null);
+    setNotice("currentAccepted");
+  };
+
+  const continueWithDraft = (): void => {
+    if (!conflictReview || pending) return;
+    setBase(conflictReview);
+    focusEditorAfterReviewRef.current = true;
+    setConflictReview(null);
+    setNotice("mergeReady");
   };
 
   const cancel = (): void => {
@@ -148,7 +193,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     window.requestAnimationFrame(() => props.returnFocusRef.current?.focus());
   };
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>): void => {
+  const handleKeyDown = (event: ReactKeyboardEvent): void => {
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     if (event.key === "Escape") {
       event.preventDefault();
@@ -157,7 +202,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
-      void save();
+      if (!conflictReview) void save();
     }
   };
 
@@ -165,7 +210,7 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
     ? null
     : notice in props.labels.invalid
       ? props.labels.invalid[notice as NoteEditorInvalidReason]
-      : props.labels[notice as "stale" | "failed" | "notFound" | "reloaded"];
+      : props.labels[notice as "stale" | "failed" | "notFound" | "currentAccepted" | "mergeReady"];
 
   return (
     <section className="note-reader" aria-labelledby="note-markdown-editor-title">
@@ -179,8 +224,11 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
           event.preventDefault();
           void save();
         }}
+        onKeyDown={handleKeyDown}
       >
-        <label htmlFor="note-markdown-editor-input">{props.labels.field}</label>
+        <label htmlFor="note-markdown-editor-input">
+          {conflictReview ? props.labels.draft : props.labels.field}
+        </label>
         <textarea
           ref={textareaRef}
           id="note-markdown-editor-input"
@@ -193,24 +241,53 @@ export function NoteMarkdownEditor(props: NoteMarkdownEditorProps): React.JSX.El
             setDraft(event.currentTarget.value);
             setNotice(null);
           }}
-          onKeyDown={handleKeyDown}
         />
+        {conflictReview ? (
+          <section
+            className="settings-card"
+            aria-labelledby="note-markdown-editor-conflict-title"
+          >
+            <h2 id="note-markdown-editor-conflict-title">{props.labels.conflictTitle}</h2>
+            <label htmlFor="note-markdown-editor-current-file">{props.labels.currentFile}</label>
+            <textarea
+              ref={currentFileRef}
+              id="note-markdown-editor-current-file"
+              value={conflictReview.markdown}
+              rows={12}
+              readOnly
+              spellCheck={false}
+            />
+            <div className="settings-actions">
+              <button type="button" className="settings-button" onClick={useCurrentFile}>
+                {props.labels.useCurrent}
+              </button>
+              <button type="button" className="primary" onClick={continueWithDraft}>
+                {props.labels.continueDraft}
+              </button>
+            </div>
+          </section>
+        ) : null}
         {noticeLabel ? (
           <div
-            className={`settings-inline-status ${notice === "reloaded" ? "success" : "error"}`}
+            className={`settings-inline-status ${notice === "currentAccepted" || notice === "mergeReady" ? "success" : "error"}`}
             role="status"
             aria-live="polite"
           >
             <span>{noticeLabel}</span>
             {notice === "stale" ? (
-              <button type="button" className="settings-button" onClick={() => void reload()}>
-                {pending === "reload" ? props.labels.reloading : props.labels.reload}
+              <button
+                type="button"
+                className="settings-button"
+                disabled={pending !== null}
+                onClick={() => void reviewConflict()}
+              >
+                {pending === "review" ? props.labels.reviewing : props.labels.review}
               </button>
             ) : null}
           </div>
         ) : null}
         <div className="settings-actions">
-          <button type="submit" className="primary" disabled={pending !== null}>
+          <button type="submit" className="primary" disabled={pending !== null || conflictReview !== null}>
             {pending === "save" ? props.labels.saving : props.labels.save}
           </button>
           <button type="button" className="ghost" disabled={pending !== null} onClick={cancel}>
