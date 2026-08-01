@@ -303,7 +303,7 @@ Behavior:
 Behavior:
 
 - Activity History is in Settings; Home keeps active attention.
-- Activity History loads bounded older pages through one Load more action. A stale or failed next page preserves every visible row and returns focus to Load more; exhausting history returns focus to the History heading. Existing Open and Undo behavior is unchanged.
+- Activity History searches the full durable safe-summary projection and filters applied or undone changes; the same exact query continues through bounded Load more pages. A stale or failed search/page preserves every visible row and initiating focus; exhausting history returns focus to the History heading. Existing Open and Undo behavior is unchanged.
 - Eligible pages offer Undo; reread restores truth/focus/retry or fails closed.
 - An undone exact note edit, active-note or Topic-title rename, Library tag lifecycle action, exact note merge, Knowledge Health duplicate-topic merge, saved Collection view lifecycle action, or Collection cell/row/column/formula/relation/lookup/rollup mutation offers Redo only while every original target, immutable revision and durable Undo binding still match. Undo and Redo share one in-flight lock; success rereads Activity truth and restores focus to the newly available inverse action. If that row disappears, focus falls back to the History heading; drift or blocked authority fails closed.
 - Applied rows open current-vault pages in Reader or memory in Agent & Memory by safe ID. Exact Edit or heading receives focus; drift/failure returns to Activity/Open focus. Labels/paths grant no authority; Open never invokes Undo.

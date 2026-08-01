@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Bind the already-merged current-Reader long-page outline and saved-memory record browser to their exact executable acceptance evidence without changing product behavior or widening status.",
+    "scope": "Review full durable Activity safe-summary search, applied/undone filtering, filter-bound paging, and failure retention without widening Operation authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "90d891850e47114f85306744ec55d99a82116c73886157c7202747d9d58d137d"
+    "reviewedSha256": "04455d1e4f176ce73705dcfadabb66413ac2f7f97f1f5c5b73d81a50e2944866"
   },
   "reviewers": [
     {
-      "reviewerId": "recent-feature-acceptance-review",
-      "task": "Review exact acceptance binding for merged Reader outline and memory browser",
+      "reviewerId": "activity-history-search-review",
+      "task": "Review authoritative Activity History query and filter workflow",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks merged product tests and current manifest claims separately from the already-completed implementation branches."
+      "independence": "Project review checks the public query contract, durable search owner, renderer state retention and exact evidence separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "recent-feature-acceptance-review",
+      "reviewerId": "activity-history-search-review",
       "blockerCount": 0,
-      "summary": "The Reader outline is identity-bound and focus-safe while the memory browser retains only a current selected record."
+      "summary": "Search spans durable Operation truth while failed or stale requests retain visible history and initiating focus."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "recent-feature-acceptance-review",
+      "reviewerId": "activity-history-search-review",
       "blockerCount": 0,
-      "summary": "The two new evidence rows point to exact merged tests and change no public schema, storage or runtime contract."
+      "summary": "Schema, contract, service cursor, App paging and Settings controls bind the same canonical query and status."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "recent-feature-acceptance-review",
+      "reviewerId": "activity-history-search-review",
       "blockerCount": 0,
-      "summary": "PIGE-UI-001 now removes the closed long-page gap and PIGE-MEM-001 retains verified status with added browsing evidence."
+      "summary": "PIGE-JOB-007 and E2.09 cite exact service and UI tests while packaged proof remains explicitly open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "recent-feature-acceptance-review",
+      "reviewerId": "activity-history-search-review",
       "blockerCount": 0,
-      "summary": "The bind corrects ledger undercount without reopening product bytes or adding a recurring verification workflow."
+      "summary": "One existing activity.list channel gains bounded optional filters; Open, Undo and Redo owners remain unchanged."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "recent-feature-acceptance-review",
+      "reviewerId": "activity-history-search-review",
       "blockerCount": 0,
-      "summary": "Only acceptance evidence, its semantic lock, and the required current review recipe change; no owner document is duplicated."
+      "summary": "Existing API, Job, UI and trace owners capture the behavior without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/reader-inline-reference-ui.test.ts tests/unit/agent-memory-record-browser-ui.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/knowledge-activity-service.test.ts tests/unit/full-ui-settings-surface.test.ts tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Merged direct tests prove bounded heading navigation and current-owner memory filtering with focus and owner-drift behavior."
+      "evidence": "Direct service, UI and contract tests prove full-history filtering, filter-bound cursors, single-flight behavior and failure retention."
     },
     {
-      "command": "npm run typecheck",
+      "command": "npm run typecheck && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The merged Reader and memory feature surfaces remain type-safe on current main; this governance-only bind changes no product types."
+      "evidence": "The rebased candidate remains type-safe and within protected owner budgets."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "The exact evidence selectors, requirement gap text and semantic claims remain structurally and executable-current."
+      "evidence": "Current owner docs, exact evidence selectors and semantic claims remain structurally and executable-current."
     }
   ],
   "coordination": {
-    "taskId": "recent-feature-acceptance-bind-20260802",
-    "taskTitle": "Bind merged Reader outline and memory browser evidence",
+    "taskId": "activity-history-search-20260802",
+    "taskTitle": "Close full Activity History search and status filtering",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "No runtime, API, durable storage, privacy, permission or release behavior changes.",
-    "acknowledgement": "The bind records two already-merged user features and makes no new completion claim beyond their exact direct evidence."
+    "compatibility": "Existing unfiltered requests and cursors preserve their behavior; query/status are optional and carry no Operation authority.",
+    "acknowledgement": "The user-visible history workflow is bound while final packaged proof remains open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

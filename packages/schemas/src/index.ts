@@ -11476,13 +11476,6 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
       message: "Only an applied create-page proposal may return a created page identity."
     });
   }
-  if (!expectsCreatedPage && result.createdPageId !== undefined) {
-    context.addIssue({
-      code: "custom",
-      path: ["createdPageId"],
-      message: "Only an applied create-page proposal may return a created page identity."
-    });
-  }
 });
 
 export const VaultRevealResultSchema = z.discriminatedUnion("status", [

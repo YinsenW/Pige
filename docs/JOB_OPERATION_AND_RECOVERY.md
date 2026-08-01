@@ -756,9 +756,10 @@ raw proposal records.
 
 Settings:
 
-- Activity History pages the authoritative Operation projection with process-local,
-  Vault/snapshot/boundary-bound cursors; stale paging preserves current rows and does not
-  change existing forward-writing Undo/Redo recovery.
+- Activity History pages or searches the authoritative Operation projection by bounded
+  safe summary and applied/undone state. Process-local cursors bind Vault, snapshot,
+  canonical filters and boundary; stale paging or search preserves current rows and does
+  not change existing forward-writing Undo/Redo recovery.
 - Index & Maintenance shows rebuild/repair jobs.
 - Vault & Note Storage alone owns restarted user Backup state, valid Cancel/Retry and
   typed redacted failure; rollback children stay hidden.
