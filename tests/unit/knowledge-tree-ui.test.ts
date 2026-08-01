@@ -210,6 +210,82 @@ describe("Knowledge Tree renderer", () => {
     await unmount(dom, mount.root);
   });
 
+  it("fits a dense tree without colliding leaves and exposes complete assistive tree positions", async () => {
+    const dom = createDom();
+    const base = readyTree();
+    const densePages = Array.from({ length: 64 }, (_, index) => ({
+      pageId: `page_20260713_dense${String(index + 1).padStart(3, "0")}`,
+      pagePath: `wiki/notes/dense-${index + 1}.md`,
+      title: `Dense note ${String(index + 1).padStart(2, "0")}`,
+      pageType: "note" as const,
+      status: "active" as const,
+      sourceIds: [`src_20260713_dense${String(index + 1).padStart(3, "0")}`]
+    }));
+    const tree: KnowledgeTreeResult = {
+      ...base,
+      totals: {
+        ...base.totals,
+        pageCount: base.totals.pageCount + densePages.length,
+        fragmentPageCount: base.totals.fragmentPageCount + densePages.length,
+        sourceCount: base.totals.sourceCount + densePages.length,
+        leafCount: base.totals.leafCount + densePages.length
+      },
+      roots: [{
+        ...base.roots[0]!,
+        pageRefs: densePages,
+        metrics: {
+          ...base.roots[0]!.metrics,
+          fragmentPageCount: base.roots[0]!.metrics.fragmentPageCount + densePages.length,
+          sourceCount: base.roots[0]!.metrics.sourceCount + densePages.length,
+          leafCount: base.roots[0]!.metrics.leafCount + densePages.length,
+          weight: base.roots[0]!.metrics.weight + densePages.length
+        }
+      }]
+    };
+    const mount = await mountTree(dom, tree, async () => undefined);
+    const svg = mount.container.querySelector<SVGElement>('svg[role="tree"]');
+    const stage = mount.container.querySelector<SVGGElement>(".knowledge-map-stage");
+    const minimap = mount.container.querySelector<SVGElement>(".knowledge-minimap svg");
+    if (!svg || !stage || !minimap) throw new Error("Missing dense Knowledge Tree structure.");
+
+    expect(svg.getAttribute("aria-orientation")).toBe("vertical");
+    expect(svg.getAttribute("aria-describedby")).toBe("knowledge-tree-map-description");
+    expect(mount.container.querySelector("#knowledge-tree-map-description")?.textContent)
+      .toContain("Showing 68 knowledge units");
+    const domain = treeItemNamed(mount.container, "Local-first");
+    expect(domain.getAttribute("aria-posinset")).toBe("1");
+    expect(domain.getAttribute("aria-setsize")).toBe("1");
+    expect(domain.getAttribute("aria-expanded")).toBe("true");
+
+    const denseNodes = densePages.map((page) => treeItemNamed(mount.container, page.title));
+    expect(denseNodes[0]?.getAttribute("aria-posinset")).toBe("2");
+    expect(denseNodes[0]?.getAttribute("aria-setsize")).toBe("65");
+    expect(denseNodes[63]?.getAttribute("aria-posinset")).toBe("65");
+    expect(denseNodes[63]?.hasAttribute("aria-expanded")).toBe(false);
+    const xPositions = denseNodes.map((node) => {
+      const match = /^translate\(([\d.]+)\s/.exec(node.getAttribute("transform") ?? "");
+      if (!match) throw new Error("Dense node has no deterministic layout position.");
+      return Number(match[1]);
+    });
+    expect(new Set(xPositions).size).toBe(densePages.length);
+    expect(xPositions.slice(1).every((x, index) => x - xPositions[index]! >= 28)).toBe(true);
+    expect(Number(minimap.getAttribute("viewBox")?.split(" ")[2])).toBeGreaterThan(900);
+    const fitMatch = /scale\(([\d.]+)\)/.exec(stage.getAttribute("transform") ?? "");
+    expect(fitMatch).not.toBeNull();
+    expect(Number(fitMatch?.[1])).toBeLessThan(1);
+    const fittedTransform = stage.getAttribute("transform");
+
+    await click(dom, denseNodes[63]!);
+    expect(denseNodes[63]?.getAttribute("aria-selected")).toBe("true");
+    expect(denseNodes[63]?.getAttribute("tabindex")).toBe("0");
+    expect(stage.getAttribute("transform")).toContain("scale(1.5)");
+    await click(dom, buttonNamed(mount.container, "More Knowledge Tree actions"));
+    await click(dom, buttonNamed(mount.container, "Go to tree root"));
+    expect(stage.getAttribute("transform")).toBe(fittedTransform);
+
+    await unmount(dom, mount.root);
+  });
+
   it("adopts related pages only for the exact selected navigable node and opens returned page identities", async () => {
     const dom = createDom();
     const requests: string[] = [];
