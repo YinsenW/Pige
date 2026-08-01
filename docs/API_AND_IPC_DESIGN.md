@@ -504,7 +504,7 @@ base hash or Operation internals.
 
 Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.listRevisionHistory`,
 `notes.openRevisionHistory`, `notes.resolveInlineReference/openSourceReference`. Commands:
-`notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash`,
+`notes.saveEditor/merge/revealSource`, `notes.trashCurrent/listTrash/restoreTrash/purgeTrash`,
 `notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`,
 `notes.changeAlias`, `notes.removeTag`, `notes.setQuestionState`.
 
@@ -521,6 +521,11 @@ path/body-free, revalidates exact private bytes and returns authoritative render
 `restore_page`. Merge binds both notes and keeps current. History binds render/revision, lists <=100 safe summaries and opens sanitized read-only
 previews; restore CAS-writes one `restore_page`. Source/rich-text stays read-only and closed results
 expose no body/path.
+
+`purgeTrash` is Settings-only and binds the exact pathless list identity plus the literal
+`delete_permanently` confirmation. Main persists intent, tombstone and irreversible `purge_page`
+Operation before removing exact checksum-bound trash bytes; stale, missing and failed results expose
+no paths, bodies, hashes or recovery records.
 
 `notes.editTaxonomy` replaces the complete tags/topics projection only for one active `note`. Its
 strict request binds active Vault, page, render context and immutable revision, with at most 12

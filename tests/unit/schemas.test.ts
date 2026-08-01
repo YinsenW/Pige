@@ -228,6 +228,8 @@ import {
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  NoteTrashPurgeRequestSchema,
+  NoteTrashPurgeResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NoteReconnectOriginalSourceRequestSchema,
@@ -5323,6 +5325,14 @@ describe("schemas", () => {
     expect(NoteTrashRestoreResultSchema.parse({ ...restoreRequest, status: "committed",
       operationId: "op_20260730_restorenote1234", render })).toMatchObject({ status: "committed" });
     expect(() => NoteTrashRestoreRequestSchema.parse({ ...restoreRequest, trashPath: "/private/trash.md" })).toThrow();
+    const purgeRequest = { ...restoreRequest, requestId: "notetrashpurgereq_abcdefghijklmnop",
+      confirmation: "delete_permanently" as const };
+    expect(NoteTrashPurgeRequestSchema.parse(purgeRequest)).toEqual(purgeRequest);
+    expect(NoteTrashPurgeResultSchema.parse({ ...purgeRequest, status: "committed",
+      operationId: "op_20260730_purgenote123456" })).toMatchObject({ status: "committed" });
+    expect(() => NoteTrashPurgeRequestSchema.parse({ ...purgeRequest, confirmation: "yes" })).toThrow();
+    expect(() => NoteTrashPurgeResultSchema.parse({ ...purgeRequest, status: "failed",
+      trashPath: "/private/trash.md" })).toThrow();
     expect(KnowledgeActivitySummarySchema.parse({
       operationId: committed.operationId,
       kind: "trash_page",

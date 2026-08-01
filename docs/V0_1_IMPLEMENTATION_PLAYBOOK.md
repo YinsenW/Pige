@@ -756,8 +756,9 @@ rewrites fail closed.
 
 B9.08 now includes direct recovery paths for trashed managed Datasets plus individual-delete and
 reset-wide Agent memory: safe inventories survive restart and exact restore reuses each domain's existing
-Operation/Undo receipt without exposing paths, bodies, provenance or private tree facts. Other
-durable classes, compaction, permanent-delete confirmation and cross-platform
+Operation/Undo receipt without exposing paths, bodies, provenance or private tree facts. Exact knowledge-page
+permanent deletion additionally requires a second confirmation and persists its tombstone and irreversible
+Operation before deleting checksum-bound trash bytes. Other durable classes, compaction and cross-platform
 lifecycle breadth remain open, so E9.04 is not promoted.
 
 Deferred from this phase:

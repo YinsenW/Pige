@@ -371,6 +371,8 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteTrashPurgeRequest,
+  NoteTrashPurgeResult,
   NoteTrashSummary,
   NoteRevisionHistoryListRequest,
   NoteRevisionHistoryListResult,
@@ -854,6 +856,8 @@ export type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteTrashPurgeRequest,
+  NoteTrashPurgeResult,
   NoteTrashSummary,
   NoteRevisionHistoryListRequest,
   NoteRevisionHistoryListResult,
@@ -2665,6 +2669,7 @@ export interface PigeDesktopApi {
     ) => Promise<NoteTrashCurrentResult>;
     readonly listTrash: (request: NoteTrashListRequest) => Promise<NoteTrashListResult>;
     readonly restoreTrash: (request: NoteTrashRestoreRequest) => Promise<NoteTrashRestoreResult>;
+    readonly purgeTrash: (request: NoteTrashPurgeRequest) => Promise<NoteTrashPurgeResult>;
     readonly listRevisionHistory: (
       request: NoteRevisionHistoryListRequest
     ) => Promise<NoteRevisionHistoryListResult>;

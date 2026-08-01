@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { NoteTrashSummary } from "@pige/contracts";
 import type { Locale } from "@pige/schemas";
 
-type RestoreNotice = "restored" | "stale" | "failed";
+type RestoreNotice = "restored" | "deleted" | "stale" | "failed";
 
 export function NoteTrashRestorePanel(props: {
   readonly activeVaultId: string | null;
@@ -15,16 +15,20 @@ export function NoteTrashRestorePanel(props: {
   const [listFailed, setListFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<RestoreNotice | null>(null);
   const sequenceRef = useRef(0);
   const sectionRef = useRef<HTMLElement>(null);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const deleteTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const sequence = ++sequenceRef.current;
     setLoaded(false);
     setListFailed(false);
     setNotes([]);
+    setConfirmingId(null);
     setNotice(null);
     const activeVaultId = props.activeVaultId;
     if (!activeVaultId) { setLoaded(true); return; }
@@ -91,6 +95,67 @@ export function NoteTrashRestorePanel(props: {
     }
   };
 
+  const openDeleteConfirmation = (note: NoteTrashSummary): void => {
+    if (pendingId) return;
+    setNotice(null);
+    setConfirmingId(note.trashOperationId);
+    const focus = (): void => confirmRef.current?.focus({ preventScroll: true });
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+    else window.setTimeout(focus, 0);
+  };
+
+  const cancelDeleteConfirmation = (): void => {
+    const operationId = confirmingId;
+    setConfirmingId(null);
+    const focus = (): void => { if (operationId) deleteTriggerRefs.current.get(operationId)?.focus({ preventScroll: true }); };
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+    else window.setTimeout(focus, 0);
+  };
+
+  const deletePermanently = async (note: NoteTrashSummary): Promise<void> => {
+    const activeVaultId = props.activeVaultId;
+    if (!activeVaultId || pendingId || confirmingId !== note.trashOperationId) return;
+    const sequence = ++sequenceRef.current;
+    const noteIndex = notes.findIndex((candidate) => candidate.trashOperationId === note.trashOperationId);
+    let focusOperationId = note.trashOperationId;
+    const requestId = `notetrashpurgereq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}` as const;
+    setPendingId(note.trashOperationId);
+    setNotice(null);
+    try {
+      const result = await window.pige.notes.purgeTrash({
+        apiVersion: 1,
+        requestId,
+        activeVaultId,
+        pageId: note.pageId,
+        trashOperationId: note.trashOperationId,
+        expectedTrashRevision: note.expectedTrashRevision,
+        confirmation: "delete_permanently"
+      });
+      const currentVault = await window.pige.vault.current();
+      if (sequence !== sequenceRef.current || currentVault?.vaultId !== activeVaultId ||
+        result.requestId !== requestId || result.activeVaultId !== activeVaultId || result.pageId !== note.pageId ||
+        result.trashOperationId !== note.trashOperationId || result.expectedTrashRevision !== note.expectedTrashRevision ||
+        result.confirmation !== "delete_permanently") return;
+      if (result.status === "committed") {
+        focusOperationId = notes[noteIndex + 1]?.trashOperationId ?? notes[noteIndex - 1]?.trashOperationId ?? "";
+        setNotes((current) => current.filter((item) => item.trashOperationId !== note.trashOperationId));
+        setConfirmingId(null);
+        setNotice("deleted");
+      } else setNotice(result.status === "failed" ? "failed" : "stale");
+    } catch {
+      if (sequence === sequenceRef.current) setNotice("failed");
+    } finally {
+      if (sequence === sequenceRef.current) {
+        setPendingId(null);
+        const restoreFocus = (): void => {
+          (triggerRefs.current.get(focusOperationId) ?? sectionRef.current)?.focus({ preventScroll: true });
+        };
+        if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(restoreFocus);
+        else window.setTimeout(restoreFocus, 0);
+      }
+    }
+  };
+
   const dateLocale = props.locale === "zh-Hans" ? "zh-CN" : props.locale;
   return <section ref={sectionRef} className="settings-section" aria-labelledby="activity-trash-title" tabIndex={-1}>
     <h2 className="settings-section-title" id="activity-trash-title">{props.t("activity.trashTitle")}</h2>
@@ -107,16 +172,33 @@ export function NoteTrashRestorePanel(props: {
           <div className="settings-row-copy"><strong>{note.title}</strong><span>{new Intl.DateTimeFormat(dateLocale, {
             dateStyle: "medium", timeStyle: "short"
           }).format(new Date(note.trashedAt))}</span></div>
-          <button ref={(element) => { if (element) triggerRefs.current.set(note.trashOperationId, element);
+          <div className="settings-inline-actions"><button ref={(element) => { if (element) triggerRefs.current.set(note.trashOperationId, element);
             else triggerRefs.current.delete(note.trashOperationId); }} type="button" className="settings-button"
             disabled={pendingId !== null} aria-busy={pendingId === note.trashOperationId || undefined}
             aria-label={`${props.t("activity.restoreFromTrash")}: ${note.title}`}
             onClick={() => void restore(note)}>{props.t(pendingId === note.trashOperationId
               ? "activity.restoringFromTrash" : "activity.restoreFromTrash")}</button>
+          <button ref={(element) => { if (element) deleteTriggerRefs.current.set(note.trashOperationId, element);
+            else deleteTriggerRefs.current.delete(note.trashOperationId); }} type="button" className="settings-button"
+            disabled={pendingId !== null} aria-expanded={confirmingId === note.trashOperationId}
+            aria-label={`${props.t("activity.deletePermanently")}: ${note.title}`}
+            onClick={() => openDeleteConfirmation(note)}>{props.t("activity.deletePermanently")}</button></div>
+          {confirmingId === note.trashOperationId ? <div className="settings-state-copy" role="alertdialog"
+            aria-label={`${props.t("activity.deletePermanently")}: ${note.title}`}>
+            <p className="error">{props.t("activity.deletePermanently.warning")}</p>
+            <div className="settings-inline-actions">
+              <button ref={confirmRef} type="button" className="danger-button" disabled={pendingId !== null}
+                aria-busy={pendingId === note.trashOperationId || undefined}
+                onClick={() => void deletePermanently(note)}>{props.t(pendingId === note.trashOperationId
+                  ? "activity.deletePermanently.deleting" : "activity.deletePermanently.confirm")}</button>
+              <button type="button" className="settings-button" disabled={pendingId !== null}
+                onClick={cancelDeleteConfirmation}>{props.t("activity.deletePermanently.cancel")}</button>
+            </div>
+          </div> : null}
         </div>)}</div>}
-    {notice ? <p className={notice === "restored" ? "settings-note" : "error"}
-      role={notice === "restored" ? "status" : "alert"} aria-live="polite">
-      {props.t(`activity.restoreFromTrash.${notice}`)}
+    {notice ? <p className={notice === "restored" || notice === "deleted" ? "settings-note" : "error"}
+      role={notice === "restored" || notice === "deleted" ? "status" : "alert"} aria-live="polite">
+      {props.t(notice === "deleted" ? "activity.deletePermanently.deleted" : `activity.restoreFromTrash.${notice}`)}
     </p> : null}
   </section>;
 }

@@ -1773,6 +1773,7 @@ export const NoteRevealGeneratedResultSchema = z.discriminatedUnion("status", [
 export const NoteTrashCurrentRequestIdSchema = z.string().regex(/^notetrashreq_[a-z0-9]{16,64}$/);
 export const NoteTrashListRequestIdSchema = z.string().regex(/^notetrashlistreq_[a-z0-9]{16,64}$/);
 export const NoteTrashRestoreRequestIdSchema = z.string().regex(/^notetrashrestorereq_[a-z0-9]{16,64}$/);
+export const NoteTrashPurgeRequestIdSchema = z.string().regex(/^notetrashpurgereq_[a-z0-9]{16,64}$/);
 export const NoteTrashRevisionSchema = z.string().regex(/^notetrashrev_[a-f0-9]{64}$/);
 export const NoteRevisionHistoryRequestIdSchema = z.string().regex(/^notehistoryreq_[a-z0-9]{16,64}$/);
 export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistoryrev_[a-f0-9]{64}$/);
@@ -2099,6 +2100,7 @@ export const NoteEditorSaveResultSchema = z.discriminatedUnion("status", [
 export const NOTE_TRASH_CURRENT_CHANNEL = "notes.trashCurrent" as const;
 export const NOTE_TRASH_LIST_CHANNEL = "notes.listTrash" as const;
 export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
+export const NOTE_TRASH_PURGE_CHANNEL = "notes.purgeTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
@@ -2715,6 +2717,25 @@ export const NoteTrashRestoreResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "failed"] as const).map((status) =>
     NoteTrashRestoreResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteTrashPurgeRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteTrashPurgeRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  pageId: PageIdSchema,
+  trashOperationId: OperationIdSchema,
+  expectedTrashRevision: NoteTrashRevisionSchema,
+  confirmation: z.literal("delete_permanently")
+}).strict();
+const NoteTrashPurgeResultIdentitySchema = NoteTrashPurgeRequestSchema;
+export const NoteTrashPurgeResultSchema = z.discriminatedUnion("status", [
+  NoteTrashPurgeResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  ...(["stale", "not_found", "failed"] as const).map((status) =>
+    NoteTrashPurgeResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 
@@ -11358,6 +11379,12 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
       path: ["createdPageId"],
       message: "An applied create-page proposal must return its created page identity."
     });
+  } else if (!expectsCreatedPage && result.createdPageId !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["createdPageId"],
+      message: "Only an applied create-page proposal may return a created page identity."
+    });
   }
 });
 
@@ -12036,6 +12063,7 @@ export const OperationRecordSchema = z.object({
     "archive_page",
     "trash_page",
     "restore_page",
+    "purge_page",
     "trash_conversation",
     "restore_conversation",
     "update_index",
@@ -12927,6 +12955,7 @@ export type NoteEditorSaveResult = z.infer<typeof NoteEditorSaveResultSchema>;
 export type NoteTrashCurrentRequestId = z.infer<typeof NoteTrashCurrentRequestIdSchema>;
 export type NoteTrashListRequestId = z.infer<typeof NoteTrashListRequestIdSchema>;
 export type NoteTrashRestoreRequestId = z.infer<typeof NoteTrashRestoreRequestIdSchema>;
+export type NoteTrashPurgeRequestId = z.infer<typeof NoteTrashPurgeRequestIdSchema>;
 export type NoteTrashRevision = z.infer<typeof NoteTrashRevisionSchema>;
 export type NoteArchiveCurrentRequestId = z.infer<typeof NoteArchiveCurrentRequestIdSchema>;
 export type NoteArchiveCurrentRequest = z.infer<typeof NoteArchiveCurrentRequestSchema>;
@@ -12998,6 +13027,8 @@ export type NoteTrashListRequest = z.infer<typeof NoteTrashListRequestSchema>;
 export type NoteTrashListResult = z.infer<typeof NoteTrashListResultSchema>;
 export type NoteTrashRestoreRequest = z.infer<typeof NoteTrashRestoreRequestSchema>;
 export type NoteTrashRestoreResult = z.infer<typeof NoteTrashRestoreResultSchema>;
+export type NoteTrashPurgeRequest = z.infer<typeof NoteTrashPurgeRequestSchema>;
+export type NoteTrashPurgeResult = z.infer<typeof NoteTrashPurgeResultSchema>;
 export type NoteRevisionHistoryRequestId = z.infer<typeof NoteRevisionHistoryRequestIdSchema>;
 export type NoteRevisionHistoryRevisionId = z.infer<typeof NoteRevisionHistoryRevisionIdSchema>;
 export type NoteRevisionHistoryEligibility = z.infer<typeof NoteRevisionHistoryEligibilitySchema>;

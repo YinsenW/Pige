@@ -50,6 +50,8 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  NoteTrashPurgeRequest,
+  NoteTrashPurgeResult,
   NoteRevisionHistoryListRequest,
   NoteRevisionHistoryListResult,
   NoteRevisionHistoryOpenRequest,
@@ -180,6 +182,9 @@ import {
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  NOTE_TRASH_PURGE_CHANNEL,
+  NoteTrashPurgeRequestSchema,
+  NoteTrashPurgeResultSchema,
   NOTE_REVISION_HISTORY_LIST_CHANNEL,
   NOTE_REVISION_HISTORY_OPEN_CHANNEL,
   NOTE_REVISION_HISTORY_RESTORE_CHANNEL,
@@ -215,6 +220,7 @@ import type { ReaderSourceReconnectService } from "./services/reader-source-reco
 import type { ReaderSourceCitationService } from "./services/reader-source-citation-service";
 import type { SourceRefreshService } from "./services/source-refresh-service";
 import type { NoteTrashService } from "./services/note-trash-service";
+import type { NoteTrashPurgeService } from "./services/note-trash-purge-service";
 import type { NoteArchiveService } from "./services/note-archive-service";
 import type { NoteTagService } from "./services/note-tag-service";
 import type { NoteRenameService } from "./services/note-rename-service";
@@ -251,6 +257,7 @@ interface RegisterReaderIpcOptions {
     readonly filePaths: readonly string[];
   }>;
   readonly getNoteTrashService: () => NoteTrashService;
+  readonly getNoteTrashPurgeService: () => NoteTrashPurgeService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getQuestionStateService: () => QuestionStateService;
   readonly getClaimConfidenceService: () => ClaimConfidenceService;
@@ -495,6 +502,17 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       });
     } catch {
       return NoteTrashRestoreResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(NOTE_TRASH_PURGE_CHANNEL, (event, request: unknown): NoteTrashPurgeResult => {
+    const parsed = NoteTrashPurgeRequestSchema.parse(request);
+    if (event.sender.isDestroyed()) return NoteTrashPurgeResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = NoteTrashPurgeResultSchema.parse(options.getNoteTrashPurgeService().purge(parsed));
+      if (result.status === "committed") options.onNoteTrashCommitted();
+      return event.sender.isDestroyed() ? NoteTrashPurgeResultSchema.parse({ ...parsed, status: "failed" }) : result;
+    } catch {
+      return NoteTrashPurgeResultSchema.parse({ ...parsed, status: "failed" });
     }
   });
   options.ipcMain.handle(NOTE_ARCHIVE_CURRENT_CHANNEL, async (event, request: unknown) => {

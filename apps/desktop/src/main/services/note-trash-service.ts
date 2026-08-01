@@ -867,7 +867,7 @@ function restorableCandidate(vaultPath: string, receipt: NoteTrashReceipt): Note
   };
 }
 
-function trashRevision(receipt: NoteTrashReceipt): `notetrashrev_${string}` {
+export function trashRevision(receipt: NoteTrashReceipt): `notetrashrev_${string}` {
   return `notetrashrev_${createHash("sha256")
     .update("pige.note.trash.restore-revision.v1\0", "utf8")
     .update(JSON.stringify(receipt), "utf8")

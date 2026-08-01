@@ -613,8 +613,9 @@ Editing mode:
   recoverable. Closed outcomes retain the visible page, selected value, and keyboard focus; the
   renderer never receives Markdown, paths, hashes, or frontmatter authority.
 - Settings Trash lists safe active knowledge pages and opens only Main's restored page. Notes plus
-  claims, questions, concepts, entities and topics share the recoverable workflow; source pages,
-  permanent deletion and restyle stay absent.
+  claims, questions, concepts, entities and topics share the recoverable workflow; source pages and
+  restyle stay absent. Permanent deletion is a separate explicit action with an inline irreversible
+  warning and second confirmation; failure retains the exact trash row and focus.
 
 Reader foundation:
 

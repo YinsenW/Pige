@@ -4169,6 +4169,34 @@ References:
 - `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Confirmed-Knowledge-Page-Purge
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Permit permanent deletion only for one exact recoverable knowledge page selected in Settings after a second explicit irreversible confirmation. Main must persist the purge intent, tombstone and irreversible Operation before deleting the checksum-bound trash payload and restore receipt.
+
+Rationale:
+
+Trash-first deletion protects ordinary work, but users also need a deliberate storage-lifecycle endpoint. Binding permanent deletion to existing receipt and Operation authority avoids renderer paths and prevents an invented, stale or tampered request from becoming filesystem deletion authority.
+
+Consequences:
+
+- The Agent, Skills and automatic cleanup cannot invoke this Settings-only action.
+- Restart adopts a prepared purge exactly once; missing confirmation, Vault drift, receipt drift, restored state or payload tampering fails closed without deleting bytes.
+- The tombstone and `purge_page` Operation remain durable and backup-included after the recoverable payload is removed.
+- Other durable-class cleanup, compaction and platform breadth remain open; PIGE-VAULT-004 and E9.04 stay partial.
+
+References:
+
+- `docs/DATA_ARCHITECTURE.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ### D-20260730-Grounded-Knowledge-Page-Creation
 
 Status: Accepted
