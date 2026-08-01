@@ -1722,6 +1722,7 @@ export const NoteRevisionHistoryRequestIdSchema = z.string().regex(/^notehistory
 export const NoteRevisionHistoryRevisionIdSchema = z.string().regex(/^notehistoryrev_[a-f0-9]{64}$/);
 export const NoteArchiveCurrentRequestIdSchema = z.string().regex(/^notearchivereq_[a-z0-9]{16,64}$/);
 export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestorereq_[a-z0-9]{16,64}$/);
+export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
 export const NoteAddTagRequestIdSchema = z.string().regex(/^noteaddtagreq_[a-z0-9]{16,64}$/);
 export const NoteEditTaxonomyRequestIdSchema = z.string().regex(/^notetaxonomyreq_[a-z0-9]{16,64}$/);
 export const NoteRenameRequestIdSchema = z.string().regex(/^noterenamereq_[a-z0-9]{16,64}$/);
@@ -1829,6 +1830,12 @@ export const NoteSourceMetadataSummarySchema = z.object({
   items: z.array(NoteSourceMetadataItemSchema).max(5),
   remainingCount: z.number().int().nonnegative().max(995)
 }).strict();
+export const NoteQuestionStateSchema = z.enum(["open", "partially_answered", "answered", "stale"]);
+export const NoteQuestionStateSummarySchema = z.object({
+  state: NoteQuestionStateSchema,
+  canChange: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteRenderResultSchema = z.object({
   summary: NoteRenderPageSummarySchema,
   html: NoteRenderedHtmlSchema,
@@ -1843,6 +1850,7 @@ export const NoteRenderResultSchema = z.object({
   tagging: NoteTaggingSummarySchema.optional(),
   topicRenameEligibility: TopicRenameEligibilitySchema.optional(),
   sourceMetadata: NoteSourceMetadataSummarySchema.optional(),
+  questionState: NoteQuestionStateSummarySchema.optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
   reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
 }).strict();
@@ -1920,6 +1928,7 @@ export const NOTE_TRASH_LIST_CHANNEL = "notes.listTrash" as const;
 export const NOTE_TRASH_RESTORE_CHANNEL = "notes.restoreTrash" as const;
 export const NOTE_ARCHIVE_CURRENT_CHANNEL = "notes.archiveCurrent" as const;
 export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
+export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
 export const NOTE_ADD_TAG_CHANNEL = "notes.addTag" as const;
 export const NOTE_EDIT_TAXONOMY_CHANNEL = "notes.editTaxonomy" as const;
 export const NOTE_RENAME_CHANNEL = "notes.rename" as const;
@@ -1980,6 +1989,26 @@ export const NoteRestoreArchivedResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteRestoreArchivedResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteSetQuestionStateRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteQuestionStateRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema,
+  state: NoteQuestionStateSchema
+}).strict();
+const NoteSetQuestionStateResultIdentitySchema = NoteSetQuestionStateRequestSchema;
+export const NoteSetQuestionStateResultSchema = z.discriminatedUnion("status", [
+  NoteSetQuestionStateResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSetQuestionStateResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 export const NoteAddTagRequestSchema = z.object({
@@ -11032,6 +11061,8 @@ export type NoteRenderContextId = z.infer<typeof NoteRenderContextIdSchema>;
 export type NoteRenderPageSummary = z.infer<typeof NoteRenderPageSummarySchema>;
 export type NoteSourceMetadataItem = z.infer<typeof NoteSourceMetadataItemSchema>;
 export type NoteSourceMetadataSummary = z.infer<typeof NoteSourceMetadataSummarySchema>;
+export type NoteQuestionState = z.infer<typeof NoteQuestionStateSchema>;
+export type NoteQuestionStateSummary = z.infer<typeof NoteQuestionStateSummarySchema>;
 export type NoteRenderResult = z.infer<typeof NoteRenderResultSchema>;
 export type NoteImportMarkdownRequest = z.infer<typeof NoteImportMarkdownRequestSchema>;
 export type NoteImportMarkdownResult = z.infer<typeof NoteImportMarkdownResultSchema>;
@@ -11053,6 +11084,9 @@ export type NoteArchiveCurrentResult = z.infer<typeof NoteArchiveCurrentResultSc
 export type NoteRestoreArchivedRequestId = z.infer<typeof NoteRestoreArchivedRequestIdSchema>;
 export type NoteRestoreArchivedRequest = z.infer<typeof NoteRestoreArchivedRequestSchema>;
 export type NoteRestoreArchivedResult = z.infer<typeof NoteRestoreArchivedResultSchema>;
+export type NoteQuestionStateRequestId = z.infer<typeof NoteQuestionStateRequestIdSchema>;
+export type NoteSetQuestionStateRequest = z.infer<typeof NoteSetQuestionStateRequestSchema>;
+export type NoteSetQuestionStateResult = z.infer<typeof NoteSetQuestionStateResultSchema>;
 export type NoteRestoreEligibility = z.infer<typeof NoteRestoreEligibilitySchema>;
 export type NoteAddTagRequestId = z.infer<typeof NoteAddTagRequestIdSchema>;
 export type NoteCanonicalTag = z.infer<typeof NoteCanonicalTagSchema>;
