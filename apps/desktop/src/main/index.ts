@@ -356,6 +356,7 @@ import { TopicParentService } from "./services/topic-parent-service";
 import { NoteTagService } from "./services/note-tag-service";
 import { NoteAliasService } from "./services/note-alias-service";
 import { NoteMergeService } from "./services/note-merge-service";
+import { EntityMergeService } from "./services/entity-merge-service";
 import { NoteRenameService } from "./services/note-rename-service";
 import { NoteRelateService } from "./services/note-relate-service";
 import {
@@ -2023,7 +2024,9 @@ const getNoteAliasService = (): NoteAliasService => {
   return noteAliasService;
 };
 const getNoteMergeService = (): NoteMergeService => {
-  noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService());
+  noteMergeService ??= new NoteMergeService(getVaultService(), getNotesService(), {
+    entityMergeService: new EntityMergeService(getVaultService(), getNotesService())
+  });
   return noteMergeService;
 };
 const getKnowledgeHealthDuplicateTopicService = (): KnowledgeHealthDuplicateTopicService => {
@@ -4110,7 +4113,9 @@ app.whenReady().then(async () => {
   );
   noteTagService = new NoteTagService(getNotesService(), noteMarkdownEditorService);
   noteAliasService = new NoteAliasService(getNotesService(), noteMarkdownEditorService, () => getVaultService().activeVaultPath());
-  noteMergeService = new NoteMergeService(getVaultService(), getNotesService());
+  noteMergeService = new NoteMergeService(getVaultService(), getNotesService(), {
+    entityMergeService: new EntityMergeService(getVaultService(), getNotesService())
+  });
   noteRenameService = new NoteRenameService(getVaultService(), getNotesService());
   libraryTagRenameService = new LibraryTagRenameService(getVaultService());
   libraryTopicRenameService = new LibraryTopicRenameService(getVaultService(), getNotesService());
