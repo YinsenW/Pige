@@ -40,6 +40,7 @@ import { ConversationHistoryPanel } from "./components/ConversationHistoryPanel"
 import { ConversationCitations, RetrievalResults, toRetrievalAskResult } from "./components/HomeRetrievalResults";
 import { ProposalReviewPanel } from "./components/ProposalReviewPanel";
 import { ConversationScrollRail } from "./components/ConversationScrollRail";
+import { ConversationMemoryContext } from "./components/ConversationMemoryContext";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
 import { HomeJobAction } from "./components/HomeJobAction";
@@ -6624,6 +6625,7 @@ function HomeComposer(props: {
                   </>
                 )}
                 {message.captureReferences?.length ? <ConversationCaptureReferences references={message.captureReferences} onOpen={(pageId) => void openSearchResult(pageId)} t={props.t} /> : null}
+                {message.role === "assistant" ? <ConversationMemoryContext answer={message.answer} t={props.t} /> : null}
                 {message.role === "assistant" ? <ConversationMessageActions messageId={message.id} markdown={markdown}
                   {...props.activeVault && conversationTimeline ? { save: { activeVaultId: props.activeVault.vaultId,
                     conversationId: conversationTimeline.conversationId, assistantEventId: message.id,
@@ -6721,6 +6723,7 @@ function HomeComposer(props: {
                 onOpen={openSearchResult}
                 t={props.t}
               />
+              <ConversationMemoryContext answer={liveConversationAnswer} t={props.t} />
               <ConversationMessageActions messageId={liveAnswerEventId ?? "live-conversation-answer"}
                 markdown={liveConversationAnswer.answer} t={props.t} />
             </article>
@@ -6852,27 +6855,24 @@ function HomeComposer(props: {
           )}
         </section>
       ) : agentAnswer?.datasetResult ? (
-        <DatasetAnswerResult
-          answer={agentAnswer}
-          modelUsage={agentModelUsage}
-          onOpenCollection={props.onOpenCollection}
-          {...(conversationTimeline && liveAnswerEventId ? {
-            onOpenCitation: (citationRef: string) => props.onOpenCollectionCitation(
-              conversationTimeline.conversationId,
-              liveAnswerEventId,
-              citationRef
-            )
-          } : {})}
-          t={props.t}
-        />
+        <ConversationMemoryContext answer={agentAnswer} t={props.t}>
+          <DatasetAnswerResult
+            answer={agentAnswer}
+            modelUsage={agentModelUsage}
+            onOpenCollection={props.onOpenCollection} t={props.t}
+            {...(conversationTimeline && liveAnswerEventId ? {
+              onOpenCitation: (citationRef: string) => props.onOpenCollectionCitation(conversationTimeline.conversationId, liveAnswerEventId, citationRef)
+            } : {})}
+          />
+        </ConversationMemoryContext>
       ) : agentAnswer?.retrieval ? (
-        <RetrievalResults
-          result={toRetrievalAskResult(agentAnswer)}
-          modelUsage={agentModelUsage}
-          noteLoadingPageId={noteLoadingPageId}
-          onOpen={openSearchResult}
-          t={props.t}
-        />
+        <ConversationMemoryContext answer={agentAnswer} t={props.t}>
+          <RetrievalResults
+            result={toRetrievalAskResult(agentAnswer)}
+            modelUsage={agentModelUsage}
+            noteLoadingPageId={noteLoadingPageId} onOpen={openSearchResult} t={props.t}
+          />
+        </ConversationMemoryContext>
       ) : null}
       <section className="composer">
         {voiceState ? (

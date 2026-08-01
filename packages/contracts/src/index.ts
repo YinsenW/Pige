@@ -1920,6 +1920,10 @@ export interface AgentTurnAnswer {
   readonly citations: readonly AgentAnswerCitation[];
   readonly retrieval?: RetrievalSearchResult;
   readonly datasetResult?: DatasetQueryPreview | undefined;
+  readonly memoryContext?: {
+    readonly kind: "vault_memory";
+    readonly count: number;
+  };
 }
 
 export type AgentSubmitTurnResult =

@@ -287,6 +287,7 @@
   "home.agentState.running": "Pi Agent travaille.",
   "home.agentState.waiting": "L’Agent attend une configuration ou une autorisation.",
   "home.assistantMessage": "Pige",
+  "home.memoryContextIncluded": "Éléments de mémoire enregistrés inclus :",
   "home.copyMessage": "Copier la réponse",
   "home.messageCopied": "Réponse copiée",
   "home.messageCopyFailed": "Impossible de copier cette réponse",

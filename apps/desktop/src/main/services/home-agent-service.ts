@@ -2126,7 +2126,10 @@ export class HomeAgentService {
       answer: {
         ...groundedAnswer,
         ...(searchResult ? { retrieval: searchResult } : {}),
-        ...(datasetResult ? { datasetResult: datasetResult.preview } : {})
+        ...(datasetResult ? { datasetResult: datasetResult.preview } : {}),
+        ...(recalledMemories.length > 0 ? {
+          memoryContext: { kind: "vault_memory" as const, count: recalledMemories.length }
+        } : {})
       },
       sourceIds,
       ...(currentNoteAppendPublication ? { currentNoteAppendPublication } : {}),

@@ -161,7 +161,8 @@ export class AgentTurnConversationStore {
       text: candidateAnswer.text,
       ...(candidateAnswer.grounding === undefined ? {} : { answerGrounding: candidateAnswer.grounding }),
       ...(candidateAnswer.citations === undefined ? {} : { answerCitations: candidateAnswer.citations }),
-      ...(candidateAnswer.datasetResult === undefined ? {} : { answerDatasetResult: candidateAnswer.datasetResult })
+      ...(candidateAnswer.datasetResult === undefined ? {} : { answerDatasetResult: candidateAnswer.datasetResult }),
+      ...(candidateAnswer.memoryContext === undefined ? {} : { answerMemoryContext: candidateAnswer.memoryContext })
     });
     const normalized = normalizeDurableAssistantEvent(eventWithoutHash);
     const event = ConversationEventSchema.parse({
@@ -549,10 +550,12 @@ function assertMatchingAssistant(
   const answerMetadataMatches = answer.structured === false
     ? event.answerGrounding === undefined &&
       event.answerCitations === undefined &&
-      event.answerDatasetResult === undefined
+      event.answerDatasetResult === undefined &&
+      event.answerMemoryContext === undefined
     : event.answerGrounding === answer.grounding &&
       JSON.stringify(event.answerCitations ?? []) === JSON.stringify(answer.citations ?? []) &&
-      JSON.stringify(event.answerDatasetResult ?? null) === JSON.stringify(answer.datasetResult ?? null);
+      JSON.stringify(event.answerDatasetResult ?? null) === JSON.stringify(answer.datasetResult ?? null) &&
+      JSON.stringify(event.answerMemoryContext ?? null) === JSON.stringify(answer.memoryContext ?? null);
   if (event.text !== answer.text || !legacyParentMatches || !answerMetadataMatches) {
     throw new PigeDomainError("agent_runtime.turn_conflict", "The Agent job already has a different assistant result.");
   }
@@ -570,6 +573,7 @@ function normalizeAssistantAnswer(answer: string | AgentTurnAnswer): {
   readonly grounding?: AgentTurnAnswer["grounding"];
   readonly citations?: AgentTurnAnswer["citations"];
   readonly datasetResult?: AgentTurnAnswer["datasetResult"];
+  readonly memoryContext?: AgentTurnAnswer["memoryContext"];
 } {
   if (typeof answer === "string") {
     return { text: validateTurnText(answer), structured: false };
@@ -579,7 +583,8 @@ function normalizeAssistantAnswer(answer: string | AgentTurnAnswer): {
     structured: true,
     grounding: answer.grounding,
     citations: answer.citations,
-    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult })
+    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult }),
+    ...(answer.memoryContext === undefined ? {} : { memoryContext: answer.memoryContext })
   };
 }
 
@@ -588,12 +593,13 @@ function createAssistantContentHash(
   parentEventId: string,
   answer: ReturnType<typeof normalizeAssistantAnswer>
 ): string {
-  const hashVersion = answer.datasetResult === undefined ? "v1" : "v2";
+  const hashVersion = answer.memoryContext !== undefined ? "v3" : answer.datasetResult === undefined ? "v1" : "v2";
   return hashValue(`pige.agent_assistant.${hashVersion}\0${jobId}\0${parentEventId}\0${JSON.stringify({
     text: answer.text,
     grounding: answer.grounding ?? null,
     citations: answer.citations ?? null,
-    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult })
+    ...(answer.datasetResult === undefined ? {} : { datasetResult: answer.datasetResult }),
+    ...(answer.memoryContext === undefined ? {} : { memoryContext: answer.memoryContext })
   })}`);
 }
 

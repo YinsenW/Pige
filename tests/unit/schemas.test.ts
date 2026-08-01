@@ -19,6 +19,7 @@ import {
   AgentConversationSetTitleResultSchema,
   AgentConversationTitleSchema,
   AgentConversationTurnSummarySchema,
+  AgentTurnAnswerSchema,
   AgentSubmitTurnResultSchema,
   AppearanceSettingsSummarySchema,
   AppearanceThemeMutationResultSchema,
@@ -840,6 +841,24 @@ describe("schemas", () => {
       proposalId: proposal.proposalId,
       expectedRevision: 3,
       decision: "keep_current"
+    })).toThrow();
+  });
+
+  it("bounds renderer-safe Agent memory context disclosure without accepting record details", () => {
+    const answer = {
+      answer: "A bounded answer.",
+      grounding: "general",
+      citations: [],
+      memoryContext: { kind: "vault_memory", count: 4 }
+    } as const;
+    expect(AgentTurnAnswerSchema.parse(answer)).toEqual(answer);
+    expect(() => AgentTurnAnswerSchema.parse({
+      ...answer,
+      memoryContext: { ...answer.memoryContext, count: 5 }
+    })).toThrow();
+    expect(() => AgentTurnAnswerSchema.parse({
+      ...answer,
+      memoryContext: { ...answer.memoryContext, title: "Private memory title" }
     })).toThrow();
   });
 

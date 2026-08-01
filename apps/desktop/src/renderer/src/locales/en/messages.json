@@ -287,6 +287,7 @@
   "home.agentState.running": "Pi Agent is working.",
   "home.agentState.waiting": "The Agent is waiting for setup or permission.",
   "home.assistantMessage": "Pige",
+  "home.memoryContextIncluded": "Saved memory items included:",
   "home.copyMessage": "Copy response",
   "home.messageCopied": "Response copied",
   "home.messageCopyFailed": "Could not copy this response",

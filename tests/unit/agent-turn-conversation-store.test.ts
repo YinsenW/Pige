@@ -297,6 +297,41 @@ describe("Agent turn conversation store", () => {
     ))).toMatchObject({ code: "agent_runtime.turn_conflict" });
   });
 
+  it("persists only a bounded memory-context count and rejects count tampering after restart", () => {
+    const vaultPath = makeVault();
+    const service = new AgentTurnConversationStore();
+    const userTurn = service.appendUserTurn(vaultPath, "Answer concisely.");
+    const jobId = "job_20260801_memoryusage01";
+    const answer: AgentTurnAnswer = {
+      answer: "A concise answer using the provided context.",
+      grounding: "general",
+      citations: [],
+      memoryContext: { kind: "vault_memory", count: 2 }
+    };
+
+    const assistant = service.appendAssistantTurn(vaultPath, userTurn, jobId, answer);
+    expect(assistant.answerMemoryContext).toEqual({ kind: "vault_memory", count: 2 });
+    expect(readConversationFile(vaultPath, userTurn.locator)).not.toContain("private memory body");
+    expect(readConversationFile(vaultPath, userTurn.locator)).not.toContain("private memory title");
+    expect(new AgentTurnConversationStore().readConversationTimeline(
+      vaultPath,
+      userTurn.event.conversationId
+    )?.messages.at(-1)?.answer).toEqual(answer);
+
+    const events = readEvents(vaultPath, userTurn.locator);
+    events[1] = { ...events[1], answerMemoryContext: { kind: "vault_memory", count: 3 } };
+    fs.writeFileSync(
+      conversationPath(vaultPath, userTurn.locator),
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+      "utf8"
+    );
+    expect(captureError(() => new AgentTurnConversationStore().findAssistantTurn(
+      vaultPath,
+      userTurn.locator,
+      jobId
+    ))).toMatchObject({ code: "agent_runtime.turn_changed" });
+  });
+
   it("projects durable plain and structured assistant events as exact Agent answers", () => {
     const vaultPath = makeVault();
     const service = new AgentTurnConversationStore();
