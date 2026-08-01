@@ -4513,6 +4513,34 @@ References:
 
 ## 4. Deferred Decisions
 
+### D-20260801-Search-Result-Reader-Focus
+
+Status: Accepted
+Date: 2026-08-01
+
+Decision:
+
+An explicitly selected retrieval result opens through a Main-owned `notes.openSearchMatch`
+boundary. Main rerenders the current page and may derive one matching Reader segment from
+the bounded query; the renderer cannot submit segment IDs, paths, bodies or index authority.
+
+Rationale:
+
+Search-to-Reader navigation should land near the evidence while retaining the existing
+render-context and Vault currentness boundary.
+
+Consequences:
+
+- Vault/page drift fails closed without replacing the visible Reader.
+- An absent exact segment still opens the current page without fabricating a highlight.
+- Search indexes remain rebuildable caches and never become navigation authority.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`
+
 ### D-20260709-Sync-Implementation
 
 Status: Deferred

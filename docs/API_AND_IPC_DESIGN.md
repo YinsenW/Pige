@@ -602,6 +602,11 @@ scores. Closed modes add `semantic_hybrid` only after private runtime/index/span
 revalidation; async failure returns the unchanged lexical result. No new runtime/UI DTO.
 Other DTOs follow `docs/CONTEXT_ASSEMBLY_AND_RETRIEVAL_POLICY.md`.
 
+`notes.openSearchMatch` accepts only the active Vault ID, result page ID and the bounded
+submitted search query. Main rerenders the current page, derives an optional exact Reader
+segment focus from that render context, and returns no page body, path, index internals or
+renderer-authored segment authority. Vault/page drift returns a closed stale/not-found result.
+
 `LocalSemanticRetrieval*Schema` owns one literal asset. Status is `{apiVersion:1}`;
 mutations add request ID/revision and accept no URL/checksum/path/provider/model. It
 returns asset state/fixed bytes, lexical availability and only an install/verify Job.
