@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T06:30:00.000Z",
+  "reviewedAt": "2026-08-01T21:38:48.787Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review exact current Reader selection quoting into the preserved Home draft with no submission, durable write or renderer authority expansion.",
+    "scope": "Review dirty Markdown draft exit confirmation, exact focus restoration and unchanged-draft immediate close without save or identity semantic changes.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "e6c57014d8ebb6b6f52174124ab1d6c1cd2fffd96f71b5e23176d2da299158cd"
+    "reviewedSha256": "9bf93f1b2cc757c836bfc77e2004742471cd1cd5b69e6c9257be5248c4532312"
   },
   "reviewers": [
     {
-      "reviewerId": "reader-quote-into-home-review",
-      "task": "Review exact Reader quote handoff into Home",
+      "reviewerId": "markdown-discard-confirm-review",
+      "task": "Review dirty Markdown draft discard confirmation",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks current-selection identity, draft preservation, navigation/focus and no-submit behavior separately from renderer implementation authorship."
+      "independence": "Project review checks dirty-vs-unchanged exit behavior, exact focus restoration, identity reset and no-save semantics separately from renderer implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "reader-quote-into-home-review",
+      "reviewerId": "markdown-discard-confirm-review",
       "blockerCount": 0,
-      "summary": "Quote in Home preserves the existing draft, closes the Reader selection surface, opens Home and restores composer focus without submitting."
+      "summary": "Dirty Cancel or Escape opens one bounded alert dialog; Keep editing or dialog Escape restores the exact initiator, while confirmed discard alone returns to the Reader opener."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "reader-quote-into-home-review",
+      "reviewerId": "markdown-discard-confirm-review",
       "blockerCount": 0,
-      "summary": "The Reader callback, App currentness fences, Home draft owner, localized action and UI contract bind the same exact selection behavior."
+      "summary": "Editor labels, six locale catalogs, App binding and the direct renderer test express the same dirty-draft and unchanged-draft behavior."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "reader-quote-into-home-review",
+      "reviewerId": "markdown-discard-confirm-review",
       "blockerCount": 0,
-      "summary": "PIGE-UI-005 cites the direct quote composition evidence while remaining partial for broader mutation and packaged-platform work."
+      "summary": "PIGE-UI-001 cites the direct discard-confirmation evidence while remaining partial for broader editing, history, platform and source work."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "reader-quote-into-home-review",
+      "reviewerId": "markdown-discard-confirm-review",
       "blockerCount": 0,
-      "summary": "One renderer-local handoff reuses the existing Home composer; no Main IPC, durable mutation, Provider call or new CSS owner is introduced."
+      "summary": "The feature stays renderer-local, reuses existing confirmation primitives and preserves save, stale-review, identity and sanitized-preview ownership."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "reader-quote-into-home-review",
+      "reviewerId": "markdown-discard-confirm-review",
       "blockerCount": 0,
-      "summary": "One concise Selection Actions rule plus existing acceptance and review artifacts capture the feature without a new design document."
+      "summary": "One concise editing rule plus existing acceptance and review artifacts record the behavior without a new design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/reader-quote-into-capture.test.ts tests/unit/full-ui-library.test.ts tests/unit/home-agent-conversation-ui.test.ts -t 'builds one Markdown quote|keeps Copy local|quotes an exact Library Reader' --maxWorkers=1",
+      "command": "npx vitest run tests/unit/note-markdown-editor-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Three focused helper, Reader and Home tests prove exact quoting, preserved draft, no submit effect, navigation and composer focus restoration."
+      "evidence": "Twelve focused editor tests prove unchanged immediate close, dirty confirmation, IME safety, exact focus restoration, confirmed discard and identity reset."
     },
     {
       "command": "git diff --check",
       "status": "passed",
-      "evidence": "The focused renderer and governance delta has no whitespace or conflict-marker defects."
+      "evidence": "The focused renderer, locale and governance delta has no whitespace or conflict-marker defects."
     },
     {
       "command": "npm run verify:independent-documentation-review",
       "status": "passed",
-      "evidence": "The current UI owner, exact evidence selector, semantic lock and five-dimensional review snapshot agree on the bounded quote workflow."
+      "evidence": "The current UI owner, exact test selector, semantic lock and five-dimensional review snapshot agree on the bounded discard workflow."
     }
   ],
   "coordination": {
-    "taskId": "reader-quote-into-home-20260802",
-    "taskTitle": "Quote one exact Reader selection into Home",
+    "taskId": "markdown-discard-confirm-20260802",
+    "taskTitle": "Confirm before discarding an unsaved Markdown draft",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Copy, Copy as quote, Ask, transforms, Home drafting and submission behavior remains unchanged; Quote in Home only appends local draft text.",
-    "acknowledgement": "The exact Reader-to-Home quote workflow is bound while PIGE-UI-005 remains partial for its broader open work."
+    "compatibility": "Save, stale review, preview, unchanged Cancel/Escape, IME and identity-reset behavior remain unchanged; only a dirty exit requires confirmation.",
+    "acknowledgement": "The dirty-draft exit confirmation is bound while PIGE-UI-001 remains partial for its broader open work."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

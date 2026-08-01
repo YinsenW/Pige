@@ -34,6 +34,10 @@ const labels = {
   save: "Save",
   saving: "Saving…",
   cancel: "Cancel",
+  discardTitle: "Discard unsaved changes?",
+  discardDescription: "Your unsaved Markdown changes will be lost.",
+  keepEditing: "Keep editing",
+  discardChanges: "Discard changes",
   review: "Review changes",
   reviewing: "Loading current file…",
   conflictTitle: "Review external changes",
@@ -317,6 +321,57 @@ describe("NoteMarkdownEditor", () => {
     await keydown(harness.dom, harness.textarea(), { key: "Escape" });
     expect(cancelled).toEqual(["cancelled"]);
     expect(harness.dom.window.document.activeElement).toBe(harness.opener);
+    await harness.close();
+  });
+
+  it("requires confirmation before discarding a changed draft and restores exact focus when editing continues", async () => {
+    const cancelled: string[] = [];
+    const harness = await renderEditor({ onCancel: () => cancelled.push("cancelled") });
+    await inputText(harness.dom, harness.textarea(), "# Unsaved local draft\n");
+
+    const cancel = harness.button("Cancel");
+    cancel.focus();
+    await click(harness.dom, cancel);
+    expect(cancelled).toEqual([]);
+    expect(harness.container.querySelector('[role="alertdialog"]')).not.toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(harness.button("Keep editing"));
+    expect(harness.textarea().value).toBe("# Unsaved local draft\n");
+    await keydown(harness.dom, harness.button("Keep editing"), { key: "Tab", shiftKey: true });
+    expect(harness.dom.window.document.activeElement).toBe(harness.button("Discard changes"));
+    await keydown(harness.dom, harness.button("Discard changes"), { key: "Tab" });
+    expect(harness.dom.window.document.activeElement).toBe(harness.button("Keep editing"));
+
+    await click(harness.dom, harness.button("Keep editing"));
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(cancel);
+    expect(harness.textarea().value).toBe("# Unsaved local draft\n");
+
+    harness.textarea().focus();
+    await keydown(harness.dom, harness.textarea(), { key: "Escape" });
+    expect(harness.dom.window.document.activeElement).toBe(harness.button("Keep editing"));
+    await keydown(harness.dom, harness.button("Keep editing"), { key: "Escape" });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(harness.textarea());
+
+    await keydown(harness.dom, harness.textarea(), { key: "Escape" });
+    await click(harness.dom, harness.button("Discard changes"));
+    expect(cancelled).toEqual(["cancelled"]);
+    expect(harness.dom.window.document.activeElement).toBe(harness.opener);
+    await harness.close();
+  });
+
+  it("drops an open discard confirmation when the editor owner identity changes", async () => {
+    const cancelled: string[] = [];
+    const harness = await renderEditor({ onCancel: () => cancelled.push("cancelled") });
+    await inputText(harness.dom, harness.textarea(), "old owner draft");
+    await click(harness.dom, harness.button("Cancel"));
+    expect(harness.container.querySelector('[role="alertdialog"]')).not.toBeNull();
+    await harness.render({
+      ready: ready({ activeVaultId: "vault_other", pageId: "page_other", markdown: "new owner markdown" })
+    });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(harness.textarea().value).toBe("new owner markdown");
+    expect(cancelled).toEqual([]);
     await harness.close();
   });
 

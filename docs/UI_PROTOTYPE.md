@@ -595,6 +595,9 @@ Editing mode:
 - Edit and Preview switch between the exact unsaved draft and the shared sanitized Reader pipeline
   without saving. Preview hides frontmatter, disables link navigation, reports bounded loading or
   render failure, and returning to Edit preserves the draft and restores editor focus.
+- Cancel and Escape close an unchanged editor immediately. A changed draft instead opens one compact
+  **Keep editing / Discard changes** confirmation; Keep editing or Escape restores the exact initiating
+  control, while confirmed discard alone returns focus to the Reader opener.
 - Active notes, claims, questions, concepts, entities and topics expose the same bounded History and
   Archive actions. Historical preview is read-only; explicit revision restore or archived-page
   restore adopts Main's authoritative same-type Reader and remains Activity/Undo recoverable.
