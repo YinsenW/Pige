@@ -3,10 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   AppearanceMachineSettingsSchema,
+  DictationLanguagePreferenceMachineSettingsSchema,
   MachineLocalSettingsSchema,
   OcrLanguagePreferenceMachineSettingsSchema,
   UpdateMachineSettingsSchema,
   type AppearanceMachineSettings,
+  type DictationLanguagePreferenceMachineSettings,
   type Locale,
   type MachineLocalSettings,
   type OcrLanguagePreferenceMachineSettings,
@@ -62,6 +64,11 @@ export interface OcrLanguagePreferenceSettingsMutation {
   readonly settings: OcrLanguagePreferenceMachineSettings;
 }
 
+export interface DictationLanguagePreferenceSettingsMutation {
+  readonly status: "committed" | "stale";
+  readonly settings: DictationLanguagePreferenceMachineSettings;
+}
+
 export interface StartupDestinationSettingsMutation {
   readonly status: "committed" | "stale";
   readonly settings: StartupDestinationMachineSettings;
@@ -110,6 +117,10 @@ export class LocalSettingsStore {
     return this.read().ocrLanguagePreference ?? createDefaultOcrLanguagePreferenceSettings();
   }
 
+  getDictationLanguagePreferenceSettings(): DictationLanguagePreferenceMachineSettings {
+    return this.read().dictationLanguagePreference ?? createDefaultDictationLanguagePreferenceSettings();
+  }
+
   getStartupDestinationSettings(): StartupDestinationMachineSettings {
     return this.read().startupDestination ?? { revision: 0, destination: "home" };
   }
@@ -134,6 +145,7 @@ export class LocalSettingsStore {
         window: current.window,
         updates: current.updates,
         ocrLanguagePreference: current.ocrLanguagePreference,
+        dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -165,6 +177,45 @@ export class LocalSettingsStore {
         window: current.window,
         updates: current.updates,
         ocrLanguagePreference: next,
+        dictationLanguagePreference: current.dictationLanguagePreference,
+        dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
+        recentVaults: current.recentVaults
+      }));
+      return { status: "committed", settings: next };
+    });
+  }
+
+  mutateDictationLanguagePreferenceSettings(
+    expectedRevision: number,
+    mutation: (
+      settings: DictationLanguagePreferenceMachineSettings
+    ) => DictationLanguagePreferenceMachineSettings
+  ): DictationLanguagePreferenceSettingsMutation {
+    return this.#withWriterLease(() => {
+      const current = this.read();
+      const settings = current.dictationLanguagePreference ??
+        createDefaultDictationLanguagePreferenceSettings();
+      if (settings.revision !== expectedRevision) return { status: "stale", settings };
+      if (settings.revision === Number.MAX_SAFE_INTEGER) {
+        throw new PigeDomainError(
+          "speech.dictation_language_revision_exhausted",
+          "The dictation language preference revision is exhausted."
+        );
+      }
+      const candidate = DictationLanguagePreferenceMachineSettingsSchema.parse(mutation(settings));
+      const next = DictationLanguagePreferenceMachineSettingsSchema.parse({
+        ...candidate,
+        revision: settings.revision + 1
+      });
+      this.#writeUnlocked(createMachineLocalSettings({
+        activeVaultPath: current.activeVaultPath,
+        appLocale: current.appLocale,
+        appearance: current.appearance,
+        startupDestination: current.startupDestination,
+        window: current.window,
+        updates: current.updates,
+        ocrLanguagePreference: current.ocrLanguagePreference,
+        dictationLanguagePreference: next,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -198,6 +249,7 @@ export class LocalSettingsStore {
         window: current.window,
         updates: current.updates,
         ocrLanguagePreference: current.ocrLanguagePreference,
+        dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -235,6 +287,7 @@ export class LocalSettingsStore {
         window: current.window,
         updates: nextUpdates,
         ocrLanguagePreference: current.ocrLanguagePreference,
+        dictationLanguagePreference: current.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: current.dismissedFirstHomeVaultIds,
         recentVaults: current.recentVaults
       }));
@@ -256,6 +309,7 @@ export class LocalSettingsStore {
         window: settings.window,
         updates: settings.updates,
         ocrLanguagePreference: settings.ocrLanguagePreference,
+        dictationLanguagePreference: settings.dictationLanguagePreference,
         dismissedFirstHomeVaultIds: [
           vaultId,
           ...(settings.dismissedFirstHomeVaultIds ?? []).filter((id) => id !== vaultId)
@@ -274,6 +328,7 @@ export class LocalSettingsStore {
       window: settings.window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
+      dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -288,6 +343,7 @@ export class LocalSettingsStore {
       window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
+      dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -323,6 +379,7 @@ export class LocalSettingsStore {
       window: settings.window,
       updates: settings.updates,
       ocrLanguagePreference: settings.ocrLanguagePreference,
+      dictationLanguagePreference: settings.dictationLanguagePreference,
       dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
       recentVaults: settings.recentVaults
     }));
@@ -529,6 +586,7 @@ function activateVault(
     window: settings.window,
     updates: settings.updates,
     ocrLanguagePreference: settings.ocrLanguagePreference,
+    dictationLanguagePreference: settings.dictationLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults: nextRecent
   });
@@ -574,6 +632,7 @@ function withRecentVaults(
     window: settings.window,
     updates: settings.updates,
     ocrLanguagePreference: settings.ocrLanguagePreference,
+    dictationLanguagePreference: settings.dictationLanguagePreference,
     dismissedFirstHomeVaultIds: settings.dismissedFirstHomeVaultIds,
     recentVaults
   });
@@ -683,6 +742,7 @@ function createMachineLocalSettings(input: {
   readonly window?: WindowPreferences | undefined;
   readonly updates?: UpdateMachineSettings | undefined;
   readonly ocrLanguagePreference?: OcrLanguagePreferenceMachineSettings | undefined;
+  readonly dictationLanguagePreference?: DictationLanguagePreferenceMachineSettings | undefined;
   readonly dismissedFirstHomeVaultIds?: readonly string[] | undefined;
   readonly recentVaults: RecentVaultSettings;
 }): MachineLocalSettings {
@@ -719,6 +779,10 @@ function createMachineLocalSettings(input: {
     settings.ocrLanguagePreference = input.ocrLanguagePreference;
   }
 
+  if (input.dictationLanguagePreference) {
+    settings.dictationLanguagePreference = input.dictationLanguagePreference;
+  }
+
   if (input.dismissedFirstHomeVaultIds?.length) {
     settings.dismissedFirstHomeVaultIds = [...input.dismissedFirstHomeVaultIds];
   }
@@ -742,6 +806,13 @@ function createDefaultAppearanceSettings(): AppearanceMachineSettings {
 
 function createDefaultOcrLanguagePreferenceSettings(): OcrLanguagePreferenceMachineSettings {
   return OcrLanguagePreferenceMachineSettingsSchema.parse({
+    revision: 0,
+    preference: { mode: "automatic" }
+  });
+}
+
+function createDefaultDictationLanguagePreferenceSettings(): DictationLanguagePreferenceMachineSettings {
+  return DictationLanguagePreferenceMachineSettingsSchema.parse({
     revision: 0,
     preference: { mode: "automatic" }
   });

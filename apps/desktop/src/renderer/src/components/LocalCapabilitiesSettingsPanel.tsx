@@ -18,6 +18,11 @@ import type {
   OcrLanguagePreferenceResult,
   SetOcrLanguagePreferenceRequest,
   SetOcrLanguagePreferenceResult,
+  DictationLanguagePreference,
+  DictationLanguagePreferenceRequest,
+  DictationLanguagePreferenceResult,
+  SetDictationLanguagePreferenceRequest,
+  SetDictationLanguagePreferenceResult,
   SpeechAssetInstallEvent,
   SpeechAssetInstallRequest,
   SpeechAssetInstallResult,
@@ -36,6 +41,8 @@ type PaddleOcrReadState = "loading" | "ready" | "failed";
 type PaddleOcrNotice = "denied" | "stale" | "failed" | null;
 type OcrLanguagePreferenceValue = "automatic" | Locale;
 type OcrLanguagePreferenceNotice = "stale" | "failed" | null;
+type DictationLanguagePreferenceValue = "automatic" | Locale;
+type DictationLanguagePreferenceNotice = "stale" | "failed" | null;
 type ToolchainReinstallNotice = ToolchainRepairResult["status"] | null;
 
 export interface OcrLanguagePreferenceApi {
@@ -45,6 +52,15 @@ export interface OcrLanguagePreferenceApi {
   readonly setOcrLanguagePreference: (
     request: SetOcrLanguagePreferenceRequest
   ) => Promise<SetOcrLanguagePreferenceResult>;
+}
+
+export interface DictationLanguagePreferenceApi {
+  readonly dictationLanguagePreference: (
+    request: DictationLanguagePreferenceRequest
+  ) => Promise<DictationLanguagePreferenceResult>;
+  readonly setDictationLanguagePreference: (
+    request: SetDictationLanguagePreferenceRequest
+  ) => Promise<SetDictationLanguagePreferenceResult>;
 }
 
 export interface PaddleOcrApi {
@@ -62,6 +78,10 @@ export interface SpeechAssetApi {
 }
 
 export interface LocalCapabilitiesSettingsPanelProps {
+  readonly dictationLanguagePreferenceApi?: DictationLanguagePreferenceApi;
+  readonly onDictationLanguagePreferenceChanged?: (
+    preference: DictationLanguagePreference
+  ) => void;
   readonly ocrLanguagePreferenceApi?: OcrLanguagePreferenceApi;
   readonly paddleOcrApi: PaddleOcrApi;
   readonly semanticRetrievalApi: LocalSemanticRetrievalApi;
@@ -99,11 +119,27 @@ function createOcrLanguagePreferenceRequestId(): string {
   return `ocrlangreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
 }
 
+function createDictationLanguagePreferenceRequestId(): string {
+  return `dictlangreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
+}
+
 function ocrLanguagePreferenceValue(preference: OcrLanguagePreference): OcrLanguagePreferenceValue {
   return preference.mode === "automatic" ? "automatic" : preference.language;
 }
 
 function ocrLanguagePreference(value: OcrLanguagePreferenceValue): OcrLanguagePreference {
+  return value === "automatic" ? { mode: "automatic" } : { mode: "preferred", language: value };
+}
+
+function dictationLanguagePreferenceValue(
+  preference: DictationLanguagePreference
+): DictationLanguagePreferenceValue {
+  return preference.mode === "automatic" ? "automatic" : preference.language;
+}
+
+function dictationLanguagePreference(
+  value: DictationLanguagePreferenceValue
+): DictationLanguagePreference {
   return value === "automatic" ? { mode: "automatic" } : { mode: "preferred", language: value };
 }
 
@@ -228,6 +264,135 @@ function OcrLanguagePreferenceControl(props: {
           aria-live="polite"
         >
           {props.t(`capabilities.ocrLanguage.notice.${notice}`)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DictationLanguagePreferenceControl(props: {
+  readonly api: DictationLanguagePreferenceApi;
+  readonly onPreferenceChanged?: (preference: DictationLanguagePreference) => void;
+  readonly t: Translate;
+}): React.JSX.Element {
+  const [snapshot, setSnapshot] = useState<Extract<
+    DictationLanguagePreferenceResult,
+    { status: "ready" }
+  >["summary"] | null>(null);
+  const [draft, setDraft] = useState<DictationLanguagePreferenceValue | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [notice, setNotice] = useState<DictationLanguagePreferenceNotice>(null);
+  const mountedRef = useRef(true);
+  const sequenceRef = useRef(0);
+  const selectRef = useRef<HTMLSelectElement | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const sequence = sequenceRef.current + 1;
+    sequenceRef.current = sequence;
+    const requestId = createDictationLanguagePreferenceRequestId();
+    void props.api.dictationLanguagePreference({ apiVersion: 1, requestId }).then((result) => {
+      if (!mountedRef.current || sequence !== sequenceRef.current) return;
+      if (result.requestId !== requestId || result.status !== "ready") {
+        setNotice("failed");
+        setLoading(false);
+        return;
+      }
+      setSnapshot(result.summary);
+      setDraft(dictationLanguagePreferenceValue(result.summary.preference));
+      props.onPreferenceChanged?.(result.summary.preference);
+      setNotice(null);
+      setLoading(false);
+    }).catch(() => {
+      if (!mountedRef.current || sequence !== sequenceRef.current) return;
+      setNotice("failed");
+      setLoading(false);
+    });
+    return () => {
+      mountedRef.current = false;
+      sequenceRef.current += 1;
+    };
+  }, [props.api, props.onPreferenceChanged]);
+
+  const updatePreference = async (value: DictationLanguagePreferenceValue): Promise<void> => {
+    const current = snapshot;
+    if (!current || pending) return;
+    const sequence = sequenceRef.current + 1;
+    sequenceRef.current = sequence;
+    setDraft(value);
+    setPending(true);
+    setNotice(null);
+    try {
+      const requestId = createDictationLanguagePreferenceRequestId();
+      const result = await props.api.setDictationLanguagePreference({
+        apiVersion: 1,
+        requestId,
+        expectedRevision: current.revision,
+        preference: dictationLanguagePreference(value)
+      });
+      if (!mountedRef.current || sequence !== sequenceRef.current) return;
+      if (result.requestId !== requestId) {
+        setNotice("failed");
+        return;
+      }
+      if ("summary" in result) {
+        setSnapshot(result.summary);
+        props.onPreferenceChanged?.(result.summary.preference);
+        if (result.status === "committed") {
+          setDraft(dictationLanguagePreferenceValue(result.summary.preference));
+        }
+      }
+      setNotice(result.status === "committed" ? null : result.status);
+    } catch {
+      if (mountedRef.current && sequence === sequenceRef.current) setNotice("failed");
+    } finally {
+      if (mountedRef.current && sequence === sequenceRef.current) {
+        setPending(false);
+        window.setTimeout(() => selectRef.current?.focus(), 0);
+      }
+    }
+  };
+
+  return (
+    <div className="settings-row tall" data-dictation-language-preference={draft ?? "loading"}>
+      <div className="settings-row-copy">
+        <strong>{props.t("capabilities.dictationLanguage.title")}</strong>
+        <span id="capabilities-dictation-language-description">
+          {props.t("capabilities.dictationLanguage.description")}
+        </span>
+      </div>
+      <div className="settings-row-control">
+        <select
+          ref={selectRef}
+          className="settings-select"
+          aria-label={props.t("capabilities.dictationLanguage.title")}
+          aria-describedby={`capabilities-dictation-language-description${notice
+            ? " capabilities-dictation-language-notice"
+            : ""}`}
+          disabled={loading || pending || !snapshot}
+          value={draft ?? "automatic"}
+          onChange={(event) => void updatePreference(
+            event.target.value as DictationLanguagePreferenceValue
+          )}
+        >
+          {ocrLanguagePreferences.map((preference) => (
+            <option key={preference} value={preference}>
+              {preference === "automatic"
+                ? props.t("capabilities.dictationLanguage.automatic")
+                : ocrLanguageLabels[preference]}
+            </option>
+          ))}
+        </select>
+      </div>
+      {notice ? (
+        <p
+          className="settings-inline-status error"
+          id="capabilities-dictation-language-notice"
+          role={notice === "failed" ? "alert" : "status"}
+          aria-live="polite"
+        >
+          {props.t(`capabilities.dictationLanguage.notice.${notice}`)}
         </p>
       ) : null}
     </div>
@@ -731,6 +896,15 @@ export function LocalCapabilitiesSettingsPanel(
           <PaddleOcrLifecyclePanel api={props.paddleOcrApi} t={props.t} />
           {props.ocrLanguagePreferenceApi ? (
             <OcrLanguagePreferenceControl api={props.ocrLanguagePreferenceApi} t={props.t} />
+          ) : null}
+          {props.dictationLanguagePreferenceApi ? (
+            <DictationLanguagePreferenceControl
+              api={props.dictationLanguagePreferenceApi}
+              {...(props.onDictationLanguagePreferenceChanged
+                ? { onPreferenceChanged: props.onDictationLanguagePreferenceChanged }
+                : {})}
+              t={props.t}
+            />
           ) : null}
           <div className="settings-row">
             <div className="settings-row-copy">

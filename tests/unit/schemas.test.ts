@@ -201,6 +201,9 @@ import {
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
   OperationRecordSchema,
+  DictationLanguagePreferenceRequestSchema,
+  DictationLanguagePreferenceResultSchema,
+  DictationLanguagePreferenceSummarySchema,
   OcrLanguagePreferenceRequestSchema,
   OcrLanguagePreferenceResultSchema,
   OcrLanguagePreferenceSummarySchema,
@@ -226,6 +229,8 @@ import {
   PermissionSetDefaultModeResultSchema,
   SetOcrLanguagePreferenceRequestSchema,
   SetOcrLanguagePreferenceResultSchema,
+  SetDictationLanguagePreferenceRequestSchema,
+  SetDictationLanguagePreferenceResultSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageCatalogQueryRequestSchema,
@@ -5543,6 +5548,53 @@ describe("schemas", () => {
       requestId,
       status: "failed",
       rawError: "private"
+    })).toThrow();
+  });
+
+  it("freezes machine-local dictation language preference CAS and strict locale scope", () => {
+    const requestId = "dictlangreq_20260801abcdef01";
+    const summary = DictationLanguagePreferenceSummarySchema.parse({
+      apiVersion: 1,
+      revision: 2,
+      preference: { mode: "preferred", language: "ko" },
+      appliesTo: "new_speech_sessions"
+    });
+    expect(DictationLanguagePreferenceRequestSchema.parse({ apiVersion: 1, requestId }))
+      .toEqual({ apiVersion: 1, requestId });
+    expect(DictationLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "ready",
+      summary
+    }).status).toBe("ready");
+    expect(SetDictationLanguagePreferenceRequestSchema.parse({
+      apiVersion: 1,
+      requestId,
+      expectedRevision: 2,
+      preference: { mode: "automatic" }
+    }).preference).toEqual({ mode: "automatic" });
+    expect(SetDictationLanguagePreferenceResultSchema.parse({
+      apiVersion: 1,
+      requestId,
+      status: "stale",
+      summary
+    })).toMatchObject({ status: "stale", summary: { revision: 2 } });
+    expect(MachineLocalSettingsSchema.parse({
+      schemaVersion: 1,
+      dictationLanguagePreference: {
+        revision: 2,
+        preference: { mode: "preferred", language: "ko" }
+      },
+      recentVaults: []
+    }).dictationLanguagePreference).toEqual({
+      revision: 2,
+      preference: { mode: "preferred", language: "ko" }
+    });
+    expect(() => SetDictationLanguagePreferenceRequestSchema.parse({
+      apiVersion: 1,
+      requestId,
+      expectedRevision: 2,
+      preference: { mode: "preferred", language: "es" }
     })).toThrow();
   });
 

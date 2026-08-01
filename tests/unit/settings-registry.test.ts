@@ -34,6 +34,15 @@ describe("settings registry", () => {
     expect([...byKey.keys()].filter((key) => key.startsWith("permissions."))).toEqual([]);
     expect(byKey.get("diagnostics.supportBundleExport")?.scope).toBe("runtime_transient");
     expect(byKey.get("toolchain.health")?.scope).toBe("derived_status");
+    expect(byKey.get("speech.dictationLanguage")).toMatchObject({
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "Speech Service, I18N Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "none"
+    });
     expect(registry.entries.every((entry) => SettingPermissionRequirementSchema.safeParse(entry.permissionRequirement).success)).toBe(true);
     expect(byKey.get("vault.activePath")?.permissionRequirement).toBe("permission_and_confirmation");
     expect(byKey.get("models.providerProfiles")?.permissionRequirement).toBe("explicit_confirmation");

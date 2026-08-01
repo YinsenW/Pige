@@ -157,6 +157,10 @@ import type {
   LibraryBrowseRequest,
   LibraryBrowseResult,
   Locale,
+  DictationLanguagePreferenceRequest,
+  DictationLanguagePreferenceResult,
+  SetDictationLanguagePreferenceRequest,
+  SetDictationLanguagePreferenceResult,
   ManagedCopyRootConfigureRequest,
   ManagedCopyRootConfigureResult,
   ManagedCopyRootSummary,
@@ -779,6 +783,14 @@ export type {
   OcrLanguagePreferenceSummary,
   SetOcrLanguagePreferenceRequest,
   SetOcrLanguagePreferenceResult,
+  DictationLanguagePreference,
+  DictationLanguagePreferenceMachineSettings,
+  DictationLanguagePreferenceRequest,
+  DictationLanguagePreferenceRequestId,
+  DictationLanguagePreferenceResult,
+  DictationLanguagePreferenceSummary,
+  SetDictationLanguagePreferenceRequest,
+  SetDictationLanguagePreferenceResult,
   PaddleOcrCatalogComponent,
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
@@ -2379,6 +2391,12 @@ export interface PigeDesktopApi {
     readonly confirm: (request: SourceRefreshConfirmRequest) => Promise<SourceRefreshConfirmResult>;
   };
   readonly localCapabilities: {
+    readonly dictationLanguagePreference: (
+      request: DictationLanguagePreferenceRequest
+    ) => Promise<DictationLanguagePreferenceResult>;
+    readonly setDictationLanguagePreference: (
+      request: SetDictationLanguagePreferenceRequest
+    ) => Promise<SetDictationLanguagePreferenceResult>;
     readonly ocrLanguagePreference: (
       request: OcrLanguagePreferenceRequest
     ) => Promise<OcrLanguagePreferenceResult>;

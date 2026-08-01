@@ -23,6 +23,7 @@ import {
 } from "../../apps/desktop/src/renderer/src/components/PermissionsPrivacySettingsPanel";
 import {
   LocalCapabilitiesSettingsPanel,
+  type DictationLanguagePreferenceApi,
   type OcrLanguagePreferenceApi,
   type PaddleOcrApi,
   type SpeechAssetApi
@@ -5501,10 +5502,76 @@ describe("full UI Settings surface", () => {
       "utf8"
     );
     expect(appSource).toContain('if (!settingsOpen || settingsSection !== "capabilities") return;');
-    expect(appSource).toContain("window.pige.speech.availability({ languageTag: locale })");
+    expect(appSource).toContain("window.pige.speech.availability({ languageTag: dictationLanguageTag })");
+    expect(appSource).toContain("dictationLanguagePreference.mode === \"automatic\"");
     expect(appSource).toContain("requestId !== speechAvailabilitySequence.current");
     expect(appSource).toContain("window.pige.speech.openSystemSettings()");
     expect(appSource).not.toContain("navigator.mediaDevices");
+  });
+
+  it("persists a dedicated dictation language and reports the authoritative preference to Home", async () => {
+    const dom = createDom();
+    const onPreferenceChanged = vi.fn();
+    const update = vi.fn(async (request) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      status: "committed" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 2,
+        preference: request.preference,
+        appliesTo: "new_speech_sessions" as const
+      }
+    }));
+    const api: DictationLanguagePreferenceApi = {
+      dictationLanguagePreference: vi.fn(async (request) => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        status: "ready",
+        summary: {
+          apiVersion: 1,
+          revision: 1,
+          preference: { mode: "preferred", language: "fr" },
+          appliesTo: "new_speech_sessions"
+        }
+      })),
+      setDictationLanguagePreference: update
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        dictationLanguagePreferenceApi: api,
+        onDictationLanguagePreferenceChanged: onPreferenceChanged,
+        paddleOcrApi: paddleOcrApi("not_installed"),
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: null,
+        onRefresh: vi.fn(async () => undefined),
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+
+    const select = requireElement(dom.window.document.querySelector<HTMLSelectElement>(
+      'select[aria-label="Dictation language"]'
+    ));
+    expect(select.value).toBe("fr");
+    expect(onPreferenceChanged).toHaveBeenCalledWith({ mode: "preferred", language: "fr" });
+    await act(async () => {
+      selectValue(dom, select, "ja");
+      await settle(dom);
+    });
+    expect(update).toHaveBeenCalledWith({
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^dictlangreq_[a-z0-9]{16,64}$/u),
+      expectedRevision: 1,
+      preference: { mode: "preferred", language: "ja" }
+    });
+    expect(onPreferenceChanged).toHaveBeenLastCalledWith({ mode: "preferred", language: "ja" });
+    expect(dom.window.document.activeElement).toBe(select);
+
+    await act(async () => root.unmount());
+    dom.window.close();
   });
 
   it("runs the managed PaddleOCR lifecycle from authoritative actions without exposing package internals", async () => {

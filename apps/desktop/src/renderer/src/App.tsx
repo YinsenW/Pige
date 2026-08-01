@@ -111,6 +111,7 @@ import type {
   AppHealth,
   BackupRestoreStatus,
   DiagnosticsClearLocalResult,
+  DictationLanguagePreference,
   DiagnosticsHealth,
   GeneratedKnowledgeLanguage,
   HomeAgentModelUsage,
@@ -463,6 +464,8 @@ export function App(): React.JSX.Element {
   const [speechAvailability, setSpeechAvailability] = useState<SpeechAvailabilityResult | null>(null);
   const [speechAvailabilityLoading, setSpeechAvailabilityLoading] = useState(false);
   const [speechAvailabilityFailed, setSpeechAvailabilityFailed] = useState(false);
+  const [dictationLanguagePreference, setDictationLanguagePreference] =
+    useState<DictationLanguagePreference>({ mode: "automatic" });
   const [dropActive, setDropActive] = useState(false);
   const [homeDraftText, setHomeDraftText] = useState("");
   const [voiceAssetInstallActive, setVoiceAssetInstallActive] = useState(false);
@@ -796,9 +799,25 @@ export function App(): React.JSX.Element {
   }, [recentJobs, backupJobs]);
 
   useEffect(() => {
+    const requestId = `dictlangreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    void window.pige.localCapabilities.dictationLanguagePreference({
+      apiVersion: 1,
+      requestId
+    }).then((result) => {
+      if (result.requestId === requestId && result.status === "ready") {
+        setDictationLanguagePreference(result.summary.preference);
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  const dictationLanguageTag = dictationLanguagePreference.mode === "automatic"
+    ? locale
+    : dictationLanguagePreference.language;
+
+  useEffect(() => {
     if (!settingsOpen || settingsSection !== "capabilities") return;
     void refreshSpeechAvailability();
-  }, [locale, settingsOpen, settingsSection]);
+  }, [dictationLanguageTag, settingsOpen, settingsSection]);
 
   const t = useCallback((key: string): string => messageCatalogs[locale][key] ?? messageCatalogs.en[key] ?? key, [locale]);
   const { libraryList, refresh: refreshLibrary, loadMore: loadMoreLibrary,
@@ -1061,7 +1080,7 @@ export function App(): React.JSX.Element {
     setSpeechAvailabilityLoading(true);
     setSpeechAvailabilityFailed(false);
     try {
-      const nextAvailability = await window.pige.speech.availability({ languageTag: locale });
+      const nextAvailability = await window.pige.speech.availability({ languageTag: dictationLanguageTag });
       if (requestId !== speechAvailabilitySequence.current) return;
       setSpeechAvailability(nextAvailability);
     } catch {
@@ -2833,6 +2852,7 @@ export function App(): React.JSX.Element {
             modelSummary={modelSummary}
             recentJobs={recentJobs}
             locale={locale}
+            dictationLanguageTag={dictationLanguageTag}
             onReaderSelectionAction={revealReaderSelectionAction}
             onSubmitReaderSelectionTransform={submitReaderSelectionTransform}
             onReaderSelectionTransform={revealReaderSelectionTransform}
@@ -3025,6 +3045,8 @@ export function App(): React.JSX.Element {
             />
           ) : settingsSection === "capabilities" ? (
             <LocalCapabilitiesSettingsPanel
+              dictationLanguagePreferenceApi={window.pige.localCapabilities}
+              onDictationLanguagePreferenceChanged={setDictationLanguagePreference}
               ocrLanguagePreferenceApi={window.pige.localCapabilities}
               paddleOcrApi={window.pige.localCapabilities}
               semanticRetrievalApi={window.pige.retrieval}
@@ -3033,7 +3055,7 @@ export function App(): React.JSX.Element {
               speechAvailabilityLoading={speechAvailabilityLoading}
               speechAvailabilityFailed={speechAvailabilityFailed}
               speechAssetApi={window.pige.speech}
-              speechLanguageTag={locale}
+              speechLanguageTag={dictationLanguageTag}
               onRefreshSpeechAvailability={refreshSpeechAvailability}
               onRefresh={refreshLocalCapabilities}
               onOpenToolchainReinstall={openToolchainReinstall}
@@ -4500,6 +4522,7 @@ function HomeComposer(props: {
   readonly modelSummary: ModelProviderSettingsSummary | null;
   readonly recentJobs: readonly JobSummary[];
   readonly locale: Locale;
+  readonly dictationLanguageTag: Locale;
   readonly onReaderSelectionAction: (result: ReaderSelectionActionResult) => void;
   readonly onSubmitReaderSelectionTransform: (request: ReaderSelectionTransformRequest) => Promise<ReaderSelectionTransformResult>;
   readonly onReaderSelectionTransform: (result: ReaderSelectionTransformResult) => void;
@@ -4644,7 +4667,7 @@ function HomeComposer(props: {
   const voiceAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
   const voiceRequestSequenceRef = useRef(0);
   const voiceMeteringAvailableRef = useRef(false);
-  const voiceLanguageTagRef = useRef(props.locale);
+  const voiceLanguageTagRef = useRef(props.dictationLanguageTag);
   const draftTextRef = useRef(text);
   const conversationLoadSequence = useRef(0);
   const pickerConversationLoadSequence = useRef(0);
@@ -4662,7 +4685,7 @@ function HomeComposer(props: {
   failedFileDropRecoveryRef.current = failedFileDropRecovery;
   selectedHistoryConversationIdRef.current = selectedHistoryConversationId;
   selectedNoteRef.current = selectedNote;
-  voiceLanguageTagRef.current = props.locale;
+  voiceLanguageTagRef.current = props.dictationLanguageTag;
   draftTextRef.current = text;
 
   useEffect(() => {
@@ -4872,7 +4895,7 @@ function HomeComposer(props: {
     const requestSequence = voiceRequestSequenceRef.current + 1;
     voiceRequestSequenceRef.current = requestSequence;
     const requestId = createSpeechAssetRequestId();
-    const languageTag = props.locale;
+    const languageTag = props.dictationLanguageTag;
     voiceAssetPendingRequestIdRef.current = requestId;
     voiceAssetEventSequenceRef.current = 0;
     voiceAssetBufferedEventsRef.current = [];
@@ -4928,7 +4951,9 @@ function HomeComposer(props: {
     voiceEventSequenceRef.current = 0;
     voiceMeteringAvailableRef.current = false;
     try {
-      const availability = await window.pige.speech.availability({ languageTag: props.locale });
+      const availability = await window.pige.speech.availability({
+        languageTag: props.dictationLanguageTag
+      });
       if (voiceRequestSequenceRef.current !== requestSequence) return;
       if (availability.status === "failed") {
         setVoiceState("failed");
@@ -4943,7 +4968,7 @@ function HomeComposer(props: {
       voicePendingRequestIdRef.current = requestId;
       const result = await window.pige.speech.start({
         requestId,
-        languageTag: props.locale
+        languageTag: props.dictationLanguageTag
       });
       if (voicePendingRequestIdRef.current === requestId) voicePendingRequestIdRef.current = null;
       if (voiceRequestSequenceRef.current !== requestSequence) {

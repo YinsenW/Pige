@@ -73,6 +73,28 @@ const disabledSummary = {
 function makeHarness(overrides: Record<string, unknown> = {}) {
   const handlers = new Map<string, IpcHandler>();
   const callbacks = {
+    dictationLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "ready" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 1,
+        preference: { mode: "preferred" as const, language: "ja" as const },
+        appliesTo: "new_speech_sessions" as const
+      }
+    })),
+    setDictationLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
+      apiVersion: 1 as const,
+      requestId: input.requestId,
+      status: "committed" as const,
+      summary: {
+        apiVersion: 1 as const,
+        revision: 2,
+        preference: { mode: "preferred" as const, language: "ko" as const },
+        appliesTo: "new_speech_sessions" as const
+      }
+    })),
     ocrLanguagePreference: vi.fn((input: { readonly requestId: string }) => ({
       apiVersion: 1 as const,
       requestId: input.requestId,
@@ -167,6 +189,8 @@ describe("registerLocalCapabilitiesIpc", () => {
     expect(source).toContain("registerLocalCapabilitiesIpc({");
     expect(source).toContain("createUnavailablePaddleOcrLifecycleService(");
     for (const callback of [
+      "dictationLanguagePreference",
+      "setDictationLanguagePreference",
       "ocrLanguagePreference",
       "setOcrLanguagePreference",
       "paddleOcrSummary",
@@ -184,6 +208,8 @@ describe("registerLocalCapabilitiesIpc", () => {
 
   it("registers OCR, managed PaddleOCR, and bundled-toolchain repair channels", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
+      "localCapabilities.dictationLanguagePreference",
+      "localCapabilities.setDictationLanguagePreference",
       "localCapabilities.ocrLanguagePreference",
       "localCapabilities.setOcrLanguagePreference",
       "localCapabilities.paddleOcrSummary",
@@ -198,6 +224,19 @@ describe("registerLocalCapabilitiesIpc", () => {
 
   it("strictly delegates valid summary and lifecycle requests", async () => {
     const { handlers, callbacks } = makeHarness();
+
+    const dictationRead = { apiVersion: 1, requestId: "dictlangreq_abcdefghijklmnop" } as const;
+    const dictationSet = {
+      ...dictationRead,
+      expectedRevision: 1,
+      preference: { mode: "preferred", language: "ko" }
+    } as const;
+    await expect(call(handlers, "localCapabilities.dictationLanguagePreference", dictationRead))
+      .resolves.toMatchObject({ status: "ready", summary: { revision: 1 } });
+    await expect(call(handlers, "localCapabilities.setDictationLanguagePreference", dictationSet))
+      .resolves.toMatchObject({ status: "committed", summary: { revision: 2 } });
+    expect(callbacks.dictationLanguagePreference).toHaveBeenCalledWith(dictationRead);
+    expect(callbacks.setDictationLanguagePreference).toHaveBeenCalledWith(dictationSet);
 
     const preferenceRead = { apiVersion: 1, requestId: "ocrlangreq_abcdefghijklmnop" } as const;
     const preferenceSet = {

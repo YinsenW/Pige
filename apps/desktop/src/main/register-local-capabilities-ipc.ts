@@ -1,5 +1,11 @@
 import type { IpcMain } from "electron";
 import {
+  DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+  SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+  DictationLanguagePreferenceRequestSchema,
+  DictationLanguagePreferenceResultSchema,
+  SetDictationLanguagePreferenceRequestSchema,
+  SetDictationLanguagePreferenceResultSchema,
   OCR_LANGUAGE_PREFERENCE_CHANNEL,
   SET_OCR_LANGUAGE_PREFERENCE_CHANNEL,
   TOOLCHAIN_REPAIR_CHANNEL,
@@ -34,6 +40,10 @@ import {
   type PaddleOcrSummaryRequest,
   type PaddleOcrTestRequest,
   type PaddleOcrTestResult,
+  type DictationLanguagePreferenceRequest,
+  type DictationLanguagePreferenceResult,
+  type SetDictationLanguagePreferenceRequest,
+  type SetDictationLanguagePreferenceResult,
   type OcrLanguagePreferenceRequest,
   type OcrLanguagePreferenceResult,
   type SetOcrLanguagePreferenceRequest,
@@ -46,6 +56,12 @@ type Awaitable<T> = T | Promise<T>;
 
 export interface RegisterLocalCapabilitiesIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
+  readonly dictationLanguagePreference: (
+    request: DictationLanguagePreferenceRequest
+  ) => Awaitable<DictationLanguagePreferenceResult>;
+  readonly setDictationLanguagePreference: (
+    request: SetDictationLanguagePreferenceRequest
+  ) => Awaitable<SetDictationLanguagePreferenceResult>;
   readonly ocrLanguagePreference: (
     request: OcrLanguagePreferenceRequest
   ) => Awaitable<OcrLanguagePreferenceResult>;
@@ -89,6 +105,26 @@ interface ResultSchema<T> {
 export function registerLocalCapabilitiesIpc(
   options: RegisterLocalCapabilitiesIpcOptions
 ): void {
+  options.ipcMain.handle(
+    DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = DictationLanguagePreferenceRequestSchema.parse(request);
+      return DictationLanguagePreferenceResultSchema.parse(
+        await options.dictationLanguagePreference(parsed)
+      );
+    }
+  );
+
+  options.ipcMain.handle(
+    SET_DICTATION_LANGUAGE_PREFERENCE_CHANNEL,
+    async (_event, request: unknown) => {
+      const parsed = SetDictationLanguagePreferenceRequestSchema.parse(request);
+      return SetDictationLanguagePreferenceResultSchema.parse(
+        await options.setDictationLanguagePreference(parsed)
+      );
+    }
+  );
+
   options.ipcMain.handle(
     OCR_LANGUAGE_PREFERENCE_CHANNEL,
     async (_event, request: unknown) => {

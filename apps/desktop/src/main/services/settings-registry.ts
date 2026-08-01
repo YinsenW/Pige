@@ -193,6 +193,16 @@ export const implementedSettingsRegistry: SettingsRegistrySummary = {
       backedUpByDefault: false,
       applyBehavior: "recomputed",
       permissionRequirement: "none"
+    },
+    {
+      key: "speech.dictationLanguage",
+      page: "Local Capabilities",
+      scope: "machine_local",
+      owner: "Speech Service, I18N Service",
+      storage: "OS app data/settings.json",
+      backedUpByDefault: false,
+      applyBehavior: "immediate",
+      permissionRequirement: "none"
     }
   ]
 };
