@@ -334,6 +334,7 @@ import type {
   RestorePreviewResult,
   RefreshProviderModelsRequest,
   UpdateProviderCredentialRequest,
+  UpdateProviderProfileRequest,
   DeleteProviderRequest,
   SetAlwaysOnTopRequest,
   SetDefaultModelRequest,
@@ -643,6 +644,7 @@ import {
   MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
   ProviderApiKeyManagementRequestSchema,
   ProviderApiKeyManagementResultSchema,
+  UpdateProviderProfileRequestSchema,
   MANAGED_COPY_ROOT_CONFIGURE_CHANNEL,
   ManagedCopyRootConfigureRequestSchema,
   ManagedCopyRootConfigureResultSchema,
@@ -3179,6 +3181,10 @@ const api: PigeDesktopApi = {
       request: UpdateProviderCredentialRequest
     ): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.updateProviderCredential", request) as Promise<ModelProviderSettingsSummary>,
+    updateProviderProfile: async (
+      request: UpdateProviderProfileRequest
+    ): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.updateProviderProfile", UpdateProviderProfileRequestSchema.parse(request)) as Promise<ModelProviderSettingsSummary>,
     deleteProvider: async (request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.deleteProvider", request) as Promise<ModelProviderSettingsSummary>,
     addManualModel: async (request: AddManualModelRequest): Promise<ModelProviderSettingsSummary> =>

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T05:05:00.000Z",
+  "reviewedAt": "2026-08-01T21:02:34.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Conversation permanent deletion is a second-confirmed, pathless trash-only lifecycle whose durable intent, tombstone and irreversible Operation precede exact JSONL removal and restart adoption.",
+    "scope": "Review confirmed compatible Provider metadata editing with exact registry currentness, protected credential reuse, endpoint probing, and identity-preserving atomic commit.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "0d3754c1636c2c5a53270447186cafa61ad928bf4399b6070c866f7313ebd880"
+    "reviewedSha256": "aa78f57756d48f20bf0d9f4597c616237d6ec00a5a6a0e67bd97860b16687c8b"
   },
   "reviewers": [
     {
-      "reviewerId": "conversation-purge-combined-review",
-      "task": "Review exact conversation trash purge ordering, restart safety and renderer disclosure",
+      "reviewerId": "provider-profile-edit-review",
+      "task": "Review compatible Provider connection metadata edit workflow",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,51 +70,51 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks the user-visible destructive confirmation and durable recovery boundaries separately from the Main implementation and direct service tests."
+      "independence": "Project review checks the public request, registry transaction, protected-secret boundary, renderer draft retention and exact evidence separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "conversation-purge-combined-review",
+      "reviewerId": "provider-profile-edit-review",
       "blockerCount": 0,
-      "summary": "Home exposes permanent deletion only inside recoverable conversation Trash and requires a second explicit confirmation."
+      "summary": "Failed, stale or ineligible edits preserve the current Provider and exact local draft while successful save restores initiating focus."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "conversation-purge-combined-review",
+      "reviewerId": "provider-profile-edit-review",
       "blockerCount": 0,
-      "summary": "Schema, IPC, Main lifecycle, Home UI and owner docs bind the same pathless trash identity and closed outcomes."
+      "summary": "Schema, IPC, registry and Settings bind one canonical endpoint and boundary under the same visible registry revision."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "conversation-purge-combined-review",
+      "reviewerId": "provider-profile-edit-review",
       "blockerCount": 0,
-      "summary": "PIGE-VAULT-004 and PIGE-JOB-006 cite exact purge evidence while remaining partial for their explicitly open breadth."
+      "summary": "PIGE-PI-002 and PIGE-PI-004 cite exact registry evidence while their signed packaged model-matrix proof remains open."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "conversation-purge-combined-review",
+      "reviewerId": "provider-profile-edit-review",
       "blockerCount": 0,
-      "summary": "The existing conversation trash owner gains one bounded irreversible lifecycle without Provider replay or new durable bodies."
+      "summary": "One bounded Provider mutation reuses existing confirmation, credential, probe and registry owners without a parallel provider runtime."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "conversation-purge-combined-review",
+      "reviewerId": "provider-profile-edit-review",
       "blockerCount": 0,
-      "summary": "Existing Data, Job, API, UI and trace owners capture the behavior without a new design document."
+      "summary": "Existing Provider, Settings, API, UI and trace owners capture the workflow without a new design document or release gate."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/conversation-trash-service.test.ts tests/unit/home-agent-conversation-ui.test.ts tests/unit/schemas.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/model-provider-registry.test.ts tests/unit/provider-profile-edit-ui.test.ts tests/unit/desktop-shell-contract.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Direct service, UI and contract tests prove second confirmation, durable-before-delete ordering, replay and restart convergence."
+      "evidence": "Direct registry, UI and shell-contract tests prove atomic identity preservation, failure retention, eligibility and bounded renderer wiring."
     },
     {
       "command": "npm run typecheck && npm run verify:architecture-reset",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "conversation-purge-20260802",
-    "taskTitle": "Permanently delete one recoverable conversation",
+    "taskId": "provider-profile-edit-20260802",
+    "taskTitle": "Close compatible Provider connection metadata editing",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing conversation list, export, trash and restore behavior is unchanged; purge requires a new explicit confirmation.",
-    "acknowledgement": "The exact user-visible conversation purge workflow is bound while broader trash-first acceptance remains open."
+    "compatibility": "Existing Provider creation, credential replacement, deletion, models and Global Default behavior remain unchanged; presets and built-in endpoints stay ineligible.",
+    "acknowledgement": "The user-visible compatible Provider edit workflow is bound while signed packaged BYOK and model-matrix proof remains open."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

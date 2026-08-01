@@ -62,7 +62,7 @@ import {
 import { ManagedCollectionCitationPanel, ManagedCollectionPanel } from "./components/ManagedCollectionPanel";
 import { ManagedDatasetTrashAction } from "./components/ManagedDatasetTrashAction"; import { ManagedDatasetRenameAction } from "./components/ManagedDatasetRenameAction"; import { ManagedDatasetTrashRestorePanel } from "./components/ManagedDatasetTrashRestorePanel";
 import { renameCollectionView, trashCollectionView, updateCollectionView } from "./collection-view-lifecycle";
-import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel";
+import { LocalCapabilitiesSettingsPanel } from "./components/LocalCapabilitiesSettingsPanel"; import { ProviderProfileEditPanel } from "./components/ProviderProfileEditPanel";
 import { SkillsSettingsPanel } from "./components/SkillsSettingsPanel";
 import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
@@ -9545,7 +9545,7 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
           label: props.t("models.backToModels"),
           target: { kind: "overview" }
         })}
-        {summaryFailure}
+        {summaryFailure}<ProviderProfileEditPanel provider={selectedProvider} expectedRevision={summary?.revision} busy={props.busy || providerMutationInFlight} onBusy={props.onBusy} onRefresh={props.onRefreshModels} t={props.t} />
         <section className="settings-section">
           <h2 className="settings-section-title">{props.t("models.modelList")}</h2>
           <div className="settings-card provider-detail-card">

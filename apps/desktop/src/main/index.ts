@@ -39,6 +39,7 @@ import type {
   ProviderApiKeyManagementRequest,
   ProviderConnectResult,
   RefreshProviderModelsRequest,
+  UpdateProviderProfileRequest,
   UpdateProviderCredentialRequest,
   DeleteProviderRequest,
   SetAlwaysOnTopRequest,
@@ -107,6 +108,7 @@ import {
   AgentSubmitTurnResultSchema,
   AgentStagedSubmitTurnResultSchema,
   UpdateProviderCredentialRequestSchema,
+  UpdateProviderProfileRequestSchema,
   DeleteProviderRequestSchema,
   OpenRecentVaultRequestSchema,
   VAULT_APPLY_MIGRATION_CHANNEL,
@@ -3905,6 +3907,18 @@ ipcMain.handle("models.updateProviderCredential", async (event, request: UpdateP
     confirmLabel: "Replace credential"
   });
   return getModelProviderRegistry().updateProviderCredential(validatedRequest).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
+  });
+});
+ipcMain.handle("models.updateProviderProfile", async (event, request: UpdateProviderProfileRequest) => {
+  const validatedRequest = UpdateProviderProfileRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["models.providerProfiles"], {
+    title: "Reconnect this model service?",
+    message: "Pige will test the new name and endpoint with the existing protected credential. The current connection remains active unless the replacement is verified and saved successfully.",
+    confirmLabel: "Reconnect service"
+  });
+  return getModelProviderRegistry().updateProviderProfile(validatedRequest).then((result) => {
     scheduleWaitingAgentIngestAfterModelReady();
     return result;
   });

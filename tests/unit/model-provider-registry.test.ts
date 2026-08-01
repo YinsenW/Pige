@@ -1299,6 +1299,84 @@ describe("model provider registry", () => {
     expect(registry.summary().providers).toHaveLength(1);
   });
 
+  it("reconnects one custom Provider Profile without changing its models or protected credential", async () => {
+    const probe = new RecordingProbe();
+    const { root, registry, secrets } = makeRegistry(okModelListFetch(["model-a"]), fakeCrypto, probe);
+    const connected = await registry.addManualProvider({
+      displayName: "Old compatible",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://old.example/v1",
+      apiKey: "stable-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Provider fixture did not connect.");
+    const provider = connected.providers[0];
+    const modelIds = connected.models.map((model) => model.id);
+    const secretRefs = registrySecretRefs(root);
+
+    const updated = await registry.updateProviderProfile({
+      providerProfileId: provider?.id ?? "",
+      expectedRevision: connected.revision ?? "",
+      displayName: "New compatible",
+      baseUrl: "https://new.example/v1",
+      cloudBoundary: "self_hosted"
+    });
+
+    expect(updated.providers[0]).toMatchObject({
+      id: provider?.id,
+      displayName: "New compatible",
+      baseUrl: "https://new.example/v1",
+      cloudBoundary: "self_hosted",
+      boundaryVerification: "user_asserted"
+    });
+    expect(updated.models.map((model) => model.id)).toEqual(modelIds);
+    expect(updated.defaultModelProfileId).toBe(connected.defaultModelProfileId);
+    expect(registrySecretRefs(root)).toEqual(secretRefs);
+    expect(secrets.readProviderSecret(secretRefs[0] ?? "")).toBe("stable-secret");
+    expect(probe.configs.at(-1)).toMatchObject({
+      provider: { id: provider?.id, baseUrl: "https://new.example/v1" },
+      apiKey: "stable-secret"
+    });
+    const reopened = new ModelProviderRegistry(root, new JsonSecretStore(root, fakeCrypto),
+      new ModelProviderConnectionTester(okModelListFetch(["model-a"])), passingProbe);
+    expect(reopened.summary().providers[0]?.baseUrl).toBe("https://new.example/v1");
+  });
+
+  it("keeps the current custom Provider Profile after probe failure and fences stale or built-in edits", async () => {
+    const probe = new RecordingProbe();
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a"]), fakeCrypto, probe);
+    const connected = await registry.addManualProvider({
+      displayName: "Stable compatible",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://stable.example/v1",
+      apiKey: "stable-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "unknown"
+    });
+    if ("status" in connected) throw new Error("Provider fixture did not connect.");
+    const providerProfileId = connected.providers[0]?.id ?? "";
+    const providerBytes = fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8");
+    probe.failNext = true;
+    await expect(registry.updateProviderProfile({ providerProfileId,
+      expectedRevision: connected.revision ?? "", displayName: "Rejected",
+      baseUrl: "https://rejected.example/v1", cloudBoundary: "cloud" })).rejects.toThrow("synthetic probe failure");
+    expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).toBe(providerBytes);
+    await expect(registry.updateProviderProfile({ providerProfileId,
+      expectedRevision: `sha256:${"0".repeat(64)}`, displayName: "Stale",
+      baseUrl: "https://stale.example/v1", cloudBoundary: "cloud" }))
+      .rejects.toMatchObject({ code: "model_provider.profile_stale" });
+
+    const presetFixture = makeRegistry(okModelListFetch(["gpt-5-mini"]));
+    const preset = await presetFixture.registry.addPresetProvider({ presetId: "openai", apiKey: "preset-secret" });
+    await expect(presetFixture.registry.updateProviderProfile({ providerProfileId: preset.providers.find((item) => item.presetId)?.id ?? "",
+      expectedRevision: preset.revision ?? "", displayName: "Not editable",
+      baseUrl: "https://other.example/v1", cloudBoundary: "cloud" }))
+      .rejects.toMatchObject({ code: "model_provider.profile_edit_forbidden" });
+  });
+
   it("blocks credential replacement while an active owner references the Provider", async () => {
     const activeReferences: ModelProviderActiveReferencePort = {
       assertProviderInactive: () => {
