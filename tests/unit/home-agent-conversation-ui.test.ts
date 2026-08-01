@@ -5273,10 +5273,17 @@ describe("Home durable Agent conversation UI", () => {
     await clickButton(dom, mount.container, enMessages["note.editor.save"]);
     await waitFor(dom, () => mount.container.textContent?.includes(enMessages["note.editor.stale"]) === true);
     expect(editor.value).toBe("# Note A\n\nEdited Home body\n");
-    await clickButton(dom, mount.container, enMessages["note.editor.reload"]);
+    await clickButton(dom, mount.container, enMessages["note.editor.review"]);
     await waitFor(dom, () => harness.editorOpenRequests.length === 2);
     expect(harness.editorOpenRequests[1]?.renderContextId).toBe(`notectx_${"e".repeat(32)}`);
     expect(editor.value).toBe("# Note A\n\nEdited Home body\n");
+    const currentFile = requireElement(
+      mount.container.querySelector<HTMLTextAreaElement>("#note-markdown-editor-current-file")
+    ) as HTMLTextAreaElement;
+    expect(currentFile.value).toBe("# Note A\n\nAuthoritative body\n");
+    expect(currentFile.readOnly).toBe(true);
+    expect(buttons(mount.container, enMessages["note.editor.save"])[0]?.disabled).toBe(true);
+    await clickButton(dom, mount.container, enMessages["note.editor.conflict.continueDraft"]);
     await clickButton(dom, mount.container, enMessages["note.editor.save"]);
     await waitFor(dom, () => mount.container.textContent?.includes("Edited Home body") === true);
     expect(harness.editorSaveRequests[1]).toMatchObject({
