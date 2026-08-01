@@ -1770,11 +1770,18 @@ export interface LibraryRelatedRequest {
   readonly limit?: number;
 }
 
+export interface LibraryRelatedPageSummary {
+  readonly pageId: LibraryPageSummary["pageId"];
+  readonly title: LibraryPageSummary["title"];
+  readonly pageType: LibraryPageSummary["pageType"];
+  readonly status: LibraryPageSummary["status"];
+  readonly updatedAt: LibraryPageSummary["updatedAt"];
+}
+
 export interface LibraryRelatedPage {
-  readonly summary: LibraryPageSummary;
+  readonly summary: LibraryRelatedPageSummary;
   readonly relation: "outgoing" | "backlink";
   readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "answers" | "broader_than";
-  readonly target: string;
 }
 
 export interface LibraryRelatedResult {

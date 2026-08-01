@@ -5133,6 +5133,38 @@ References:
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 
+### D-20260802-Pathless-Reader-Related-Pages
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+The public `library.related` result uses a dedicated safe page summary containing only stable
+page ID, title, type, status and updated time. It exposes a closed relation type but no Markdown
+path, source IDs or raw link target. Reader renders a localized relation label and navigates only
+by stable page ID.
+
+Rationale:
+
+Reusing the broad Library page summary made an operational Markdown path available to the
+renderer, and Reader used that path as visible fallback copy. Related browsing needs identity and
+currentness for Open and unlink, but it does not need filesystem or raw Wiki-link authority.
+
+Consequences:
+
+- Main removes path, source and raw-target fields before the related result crosses IPC.
+- Reader retains deterministic relationship descriptions and exact page-ID navigation.
+- Missing graph state remains a typed empty degradation and grants no additional authority.
+- PIGE-UI-006 is verified; broader Reader and Knowledge Tree scale/platform exits remain partial.
+
+References:
+
+- `docs/API_AND_IPC_DESIGN.md`
+- `docs/UI_PROTOTYPE.md`
+- `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
+- `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

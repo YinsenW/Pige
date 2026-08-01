@@ -393,11 +393,11 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       const outgoingRows = db.prepare(
         `
           SELECT * FROM (
-            SELECT p.*, 'links_to' AS relation_type, MIN(l.target) AS target
+            SELECT p.*, 'links_to' AS relation_type
             FROM links l JOIN pages p ON p.page_id = l.to_page_id
             WHERE l.from_page_id = ? GROUP BY p.page_id
             UNION ALL
-            SELECT p.*, e.relation_type, p.title AS target
+            SELECT p.*, e.relation_type
             FROM relation_edges e JOIN pages p ON p.page_id = e.to_page_id
             WHERE e.from_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
           ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
@@ -407,12 +407,12 @@ export class NodeSqliteDriver implements LocalDatabaseDriver {
       const backlinkRows = db.prepare(
         `
           SELECT * FROM (
-            SELECT p.*, 'links_to' AS relation_type, MIN(l.target) AS target
+            SELECT p.*, 'links_to' AS relation_type
             FROM backlinks b JOIN pages p ON p.page_id = b.from_page_id
             LEFT JOIN links l ON l.from_page_id = b.from_page_id AND l.to_page_id = b.to_page_id
             WHERE b.to_page_id = ? GROUP BY p.page_id
             UNION ALL
-            SELECT p.*, e.relation_type, p.title AS target
+            SELECT p.*, e.relation_type
             FROM relation_edges e JOIN pages p ON p.page_id = e.from_page_id
             WHERE e.to_page_id = ? AND e.relation_type IN ('related_to', 'mentions_entity', 'contradicts', 'answers', 'broader_than')
           ) ORDER BY updated_at DESC, page_path ASC, relation_type ASC
@@ -1421,12 +1421,12 @@ function rowToSearchResult(row: Record<string, unknown>, query: QueryTerms): Ret
 }
 
 function rowToRelatedPage(row: Record<string, unknown>, relation: LibraryRelatedPage["relation"]): LibraryRelatedPage {
+  const { pageId, title, pageType, status, updatedAt } = rowToSummary(row);
   return {
-    summary: rowToSummary(row),
+    summary: { pageId, title, pageType, status, updatedAt },
     relation,
     relationType: ["related_to", "mentions_entity", "contradicts", "answers", "broader_than"].includes(String(row.relation_type))
       ? row.relation_type as LibraryRelatedPage["relationType"] : "links_to",
-    target: String(row.target ?? "")
   };
 }
 

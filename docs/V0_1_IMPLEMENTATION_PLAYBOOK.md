@@ -559,6 +559,10 @@ Build:
 - [B6.16 -> E6.11] Bounded local Dataset query/table and exact refs.
 
 Current Home proves durable cited chat/control/IME/final projection; B6.05/B6.06/B6.07 prove one Qwen3 lifecycle, body-free rebuild, local vector/hybrid retrieval, bounded reranking and 10k/100k warm lexical scale; package/recovery gaps keep E6.02 partial. B6.10/B6.11 prove cited current-note and Reader action/recovery, including all four explicit conflict outcomes; broader mutation/platform proof keeps E6.06/PIGE-UI-005 partial. B6.15 now proves unknown citation refs and exact Source/current-note/Dataset answers without a required Host ref fail closed to localized insufficiency while general answers remain pass-through; broader model-quality metrics, linking/ranking breadth, scale and platform/package proof keep E6.10/PIGE-EVAL-004 partial. B6.16 proves fenced bounded queries/citations/paging/Open plus an opaque same-Dataset relation path of at most two hops through the real Home tool and restart; analytical snapshots, longer relation paths/aggregate joins, scale/platform and complete authority proof keep E6.11/PIGE-DATA-002 partial. B6.12/B6.14 prove main-owned rebuildable tree, exact weight/fragment/source/leaf/density text, fixed bands, review outline, keyboard and Reader navigation; aggregate/10k/incremental/package/a11y/signed-visual gaps keep E6.07/E6.09 partial.
+PIGE-UI-006 is verified: Reader source metadata stays bounded, related/backlink results expose only
+stable safe summaries and closed localized relation labels, and an unavailable graph degrades
+without leaking page paths, raw link targets or source bodies. E6.05/E6.07 remain partial for
+their independent long-page, aggregate-scale, accessibility and packaged-platform breadth.
 
 Deferred from this phase:
 

@@ -499,8 +499,11 @@ Queries: `library.list/tree/related`, `notes.get/render/openEditor`, `notes.list
 `notes.restoreRevisionHistory`, `notes.addTag`, `notes.editTaxonomy`, `notes.rename`,
 `notes.changeAlias`, `notes.removeTag`, `notes.setQuestionState`.
 
-Library returns bounded stable IDs; Notes resolves safe Markdown/HTML. `renderContextId` authorizes
-only rendering; Main retains paths, private data, prompts, secrets and unsafe content.
+Library returns bounded stable IDs; `library.related` narrows every related-page summary to
+page ID, title, type, status and updated time plus a closed relation vocabulary. It returns no
+page path, source IDs, raw link target or body. Notes resolves safe Markdown/HTML.
+`renderContextId` authorizes only rendering; Main retains paths, private data, prompts, secrets
+and unsafe content.
 
 Reader edits are revision-fenced. `openEditor` returns bounded Markdown; `saveEditor` CAS-writes
 `update_page`, preserving stale drafts. `trashCurrent` accepts notes and active Pige-managed

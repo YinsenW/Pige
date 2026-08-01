@@ -172,8 +172,14 @@ source_ids: []
     expect(result.degraded).toBe(false);
     expect(result.totalOutgoing).toBe(1);
     expect(result.outgoing[0]?.summary.title).toBe("Topic");
-    expect(result.outgoing[0]?.target).toBe("Topic");
-    expect(JSON.stringify(result)).not.toContain("Sensitive body detail");
+    expect(result.outgoing[0]?.summary).toEqual({
+      pageId: "page_20260709_topic1",
+      title: "Topic",
+      pageType: "note",
+      status: "active",
+      updatedAt: "2026-07-09T12:00:00.000Z",
+    });
+    expect(JSON.stringify(result)).not.toMatch(/Sensitive body detail|pagePath|sourceIds|target/u);
   });
 
   it("degrades related-page lookup when the local graph index is unavailable", () => {

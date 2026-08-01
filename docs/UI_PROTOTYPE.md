@@ -563,6 +563,8 @@ Reader requirements:
 - Render Markdown as a primary product surface, not a secondary preview.
 - Show frontmatter-derived metadata in a compact header.
 - Show backlinks and related pages.
+- Describe each related edge with a localized closed relation label; use only stable page ID for
+  Open and never display its Markdown path or raw link target.
 - Show source references.
 - Show source-backed citations distinctly from Agent interpretation.
 - Provide open-in-folder and reveal-raw-source actions.

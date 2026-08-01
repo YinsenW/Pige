@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T16:32:42.059Z",
+  "reviewedAt": "2026-08-01T17:07:29.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "PIGE-INGEST-004 selected DOCX raster-media OCR evidence without status promotion.",
+    "scope": "Pathless Reader related-page and backlink projection with stable-ID navigation and graph-unavailable degradation.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "6c9e1d3e8fb3d2eeb57a9bc02cc9de6f505d3e25bb7b8f18f660e3642d2698cc"
+    "reviewedSha256": "4dc2c662faa05b3b37e94bd2b198e30b4a9c392960da36f0a1ad13e449420093"
   },
   "reviewers": [
     {
-      "reviewerId": "docx-media-ocr-review",
-      "task": "Review selected DOCX raster-media OCR evidence and remaining scope",
+      "reviewerId": "reader-related-boundary-review",
+      "task": "Review the pathless Reader related-page boundary and localized relationship presentation",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews parser and acceptance facts; Development supplies separate archive, materializer, OCR-target and Agent-led evidence."
+      "independence": "Planning reviews the Reader and IPC contract while Development supplies separate database projection, renderer presentation and degraded-state evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "docx-media-ocr-review",
+      "reviewerId": "reader-related-boundary-review",
       "blockerCount": 0,
-      "summary": "Parser-selected DOCX raster media stays bounded and disposable while original Office evidence remains preserved."
+      "summary": "Related and backlink rows retain exact stable page identity for Open while operational Markdown and raw link targets never cross the boundary."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "docx-media-ocr-review",
+      "reviewerId": "reader-related-boundary-review",
       "blockerCount": 0,
-      "summary": "Parser, OCR target, materializer and playbook contracts agree on the shared DOCX/PPTX raster bounds."
+      "summary": "API, Reader, linking and UI owners agree on a closed relation vocabulary, pathless safe summary and typed unavailable degradation."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "docx-media-ocr-review",
+      "reviewerId": "reader-related-boundary-review",
       "blockerCount": 0,
-      "summary": "PIGE-INGEST-004 gains exact DOCX media OCR evidence while Windows, broader targets and packaging remain open."
+      "summary": "PIGE-UI-006 gains direct contract, Main projection and renderer evidence while broader Reader and tree exits remain independently partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "docx-media-ocr-review",
+      "reviewerId": "reader-related-boundary-review",
       "blockerCount": 0,
-      "summary": "One bounded OCR-target owner isolates DOCX/PPTX selection without widening parser or Job orchestrators."
+      "summary": "The existing Library related channel and rebuildable graph remain compatible; only their public summary and visible label are narrowed."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "docx-media-ocr-review",
+      "reviewerId": "reader-related-boundary-review",
       "blockerCount": 0,
-      "summary": "Existing parser, playbook, trace, acceptance and responsibility owners hold the delta without a new design document."
+      "summary": "Existing API, UI, playbook, decision and trace owners contain the boundary without introducing a new design document or durable format."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-led-office-parse.test.ts tests/unit/evidence-assembly-service.test.ts tests/unit/office-parser-core.test.ts tests/unit/office-media-materializer-core.test.ts tests/unit/pptx-media-ocr-artifact-service.test.ts tests/unit/ocr-job-executor-integration.test.ts tests/unit/pdf-ocr-artifact-service.test.ts --pool=threads --maxWorkers=1",
+      "command": "npx vitest run tests/unit/library-service.test.ts tests/unit/reader-note-related-panel.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Agent-led DOCX/PPTX OCR, evidence assembly, bounded materialization, artifacts and PDF compatibility pass directly."
+      "evidence": "The direct service, contract and renderer tests prove stable-ID Open, closed labels, pathless projection and graph degradation."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The Office OCR candidate compiles and builds while the new bounded target owner is recorded at its exact size."
+      "evidence": "The narrowed related summary compiles and builds without adding a channel, service, durable owner or architecture-budget change."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Parser, playbook, trace, acceptance and semantic-claim owners remain mutually consistent."
+      "evidence": "API, UI, linking, playbook, accepted decision, acceptance evidence and semantic claims agree on pathless related browsing."
     }
   ],
   "coordination": {
-    "taskId": "docx-media-ocr-bind-20260801",
-    "taskTitle": "Bind selected DOCX raster-media OCR evidence",
+    "taskId": "reader-related-pathless-bind-20260802",
+    "taskTitle": "Bind pathless stable-ID Reader related browsing",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Office parser artifacts remain readable; DOCX raster OCR reuses the bounded selected-media handoff without durable migration.",
-    "acknowledgement": "Planning adds exact DOCX media OCR evidence while keeping PIGE-INGEST-004 partial and its remaining platform and target breadth explicit."
+    "compatibility": "Existing page IDs, graph indexes, Library related IPC and Reader Open semantics remain compatible; private path, source and raw-target fields are removed.",
+    "acknowledgement": "Planning records direct pathless contract, Main and renderer evidence for verified PIGE-UI-006 without promoting unrelated long-page, scale or packaged-platform exits."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

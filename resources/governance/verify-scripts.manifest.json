@@ -42,7 +42,7 @@
     { "path": "scripts/verify/public-privacy-surface.mjs", "sha256": "a00369c602677a1c0cae2af97a8b2494e82ce87dad47bea7e9144f6f3b4ebb6c" },
     { "path": "scripts/verify/repository-foundation-smoke.mjs", "sha256": "0793c4b9184cc79efa5407157ccaaaae17db6d6084be9c38afa3cad69902814f" },
     { "path": "scripts/verify/source-artifacts.mjs", "sha256": "e810f395fe542b6efbe84c918b2aabc338abf9bfc41974e520514ad46b6623f7" },
-    { "path": "scripts/verify/traceability-negative-cases.mjs", "sha256": "db89a40dbf0fd87c0ea62c5678462aab3fd5905ddce69fa4300c71549008cf55" },
+    { "path": "scripts/verify/traceability-negative-cases.mjs", "sha256": "e818f074d3b2f9233a4d3351b1e8c9dc2a8f44357bbee4469ad6bae4e3165668" },
     { "path": "scripts/verify/traceability.mjs", "sha256": "29ca157e4d051f2f4d0f06c9544c0180bca357b25a329343e493cfd6000515f3" },
     { "path": "scripts/verify/trailing-whitespace.mjs", "sha256": "ec8c7c35d1281c6ca1d9f85bdb4f7c3683d2af2d402ea90b21f348198037f246" },
     { "path": "scripts/verify/ui-visual-contract.mjs", "sha256": "08208f4005ca85bb052670bd9bfa97a4961106e1b9392778d55f5e202730eb31" },

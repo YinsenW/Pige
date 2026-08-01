@@ -51,6 +51,30 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain("crashRecoverySummary: () => getCrashRecoveryService().summary()");
   });
 
+  it("keeps related-page navigation stable-ID-only and operational-path-free", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const relatedContract = contractsSource.slice(
+      contractsSource.indexOf("export interface LibraryRelatedPageSummary"),
+      contractsSource.indexOf("export interface LibraryRelatedResult")
+    );
+    const databaseSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/services/local-database-service.ts"), "utf8"
+    );
+    const rendererSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/renderer/src/components/ReaderNoteRelatedPanel.tsx"), "utf8"
+    );
+
+    expect(relatedContract).toContain('readonly pageId: LibraryPageSummary["pageId"]');
+    expect(relatedContract).toContain('readonly updatedAt: LibraryPageSummary["updatedAt"]');
+    for (const privateField of ["pagePath", "sourceIds", "target", "body", "path:"]) {
+      expect(relatedContract).not.toContain(privateField);
+    }
+    expect(databaseSource).toContain("const { pageId, title, pageType, status, updatedAt } = rowToSummary(row)");
+    expect(rendererSource).toContain("props.t(`note.relatedType.${page.relationType}`)");
+    expect(rendererSource).not.toContain("page.summary.pagePath");
+    expect(rendererSource).not.toContain("page.target");
+  });
+
   it("composes image source refresh with the local OCR owner", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const composition = mainSource.slice(
