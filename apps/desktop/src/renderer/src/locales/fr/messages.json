@@ -151,6 +151,7 @@
   "backup.restoreApply": "Restaurer",
   "backup.restoreCancel": "Annuler",
   "backup.restoreFailed": "Pige n’a pas pu poursuivre cette restauration en toute sécurité. Réessayez.",
+  "backup.restoreUnsupported": "Cette sauvegarde utilise un schéma de données plus récent. Mettez Pige à jour avant de la restaurer.",
   "backup.restoreInvalid": "Cette sauvegarde ne peut pas être restaurée car la validation a détecté des fichiers invalides.",
   "backup.restoreBlocked": "Bloquée",
   "backup.restoreMode": "Mode de restauration",

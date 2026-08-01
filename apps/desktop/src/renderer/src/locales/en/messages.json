@@ -151,6 +151,7 @@
   "backup.restoreApply": "Restore",
   "backup.restoreCancel": "Cancel",
   "backup.restoreFailed": "Pige could not safely continue this restore. Try again.",
+  "backup.restoreUnsupported": "This backup was created with a newer data schema. Update Pige before restoring it.",
   "backup.restoreInvalid": "This backup cannot be restored because validation found invalid files.",
   "backup.restoreBlocked": "Blocked",
   "backup.restoreMode": "Restore as",

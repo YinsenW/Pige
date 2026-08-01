@@ -2195,6 +2195,16 @@ export type RestorePreviewResult =
       readonly warnings?: never;
       readonly permittedModes?: never;
       readonly defaultMode?: never;
+    }
+  | {
+      readonly status: "unsupported";
+      readonly reason: "schema_newer";
+      readonly previewId?: never;
+      readonly manifest?: never;
+      readonly invalidFileCount?: never;
+      readonly warnings?: never;
+      readonly permittedModes?: never;
+      readonly defaultMode?: never;
     };
 
 export interface RestoreApplyRequest {

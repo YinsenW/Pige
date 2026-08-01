@@ -151,6 +151,7 @@
   "backup.restoreApply": "恢复",
   "backup.restoreCancel": "取消",
   "backup.restoreFailed": "Pige 无法安全地继续恢复。请重试。",
+  "backup.restoreUnsupported": "此备份使用了更新的数据架构。请先更新 Pige，再恢复备份。",
   "backup.restoreInvalid": "备份验证发现无效文件，无法恢复。",
   "backup.restoreBlocked": "暂不可恢复",
   "backup.restoreMode": "恢复方式",

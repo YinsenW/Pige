@@ -286,6 +286,32 @@ describe("backup restore service", () => {
     });
   });
 
+  it("migrates a compatible v1 backup inside private staging and adopts the exact current restore", async () => {
+    const { root, vaultPath } = makeVault();
+    const backupPath = path.join(root, "legacy-vault.pige-backup.zip");
+    const restoreParent = path.join(root, "legacy-restore-targets");
+    const currentManifest = readVaultManifestFixture(vaultPath);
+    const { durable_domain_versions: _domainVersions, ...legacyManifest } = currentManifest;
+    fs.writeFileSync(path.join(vaultPath, ".pige", "manifest.json"), `${JSON.stringify({
+      ...legacyManifest,
+      vault_schema_version: 1
+    }, null, 2)}\n`, "utf8");
+    const service = new BackupRestoreService();
+    await service.createBackup(vaultPath, backupPath, "0.1.0-test");
+    const preview = await service.inspectRestoreArchive(backupPath);
+    const input = createTestRestoreInput(backupPath, restoreParent, preview);
+    const restored = await service.applyRestore(input);
+
+    expect(readVaultManifestFixture(restored.restoredVaultPath)).toMatchObject({
+      vault_schema_version: 2,
+      vault_id: restored.resultVaultId,
+      origin_vault_id: preview.sourceVaultId,
+      restored_from_backup_id: preview.backupId,
+      durable_domain_versions: expect.any(Object)
+    });
+    await expect(service.adoptCommittedRestore(input)).resolves.toEqual(restored);
+  });
+
   it("excludes recoverable trash when the durable vault preference is off", async () => {
     const { root, vaultPath } = makeVault();
     const backupPath = path.join(root, "without-trash.pige-backup.zip");
@@ -786,6 +812,35 @@ describe("backup restore service", () => {
       primitiveBackup,
       "0.1.0-test"
     )).rejects.toMatchObject({ code: "backup.schema_version_invalid" });
+  });
+
+  it("blocks declared and conservatively scanned newer durable schemas during preview", async () => {
+    const declared = makeVault();
+    const declaredBackup = path.join(declared.root, "declared-future-domain.pige-backup.zip");
+    await new BackupRestoreService().createBackup(declared.vaultPath, declaredBackup, "0.1.0-test");
+    await rewriteBackupArchive(declaredBackup, (manifest) => ({
+      ...manifest,
+      domainSchemaVersions: {
+        ...manifest.domainSchemaVersions!,
+        jobs: { min: 1, max: 2 }
+      }
+    }));
+    await expect(new BackupRestoreService().inspectRestoreArchive(declaredBackup))
+      .rejects.toMatchObject({ code: "restore.schema_unsupported" });
+
+    const legacy = makeVault();
+    const legacyBackup = path.join(legacy.root, "legacy-future-domain.pige-backup.zip");
+    writeFixtureFiles(legacy.vaultPath, [{
+      path: ".pige/jobs/2026/08/job_20260802_futurecompat01.json",
+      canary: `${JSON.stringify({ schemaVersion: 2, opaqueFuture: true })}\n`
+    }]);
+    await new BackupRestoreService().createBackup(legacy.vaultPath, legacyBackup, "0.1.0-test");
+    await rewriteBackupArchive(legacyBackup, (manifest) => {
+      const { domainSchemaVersions: _ranges, ...withoutRanges } = manifest;
+      return withoutRanges as BackupManifest;
+    });
+    await expect(new BackupRestoreService().inspectRestoreArchive(legacyBackup))
+      .rejects.toMatchObject({ code: "restore.schema_unsupported" });
   });
 
   it("excludes historical Backup Jobs so machine-local destination paths never enter portable bytes", async () => {

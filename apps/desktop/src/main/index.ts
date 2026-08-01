@@ -389,6 +389,7 @@ import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
 import { RetrievalService } from "./services/retrieval-service";
 import { JsonSecretStore } from "./services/secret-store";
 import { LocalRagEngineService } from "./services/local-rag-engine-service";
+import { rebuildRestoreDerivedIndexes } from "./services/restore-derived-index-rebuilder";
 import { LocalRerankerRuntime } from "./services/local-reranker-runtime";
 import { LocalRerankerService } from "./services/local-reranker-service";
 import {
@@ -1025,11 +1026,11 @@ const getRestoreCoordinatorService = (): RestoreCoordinatorService => {
       backupService: getBackupRestoreService(),
       vaultService: getVaultService(),
       pauseMutableWork: pauseMutableWorkForRestore,
-      rebuildIndexes: async (vaultPath) => {
-        const rebuilt = await getLocalDatabaseService().rebuildInWorker(vaultPath);
-        getLocalDatabaseService().initialize(vaultPath);
-        return rebuilt;
-      }
+      rebuildIndexes: (vaultPath) => rebuildRestoreDerivedIndexes(
+        vaultPath,
+        getLocalDatabaseService(),
+        getLocalRagEngineService()
+      )
     });
   }
   return restoreCoordinatorService;

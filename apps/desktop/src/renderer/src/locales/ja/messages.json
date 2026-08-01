@@ -151,6 +151,7 @@
   "backup.restoreApply": "復元",
   "backup.restoreCancel": "キャンセル",
   "backup.restoreFailed": "Pige は復元を安全に続行できませんでした。もう一度お試しください。",
+  "backup.restoreUnsupported": "このバックアップは新しいデータスキーマを使用しています。Pige を更新してから復元してください。",
   "backup.restoreInvalid": "検証で無効なファイルが見つかったため、このバックアップは復元できません。",
   "backup.restoreBlocked": "復元不可",
   "backup.restoreMode": "復元方法",

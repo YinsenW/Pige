@@ -310,6 +310,9 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       };
     } catch (caught) {
       previews.cancel(senderId, generation);
+      if (caught instanceof PigeDomainError && caught.code === "restore.schema_unsupported") {
+        return { status: "unsupported", reason: "schema_newer" };
+      }
       throw caught;
     }
   });

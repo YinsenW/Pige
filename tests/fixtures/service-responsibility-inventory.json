@@ -2,8 +2,8 @@
   "apiVersion": 1,
   "baseline": "f76a9e7469741fc945ac7acd48258183aa821844",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 301,
-  "baselineLines": 128834,
+  "baselineFileCount": 304,
+  "baselineLines": 129240,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -43,7 +43,9 @@
       ["backup-memory-preference-service.ts", 193, "rd"],
       ["backup-trash-preference-service.ts", 203, "rd"],
       ["backup-reconnect-coordinator.ts", 201, "jr"],
-      ["backup-service.ts", 4175, "rd"],
+      ["backup-restore-materialization.ts", 152, "rd"],
+      ["backup-restore-schema-compatibility.ts", 219, "rf"],
+      ["backup-service.ts", 4182, "rd"],
       ["current-note-append-service.ts", 891, "ard"],
       ["current-note-conflict-review-service.ts", 159, "rd"],
       ["current-note-conflict-save-service.ts", 419, "ard"],
@@ -138,6 +140,7 @@
       ["reader-source-reveal-service.ts", 39, "p"],
       ["renderer-navigation-guard.ts", 10, "p"],
       ["restore-coordinator-service.ts", 1015, "jr"],
+      ["restore-derived-index-rebuilder.ts", 28, "rf"],
       ["restore-cancellation-controller.ts", 82, "jr"],
       ["restore-job-cancellation.ts", 46, "jr"],
       ["retrieval-evidence-boundary.ts", 470, "prf"],
@@ -334,7 +337,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 301,
+    "serviceOwnerCount": 304,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
