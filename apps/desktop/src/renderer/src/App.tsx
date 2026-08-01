@@ -2698,6 +2698,7 @@ export function App(): React.JSX.Element {
                 setView(returnView);
               }
             }}
+            onReveal={window.pige.collections.reveal}
             onAddNullableColumn={addCollectionNullableColumn}
             onRenameColumn={renameCollectionColumn}
             onTrashColumn={trashCollectionColumn}

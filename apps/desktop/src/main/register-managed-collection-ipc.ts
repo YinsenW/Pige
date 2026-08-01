@@ -9,6 +9,7 @@ import {
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
+  COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
@@ -41,6 +42,8 @@ import {
   CollectionListResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionRevealRequestSchema,
+  CollectionRevealResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -79,6 +82,8 @@ import {
   type CollectionAppendDefaultRowResult,
   type CollectionOpenRequest,
   type CollectionOpenResult,
+  type CollectionRevealRequest,
+  type CollectionRevealResult,
   type CollectionRenameColumnRequest,
   type CollectionRenameColumnResult,
   type CollectionTrashColumnRequest,
@@ -97,6 +102,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly openCollection: (
     request: CollectionOpenRequest
   ) => CollectionOpenResult | Promise<CollectionOpenResult>;
+  readonly revealCollection: (
+    request: CollectionRevealRequest
+  ) => CollectionRevealResult | Promise<CollectionRevealResult>;
   readonly openCollectionCitation: (
     request: CollectionOpenCitationRequest
   ) => CollectionOpenCitationResult | Promise<CollectionOpenCitationResult>;
@@ -148,6 +156,12 @@ interface RegisterManagedCollectionIpcOptions {
   readonly trashCollectionRow: (
     request: CollectionTrashRowRequest
   ) => CollectionTrashRowResult | Promise<CollectionTrashRowResult>;
+}
+
+function sameRevealIdentity(request: CollectionRevealRequest, result: CollectionRevealResult): boolean {
+  return result.requestId === request.requestId && result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId && result.revisionId === request.revisionId &&
+    result.tableId === request.tableId;
 }
 
 function failedList(request: CollectionListRequest): CollectionListResult {
@@ -428,6 +442,23 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     const result = assertOpenIdentity(parsed, CollectionOpenResultSchema.parse(rawResult));
     return options.getActiveVaultId() === parsed.activeVaultId ? result : failedOpen(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_REVEAL_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionRevealRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return CollectionRevealResultSchema.parse({ ...parsed, status: "stale" });
+    }
+    try {
+      const result = CollectionRevealResultSchema.parse(await options.revealCollection(parsed));
+      if (!sameRevealIdentity(parsed, result) || !options.isTrustedSender(event.sender) ||
+          options.getActiveVaultId() !== parsed.activeVaultId) {
+        return CollectionRevealResultSchema.parse({ ...parsed, status: "stale" });
+      }
+      return result;
+    } catch {
+      return CollectionRevealResultSchema.parse({ ...parsed, status: "failed" });
+    }
   });
 
   options.ipcMain.handle("collections.openCitation", async (event, request: unknown) => {

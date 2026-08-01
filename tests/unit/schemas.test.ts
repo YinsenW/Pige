@@ -42,6 +42,7 @@ import {
   COLLECTION_COLUMN_LABEL_MAX_UTF8_BYTES,
   COLLECTION_LIST_CHANNEL,
   COLLECTION_OPEN_CITATION_CHANNEL,
+  COLLECTION_REVEAL_CHANNEL,
   CollectionAddNullableColumnRequestSchema,
   CollectionAddNullableColumnResultSchema,
   CollectionAddFormulaColumnRequestSchema,
@@ -72,6 +73,8 @@ import {
   CollectionOpenResultSchema,
   CollectionOpenCitationRequestSchema,
   CollectionOpenCitationResultSchema,
+  CollectionRevealRequestSchema,
+  CollectionRevealResultSchema,
   CollectionRenameColumnRequestSchema,
   CollectionRenameColumnResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -1076,6 +1079,29 @@ describe("schemas", () => {
       status: "stale",
       rows: snapshot.rows
     })).toThrow();
+  });
+
+  it("keeps generated Dataset reveal exact, bounded, and pathless", () => {
+    expect(COLLECTION_REVEAL_CHANNEL).toBe("collections.reveal");
+    const request = {
+      apiVersion: 1,
+      requestId: "collection_reveal_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_collectionreveal",
+      datasetId: "dataset_20260801_collectionreveal",
+      revisionId: "dataset_rev_20260801_collectionreveal",
+      tableId: "table_collectionreveal01"
+    } as const;
+    expect(CollectionRevealRequestSchema.parse(request)).toEqual(request);
+    for (const status of ["revealed", "stale", "not_found", "failed"] as const) {
+      expect(CollectionRevealResultSchema.parse({ ...request, status })).toEqual({ ...request, status });
+    }
+    expect(() => CollectionRevealResultSchema.parse({
+      ...request,
+      status: "revealed",
+      path: "/private/vault/data/datasets/private"
+    })).toThrow();
+    expect(() => CollectionRevealRequestSchema.parse({ ...request, requestId: "collection_reveal_short" }))
+      .toThrow();
   });
 
   it("keeps Library tag browsing snapshot-bound, ordered, and renderer-safe", () => {

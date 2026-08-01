@@ -11,6 +11,7 @@ import type {
   CollectionRenameViewRequest, CollectionRenameViewResult,
   CollectionTrashViewRequest, CollectionTrashViewResult,
   CollectionOpenResult,
+  CollectionRevealRequest, CollectionRevealResult,
   CollectionOpenCitationResult,
   CollectionRenameColumnRequest,
   CollectionRenameColumnResult,
@@ -32,6 +33,7 @@ import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormula
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog";
 import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
 import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog";
+import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -110,6 +112,7 @@ export function ManagedCollectionPanel(props: {
   readonly snapshot: CollectionSnapshot;
   readonly nextRowCursor?: string;
   readonly onClose: () => void;
+  readonly onReveal?: (request: CollectionRevealRequest) => Promise<CollectionRevealResult>;
   readonly onAppendDefaultRow: (request: CollectionAppendDefaultRowRequest) => Promise<CollectionAppendDefaultRowResult>;
   readonly onTrashRow: (request: CollectionTrashRowRequest) => Promise<CollectionTrashRowResult>;
   readonly onAddNullableColumn: (request: CollectionAddNullableColumnRequest) => Promise<CollectionAddNullableColumnResult>;
@@ -617,6 +620,8 @@ export function ManagedCollectionPanel(props: {
           <p className="muted dataset-answer-count">
             {props.t("dataset.rows")}: {visibleRows.length}/{props.snapshot.totalRowCount}
           </p>
+          {props.onReveal ? <ManagedCollectionRevealAction activeVaultId={props.activeVaultId} datasetId={props.snapshot.datasetId}
+            revisionId={props.snapshot.revisionId} tableId={props.snapshot.tableId} onReveal={props.onReveal} t={props.t} /> : null}
           {props.snapshot.canAppendDefaultRow ? (
             <button
               ref={appendTriggerRef}
