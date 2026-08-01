@@ -11379,6 +11379,12 @@ export const ReaderSelectionProposalDecisionResultSchema = z.discriminatedUnion(
       path: ["createdPageId"],
       message: "An applied create-page proposal must return its created page identity."
     });
+  } else if (!expectsCreatedPage && result.createdPageId !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["createdPageId"],
+      message: "Only an applied create-page proposal may return a created page identity."
+    });
   }
 });
 

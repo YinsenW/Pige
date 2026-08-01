@@ -68,7 +68,7 @@ describe("NoteTrashPurgeService", () => {
     const external = path.join(path.dirname(fixture.vaultPath), "external-purge-intents");
     fs.mkdirSync(external);
     fs.symlinkSync(external, path.join(fixture.vaultPath, ".pige", "trash", "note-purge-intents"));
-    expect(fixture.purge.purge(purgeRequest(fixture))).toMatchObject({ status: "failed" });
+    expect(fixture.purge.purge(purgeRequest(fixture))).toMatchObject({ status: "stale" });
     expect(readTrashPayloads(fixture.vaultPath)).toEqual(["purge-me.md"]);
     expect(fs.readdirSync(external)).toEqual([]);
   });

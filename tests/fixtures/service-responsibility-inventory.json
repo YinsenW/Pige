@@ -1,9 +1,9 @@
 {
   "apiVersion": 1,
-  "baseline": "f76a9e7469741fc945ac7acd48258183aa821844",
+  "baseline": "c726413d661c2011ab3f92bb16121c7cf5becbc6",
   "root": "apps/desktop/src/main/services",
-  "baselineFileCount": 308,
-  "baselineLines": 130557,
+  "baselineFileCount": 311,
+  "baselineLines": 131265,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -29,6 +29,7 @@
       ["agent-conversation-search.ts", 133, "rf"],
       ["agent-context-pack.ts", 261, "ar"],
       ["assistant-answer-note-service.ts", 317, "ard"],
+      ["claim-evidence-service.ts", 189, "rd"],
       ["agent-memory-lifecycle.ts", 695, "rd"],
       ["agent-memory-trash-service.ts", 210, "rd"],
       ["agent-page-create-redo-service.ts", 284, "rd"],
@@ -119,8 +120,10 @@
       ["note-rename-service.ts", 302, "rd"],
       ["note-relate-service.ts", 158, "r"],
       ["note-revision-history-service.ts", 483, "rdf"],
+      ["note-trash-purge-service.ts", 456, "rd"],
       ["note-trash-service.ts", 910, "rd"],
       ["note-trash-redo-service.ts", 224, "rd"],
+      ["reader-source-citation-service.ts", 63, "f"],
       ["notes-service.ts", 1000, "prf"],
       ["ocr-engine-preference-service.ts", 122, ""],
       ["ocr-language-preference-service.ts", 282, "aprd"],
@@ -341,7 +344,7 @@
   ],
   "architectureBudget": {
     "reviewTriggerOnly": true,
-    "serviceOwnerCount": 306,
+    "serviceOwnerCount": 311,
     "agentControlBaselineLines": 1398,
     "duplicatePrimitiveInstances": {
       "writeJsonAtomicDefinitions": 9,
