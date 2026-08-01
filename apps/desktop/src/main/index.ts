@@ -259,6 +259,7 @@ import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
+import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
 import { ManagedCollectionCitationService } from "./services/managed-collection-citation-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
@@ -2088,6 +2089,11 @@ const getManagedCollectionService = (): ManagedCollectionService => {
   return managedCollectionService;
 };
 
+const getManagedCollectionRevealService = (): ManagedCollectionRevealService =>
+  new ManagedCollectionRevealService(getVaultService(), {
+    reveal: (absolutePath) => shell.showItemInFolder(absolutePath)
+  });
+
 const getManagedCollectionViewService = (): ManagedCollectionViewService => {
   if (!managedCollectionViewService) {
     managedCollectionViewService = new ManagedCollectionViewService(getVaultService());
@@ -3023,6 +3029,7 @@ registerManagedCollectionIpc({
   getActiveVaultId: () => getVaultService().current()?.vaultId,
   listCollections: (request) => getManagedCollectionViewService().list(request),
   openCollection: (request) => getManagedCollectionViewService().open(request),
+  revealCollection: (request) => getManagedCollectionRevealService().reveal(request),
   openCollectionCitation: (request) => getManagedCollectionCitationService().open(request),
   editCollectionCell: (request) => getManagedCollectionService().editCell(request),
   appendDefaultCollectionRow: (request) => getManagedCollectionService().appendDefaultRow(request),

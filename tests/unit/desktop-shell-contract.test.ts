@@ -2247,11 +2247,13 @@ describe("desktop shell build contract", () => {
     expect(contractsSource).toContain("readonly list: (request: CollectionListRequest)");
     expect(contractsSource).toContain("Promise<CollectionListResult>");
     expect(contractsSource).toContain("readonly openCitation:");
+    expect(contractsSource).toContain("readonly reveal: (request: CollectionRevealRequest)");
     expect(contractsSource).toContain("request: CollectionOpenCitationRequest");
     expect(contractsSource).toContain("Promise<CollectionOpenCitationResult>");
     expect(registrarSource).toContain('ipcMain.handle("collections.list"');
     expect(registrarSource).toContain('ipcMain.handle("collections.open"');
     expect(registrarSource).toContain('ipcMain.handle("collections.openCitation"');
+    expect(registrarSource).toContain("ipcMain.handle(COLLECTION_REVEAL_CHANNEL");
     expect(registrarSource).toContain('ipcMain.handle("collections.editCell"');
     expect(registrarSource).toContain("CollectionOpenRequestSchema.parse(request)");
     expect(registrarSource).toContain("CollectionListRequestSchema.parse(request)");
@@ -2259,6 +2261,8 @@ describe("desktop shell build contract", () => {
     expect(registrarSource).toContain("CollectionOpenResultSchema.parse(rawResult)");
     expect(registrarSource).toContain("CollectionOpenCitationRequestSchema.parse(request)");
     expect(registrarSource).toContain("CollectionOpenCitationResultSchema.parse(rawResult)");
+    expect(registrarSource).toContain("CollectionRevealRequestSchema.parse(request)");
+    expect(registrarSource).toContain("CollectionRevealResultSchema.parse(await options.revealCollection(parsed))");
     expect(registrarSource).toContain("CollectionCellEditRequestSchema.parse(request)");
     expect(registrarSource).toContain("CollectionCellEditResultSchema.parse(rawResult)");
     expect(registrarSource).toContain(
@@ -2279,6 +2283,7 @@ describe("desktop shell build contract", () => {
     expect(registrarSource).toContain("options.getActiveVaultId() !== parsed.activeVaultId");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.open", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.openCitation", parsedRequest)');
+    expect(preloadSource).toContain("ipcRenderer.invoke(COLLECTION_REVEAL_CHANNEL, parsedRequest)");
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.list", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.editCell", parsedRequest)');
     expect(preloadSource).toContain('ipcRenderer.invoke("collections.appendDefaultRow", parsedRequest)');

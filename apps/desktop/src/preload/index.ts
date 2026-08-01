@@ -492,6 +492,7 @@ import {
   COLLECTION_UPDATE_VIEW_CHANNEL,
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
+  COLLECTION_REVEAL_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
@@ -520,6 +521,8 @@ import {
   CollectionOpenCitationResultSchema,
   CollectionOpenRequestSchema,
   CollectionOpenResultSchema,
+  CollectionRevealRequestSchema,
+  CollectionRevealResultSchema,
   CollectionListRequestSchema,
   CollectionListResultSchema,
   CollectionAppendDefaultRowRequestSchema,
@@ -891,6 +894,8 @@ import type {
   CollectionOpenCitationResult,
   CollectionOpenRequest,
   CollectionOpenResult,
+  CollectionRevealRequest,
+  CollectionRevealResult,
   CollectionListRequest,
   CollectionListResult,
   CollectionAppendDefaultRowRequest,
@@ -973,6 +978,19 @@ async function invokeCollectionOpen(request: CollectionOpenRequest): Promise<Col
     result.snapshot.activeViewId !== parsedRequest.viewId
   ) {
     throw new Error("Invalid Managed Collection open response view identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionReveal(request: CollectionRevealRequest): Promise<CollectionRevealResult> {
+  const parsedRequest = CollectionRevealRequestSchema.parse(request);
+  const result = CollectionRevealResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_REVEAL_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.revisionId !== parsedRequest.revisionId ||
+      result.tableId !== parsedRequest.tableId) {
+    throw new Error("Invalid Managed Collection reveal response identity.");
   }
   return result;
 }
@@ -2025,6 +2043,7 @@ const api: PigeDesktopApi = {
   collections: {
     list: invokeCollectionList,
     open: invokeCollectionOpen,
+    reveal: invokeCollectionReveal,
     openCitation: invokeCollectionOpenCitation,
     editCell: invokeCollectionCellEdit,
     appendDefaultRow: invokeCollectionAppendDefaultRow,

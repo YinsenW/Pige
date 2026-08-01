@@ -7395,6 +7395,24 @@ export const CollectionOpenRequestSchema = z.object({
   rowCursor: CollectionRowCursorSchema.optional()
 }).strict();
 
+export const COLLECTION_REVEAL_CHANNEL = "collections.reveal" as const;
+export const CollectionRevealRequestIdSchema = z.string()
+  .regex(/^collection_reveal_[a-z0-9]{16,64}$/u);
+export const CollectionRevealRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRevealRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema
+}).strict();
+const CollectionRevealResultIdentitySchema = CollectionRevealRequestSchema;
+export const CollectionRevealResultSchema = z.discriminatedUnion("status", [
+  CollectionRevealResultIdentitySchema.extend({ status: z.literal("revealed") }).strict(),
+  ...(["stale", "not_found", "failed"] as const).map((status) =>
+    CollectionRevealResultIdentitySchema.extend({ status: z.literal(status) }).strict())
+]);
+
 const CollectionResultIdentitySchema = CollectionOpenRequestSchema.pick({
   apiVersion: true,
   requestId: true,
@@ -11318,6 +11336,8 @@ export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitatio
 export type CollectionOpenCitationResult = z.infer<typeof CollectionOpenCitationResultSchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
 export type CollectionOpenResult = z.infer<typeof CollectionOpenResultSchema>;
+export type CollectionRevealRequest = z.infer<typeof CollectionRevealRequestSchema>;
+export type CollectionRevealResult = z.infer<typeof CollectionRevealResultSchema>;
 export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;
 export type CollectionRowCursor = z.infer<typeof CollectionRowCursorSchema>;
 export type CollectionRow = z.infer<typeof CollectionRowSchema>;

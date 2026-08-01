@@ -12,6 +12,11 @@ const openRequest = {
   datasetId: "dataset_20260727_abcdefghijkl",
   tableId: "table_abcdefghijkl"
 } as const;
+const revealRequest = {
+  ...openRequest,
+  requestId: "collection_reveal_abcdefghijklmnop",
+  revisionId: "dataset_rev_20260727_abcdefghijkl"
+} as const;
 const listRequest = {
   apiVersion: 1,
   activeVaultId,
@@ -137,6 +142,7 @@ function makeHarness(options: {
   readonly isTrustedSender?: () => boolean;
   readonly listCollections?: (request: typeof listRequest) => unknown;
   readonly openCollection?: (request: typeof openRequest) => unknown;
+  readonly revealCollection?: (request: typeof revealRequest) => unknown;
   readonly openCollectionCitation?: (request: typeof citationRequest) => unknown;
   readonly editCollectionCell?: (request: typeof editRequest) => unknown;
   readonly appendDefaultCollectionRow?: (request: typeof appendRequest) => unknown;
@@ -190,6 +196,10 @@ function makeHarness(options: {
   const openCollectionCitation = vi.fn(options.openCollectionCitation ?? ((request) => ({
     ...request,
     status: "not_found"
+  })));
+  const revealCollection = vi.fn(options.revealCollection ?? ((request) => ({
+    ...request,
+    status: "revealed"
   })));
   const appendDefaultCollectionRow = vi.fn(options.appendDefaultCollectionRow ?? ((request) => ({
     apiVersion: request.apiVersion,
@@ -299,6 +309,7 @@ function makeHarness(options: {
     getActiveVaultId: options.getActiveVaultId ?? (() => activeVaultId),
     listCollections,
     openCollection,
+    revealCollection,
     openCollectionCitation,
     editCollectionCell,
     appendDefaultCollectionRow,
@@ -320,6 +331,7 @@ function makeHarness(options: {
     handlers,
     listCollections,
     openCollection,
+    revealCollection,
     openCollectionCitation,
     editCollectionCell,
     appendDefaultCollectionRow,
@@ -344,6 +356,7 @@ describe("registerManagedCollectionIpc", () => {
     expect([...makeHarness().handlers.keys()]).toEqual([
       "collections.list",
       "collections.open",
+      "collections.reveal",
       "collections.openCitation",
       "collections.editCell",
       "collections.appendDefaultRow",
@@ -362,6 +375,27 @@ describe("registerManagedCollectionIpc", () => {
       "collections.trashColumn",
       "collections.trashRow"
     ]);
+  });
+
+  it("reveals only an exact current Dataset identity through the trusted boundary", async () => {
+    const accepted = makeHarness();
+    await expect(accepted.handlers.get("collections.reveal")!(
+      { sender: {} } as IpcMainInvokeEvent, revealRequest
+    )).resolves.toEqual({ ...revealRequest, status: "revealed" });
+    expect(accepted.revealCollection).toHaveBeenCalledWith(revealRequest);
+
+    const stale = makeHarness({ getActiveVaultId: () => "vault_other" });
+    await expect(stale.handlers.get("collections.reveal")!(
+      { sender: {} } as IpcMainInvokeEvent, revealRequest
+    )).resolves.toEqual({ ...revealRequest, status: "stale" });
+    expect(stale.revealCollection).not.toHaveBeenCalled();
+
+    const swapped = makeHarness({
+      revealCollection: (request) => ({ ...request, datasetId: "dataset_20260727_otherdataset01", status: "revealed" })
+    });
+    await expect(swapped.handlers.get("collections.reveal")!(
+      { sender: {} } as IpcMainInvokeEvent, revealRequest
+    )).resolves.toEqual({ ...revealRequest, status: "stale" });
   });
 
   it("strictly binds view update, rename, and trash to trusted sender, vault, and exact view identity", async () => {
