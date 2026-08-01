@@ -70,7 +70,7 @@ import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel"
 import { DiagnosticsJobCard, PrivateExcerptSupportOption, ProviderMetadataSupportOption, SupportBundlePreviewCard,
   SupportBundlePreviewTrigger, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
-import { CrashRecoveryHistory } from "./components/CrashRecoveryHistory";
+import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
 import {
   homeConversationStateForJob,
@@ -3214,6 +3214,15 @@ export function App(): React.JSX.Element {
               supportBundlePreview={supportBundlePreview}
               onRefreshDiagnostics={refreshDiagnostics}
               onClearDiagnostics={clearLocalDiagnostics}
+              onReviewRecoveryActivity={() => {
+                setSettingsSection("history");
+                setDevelopmentNotice(null);
+                void refreshActivityJobs();
+              }}
+              onRepairRecoverySources={() => {
+                setSettingsSection("vault");
+                setDevelopmentNotice(null);
+              }}
               onSupportBundlePreviewChange={setSupportBundlePreview}
               t={t}
             />
@@ -8221,6 +8230,8 @@ export function SystemSettingsPanel(props: {
   readonly supportBundlePreview: SupportBundlePreview | null;
   readonly onRefreshDiagnostics: () => Promise<void>;
   readonly onClearDiagnostics?: () => Promise<DiagnosticsClearLocalResult>;
+  readonly onReviewRecoveryActivity?: () => void;
+  readonly onRepairRecoverySources?: () => void;
   readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -8712,26 +8723,13 @@ export function SystemSettingsPanel(props: {
               </button>
             </div>
           </div>
-          {props.diagnosticsHealth?.crashRecovery ? (
-            <div className="settings-row tall" data-crash-recovery-status={props.diagnosticsHealth.crashRecovery.status}>
-              <div className="settings-row-copy">
-                <strong>{props.t("system.crashRecovery")}</strong>
-                <span>{props.t(`system.crashRecovery.${props.diagnosticsHealth.crashRecovery.status}`)}</span>
-                <small>
-                  {props.t("system.crashRecovery.captures")} {props.diagnosticsHealth.crashRecovery.capturesPreserved}
-                  {" · "}{props.t("system.crashRecovery.jobs")} {props.diagnosticsHealth.crashRecovery.jobsRecovered}
-                  {" · "}{props.t("system.crashRecovery.retry")} {props.diagnosticsHealth.crashRecovery.jobsNeedRetry}
-                  {" · "}{props.t("system.crashRecovery.proposals")} {props.diagnosticsHealth.crashRecovery.proposalsRecovered}
-                  {" · "}{props.t("system.crashRecovery.awaitingReview")} {props.diagnosticsHealth.crashRecovery.proposalsAwaitingReview}
-                  {" · "}{props.t("system.crashRecovery.sources")} {props.diagnosticsHealth.crashRecovery.sourcesNeedRepair}
-                </small>
-              </div>
-              <span className={`settings-status ${props.diagnosticsHealth.crashRecovery.status === "needs_attention" ? "degraded" : ""}`}>
-                {props.t(`system.crashRecovery.status.${props.diagnosticsHealth.crashRecovery.status}`)}
-              </span>
-            </div>
-          ) : null}
-          <CrashRecoveryHistory history={props.diagnosticsHealth?.crashRecoveryHistory} t={props.t} />
+          <CrashRecoveryStatus
+            recovery={props.diagnosticsHealth?.crashRecovery}
+            history={props.diagnosticsHealth?.crashRecoveryHistory}
+            onReviewActivity={props.onReviewRecoveryActivity}
+            onRepairSources={props.onRepairRecoverySources}
+            t={props.t}
+          />
           <SupportBundlePreviewTrigger disabled={Boolean(diagnosticsBusy) || (includePrivateExcerpt && privateExcerpt.trim().length === 0)}
             onPreview={() => void previewSupportBundle()} t={props.t} />
           <ProviderMetadataSupportOption checked={includeProviderMetadata}

@@ -186,6 +186,11 @@ The recovery summary should say:
 - Whether database/index rebuild is running.
 - Whether any source assets need repair or relinking.
 
+When a completed summary still needs attention, Settings routes retryable Jobs and pending
+reviews to the existing Activity surface, and routes unavailable referenced originals to
+Vault & Note Storage. These actions carry no Job, source, path, or content authority from
+the diagnostic summary; the destination owners re-read their own current durable state.
+
 The summary must not expose secrets or raw source contents.
 
 ## 9. Support Bundle

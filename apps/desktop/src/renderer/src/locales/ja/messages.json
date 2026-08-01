@@ -2435,6 +2435,8 @@
   "system.crashRecovery.sources": "修復が必要なソース",
   "system.crashRecovery.history": "最近の起動時復旧",
   "system.crashRecovery.historySummary": "復旧履歴を表示",
+  "system.crashRecovery.reviewActivity": "アクティビティを確認",
+  "system.crashRecovery.repairSources": "ソースを修復",
   "pigePolicy.title": "Vault の Agent ポリシー",
   "pigePolicy.description": "Agent がこの Vault を管理するための検証済み指示 PIGE.md を確認・編集します。",
   "pigePolicy.edit": "ポリシーを編集",

@@ -4729,6 +4729,8 @@ describe("full UI Settings surface", () => {
 
   it("shows the bounded recovery outcome from an abnormal previous session", async () => {
     const dom = createDom();
+    const onReviewRecoveryActivity = vi.fn();
+    const onRepairRecoverySources = vi.fn();
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: { diagnostics: { workflowSummary: vi.fn(async () => ({
@@ -4747,7 +4749,7 @@ describe("full UI Settings surface", () => {
             status: "needs_attention", detectedAt: "2026-08-01T01:00:00.000Z",
             completedAt: "2026-08-01T01:01:00.000Z", capturesPreserved: 2,
             jobsRecovered: 3, jobsNeedRetry: 1, proposalsRecovered: 1, proposalsAwaitingReview: 2,
-            sourcesNeedRepair: 0, indexRebuildRunning: false
+            sourcesNeedRepair: 1, indexRebuildRunning: false
           }, crashRecoveryHistory: [{
             recoveryId: `crashrecovery_${"a".repeat(32)}`, status: "needs_attention",
             detectedAt: "2026-08-01T01:00:00.000Z", completedAt: "2026-08-01T01:01:00.000Z",
@@ -4756,6 +4758,8 @@ describe("full UI Settings surface", () => {
           }]
         },
         onRefreshDiagnostics: async () => undefined,
+        onReviewRecoveryActivity,
+        onRepairRecoverySources,
         onSupportBundlePreviewChange: vi.fn(), t
       }));
       await settle(dom);
@@ -4765,7 +4769,15 @@ describe("full UI Settings surface", () => {
     expect(recovery.textContent).toContain("Captures preserved 2");
     expect(recovery.textContent).toContain("Jobs resumed 3");
     expect(recovery.textContent).toContain("Jobs needing retry 1");
+    expect(recovery.textContent).toContain("Review activity");
+    expect(recovery.textContent).toContain("Repair sources");
     expect(recovery.textContent).not.toContain("job_");
+    await act(async () => {
+      Array.from(recovery.querySelectorAll("button")).find((button) => button.textContent === "Review activity")?.click();
+      Array.from(recovery.querySelectorAll("button")).find((button) => button.textContent === "Repair sources")?.click();
+    });
+    expect(onReviewRecoveryActivity).toHaveBeenCalledOnce();
+    expect(onRepairRecoverySources).toHaveBeenCalledOnce();
     expect(dom.window.document.querySelector("[data-crash-recovery-history]")?.textContent)
       .toContain("Recent startup recoveries");
     await act(async () => root.unmount());

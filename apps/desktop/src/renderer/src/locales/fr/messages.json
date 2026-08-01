@@ -2435,6 +2435,8 @@
   "system.crashRecovery.sources": "Sources à réparer",
   "system.crashRecovery.history": "Récupérations de démarrage récentes",
   "system.crashRecovery.historySummary": "Afficher les récupérations",
+  "system.crashRecovery.reviewActivity": "Examiner l’activité",
+  "system.crashRecovery.repairSources": "Réparer les sources",
   "pigePolicy.title": "Politique Agent du coffre",
   "pigePolicy.description": "Consultez et modifiez PIGE.md, les instructions validées qui guident l’entretien de ce coffre.",
   "pigePolicy.edit": "Modifier la politique",
