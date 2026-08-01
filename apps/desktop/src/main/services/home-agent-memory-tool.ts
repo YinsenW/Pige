@@ -24,6 +24,8 @@ const AuthoredMemoryInputSchema = z.object({
   quote: z.string().min(3).max(2_000)
 }).strict();
 
+const EXCEPTIONAL_MEMORY_PATTERN = /(?:\b(?:allow|approve|authorize|confirmation|credential|delete|permission|secret|shell|token|upload|yolo)\b|(?:不需要|无需).{0,8}(?:确认|询问)|权限|允许|授权|删除|密钥|令牌|berechtigung|bestätigung|erlaub|lösch|autoris|confirmation|permission|supprim|権限|許可|確認|削除|권한|허용|확인|삭제)/iu;
+
 export function createAuthoredVaultMemoryTool(turn: HomeAgentMemoryToolTurn): PigeAgentToolDefinition {
   let selected: z.infer<typeof AuthoredMemoryInputSchema> | undefined;
   const authorizedCalls = new Map<string, z.infer<typeof AuthoredMemoryInputSchema>>();
@@ -68,8 +70,11 @@ export function createAuthoredVaultMemoryTool(turn: HomeAgentMemoryToolTurn): Pi
     authorize: (args, context) => {
       turn.authorize();
       const parsed = AuthoredMemoryInputSchema.safeParse(args);
-      if (!parsed.success || !isExactAuthoredQuote(turn.authoredText, parsed.data.quote)) {
-        throw new PigeDomainError("agent_runtime.tool_input_invalid", "Memory must use an exact bounded quote from the current authored turn.");
+      if (
+        !parsed.success || !isExactAuthoredQuote(turn.authoredText, parsed.data.quote) ||
+        requiresExceptionalMemoryIntervention(parsed.data.quote)
+      ) {
+        throw new PigeDomainError("agent_runtime.tool_input_invalid", "Memory must use an exact bounded, non-authority-changing quote from the current authored turn.");
       }
       if (selected && (selected.kind !== parsed.data.kind || selected.quote !== parsed.data.quote)) {
         throw new PigeDomainError("agent_runtime.tool_call_invalid", "One turn can save only one exact vault memory.");
@@ -86,7 +91,8 @@ export function createAuthoredVaultMemoryTool(turn: HomeAgentMemoryToolTurn): Pi
       if (
         !parsed.success || !authorized || authorized.kind !== parsed.data.kind || authorized.quote !== parsed.data.quote ||
         selected?.kind !== parsed.data.kind || selected.quote !== parsed.data.quote ||
-        !isExactAuthoredQuote(turn.authoredText, parsed.data.quote)
+        !isExactAuthoredQuote(turn.authoredText, parsed.data.quote) ||
+        requiresExceptionalMemoryIntervention(parsed.data.quote)
       ) {
         throw new PigeDomainError("agent_runtime.tool_binding_changed", "The authored Memory binding changed after authorization.");
       }
@@ -106,6 +112,10 @@ export function createAuthoredVaultMemoryTool(turn: HomeAgentMemoryToolTurn): Pi
 
 export function isExactAuthoredQuote(authoredText: string, quote: string): boolean {
   return quote === quote.trim() && !quote.includes("\0") && authoredText.includes(quote);
+}
+
+export function requiresExceptionalMemoryIntervention(quote: string): boolean {
+  return EXCEPTIONAL_MEMORY_PATTERN.test(quote.normalize("NFKC"));
 }
 
 export function deriveAuthoredMemoryTitle(quote: string): string {

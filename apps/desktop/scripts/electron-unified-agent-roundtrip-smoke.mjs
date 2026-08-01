@@ -3193,7 +3193,7 @@ async function runPublicAlphaWorkflowRenderer(browserWindow) {
       });
       if (memoryTurn.state !== 'completed') throw new Error('Public Alpha memory turn did not complete.');
       const memorySummary = await window.pige.memory.list({ apiVersion: 1, activeVaultId: jobsBefore.activeVaultId });
-      const memory = memorySummary.records.find((record) => record.title === 'Concise Public Alpha reports');
+      const memory = memorySummary.records.find((record) => record.title === 'Public Alpha reports should stay concise.');
       if (!memory) throw new Error('Public Alpha memory record is unavailable.');
       const timeline = await window.pige.agent.conversation({ limit: 100 });
       return {
