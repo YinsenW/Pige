@@ -1,5 +1,6 @@
 import {
   forwardRef,
+  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
@@ -7,6 +8,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent
 } from "react";
+import { ReaderDocumentOutline } from "./ReaderDocumentOutline";
 
 export type ReaderInlineReferenceActivation =
   | "opened_page"
@@ -36,6 +38,7 @@ export const ReaderInlineReferenceSurface = forwardRef<HTMLDivElement, {
   const unavailableDescriptionId = useId();
   const feedbackId = useId();
   const ownRef = useRef<HTMLDivElement | null>(null);
+  const [contentRoot, setContentRoot] = useState<HTMLDivElement | null>(null);
   const requestSequenceRef = useRef(0);
   const codeCopySequenceRef = useRef(0);
   const codeCopyActiveRef = useRef(false);
@@ -43,6 +46,12 @@ export const ReaderInlineReferenceSurface = forwardRef<HTMLDivElement, {
   const [activeHref, setActiveHref] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<ReaderInlineReferenceFeedback | null>(null);
   const sanitizedMarkup = useMemo(() => ({ __html: props.html }), [props.html]);
+  const attachContentRoot = useCallback((element: HTMLDivElement | null): void => {
+    ownRef.current = element;
+    setContentRoot(element);
+    if (typeof forwardedRef === "function") forwardedRef(element);
+    else if (forwardedRef) forwardedRef.current = element;
+  }, [forwardedRef]);
 
   useLayoutEffect(() => {
     pageIdentityRef.current = props.pageIdentity;
@@ -219,12 +228,9 @@ export const ReaderInlineReferenceSurface = forwardRef<HTMLDivElement, {
       >
         {feedback ? props.t(`note.readerLink.${feedback}`) : ""}
       </p>
+      <ReaderDocumentOutline contentRoot={contentRoot} pageIdentity={props.pageIdentity} html={props.html} t={props.t} />
       <div
-        ref={(element) => {
-          ownRef.current = element;
-          if (typeof forwardedRef === "function") forwardedRef(element);
-          else if (forwardedRef) forwardedRef.current = element;
-        }}
+        ref={attachContentRoot}
         className="markdown-body"
         onClickCapture={(event) => void activate(event)}
         onAuxClickCapture={(event) => void activate(event)}
