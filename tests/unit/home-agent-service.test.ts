@@ -4593,6 +4593,68 @@ SYNTHETIC_DISTRACTOR_BODY
     expect(JSON.stringify(timeline)).not.toContain(selected);
   });
 
+  it("accepts Pi final prose without requiring a Reader link terminal tool or effect", async () => {
+    const fixture = makeFixture();
+    const selected = "Selected passage that Pi may leave unchanged.";
+    const currentPagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+    const originalMarkdown = fs.readFileSync(currentPagePath, "utf8");
+    const selection = createReaderSelectionForPage(currentPagePath, HOME_PAGE_ID, selected);
+    let retrievalCalls = 0;
+    const publishLink = vi.fn();
+    const jobs = new JobsService(fixture.vaults);
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId, {
+        onSearch: () => { retrievalCalls += 1; }
+      }),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, undefined, {
+            answer: "I did not find a relation worth adding.",
+            citationRefs: []
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: vi.fn(),
+        readPublication: vi.fn(() => undefined),
+        publishLink,
+        readLinkPublication: vi.fn(() => undefined)
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Link this selection if a useful current relation exists.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260801_readerlink04"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteLinkAction: "link"
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({
+      state: "completed",
+      answer: { answer: "I did not find a relation worth adding." }
+    });
+    expect(retrievalCalls).toBe(0);
+    expect(publishLink).not.toHaveBeenCalled();
+    expect(fs.readFileSync(currentPagePath, "utf8")).toBe(originalMarkdown);
+    const completedJob = jobs.readAgentTurnJob(outcome.jobId!);
+    expect(completedJob).toMatchObject({ state: "completed" });
+    expect(completedJob?.operationIds ?? []).toEqual([]);
+    expect(completedJob?.proposalIds ?? []).toEqual([]);
+  });
+
   it.each(["unknown target ref", "target drift"] as const)(
     "fails a Reader link closed for %s without publication",
     async (failureMode) => {
@@ -4893,6 +4955,66 @@ SYNTHETIC_DISTRACTOR_BODY
       state: "awaiting_review",
       proposalIds: [proposal.proposalId]
     });
+  });
+
+  it("accepts Pi final prose without requiring a Reader create-note terminal tool or proposal", async () => {
+    const fixture = makeFixture();
+    const selected = "Selection that does not justify another durable page.";
+    const pagePath = writeGeneratedKnowledgePage(fixture.vaultPath, selected);
+    const originalMarkdown = fs.readFileSync(pagePath, "utf8");
+    const selection = createReaderSelectionForPage(pagePath, HOME_PAGE_ID, selected);
+    const publishCreateNote = vi.fn();
+    const jobs = new JobsService(fixture.vaults);
+    const service = new TestHomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      {
+        run: async (request) => {
+          await request.beforeModelTurn?.();
+          return makeRuntimeResult(request, undefined, {
+            answer: "This selection should stay in the current note.",
+            citationRefs: []
+          });
+        }
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        publish: vi.fn(),
+        readPublication: vi.fn(() => undefined),
+        publishLink: vi.fn(),
+        readLinkPublication: vi.fn(() => undefined),
+        publishCreateNote,
+        readCreateNotePublication: vi.fn(() => undefined)
+      }
+    );
+
+    const outcome = await service.submitTurn({
+      text: "Create an entity only if this selection warrants one.",
+      inputKind: "typed_text",
+      scope: { kind: "current_note", pageId: HOME_PAGE_ID },
+      locale: "en",
+      clientTurnId: "turn_20260801_readercreate13"
+    }, {
+      currentNoteSelection: selection,
+      currentNoteCreateNoteAction: "create_entity"
+    });
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({
+      state: "completed",
+      answer: { answer: "This selection should stay in the current note." }
+    });
+    expect(publishCreateNote).not.toHaveBeenCalled();
+    expect(fs.readFileSync(pagePath, "utf8")).toBe(originalMarkdown);
+    const completedJob = jobs.readAgentTurnJob(outcome.jobId!);
+    expect(completedJob).toMatchObject({ state: "completed" });
+    expect(completedJob?.operationIds ?? []).toEqual([]);
+    expect(completedJob?.proposalIds ?? []).toEqual([]);
   });
 
   it("does not stage a durable Reader review before final assistant publication succeeds", async () => {

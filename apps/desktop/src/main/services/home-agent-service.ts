@@ -2059,16 +2059,10 @@ export class HomeAgentService {
       assertCurrentBindingAndVault();
       stageReaderSelectionPublicationIntent(vaultPath, session.current, readerSelectionReplacement);
     }
-    if (readerSelectionLink && readerSelectionMutations) {
-      if (!readerSelectionLinkTarget) {
-        throw new PigeDomainError("rag.search_not_found", "The Reader link turn did not select a current target.");
-      }
+    if (readerSelectionLink && readerSelectionMutations && readerSelectionLinkTarget) {
       signal?.throwIfAborted();
       assertCurrentBindingAndVault();
       stageReaderSelectionLinkPublicationIntent(vaultPath, session.current, readerSelectionLinkTarget);
-    }
-    if (readerSelectionCreateNote && !readerSelectionCreateNoteProposal) {
-      throw new PigeDomainError("agent_runtime.tool_input_invalid", "The Reader create-note turn did not stage a review proposal.");
     }
     session.current = this.#jobs.readAgentTurnJob(jobId) ?? session.current;
     assertCurrentBindingAndVault();
