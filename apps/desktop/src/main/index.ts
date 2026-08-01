@@ -348,6 +348,7 @@ import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
 import { ClaimConfidenceService } from "./services/claim-confidence-service";
 import { EntityTypeService } from "./services/entity-type-service";
+import { EntityMentionService } from "./services/entity-mention-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { ConceptParentService } from "./services/concept-parent-service";
@@ -509,6 +510,7 @@ let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let claimConfidenceService: ClaimConfidenceService | undefined;
 let entityTypeService: EntityTypeService | undefined;
+let entityMentionService: EntityMentionService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
 let conceptParentService: ConceptParentService | undefined;
@@ -1948,6 +1950,16 @@ const getEntityTypeService = (): EntityTypeService => {
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowEntity: true })
   );
   return entityTypeService;
+};
+const getEntityMentionService = (): EntityMentionService => {
+  entityMentionService ??= new EntityMentionService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowTopic: true
+    }),
+    () => getVaultService().activeVaultPath()
+  );
+  return entityMentionService;
 };
 const getQuestionAnswerService = (): QuestionAnswerService => {
   questionAnswerService ??= new QuestionAnswerService(getNotesService(),
@@ -3535,6 +3547,7 @@ registerReaderIpc({
   getQuestionStateService,
   getClaimConfidenceService,
   getEntityTypeService,
+  getEntityMentionService,
   getQuestionAnswerService,
   getClaimContradictionService,
   getConceptParentService,
@@ -4063,6 +4076,13 @@ app.whenReady().then(async () => {
   entityTypeService = new EntityTypeService(
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowEntity: true })
+  );
+  entityMentionService = new EntityMentionService(
+    getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, {
+      allowClaim: true, allowQuestion: true, allowConcept: true, allowTopic: true
+    }),
+    () => getVaultService().activeVaultPath()
   );
   questionAnswerService = new QuestionAnswerService(getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowQuestion: true }),

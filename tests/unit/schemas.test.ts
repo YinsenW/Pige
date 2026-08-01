@@ -186,6 +186,10 @@ import {
   NoteRevealGeneratedRequestSchema,
   NoteRevealGeneratedResultSchema,
   NoteRenderResultSchema,
+  NoteSearchEntityMentionsRequestSchema,
+  NoteSearchEntityMentionsResultSchema,
+  NoteChangeEntityMentionRequestSchema,
+  NoteChangeEntityMentionResultSchema,
   NoteSearchConceptParentsRequestSchema,
   NoteSearchConceptParentsResultSchema,
   NoteChangeConceptParentRequestSchema,
@@ -5345,6 +5349,25 @@ describe("schemas", () => {
     expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
     expect(() => NoteChangeConceptParentRequestSchema.parse({ ...add, action: "remove" })).toThrow();
     expect(NoteChangeConceptParentResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
+  });
+
+  it("keeps Entity mention search and mutation renderer-safe and revision-fenced", () => {
+    const identity = { apiVersion: 1 as const, requestId: "entitymentionreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_entities", currentPageId: "page_20260801_entity001",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    const item = { pageId: "page_20260801_note0001", title: "Related note", pageType: "note" as const,
+      updatedAt: "2026-08-01T11:00:00.000Z" };
+    const search = { ...identity, query: "related" };
+    expect(NoteSearchEntityMentionsRequestSchema.parse(search)).toEqual(search);
+    expect(NoteSearchEntityMentionsResultSchema.parse({ ...search, status: "ready", candidates: [item] }))
+      .toMatchObject({ status: "ready", candidates: [item] });
+    const add = { ...identity, action: "add" as const, targetPageId: item.pageId,
+      expectedTargetUpdatedAt: item.updatedAt };
+    expect(NoteChangeEntityMentionRequestSchema.parse(add)).toEqual(add);
+    expect(() => NoteChangeEntityMentionRequestSchema.parse({ ...add, localPath: "/private/note.md" })).toThrow();
+    expect(() => NoteChangeEntityMentionRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
+    expect(NoteChangeEntityMentionResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("keeps topic hierarchy search and mutation renderer-safe and revision-fenced", () => {

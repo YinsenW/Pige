@@ -19,6 +19,7 @@ import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/serv
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
 import type { ClaimConfidenceService } from "../../apps/desktop/src/main/services/claim-confidence-service";
 import type { EntityTypeService } from "../../apps/desktop/src/main/services/entity-type-service";
+import type { EntityMentionService } from "../../apps/desktop/src/main/services/entity-mention-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
 import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
 import type { TopicParentService } from "../../apps/desktop/src/main/services/topic-parent-service";
@@ -60,7 +61,8 @@ function makeHarness(
   conceptParentService?: Partial<ConceptParentService>,
   claimConfidenceService?: Partial<ClaimConfidenceService>,
   entityTypeService?: Partial<EntityTypeService>,
-  topicParentService?: Partial<TopicParentService>
+  topicParentService?: Partial<TopicParentService>,
+  entityMentionService?: Partial<EntityMentionService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -116,6 +118,10 @@ function makeHarness(
     getEntityTypeService: () => {
       if (entityTypeService) return entityTypeService as EntityTypeService;
       throw new Error("Entity type service was not expected.");
+    },
+    getEntityMentionService: () => {
+      if (entityMentionService) return entityMentionService as EntityMentionService;
+      throw new Error("Entity mention service was not expected.");
     },
     getQuestionAnswerService: () => {
       if (questionAnswerService) return questionAnswerService as QuestionAnswerService;
@@ -201,6 +207,8 @@ describe("registerReaderIpc", () => {
       "notes.setQuestionState",
       "notes.setClaimConfidence",
       "notes.setEntityType",
+      "notes.searchEntityMentions",
+      "notes.changeEntityMention",
       "notes.searchQuestionAnswers",
       "notes.changeQuestionAnswer",
       "notes.searchClaimContradictions",
@@ -372,6 +380,38 @@ describe("registerReaderIpc", () => {
     expect(change).toHaveBeenCalledTimes(1);
     expect(changed).toMatchObject({ status: "committed", operationId: "op_20260801_questionanswer1" });
     expect(search).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ query: "Answer" }));
+    expect(change).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ action: "add" }));
+    expect(refreshed).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds Entity mention search and mutation to the tracked Reader owner", async () => {
+    const owner = { apiVersion: 1 as const, requestId: "entitymentionreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_entity", currentPageId: "page_20260801_entity001",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    const candidate = { pageId: "page_20260801_note0001", title: "Related note", pageType: "note" as const,
+      updatedAt: "2026-08-01T11:00:00.000Z" };
+    const search = vi.fn(() => ({ ...owner, query: "Related", status: "ready" as const, candidates: [candidate] }));
+    const render = { summary: { pageId: owner.currentPageId, title: "Entity", pageType: "entity" as const,
+      status: "active" as const, pagePath: "wiki/entity.md", createdAt: "2026-08-01T10:00:00.000Z",
+      updatedAt: "2026-08-01T12:00:00.000Z", sourceIds: [] }, html: "<h1>Entity</h1>", byteSize: 64,
+      renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      entityMentions: { canEdit: true, revision: `noteeditrev_${"b".repeat(64)}`, items: [candidate] } };
+    const change = vi.fn(async (_ownerId, request) => ({ ...request, status: "committed" as const,
+      operationId: "op_20260801_entitymention1", render }));
+    const refreshed = vi.fn();
+    const handlers = makeHarness({ render: vi.fn(async () => render) }, undefined, undefined, vi.fn(),
+      undefined, undefined, undefined, refreshed, undefined, vi.fn(), undefined, undefined, undefined,
+      vi.fn(), undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      undefined, undefined, { search, change });
+    const sender = makeSender(63);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: owner.currentPageId });
+    await expect(handlers.get("notes.searchEntityMentions")!({ sender } as IpcMainInvokeEvent,
+      { ...owner, query: "Related" })).resolves.toMatchObject({ status: "ready", candidates: [candidate] });
+    await expect(handlers.get("notes.changeEntityMention")!({ sender } as IpcMainInvokeEvent,
+      { ...owner, action: "add", targetPageId: candidate.pageId,
+        expectedTargetUpdatedAt: candidate.updatedAt })).resolves.toMatchObject({ status: "committed" });
+    expect(search).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ query: "Related" }));
     expect(change).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), expect.objectContaining({ action: "add" }));
     expect(refreshed).toHaveBeenCalledTimes(1);
   });

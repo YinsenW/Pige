@@ -1774,6 +1774,7 @@ export const NoteRestoreArchivedRequestIdSchema = z.string().regex(/^noterestore
 export const NoteQuestionStateRequestIdSchema = z.string().regex(/^notequestionreq_[a-z0-9]{16,64}$/);
 export const NoteClaimConfidenceRequestIdSchema = z.string().regex(/^noteclaimconfreq_[a-z0-9]{16,64}$/);
 export const NoteEntityTypeRequestIdSchema = z.string().regex(/^noteentitytypereq_[a-z0-9]{16,64}$/);
+export const NoteEntityMentionRequestIdSchema = z.string().regex(/^entitymentionreq_[a-z0-9]{16,64}$/);
 export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
 export const NoteClaimContradictionRequestIdSchema = z.string().regex(/^claimcontradictionreq_[a-z0-9]{16,64}$/);
 export const NoteConceptParentRequestIdSchema = z.string().regex(/^conceptparentreq_[a-z0-9]{16,64}$/);
@@ -1895,6 +1896,17 @@ export const NoteEntityTypeSummarySchema = z.object({
   canChange: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const NoteEntityMentionItemSchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  pageType: z.enum(["note", "claim", "question", "concept", "topic"]),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const NoteEntityMentionsSummarySchema = z.object({
+  items: z.array(NoteEntityMentionItemSchema).max(32),
+  canEdit: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteQuestionAnswerItemSchema = z.object({
   pageId: PageIdSchema,
   title: z.string().min(1).max(240),
@@ -1964,6 +1976,7 @@ export const NoteRenderResultSchema = z.object({
   questionState: NoteQuestionStateSummarySchema.optional(),
   claimConfidence: NoteClaimConfidenceSummarySchema.optional(),
   entityType: NoteEntityTypeSummarySchema.optional(),
+  entityMentions: NoteEntityMentionsSummarySchema.optional(),
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
   conceptParents: NoteConceptParentsSummarySchema.optional(),
@@ -2071,6 +2084,8 @@ export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
 export const NOTE_SET_CLAIM_CONFIDENCE_CHANNEL = "notes.setClaimConfidence" as const;
 export const NOTE_SET_ENTITY_TYPE_CHANNEL = "notes.setEntityType" as const;
+export const NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL = "notes.searchEntityMentions" as const;
+export const NOTE_CHANGE_ENTITY_MENTION_CHANNEL = "notes.changeEntityMention" as const;
 export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers" as const;
 export const NOTE_CHANGE_QUESTION_ANSWER_CHANNEL = "notes.changeQuestionAnswer" as const;
 export const NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContradictions" as const;
@@ -2199,6 +2214,43 @@ export const NoteSetEntityTypeResultSchema = z.discriminatedUnion("status", [
   }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteSetEntityTypeResultIdentitySchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+const NoteEntityMentionOwnerSchema = z.object({
+  apiVersion: z.literal(1),
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteSearchEntityMentionsRequestSchema = NoteEntityMentionOwnerSchema.extend({
+  requestId: NoteEntityMentionRequestIdSchema,
+  query: z.string().trim().min(1).max(160)
+}).strict();
+export const NoteSearchEntityMentionsResultSchema = z.discriminatedUnion("status", [
+  NoteSearchEntityMentionsRequestSchema.extend({
+    status: z.literal("ready"),
+    candidates: z.array(NoteEntityMentionItemSchema).max(20)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSearchEntityMentionsRequestSchema.extend({ status: z.literal(status) }).strict()
+  )
+]);
+export const NoteChangeEntityMentionRequestSchema = NoteEntityMentionOwnerSchema.extend({
+  requestId: NoteEntityMentionRequestIdSchema,
+  action: z.enum(["add", "remove"]),
+  targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+const NoteChangeEntityMentionResultIdentitySchema = NoteChangeEntityMentionRequestSchema;
+export const NoteChangeEntityMentionResultSchema = z.discriminatedUnion("status", [
+  NoteChangeEntityMentionResultIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict()
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteChangeEntityMentionResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
 const NoteQuestionAnswerOwnerSchema = z.object({
@@ -12500,6 +12552,8 @@ export type NoteClaimConfidence = z.infer<typeof NoteClaimConfidenceSchema>;
 export type NoteClaimConfidenceSummary = z.infer<typeof NoteClaimConfidenceSummarySchema>;
 export type NoteEntityType = z.infer<typeof NoteEntityTypeSchema>;
 export type NoteEntityTypeSummary = z.infer<typeof NoteEntityTypeSummarySchema>;
+export type NoteEntityMentionItem = z.infer<typeof NoteEntityMentionItemSchema>;
+export type NoteEntityMentionsSummary = z.infer<typeof NoteEntityMentionsSummarySchema>;
 export type NoteQuestionAnswerItem = z.infer<typeof NoteQuestionAnswerItemSchema>;
 export type NoteQuestionAnswersSummary = z.infer<typeof NoteQuestionAnswersSummarySchema>;
 export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionItemSchema>;
@@ -12543,6 +12597,10 @@ export type NoteSetClaimConfidenceResult = z.infer<typeof NoteSetClaimConfidence
 export type NoteEntityTypeRequestId = z.infer<typeof NoteEntityTypeRequestIdSchema>;
 export type NoteSetEntityTypeRequest = z.infer<typeof NoteSetEntityTypeRequestSchema>;
 export type NoteSetEntityTypeResult = z.infer<typeof NoteSetEntityTypeResultSchema>;
+export type NoteSearchEntityMentionsRequest = z.infer<typeof NoteSearchEntityMentionsRequestSchema>;
+export type NoteSearchEntityMentionsResult = z.infer<typeof NoteSearchEntityMentionsResultSchema>;
+export type NoteChangeEntityMentionRequest = z.infer<typeof NoteChangeEntityMentionRequestSchema>;
+export type NoteChangeEntityMentionResult = z.infer<typeof NoteChangeEntityMentionResultSchema>;
 export type NoteSearchQuestionAnswersRequest = z.infer<typeof NoteSearchQuestionAnswersRequestSchema>;
 export type NoteSearchQuestionAnswersResult = z.infer<typeof NoteSearchQuestionAnswersResultSchema>;
 export type NoteChangeQuestionAnswerRequest = z.infer<typeof NoteChangeQuestionAnswerRequestSchema>;
