@@ -598,6 +598,9 @@ Editing mode:
 - Cancel and Escape close an unchanged editor immediately. A changed draft instead opens one compact
   **Keep editing / Discard changes** confirmation; Keep editing or Escape restores the exact initiating
   control, while confirmed discard alone returns focus to the Reader opener.
+- A stale save opens sanitized, inert previews of the current disk version and the exact local draft.
+  Keep editing adopts only the new revision, Reload requires an explicit draft-discard confirmation,
+  and Save draft as new note preserves the current bytes while creating one reversible note.
 - Active notes, claims, questions, concepts, entities and topics expose the same bounded History and
   Archive actions. Historical preview is read-only; explicit revision restore or archived-page
   restore adopts Main's authoritative same-type Reader and remains Activity/Undo recoverable.

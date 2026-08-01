@@ -3735,15 +3735,13 @@ export function LibraryPanel(props: {
           labels={noteMarkdownEditorLabels(props.t)}
           returnFocusRef={editorOpenerRef}
           onSave={props.onSaveNoteEditor}
-          onReload={props.onReloadNoteEditor}
-          onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
+          onReload={props.onReloadNoteEditor} onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
           onCommitted={(result) => { if (result.render.summary.pageId !== props.selectedNote?.summary.pageId || result.render.summary.pageType !== props.selectedNote.summary.pageType) return;
             editorOpenSequence.current += 1;
             setEditorReady(null);
             onNoteEditorCommitted(result);
           }}
-          onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null);
-            props.onNoteImported?.(result.render); }}
+          onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null); props.onNoteImported?.(result.render); }}
           onCancel={() => setEditorReady(null)}
         />
       );
@@ -6760,16 +6758,14 @@ function HomeComposer(props: {
               labels={noteMarkdownEditorLabels(props.t)}
               returnFocusRef={editorOpenerRef}
               onSave={props.onSaveNoteEditor}
-              onReload={props.onReloadNoteEditor}
-              onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
+              onReload={props.onReloadNoteEditor} onSaveConflictAsNew={window.pige.notes.saveEditorConflictAsNew}
               onCommitted={(result) => { if (result.render.summary.pageId !== selectedNote.summary.pageId || result.render.summary.pageType !== selectedNote.summary.pageType) return;
                 editorOpenSequence.current += 1;
                 setEditorReady(null);
                 setSelectedNote(result.render);
                 void props.onHomeStateChanged();
               }}
-              onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null);
-                setSelectedNote(result.render); void props.onHomeStateChanged(); }}
+              onConflictSaved={(result) => { editorOpenSequence.current += 1; setEditorReady(null); setSelectedNote(result.render); void props.onHomeStateChanged(); }}
               onCancel={() => setEditorReady(null)}
             />
           ) : (
