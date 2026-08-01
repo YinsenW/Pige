@@ -125,8 +125,12 @@ Rules:
   not cross-file atomic. Raw prompts or provider responses are not persisted by default.
 - Invalid registered-tool input returns that tool's bounded typed failure. Pi decides its
   next action through the upstream loop. A missing terminal tool, answer shape, grounding
-  label or citation count never triggers Host repair or rejects assistant prose. A denied
-  authority/safety boundary remains authoritative and is never rewritten as permission.
+  label or citation count never triggers Host repair or another Provider turn. After Pi's
+  final, the Host locally validates explicit citation refs against exact evidence it owns:
+  unknown refs and Source/current-note/Dataset answers that omit every required exact ref
+  become a localized insufficient-evidence result. Ordinary general prose still passes
+  through unchanged. A denied authority/safety boundary remains authoritative and is never
+  rewritten as permission.
 - If `confidence` is `"low"` or warnings exist, apply only conservative supported content,
   mark a non-blocking quality warning, or abstain; confidence alone cannot demand approval.
 - Service-side quality guards add a warning and cap model-reported `high` confidence at `medium` when document extraction was range-limited or visible content still needs OCR. Prompt compliance alone is not the enforcement layer.
@@ -189,6 +193,12 @@ Upstream Pi's final assistant message completes Home. Prompt text may encourage 
 citations when evidence was used, but it must not require a Pige terminal tool, grounding
 label, citation count/shape, or Host repair follow-up. Tool inputs and durable mutations
 remain validated at their owning boundaries.
+
+After that final, a deterministic local projection checks citation syntax against the
+exact Host-owned citation set. Unknown refs never become durable citations, and an exact
+Source/current-note/Dataset evidence turn with no cited Host ref becomes the localized
+insufficient-evidence answer. This is not semantic rewriting or a repair loop: general
+answers remain Pi-owned and pass through unchanged.
 
 Safe `answer` replacement snapshots may update while Pi works, including after tool
 results. They are presentation-only and never grant authority. Pige does not request a

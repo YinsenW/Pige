@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-01T15:31:00Z",
+  "reviewedAt": "2026-08-01T15:47:28.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "E6.11 bounded same-Dataset relation-driven analytical query through Home.",
+    "scope": "E6.10 Home grounded-answer citation validation and honest insufficiency projection.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "f2a8b2a95b8358b44b006746026a4279ead2b0f1be05c5dd2b274f794bfe6319"
+    "reviewedSha256": "6415cb2b0814962e09e1e3ab9d7056b17f1b524bb0061dd19e6bf1c6e9393673"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-knowledge-outcome-review",
-      "task": "Review E3.07 durable outcome and recovery authority",
+      "reviewerId": "home-grounded-answer-review",
+      "task": "Review E6.10 grounded-answer citation authority",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Planning reviews the outcome and recovery contract; Development supplies separate schema, settlement, restart projection and UI evidence."
+      "independence": "Planning reviews the prompt, context, quality and trace contracts; Development supplies the separate deterministic validator and Home integration evidence."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-knowledge-outcome-review",
+      "reviewerId": "home-grounded-answer-review",
       "blockerCount": 0,
-      "summary": "Every terminal Agent knowledge path settles one strict reference-only outcome in the same durable Job transition."
+      "summary": "The final projection is local and bounded: exact Host refs project, unknown or required missing refs become localized insufficiency, and ordinary prose remains pass-through."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-knowledge-outcome-review",
+      "reviewerId": "home-grounded-answer-review",
       "blockerCount": 0,
-      "summary": "Job schema, contracts, renderer events, Activity History, Playbook and acceptance share one outcome vocabulary."
+      "summary": "Prompt, Context, Quality, Playbook, traceability, acceptance and decision owners share one post-final validation boundary without adding a repair turn."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-knowledge-outcome-review",
+      "reviewerId": "home-grounded-answer-review",
       "blockerCount": 0,
-      "summary": "E3.07 and PIGE-KNOW-006 are verified by executable created, updated, linked, skipped, failed and needs-attention evidence."
+      "summary": "E6.10 and PIGE-EVAL-004 remain partial while recording executable exact-ref, unknown-ref, required-missing-ref and ordinary-answer evidence."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-knowledge-outcome-review",
+      "reviewerId": "home-grounded-answer-review",
       "blockerCount": 0,
-      "summary": "A bounded outcome owner leaves mutation services unchanged while retry clears stale terminal facts before new work."
+      "summary": "A 60-line deterministic owner closes the evidence-authority gap without another Provider call, new renderer contract or semantic routing layer."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-knowledge-outcome-review",
+      "reviewerId": "home-grounded-answer-review",
       "blockerCount": 0,
-      "summary": "Existing Job and Playbook owners already define the behavior, so no new design document or duplicate status surface is introduced."
+      "summary": "Existing Prompt, Context, Quality, Playbook and trace owners hold the decision; no new design document or duplicate status surface is introduced."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-knowledge-outcome.test.ts tests/unit/jobs-service.test.ts",
+      "command": "npx vitest run tests/unit/home-grounded-answer-validator.test.ts tests/unit/home-agent-service.test.ts",
       "status": "passed",
-      "evidence": "All six outcomes retain bounded fields, citations, writes, Operations, Undo and recovery references across exact Job settlement."
+      "evidence": "Exact Host refs, unknown refs, grounded missing refs, source turns that skip inspect and ordinary general answers are covered at the validator and Home integration boundaries."
     },
     {
       "command": "npm run typecheck && npm run build && npm run verify:architecture-reset",
       "status": "passed",
-      "evidence": "The outcome candidate compiles and builds while Jobs remains below its frozen architecture budget and the new owner is inventory-bound."
+      "evidence": "The candidate compiles and builds while Home remains within its frozen architecture budget and the new 60-line validation owner is inventory-bound."
     },
     {
       "command": "npm run verify:docs && npm run verify:decisions",
       "status": "passed",
-      "evidence": "Job recovery, Playbook, acceptance projection and semantic-claim lock remain mutually consistent."
+      "evidence": "Prompt, Context, Quality, Playbook, decision, acceptance projection and semantic-claim lock remain mutually consistent."
     }
   ],
   "coordination": {
-    "taskId": "agent-knowledge-outcome-bind-20260801",
-    "taskTitle": "Bind E3.07 deterministic Agent outcomes",
+    "taskId": "home-grounded-answer-bind-20260801",
+    "taskTitle": "Bind E6.10 grounded-answer citation validation",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Legacy Job records remain readable; new source-bound terminal facts are reference-only and existing mutation authorities remain unchanged.",
-    "acknowledgement": "Planning promotes E3.07 and PIGE-KNOW-006 from direct settlement, restart projection and Activity History evidence."
+    "compatibility": "No public schema, prompt round-trip or durable format changes; ordinary general answers remain pass-through and evidence-bound failures use the existing insufficient_evidence projection.",
+    "acknowledgement": "Planning records exact Home citation validation evidence while E6.10 and PIGE-EVAL-004 remain partial for broader quality, breadth, scale and platform proof."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
