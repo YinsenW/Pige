@@ -5165,6 +5165,38 @@ References:
 - `docs/KNOWLEDGE_MODEL_AND_LINKING.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260802-Runtime-Fault-Diagnostics
+
+Status: Accepted
+Date: 2026-08-02
+
+Decision:
+
+Main-process unhandled faults and unexpected renderer or child-process termination enter the
+existing bounded local diagnostics event store through one observer that accepts only fixed codes
+and allowlisted reason, process-type and exit-code facts.
+
+Rationale:
+
+Crash recovery could detect an abnormal prior session, but current-session Electron and Node
+runtime failures had no safe event hook. Persisting thrown messages, stacks, renderer URLs or
+child-process names would disclose private content and credentials precisely when failure handling
+is least trustworthy.
+
+Consequences:
+
+- The observer ignores clean exits and never changes Node or Electron termination semantics.
+- Exception values, stacks, URLs, process names and service names never reach diagnostics.
+- Diagnostics persistence failure is swallowed so it cannot replace or recursively amplify the fault.
+- The observer detaches before quit and reuses existing rotation, retention, redaction, preview,
+  clear and local-only export ownership.
+
+References:
+
+- `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`
+- `PRIVACY.md`
+- `docs/TECH_ARCHITECTURE.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation
