@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentConversationHistory } from "../../apps/desktop/src/main/services/agent-conversation-history";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 import { ConversationTrashService } from "../../apps/desktop/src/main/services/conversation-trash-service";
@@ -123,6 +123,60 @@ describe("ConversationTrashService", () => {
     })).toMatchObject({ status: "stale" });
     expect(fs.readFileSync(occupied.conversationPath, "utf8")).toBe("Unrelated replacement.\n");
     expect(occupied.service.list({ apiVersion: 1, activeVaultId: occupied.vault.vaultId })).toMatchObject({ status: "ready", conversations: [{ conversationId: occupied.conversationId }] });
+  });
+
+  it("permanently deletes only exact trashed bytes after durable tombstone and irreversible operation", () => {
+    const fixture = createFixture();
+    const summary = new AgentConversationHistory()
+      .list({ activeVaultId: fixture.vault.vaultId, vaultPath: fixture.vaultPath }).conversations[0]!;
+    const trashed = fixture.service.trash({
+      apiVersion: 1,
+      requestId: "conversationtrashreq_purgefixtureabcd",
+      activeVaultId: fixture.vault.vaultId,
+      conversationId: fixture.conversationId,
+      expectedRevision: summary.revision!
+    });
+    if (trashed.status !== "committed") throw new Error("Fixture conversation was not trashed.");
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "conversationpurgereq_abcdefghijklmnop",
+      activeVaultId: fixture.vault.vaultId,
+      trashEntryId: trashed.trashEntryId,
+      conversationId: fixture.conversationId,
+      expectedRevision: summary.revision!,
+      confirmation: "delete_permanently" as const
+    };
+    const trashPayload = findTrashPayload(fixture.vaultPath);
+    const originalUnlink = fs.unlinkSync.bind(fs);
+    const unlink = vi.spyOn(fs, "unlinkSync").mockImplementation((filePath) => {
+      if (String(filePath).endsWith(".purge-quarantine")) throw new Error("simulated interruption");
+      return originalUnlink(filePath);
+    });
+    expect(fixture.service.purge(request)).toMatchObject({ status: "failed" });
+    unlink.mockRestore();
+    expect(fs.existsSync(`${trashPayload}.purge-quarantine`)).toBe(true);
+    const operationsBeforeRecovery = readOperations(fixture.vaultPath);
+    expect(operationsBeforeRecovery.map(({ kind }) => kind)).toContain("purge_conversation");
+
+    const restarted = new ConversationTrashService(fixture.vaults, new AgentConversationHistory());
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(fs.existsSync(trashPayload)).toBe(false);
+    expect(fs.existsSync(`${trashPayload}.purge-quarantine`)).toBe(false);
+    expect(restarted.list({ apiVersion: 1, activeVaultId: fixture.vault.vaultId }))
+      .toMatchObject({ status: "ready", conversations: [] });
+    const committed = restarted.purge(request);
+    expect(committed).toMatchObject({ status: "committed", operationId: expect.stringMatching(/^op_20260731_/u) });
+    expect(restarted.restore({
+      apiVersion: 1,
+      requestId: "conversationtrashreq_restorepurgedabcd",
+      activeVaultId: fixture.vault.vaultId,
+      trashEntryId: trashed.trashEntryId,
+      conversationId: fixture.conversationId,
+      expectedRevision: summary.revision!
+    })).toMatchObject({ status: "not_found" });
+    const durable = JSON.stringify(readOperations(fixture.vaultPath));
+    expect(durable).not.toContain("Provider response must remain only in JSONL");
+    expect(durable).not.toContain(fixture.vaultPath);
   });
 });
 

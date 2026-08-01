@@ -12,6 +12,7 @@ import type {
   AgentConversationHistoryListRequest,
   AgentSaveAnswerAsNoteRequest,
   ConversationRestoreRequest,
+  ConversationPurgeRequest,
   ConversationTrashListRequest,
   ConversationTrashRequest,
   AgentSubmitTurnRequest,
@@ -78,6 +79,8 @@ import {
   AgentSaveAnswerAsNoteResultSchema,
   ConversationRestoreRequestSchema,
   ConversationRestoreResultSchema,
+  ConversationPurgeRequestSchema,
+  ConversationPurgeResultSchema,
   ConversationTrashListRequestSchema,
   ConversationTrashListResultSchema,
   ConversationTrashRequestSchema,
@@ -3050,6 +3053,10 @@ ipcMain.handle("agent.conversationTrash", (_event, request: ConversationTrashLis
 ipcMain.handle("agent.restoreConversation", (_event, request: ConversationRestoreRequest) => {
   const parsedRequest = ConversationRestoreRequestSchema.parse(request);
   return ConversationRestoreResultSchema.parse(getConversationTrashService().restore(parsedRequest));
+});
+ipcMain.handle("agent.purgeConversation", (_event, request: ConversationPurgeRequest) => {
+  const parsedRequest = ConversationPurgeRequestSchema.parse(request);
+  return ConversationPurgeResultSchema.parse(getConversationTrashService().purge(parsedRequest));
 });
 registerConversationHistoryIpc({
   ipcMain,

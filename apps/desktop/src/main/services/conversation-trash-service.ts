@@ -2,6 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
+  ConversationPurgeRequest,
+  ConversationPurgeResult,
   ConversationRestoreRequest,
   ConversationRestoreResult,
   ConversationTrashListRequest,
@@ -42,6 +44,29 @@ interface ConversationTrashReceipt {
   readonly safePreview: string;
   readonly updatedAt: string;
   readonly trashedAt: string;
+}
+
+interface ConversationPurgeRecordBase {
+  readonly schemaVersion: 1;
+  readonly requestId: string;
+  readonly requestDigest: string;
+  readonly activeVaultId: string;
+  readonly trashEntryId: string;
+  readonly conversationId: string;
+  readonly expectedRevision: string;
+  readonly trashOperationId: string;
+  readonly purgeOperationId: string;
+  readonly createdAt: string;
+}
+
+interface ConversationPurgeIntent extends ConversationPurgeRecordBase {
+  readonly kind: "conversation_purge_intent";
+}
+
+interface ConversationPurgeTombstone extends ConversationPurgeRecordBase {
+  readonly kind: "conversation_purge_tombstone";
+  readonly trashPath: string;
+  readonly contentHash: string;
 }
 
 interface ConversationTrashDependencies {
@@ -147,6 +172,7 @@ export class ConversationTrashService {
         return { ...identity, status: "not_found" };
       }
       if (receipt.revision !== request.expectedRevision) return { ...identity, status: "stale" };
+      if (hasPurgeAuthority(scope, receipt)) return { ...identity, status: "stale" };
       const trashOperation = readOperation(scope, receipt.operationId);
       if (!trashOperation || !matchesTrashOperation(receipt, trashOperation)) return { ...identity, status: "failed" };
       const restoreId = restoreOperationId(receipt.operationId);
@@ -169,13 +195,70 @@ export class ConversationTrashService {
     }
   }
 
+  purge(request: ConversationPurgeRequest): ConversationPurgeResult {
+    const identity = { ...request };
+    const scope = this.#scope(request.activeVaultId);
+    if (!scope) return { ...identity, status: "failed" };
+    try {
+      const tombstone = readPurgeTombstoneByRequest(scope, request.requestId);
+      if (tombstone) {
+        if (!matchesPurgeRequest(tombstone, request)) return { ...identity, status: "stale" };
+        this.#completePurge(scope, tombstone);
+        return { ...identity, status: "committed", operationId: tombstone.purgeOperationId };
+      }
+      const existing = readPurgeIntentByRequest(scope, request.requestId);
+      if (existing) {
+        if (!matchesPurgeRequest(existing, request)) return { ...identity, status: "stale" };
+        this.#completePurge(scope, existing);
+        return { ...identity, status: "committed", operationId: existing.purgeOperationId };
+      }
+      const receipt = readAllReceipts(scope).find((candidate) => candidate.trashEntryId === request.trashEntryId);
+      const status = validatePurgeReceipt(scope, receipt, request);
+      if (status !== "ready") return { ...identity, status };
+      const createdAt = this.#now().toISOString();
+      const intent: ConversationPurgeIntent = {
+        schemaVersion: 1,
+        kind: "conversation_purge_intent",
+        requestId: request.requestId,
+        requestDigest: purgeRequestDigest(request),
+        activeVaultId: request.activeVaultId,
+        trashEntryId: request.trashEntryId,
+        conversationId: request.conversationId,
+        expectedRevision: request.expectedRevision,
+        trashOperationId: receipt!.operationId,
+        purgeOperationId: createPurgeOperationId(createdAt, request, this.#randomId()),
+        createdAt
+      };
+      writePurgeRecordExclusive(scope, purgeIntentPath(scope, request.requestId), intent);
+      this.#completePurge(scope, intent);
+      return { ...identity, status: "committed", operationId: intent.purgeOperationId };
+    } catch (caught) {
+      if (caught instanceof PigeDomainError && caught.code === "conversation_trash.not_found") {
+        return { ...identity, status: "not_found" };
+      }
+      if (caught instanceof PigeDomainError && caught.code === "conversation_trash.stale") {
+        return { ...identity, status: "stale" };
+      }
+      return { ...identity, status: "failed" };
+    }
+  }
+
   recoverIncompleteOperations(): { readonly recovered: number; readonly failed: number } {
     const scope = this.#vaults.activeVaultPath();
     if (!scope || !this.#vaults.current()) return { recovered: 0, failed: 0 };
     let recovered = 0;
     let failed = 0;
+    for (const intent of readAllPurgeIntents(scope)) {
+      try {
+        this.#completePurge(scope, intent);
+        recovered += 1;
+      } catch {
+        failed += 1;
+      }
+    }
     for (const receipt of readAllReceipts(scope)) {
       try {
+        if (hasPurgeAuthority(scope, receipt)) continue;
         const restore = readOperation(scope, restoreOperationId(receipt.operationId));
         if (restore) {
           const trash = readOperation(scope, receipt.operationId);
@@ -190,6 +273,33 @@ export class ConversationTrashService {
       }
     }
     return { recovered, failed };
+  }
+
+  #completePurge(vaultPath: string, record: ConversationPurgeIntent | ConversationPurgeTombstone): void {
+    let tombstone = readPurgeTombstoneByRequest(vaultPath, record.requestId);
+    const receipt = readAllReceipts(vaultPath).find((candidate) => candidate.trashEntryId === record.trashEntryId);
+    if (!tombstone) {
+      if (record.kind !== "conversation_purge_intent" || !receipt ||
+        validatePurgeReceiptAgainstRecord(vaultPath, receipt, record) !== "ready") throw staleError();
+      tombstone = {
+        ...record,
+        kind: "conversation_purge_tombstone",
+        trashPath: receipt.trashPath,
+        contentHash: receipt.contentHash
+      };
+      writePurgeRecordExclusive(vaultPath, purgeTombstonePath(vaultPath, record.requestId), tombstone);
+    } else if (!matchesPurgeRecord(tombstone, record)) {
+      throw staleError();
+    }
+    const operation = readOperation(vaultPath, tombstone.purgeOperationId);
+    if (operation) {
+      if (!matchesPurgeOperation(tombstone, operation)) throw staleError();
+    } else {
+      commitOperationExclusive(vaultPath, createPurgeOperation(tombstone));
+    }
+    removePurgePayload(vaultPath, tombstone);
+    if (receipt) removeTrashReceipt(vaultPath, receipt);
+    removeExactPurgeRecord(vaultPath, purgeIntentPath(vaultPath, record.requestId), record);
   }
 
   #completeTrash(vaultPath: string, receipt: ConversationTrashReceipt): void {
@@ -356,6 +466,104 @@ function matchesRestoreOperation(receipt: ConversationTrashReceipt, trash: Opera
     restore.after.checksum === receipt.contentHash && restore.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === trash.id);
 }
 
+function validatePurgeReceipt(
+  vaultPath: string,
+  receipt: ConversationTrashReceipt | undefined,
+  request: ConversationPurgeRequest
+): "ready" | "stale" | "not_found" {
+  if (!receipt) return "not_found";
+  if (receipt.activeVaultId !== request.activeVaultId || receipt.trashEntryId !== request.trashEntryId ||
+    receipt.conversationId !== request.conversationId || receipt.revision !== request.expectedRevision) return "stale";
+  return validateCurrentPurgeTarget(vaultPath, receipt);
+}
+
+function validatePurgeReceiptAgainstRecord(
+  vaultPath: string,
+  receipt: ConversationTrashReceipt,
+  record: ConversationPurgeRecordBase
+): "ready" | "stale" | "not_found" {
+  if (receipt.activeVaultId !== record.activeVaultId || receipt.trashEntryId !== record.trashEntryId ||
+    receipt.conversationId !== record.conversationId || receipt.revision !== record.expectedRevision ||
+    receipt.operationId !== record.trashOperationId) return "stale";
+  return validateCurrentPurgeTarget(vaultPath, receipt);
+}
+
+function validateCurrentPurgeTarget(vaultPath: string, receipt: ConversationTrashReceipt): "ready" | "stale" | "not_found" {
+  const trashOperation = readOperation(vaultPath, receipt.operationId);
+  if (!trashOperation || !matchesTrashOperation(receipt, trashOperation)) return "stale";
+  if (readOperation(vaultPath, restoreOperationId(receipt.operationId))) return "stale";
+  if (pathExists(resolveVaultRelative(vaultPath, receipt.originalPath))) return "stale";
+  const trashPath = resolveVaultRelative(vaultPath, receipt.trashPath);
+  if (!pathExists(trashPath)) return "not_found";
+  return payloadMatches(vaultPath, receipt.trashPath, receipt.contentHash, 1) ? "ready" : "stale";
+}
+
+function createPurgeOperation(tombstone: ConversationPurgeTombstone): OperationRecord {
+  return OperationRecordSchema.parse({
+    id: tombstone.purgeOperationId,
+    schemaVersion: 1,
+    createdAt: tombstone.createdAt,
+    actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+    kind: "purge_conversation",
+    targetRefs: [{ kind: "conversation", id: tombstone.conversationId }],
+    sourceRefs: [{ kind: "operation", id: tombstone.trashOperationId }],
+    before: {
+      kind: "conversation",
+      id: tombstone.conversationId,
+      path: tombstone.trashPath,
+      checksum: tombstone.contentHash
+    },
+    summary: "Permanently deleted one conversation from recoverable trash.",
+    reversible: "no",
+    warnings: ["The trashed conversation cannot be restored."]
+  });
+}
+
+function matchesPurgeOperation(tombstone: ConversationPurgeTombstone, operation: OperationRecord): boolean {
+  const target = operation.targetRefs[0];
+  return operation.id === tombstone.purgeOperationId && operation.kind === "purge_conversation" &&
+    operation.actor.kind === "user" && operation.reversible === "no" && operation.targetRefs.length === 1 &&
+    target?.kind === "conversation" && target.id === tombstone.conversationId &&
+    operation.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === tombstone.trashOperationId) &&
+    operation.before?.kind === "conversation" && operation.before.id === tombstone.conversationId &&
+    operation.before.path === tombstone.trashPath && operation.before.checksum === tombstone.contentHash &&
+    operation.after === undefined;
+}
+
+function removePurgePayload(vaultPath: string, tombstone: ConversationPurgeTombstone): void {
+  const trashPath = resolveVaultRelative(vaultPath, tombstone.trashPath);
+  const quarantinePath = `${trashPath}.purge-quarantine`;
+  if (pathExists(trashPath)) {
+    if (pathExists(quarantinePath)) throw staleError();
+    assertHash(readVerifiedFile(vaultPath, trashPath, 1).bytes, tombstone.contentHash);
+    fs.renameSync(trashPath, quarantinePath);
+    flushDirectoryWhereSupported(path.dirname(trashPath));
+  }
+  if (pathExists(quarantinePath)) {
+    assertHash(readVerifiedFile(vaultPath, quarantinePath, 1).bytes, tombstone.contentHash);
+    fs.unlinkSync(quarantinePath);
+    flushDirectoryWhereSupported(path.dirname(quarantinePath));
+  }
+  const directory = path.dirname(trashPath);
+  try {
+    if (fs.readdirSync(directory).length === 0) {
+      fs.rmdirSync(directory);
+      flushDirectoryWhereSupported(path.dirname(directory));
+    }
+  } catch (caught) {
+    if (!isErrno(caught, "ENOENT") && !isErrno(caught, "ENOTEMPTY")) throw caught;
+  }
+}
+
+function removeTrashReceipt(vaultPath: string, receipt: ConversationTrashReceipt): void {
+  const filePath = receiptPath(vaultPath, receipt.requestId);
+  const current = readReceipt(filePath);
+  if (!current) return;
+  if (JSON.stringify(current) !== JSON.stringify(receipt)) throw staleError();
+  fs.unlinkSync(filePath);
+  flushDirectoryWhereSupported(path.dirname(filePath));
+}
+
 function assertTrashed(vaultPath: string, receipt: ConversationTrashReceipt): void {
   if (pathExists(resolveVaultRelative(vaultPath, receipt.originalPath))) throw staleError();
   if (!payloadMatches(vaultPath, receipt.trashPath, receipt.contentHash, 1)) throw staleError();
@@ -417,6 +625,99 @@ function readReceipt(filePath: string): ConversationTrashReceipt | undefined {
   return receipt;
 }
 
+function writePurgeRecordExclusive(vaultPath: string, filePath: string, value: unknown): void {
+  ensureSafeDirectory(vaultPath, path.dirname(filePath));
+  writeJsonExclusive(filePath, value);
+}
+
+function readAllPurgeIntents(vaultPath: string): ConversationPurgeIntent[] {
+  return readPurgeRecords(vaultPath, purgeIntentRoot(vaultPath), /^intent_[a-f0-9]{32}\.json$/u, parsePurgeIntent);
+}
+
+function readAllPurgeTombstones(vaultPath: string): ConversationPurgeTombstone[] {
+  return readPurgeRecords(vaultPath, purgeTombstoneRoot(vaultPath), /^tombstone_[a-f0-9]{32}\.json$/u, parsePurgeTombstone);
+}
+
+function readPurgeRecords<T>(
+  vaultPath: string,
+  root: string,
+  pattern: RegExp,
+  parse: (bytes: Buffer) => T
+): T[] {
+  if (!pathExists(root)) return [];
+  assertSafeExistingDirectory(vaultPath, root);
+  const entries = fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && pattern.test(entry.name));
+  if (entries.length > MAX_RECEIPTS) throw conflictError();
+  return entries.map((entry) => parse(readBoundedFile(path.join(root, entry.name), MAX_RECEIPT_BYTES)));
+}
+
+function readPurgeIntentByRequest(vaultPath: string, requestId: string): ConversationPurgeIntent | undefined {
+  const filePath = purgeIntentPath(vaultPath, requestId);
+  return pathExists(filePath) ? parsePurgeIntent(readBoundedFile(filePath, MAX_RECEIPT_BYTES)) : undefined;
+}
+
+function readPurgeTombstoneByRequest(vaultPath: string, requestId: string): ConversationPurgeTombstone | undefined {
+  const filePath = purgeTombstonePath(vaultPath, requestId);
+  return pathExists(filePath) ? parsePurgeTombstone(readBoundedFile(filePath, MAX_RECEIPT_BYTES)) : undefined;
+}
+
+function parsePurgeIntent(bytes: Buffer): ConversationPurgeIntent {
+  const value = JSON.parse(bytes.toString("utf8")) as Partial<ConversationPurgeIntent>;
+  const keys = "activeVaultId,conversationId,createdAt,expectedRevision,kind,purgeOperationId,requestDigest,requestId,schemaVersion,trashEntryId,trashOperationId";
+  if (Object.keys(value).sort().join(",") !== keys || value.schemaVersion !== 1 || value.kind !== "conversation_purge_intent" ||
+    typeof value.requestId !== "string" || !/^conversationpurgereq_[a-z0-9]{16,64}$/u.test(value.requestId) ||
+    typeof value.requestDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value.requestDigest) ||
+    typeof value.activeVaultId !== "string" || typeof value.trashEntryId !== "string" ||
+    !/^conversationtrash_[a-f0-9]{32}$/u.test(value.trashEntryId) || typeof value.conversationId !== "string" ||
+    typeof value.expectedRevision !== "string" || !/^conversationrev_[a-f0-9]{64}$/u.test(value.expectedRevision) ||
+    typeof value.trashOperationId !== "string" || !OPERATION_ID.test(value.trashOperationId) ||
+    typeof value.purgeOperationId !== "string" || !OPERATION_ID.test(value.purgeOperationId) ||
+    typeof value.createdAt !== "string" || !Number.isFinite(Date.parse(value.createdAt))) throw staleError();
+  return value as ConversationPurgeIntent;
+}
+
+function parsePurgeTombstone(bytes: Buffer): ConversationPurgeTombstone {
+  const value = JSON.parse(bytes.toString("utf8")) as Partial<ConversationPurgeTombstone>;
+  const keys = "activeVaultId,contentHash,conversationId,createdAt,expectedRevision,kind,purgeOperationId,requestDigest,requestId,schemaVersion,trashEntryId,trashOperationId,trashPath";
+  if (Object.keys(value).sort().join(",") !== keys || value.kind !== "conversation_purge_tombstone" ||
+    typeof value.trashPath !== "string" || typeof value.contentHash !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(value.contentHash)) throw staleError();
+  const intent = parsePurgeIntent(Buffer.from(JSON.stringify({
+    schemaVersion: value.schemaVersion,
+    kind: "conversation_purge_intent",
+    requestId: value.requestId,
+    requestDigest: value.requestDigest,
+    activeVaultId: value.activeVaultId,
+    trashEntryId: value.trashEntryId,
+    conversationId: value.conversationId,
+    expectedRevision: value.expectedRevision,
+    trashOperationId: value.trashOperationId,
+    purgeOperationId: value.purgeOperationId,
+    createdAt: value.createdAt
+  })));
+  const expectedPath = [".pige", "trash", "conversations", intent.trashEntryId, `${intent.conversationId}.jsonl`].join("/");
+  if (value.trashPath !== expectedPath) throw staleError();
+  return { ...intent, kind: "conversation_purge_tombstone", trashPath: value.trashPath, contentHash: value.contentHash };
+}
+
+function hasPurgeAuthority(vaultPath: string, receipt: ConversationTrashReceipt): boolean {
+  return [...readAllPurgeIntents(vaultPath), ...readAllPurgeTombstones(vaultPath)]
+    .some((record) => record.trashEntryId === receipt.trashEntryId && record.trashOperationId === receipt.operationId);
+}
+
+function removeExactPurgeRecord(
+  vaultPath: string,
+  filePath: string,
+  record: ConversationPurgeIntent | ConversationPurgeTombstone
+): void {
+  if (!pathExists(filePath)) return;
+  const current = parsePurgeIntent(readBoundedFile(filePath, MAX_RECEIPT_BYTES));
+  if (!matchesPurgeRecord(current, record)) throw staleError();
+  fs.unlinkSync(filePath);
+  flushDirectoryWhereSupported(path.dirname(filePath));
+}
+
 function commitOperationExclusive(vaultPath: string, operation: OperationRecord): OperationRecord {
   const filePath = operationPath(vaultPath, operation.id);
   ensureSafeDirectory(vaultPath, path.dirname(filePath));
@@ -447,6 +748,26 @@ function operationPath(vaultPath: string, operationId: string): string {
 function receiptPath(vaultPath: string, requestId: string): string {
   const digest = createHash("sha256").update(requestId, "utf8").digest("hex").slice(0, 32);
   return path.join(vaultPath, ".pige", "trash", "conversation-receipts", `receipt_${digest}.json`);
+}
+
+function purgeIntentRoot(vaultPath: string): string {
+  return path.join(vaultPath, ".pige", "trash", "conversation-purges", "intents");
+}
+
+function purgeTombstoneRoot(vaultPath: string): string {
+  return path.join(vaultPath, ".pige", "trash", "conversation-purges", "tombstones");
+}
+
+function purgeIntentPath(vaultPath: string, requestId: string): string {
+  return path.join(purgeIntentRoot(vaultPath), `intent_${purgeRecordKey(requestId)}.json`);
+}
+
+function purgeTombstonePath(vaultPath: string, requestId: string): string {
+  return path.join(purgeTombstoneRoot(vaultPath), `tombstone_${purgeRecordKey(requestId)}.json`);
+}
+
+function purgeRecordKey(requestId: string): string {
+  return createHash("sha256").update(requestId, "utf8").digest("hex").slice(0, 32);
 }
 
 function writeJsonExclusive(filePath: string, value: unknown): void {
@@ -563,6 +884,17 @@ function restoreOperationId(operationId: string): string {
   return `op_${dateKey}_${createHash("sha256").update(`pige.conversation.restore.v1\0${operationId}`).digest("hex").slice(0, 16)}`;
 }
 
+function createPurgeOperationId(createdAt: string, request: ConversationPurgeRequest, randomId: string): string {
+  const dateKey = createdAt.slice(0, 10).replaceAll("-", "");
+  const digest = createHash("sha256")
+    .update("pige.conversation.purge.v1\0")
+    .update(purgeRequestDigest(request))
+    .update(randomId)
+    .digest("hex")
+    .slice(0, 16);
+  return `op_${dateKey}_${digest}`;
+}
+
 function requestDigest(request: ConversationTrashRequest): string {
   return hashBytes(Buffer.from([request.requestId, request.activeVaultId, request.conversationId, request.expectedRevision].join("\0"), "utf8"));
 }
@@ -570,6 +902,31 @@ function requestDigest(request: ConversationTrashRequest): string {
 function matchesRequest(receipt: ConversationTrashReceipt, request: ConversationTrashRequest): boolean {
   return receipt.requestDigest === requestDigest(request) && receipt.activeVaultId === request.activeVaultId &&
     receipt.conversationId === request.conversationId && receipt.revision === request.expectedRevision;
+}
+
+function purgeRequestDigest(request: ConversationPurgeRequest): string {
+  return hashBytes(Buffer.from([
+    request.requestId,
+    request.activeVaultId,
+    request.trashEntryId,
+    request.conversationId,
+    request.expectedRevision,
+    request.confirmation
+  ].join("\0"), "utf8"));
+}
+
+function matchesPurgeRequest(record: ConversationPurgeRecordBase, request: ConversationPurgeRequest): boolean {
+  return record.requestDigest === purgeRequestDigest(request) && record.activeVaultId === request.activeVaultId &&
+    record.trashEntryId === request.trashEntryId && record.conversationId === request.conversationId &&
+    record.expectedRevision === request.expectedRevision;
+}
+
+function matchesPurgeRecord(left: ConversationPurgeRecordBase, right: ConversationPurgeRecordBase): boolean {
+  return left.requestId === right.requestId && left.requestDigest === right.requestDigest &&
+    left.activeVaultId === right.activeVaultId && left.trashEntryId === right.trashEntryId &&
+    left.conversationId === right.conversationId && left.expectedRevision === right.expectedRevision &&
+    left.trashOperationId === right.trashOperationId && left.purgeOperationId === right.purgeOperationId &&
+    left.createdAt === right.createdAt;
 }
 
 function assertHash(bytes: Uint8Array, expected: string): void { if (hashBytes(bytes) !== expected) throw staleError(); }

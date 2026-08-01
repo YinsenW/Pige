@@ -3,7 +3,7 @@
   "baseline": "d2e2a76b14bb6b12859c439cadb144ccd81995b8",
   "root": "apps/desktop/src/main/services",
   "baselineFileCount": 313,
-  "baselineLines": 131735,
+  "baselineLines": 132092,
   "flagLegend": {
     "j": "job_transition",
     "a": "agent_control",
@@ -53,7 +53,7 @@
       ["current-note-conflict-save-service.ts", 419, "ard"],
       ["current-note-replace-service.ts", 907, "ard"],
       ["conversation-context-compaction-service.ts", 134, "rd"],
-      ["conversation-trash-service.ts", 583, "rd"],
+      ["conversation-trash-service.ts", 940, "rd"],
       ["claim-contradiction-service.ts", 189, "rdf"],
       ["entity-mention-service.ts", 174, "rdf"],
       ["entity-merge-service.ts", 541, "rd"],

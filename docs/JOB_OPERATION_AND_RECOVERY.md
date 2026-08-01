@@ -618,7 +618,7 @@ Executable operation-kind vocabulary (machine checked):
 - `create_artifact`, `trash_artifact`, `restore_artifact`.
 - `create_dataset_revision`, `rename_dataset`, `trash_dataset`, `restore_dataset`, `update_collection_cell`, `add_collection_row`, `add_collection_column`, `update_collection_formula`, `add_collection_relation`, `update_collection_relation`, `add_collection_lookup`, `update_collection_lookup`, `add_collection_rollup`, `update_collection_rollup`, `update_collection_relation_cell`, `rename_collection_column`, `trash_collection_row`, `trash_collection_column`, `create_collection_view`, `update_collection_view`, `rename_collection_view`, `trash_collection_view`, `restore_collection_view`.
 - `create_page`, `update_page`, `rename_page`, `archive_page`, `trash_page`, `restore_page`, `purge_page`.
-- `trash_conversation`, `restore_conversation`.
+- `trash_conversation`, `restore_conversation`, `purge_conversation`.
 - `update_index`.
 - `create_memory`, `update_memory`, `trash_memory`, `restore_memory`.
 - `install_skill`, `disable_skill`, `uninstall_skill`.
@@ -638,7 +638,7 @@ Lifecycle coverage:
 | Durable artifact | create/trash/restore artifact |
 | Dataset revision | create dataset revision with manifest/schema/payload/source hashes |
 | Markdown page | create/update/rename/archive/trash/restore/purge page |
-| Conversation | trash/restore exact JSONL without replay |
+| Conversation | trash/restore/purge exact JSONL without replay |
 | Memory | create/update/trash/restore memory through the memory lifecycle |
 | Skills/packages | install/disable/uninstall Skill or package |
 | Settings/policy | change a sensitive setting with exact effect evidence |
@@ -661,6 +661,9 @@ Rules:
 - Confirmed knowledge-page purge binds the exact trash receipt/revision and persists its intent,
   tombstone and irreversible `purge_page` Operation before payload removal. Restart finishes the
   same deletion once; it never infers a new target or deletes a mismatched payload.
+- Confirmed conversation purge uses the same ordering for one exact recoverable JSONL: purge intent,
+  sync-ready tombstone and irreversible `purge_conversation` Operation are durable before payload and
+  receipt removal. Restart finishes only that receipt-bound deletion and never replays a Provider turn.
 - Rollback is best effort and must check current file hashes before applying.
 
 ## 13. Crash Recovery

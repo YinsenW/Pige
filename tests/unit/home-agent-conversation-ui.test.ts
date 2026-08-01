@@ -17,6 +17,8 @@ import type {
   AgentConversationTimeline,
   ConversationRestoreRequest,
   ConversationRestoreResult,
+  ConversationPurgeRequest,
+  ConversationPurgeResult,
   ConversationTrashListRequest,
   ConversationTrashListResult,
   ConversationTrashRequest,
@@ -124,6 +126,7 @@ import {
   terminalTurnOwnsComposerSubmission
 } from "../../apps/desktop/src/renderer/src/components/HomeConversationTurnState";
 import { HomeJobAction } from "../../apps/desktop/src/renderer/src/components/HomeJobAction";
+import { ConversationHistoryPanel } from "../../apps/desktop/src/renderer/src/components/ConversationHistoryPanel";
 
 const globalKeys = [
   "window",
@@ -4457,6 +4460,70 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("requires a second explicit confirmation before permanently deleting a trashed conversation", async () => {
+    const dom = createDom();
+    const revision = `conversationrev_${"c".repeat(64)}` as const;
+    const requests: ConversationPurgeRequest[] = [];
+    let present = true;
+    Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+      agent: {
+        conversationTrash: async (request: ConversationTrashListRequest): Promise<ConversationTrashListResult> => ({
+          ...request,
+          status: "ready",
+          conversations: present ? [{
+            trashEntryId: `conversationtrash_${"d".repeat(32)}`,
+            conversationId: "conv_20260712_homefixture",
+            safePreview: "Permanently remove this conversation",
+            updatedAt: "2026-07-12T08:00:01.000Z",
+            trashedAt: "2026-07-31T12:00:00.000Z",
+            revision
+          }] : []
+        }),
+        purgeConversation: async (request: ConversationPurgeRequest): Promise<ConversationPurgeResult> => {
+          requests.push(request);
+          present = false;
+          return { ...request, status: "committed", operationId: "op_20260731_conversationpurge" };
+        }
+      }
+    } });
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(ConversationHistoryPanel, {
+        activeVaultId: "vault_home_conversation",
+        locale: "en",
+        selectedConversationId: null,
+        onOpenConversation: async () => false,
+        onConversationTrashed: () => undefined,
+        t: (key: string) => (enMessages as Record<string, string>)[key] ?? key
+      }));
+      await settle(dom);
+    });
+    await clickButton(dom, container, enMessages["conversation.trash"]);
+    await waitFor(dom, () => container.textContent?.includes("Permanently remove this conversation") === true);
+    await clickButton(dom, container, enMessages["conversation.deletePermanently"]);
+    expect(requests).toHaveLength(0);
+    expect(container.textContent).toContain(enMessages["conversation.purgeConfirmPrompt"]);
+    const purgeConfirm = buttons(container, enMessages["conversation.purgeConfirm"]).at(-1);
+    if (!purgeConfirm) throw new Error("Permanent conversation delete confirmation was unavailable.");
+    await act(async () => { purgeConfirm.click(); await settle(dom); });
+    await waitFor(dom, () => container.textContent?.includes(enMessages["conversation.lifecycle.purged"]) === true);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_home_conversation",
+      trashEntryId: `conversationtrash_${"d".repeat(32)}`,
+      conversationId: "conv_20260712_homefixture",
+      expectedRevision: revision,
+      confirmation: "delete_permanently"
+    });
+    expect(JSON.stringify(requests[0])).not.toContain("Permanently remove");
+    expect(container.textContent).not.toContain("Permanently remove this conversation");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("renames the selected conversation immediately and retains the draft across a stale fence", async () => {
     const dom = createDom();
     const current = paginatedHomeTimeline();
@@ -6663,6 +6730,7 @@ interface ConversationHarness {
   readonly conversationTrashRequests: ConversationTrashRequest[];
   readonly conversationTrashListRequests: ConversationTrashListRequest[];
   readonly conversationRestoreRequests: ConversationRestoreRequest[];
+  readonly conversationPurgeRequests: ConversationPurgeRequest[];
   readonly conversationTitleRequests: AgentConversationSetTitleRequest[];
   readonly saveAnswerRequests: AgentSaveAnswerAsNoteRequest[];
   readonly collectionCitationRequests: CollectionOpenCitationRequest[];
@@ -6775,6 +6843,7 @@ interface ConversationHarness {
   trashConversation: (request: ConversationTrashRequest) => Promise<ConversationTrashResult>;
   loadConversationTrash: (request: ConversationTrashListRequest) => Promise<ConversationTrashListResult>;
   restoreConversation: (request: ConversationRestoreRequest) => Promise<ConversationRestoreResult>;
+  purgeConversation: (request: ConversationPurgeRequest) => Promise<ConversationPurgeResult>;
   setConversationTitle: (request: AgentConversationSetTitleRequest) => Promise<AgentConversationSetTitleResult>;
   saveAnswerAsNote: (request: AgentSaveAnswerAsNoteRequest) => Promise<AgentSaveAnswerAsNoteResult>;
   openCollectionCitation: (request: CollectionOpenCitationRequest) => Promise<CollectionOpenCitationResult>;
@@ -6802,6 +6871,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     conversationTrashRequests: [],
     conversationTrashListRequests: [],
     conversationRestoreRequests: [],
+    conversationPurgeRequests: [],
     conversationTitleRequests: [],
     saveAnswerRequests: [],
     collectionCitationRequests: [],
@@ -6990,6 +7060,7 @@ function createHarness(timeline: AgentConversationTimeline | undefined): Convers
     trashConversation: async (request) => ({ ...request, status: "failed" }),
     loadConversationTrash: async (request) => ({ ...request, status: "ready", conversations: [] }),
     restoreConversation: async (request) => ({ ...request, status: "failed" }),
+    purgeConversation: async (request) => ({ ...request, status: "failed" }),
     setConversationTitle: async (request) => ({
       apiVersion: 1,
       requestId: request.requestId,
@@ -7294,6 +7365,7 @@ function makePigeApi(harness: ConversationHarness): object {
       trashConversation: (request: ConversationTrashRequest) => harness.trashConversation(request),
       conversationTrash: (request: ConversationTrashListRequest) => harness.loadConversationTrash(request),
       restoreConversation: (request: ConversationRestoreRequest) => harness.restoreConversation(request),
+      purgeConversation: (request: ConversationPurgeRequest) => harness.purgeConversation(request),
       setConversationTitle: (request: AgentConversationSetTitleRequest) => harness.setConversationTitle(request),
       saveAnswerAsNote: (request: AgentSaveAnswerAsNoteRequest) => {
         harness.saveAnswerRequests.push(request);
