@@ -2973,8 +2973,8 @@ export class JobsService {
       "ocr",
       source.kind === "pdf_file"
         ? "Rendering verified PDF page targets and recognizing them with local OCR."
-        : source.kind === "pptx_file"
-          ? "Materializing verified PPTX media targets and recognizing them with local OCR."
+        : source.kind === "pptx_file" || source.kind === "docx_file"
+          ? `Materializing verified ${source.kind === "docx_file" ? "DOCX" : "PPTX"} media targets and recognizing them with local OCR.`
           : "Recognizing image text with the local platform OCR helper."
     );
     const runningJob = execution.job;
@@ -6117,7 +6117,7 @@ function supportsAgentSelectedDataset(sourceKind: SourceKind): boolean {
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceKind): boolean {
-  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "pptx_file";
+  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "docx_file" || sourceKind === "pptx_file";
 }
 
 function parserDependencyCode(sourceKind: SourceKind): string {
@@ -6128,11 +6128,13 @@ function parserDependencyCode(sourceKind: SourceKind): string {
 
 function ocrDependencyCode(sourceKind: SourceKind): string {
   if (sourceKind === "image_file") return "image_ocr_unavailable";
+  if (sourceKind === "docx_file") return "docx_ocr_unavailable";
   return sourceKind === "pptx_file" ? "pptx_ocr_unavailable" : "pdf_ocr_unavailable";
 }
 
 function ocrNoReadableEvidenceCode(sourceKind: SourceKind): string {
   if (sourceKind === "image_file") return "image_ocr_no_readable_evidence";
+  if (sourceKind === "docx_file") return "docx_ocr_no_readable_evidence";
   return sourceKind === "pptx_file" ? "pptx_ocr_no_readable_evidence" : "pdf_ocr_no_readable_evidence";
 }
 
@@ -6229,7 +6231,8 @@ function isOcrCapabilityUnavailableError(caught: unknown): boolean {
   return caught instanceof PigeDomainError && (
     /^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) ||
     caught.code === "parser.pdf_page_renderer.unavailable" ||
-    caught.code === "ocr.pptx.target_not_ready"
+    caught.code === "ocr.pptx.target_not_ready" ||
+    caught.code === "ocr.docx.target_not_ready"
   );
 }
 

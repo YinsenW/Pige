@@ -105,7 +105,7 @@ export class LegacyAgentIngestJobExecutor {
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceKind): boolean {
-  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "pptx_file";
+  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "docx_file" || sourceKind === "pptx_file";
 }
 
 function shouldWaitForRunnableOcr(ocr: OcrPort | undefined, sourceRecord: SourceRecord): boolean {

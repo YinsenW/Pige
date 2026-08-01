@@ -23,13 +23,14 @@ import {
   type OfficeMediaTarget
 } from "../../apps/desktop/src/main/services/office-parser-types";
 import {
+  OfficeMediaOcrArtifactService,
   PptxMediaOcrArtifactService,
   type PptxMediaOcrItemResult
 } from "../../apps/desktop/src/main/services/pptx-media-ocr-artifact-service";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { JobRecordSchema, SourceRecordSchema, type JobRecord, type SourceRecord } from "@pige/schemas";
-import { createTestPptx, TINY_PNG } from "./helpers/office-fixture";
+import { createTestDocx, createTestPptx, TINY_PNG } from "./helpers/office-fixture";
 
 const tempRoots: string[] = [];
 
@@ -38,6 +39,61 @@ afterEach(() => {
 });
 
 describe("PPTX media OCR artifact service", () => {
+  it("runs a verified DOCX embedded image through the shared bounded OCR lifecycle", async () => {
+    const setup = await makeParsedDocx();
+    const artifactService = new OfficeMediaOcrArtifactService();
+    const target = await artifactService.resolveTarget(setup.vaultPath, setup.sourceRecord);
+    expect(target.targets).toEqual([{
+      image: 1,
+      parentLocator: "image:1",
+      mediaIndex: 1,
+      locator: "image:1",
+      packagePath: "word/media/image1.png",
+      size: TINY_PNG.length,
+      extension: ".png"
+    }]);
+
+    const service = new OcrService(
+      new InspectingOcrAdapter(),
+      undefined,
+      undefined,
+      undefined,
+      new StaticOfficeMediaMaterializer(),
+      artifactService
+    );
+    expect(service.canOcr("docx_file")).toBe(true);
+    expect(service.inspectSource(setup.sourceRecord)).toMatchObject({ ready: true });
+    const result = await service.ocrSource(
+      setup.vaultPath,
+      setup.sourceRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob
+    );
+    const finalRecord = readSourceRecord(setup.sourceRecordPath);
+    const textArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_docx_media_ocr_text")));
+    const metadataArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_docx_media_ocr_metadata")));
+    const text = fs.readFileSync(path.join(setup.vaultPath, textArtifact.path), "utf8");
+    const sidecar = fs.readFileSync(path.join(setup.vaultPath, metadataArtifact.path), "utf8");
+
+    expect(result).toMatchObject({ created: true, agentTextReady: true });
+    expect(text).toBe("--- Document Image 1 ---\nPrivate media OCR evidence\n");
+    expect(sidecar).toContain('"kind": "docx_media_ocr_metadata"');
+    expect(sidecar).toContain('"locator": "image:1/ocr:block:1"');
+    expect(sidecar).not.toContain("Private media OCR evidence");
+    expect(finalRecord.metadata).toMatchObject({
+      ocrStatus: "completed",
+      ocrProcessedMediaCount: 1,
+      needsOcr: false,
+      agentTextReady: true
+    });
+    expect(await artifactService.readExisting(
+      setup.vaultPath,
+      finalRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob
+    )).toMatchObject({ created: false, agentTextReady: true });
+  });
+
   it("persists locator-correct media OCR once and reuses body-free metadata", async () => {
     const setup = await makeParsedPptx();
     const service = new PptxMediaOcrArtifactService();
@@ -331,6 +387,20 @@ async function makeParsedPptx(): Promise<{
   readonly sourceRecord: SourceRecord;
   readonly ocrJob: JobRecord;
 }> {
+  return makeParsedOffice("pptx");
+}
+
+async function makeParsedDocx(): Promise<Awaited<ReturnType<typeof makeParsedPptx>>> {
+  return makeParsedOffice("docx");
+}
+
+async function makeParsedOffice(format: "docx" | "pptx"): Promise<{
+  readonly vaultPath: string;
+  readonly originalPath: string;
+  readonly sourceRecordPath: string;
+  readonly sourceRecord: SourceRecord;
+  readonly ocrJob: JobRecord;
+}> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-pptx-media-ocr-"));
   tempRoots.push(root);
   createVaultOnDisk({
@@ -347,7 +417,7 @@ async function makeParsedPptx(): Promise<{
   const parser = new OfficeParserService({
     isAvailable: () => true,
     extract: (filePath, sourceKind) => extractOfficeText({
-      requestId: "pptx-media-ocr-test",
+      requestId: `${format}-media-ocr-test`,
       filePath,
       sourceKind,
       limits: {
@@ -362,8 +432,8 @@ async function makeParsedPptx(): Promise<{
     })
   });
   const jobs = new JobsService(vaultPort);
-  const originalPath = path.join(root, "roadmap.pptx");
-  fs.writeFileSync(originalPath, await createTestPptx());
+  const originalPath = path.join(root, `roadmap.${format}`);
+  fs.writeFileSync(originalPath, format === "docx" ? await createTestDocx() : await createTestPptx());
   const captured = await capture.submitFiles({
     filePaths: [originalPath],
     inputKind: "file_drop",
@@ -378,13 +448,13 @@ async function makeParsedPptx(): Promise<{
     readSourceRecord(sourceRecordPath),
     sourceRecordPath,
     JobRecordSchema.parse({
-      id: `job_20260710_${"pptxparse".padEnd(12, "0")}`,
+      id: `job_20260710_${`${format}parse`.padEnd(12, "0")}`,
       class: "parse",
       state: "running",
       sourceId,
       createdAt: "2026-07-10T08:00:30.000Z",
       updatedAt: "2026-07-10T08:00:30.000Z",
-      message: "Explicit persisted PPTX parser substrate test"
+      message: `Explicit persisted ${format.toUpperCase()} parser substrate test`
     })
   );
   return {
@@ -393,13 +463,13 @@ async function makeParsedPptx(): Promise<{
     sourceRecordPath,
     sourceRecord: readSourceRecord(sourceRecordPath),
     ocrJob: JobRecordSchema.parse({
-      id: `job_20260710_${"pptxocr".padEnd(12, "0")}`,
+      id: `job_20260710_${`${format}ocr`.padEnd(12, "0")}`,
       class: "ocr",
       state: "running",
       sourceId,
       createdAt: "2026-07-10T08:01:00.000Z",
       updatedAt: "2026-07-10T08:01:00.000Z",
-      message: "PPTX media OCR test"
+      message: `${format.toUpperCase()} media OCR test`
     })
   };
 }

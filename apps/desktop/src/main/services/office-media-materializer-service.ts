@@ -23,7 +23,8 @@ export interface OfficeMediaMaterializerPort {
   materialize(
     filePath: string,
     targets: readonly OfficeMediaTarget[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    sourceKind?: "docx_file" | "pptx_file"
   ): Promise<OfficeMediaMaterializerResult>;
 }
 
@@ -57,14 +58,15 @@ export class OfficeMediaMaterializerWorkerAdapter implements OfficeMediaMaterial
   materialize(
     filePath: string,
     targets: readonly OfficeMediaTarget[],
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    sourceKind: "docx_file" | "pptx_file" = "pptx_file"
   ): Promise<OfficeMediaMaterializerResult> {
     if (signal?.aborted) return Promise.reject(new JobCancellationError());
     const request: OfficeMediaMaterializerRequest = {
-      operation: "materialize_pptx_media",
+      operation: sourceKind === "docx_file" ? "materialize_docx_media" : "materialize_pptx_media",
       requestId: randomUUID(),
       filePath,
-      sourceKind: "pptx_file",
+      sourceKind,
       targets,
       limits: {
         maxBytes: OFFICE_PARSER_MAX_BYTES,

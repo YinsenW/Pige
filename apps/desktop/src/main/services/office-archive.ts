@@ -102,7 +102,8 @@ export async function readOpenXmlPackage(
 export async function readOpenXmlMedia(
   filePath: string,
   targets: readonly OfficeMediaTarget[],
-  limits: OfficeMediaMaterializerLimits
+  limits: OfficeMediaMaterializerLimits,
+  format: "docx" | "pptx" = "pptx"
 ): Promise<readonly MaterializedOfficeMedia[]> {
   const requested = new Map<string, OfficeMediaTarget[]>();
   for (const target of targets) {
@@ -137,7 +138,7 @@ export async function readOpenXmlMedia(
       if (entryCount > limits.maxEntries) {
         throw new PigeDomainError("ocr.pptx.too_many_entries", "The PPTX package exceeds the media materializer entry limit.");
       }
-      validateArchiveEntry(entry, "pptx", { maxUncompressedBytes: limits.maxUncompressedBytes });
+      validateArchiveEntry(entry, format, { maxUncompressedBytes: limits.maxUncompressedBytes });
       if (entryNames.has(entry.fileName)) {
         throw new PigeDomainError("ocr.pptx.duplicate_entry", "The PPTX package contains duplicate parts.");
       }

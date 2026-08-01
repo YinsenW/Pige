@@ -118,7 +118,8 @@ export interface OfficeParserWorkerFailure {
 export type OfficeParserWorkerResponse = OfficeParserWorkerSuccess | OfficeParserWorkerFailure;
 
 export interface OfficeMediaTarget extends OfficeUnitMediaReference {
-  readonly slide: number;
+  readonly slide?: number;
+  readonly image?: number;
   readonly parentLocator: string;
 }
 
@@ -132,10 +133,10 @@ export interface OfficeMediaMaterializerLimits {
 }
 
 export interface OfficeMediaMaterializerRequest {
-  readonly operation: "materialize_pptx_media";
+  readonly operation: "materialize_pptx_media" | "materialize_docx_media";
   readonly requestId: string;
   readonly filePath: string;
-  readonly sourceKind: "pptx_file";
+  readonly sourceKind: "pptx_file" | "docx_file";
   readonly targets: readonly OfficeMediaTarget[];
   readonly limits: OfficeMediaMaterializerLimits;
 }
@@ -151,14 +152,14 @@ export interface OfficeMediaMaterializerResult {
 }
 
 export interface OfficeMediaWorkerSuccess {
-  readonly operation: "materialize_pptx_media";
+  readonly operation: "materialize_pptx_media" | "materialize_docx_media";
   readonly requestId: string;
   readonly ok: true;
   readonly result: OfficeMediaMaterializerResult;
 }
 
 export interface OfficeMediaWorkerFailure {
-  readonly operation: "materialize_pptx_media";
+  readonly operation: "materialize_pptx_media" | "materialize_docx_media";
   readonly requestId: string;
   readonly ok: false;
   readonly error: { readonly code: string; readonly message: string };

@@ -16,12 +16,12 @@ import {
   OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS,
   OFFICE_MEDIA_MATERIALIZER_MAX_TOTAL_BYTES,
   OFFICE_MEDIA_OCR_EXTENSIONS,
-  OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
-  OFFICE_PARSER_ENGINE,
-  OFFICE_PARSER_ID,
-  OFFICE_PARSER_VERSION,
   type OfficeMediaTarget
 } from "./office-parser-types";
+import {
+  verifiedOfficeMediaParserTargets,
+  type OfficeMediaOcrFormat
+} from "./office-media-ocr-target";
 import { isSupportedNativeOcrIdentity, type NativeOcrResult } from "./ocr-types";
 import { SourcePageService } from "./source-page-service";
 import { tryVerifyReadableSourceFileAsync, verifyReadableSourceFileAsync } from "./source-file-access";
@@ -63,6 +63,12 @@ export interface PptxMediaOcrItemResult {
   readonly result: NativeOcrResult;
 }
 
+export type { OfficeMediaOcrFormat } from "./office-media-ocr-target";
+export type OfficeMediaOcrTargetReady = PptxMediaOcrTargetReady;
+export type OfficeMediaOcrTargetInspection = PptxMediaOcrTargetInspection;
+export type VerifiedOfficeMediaOcrTarget = VerifiedPptxMediaOcrTarget;
+export type OfficeMediaOcrItemResult = PptxMediaOcrItemResult;
+
 interface FileIntegrity {
   readonly checksum: string;
   readonly size: number;
@@ -87,20 +93,28 @@ const MAX_PPTX_MEDIA_OCR_SIDECAR_BYTES = 32 * 1024 * 1024;
 const MAX_SOURCE_RECORD_BYTES = 16 * 1024 * 1024;
 
 export function inspectPptxMediaOcrTarget(sourceRecord: SourceRecord): PptxMediaOcrTargetInspection {
-  const metadata = sourceRecord.metadata;
-  if (
-    sourceRecord.kind !== "pptx_file" ||
-    metadata.parserFormat !== "pptx" ||
-    (metadata.parserStatus !== "parsed_needs_ocr" && metadata.parserStatus !== "parsed")
-  ) {
+  if (sourceRecord.kind !== "pptx_file") {
     return { ready: false, message: "PPTX media OCR is waiting for verified local presentation metadata." };
   }
+  return inspectOfficeMediaOcrTarget(sourceRecord);
+}
+
+export function inspectOfficeMediaOcrTarget(sourceRecord: SourceRecord): OfficeMediaOcrTargetInspection {
+  const format = officeFormat(sourceRecord);
+  const label = format.toUpperCase();
+  const metadata = sourceRecord.metadata;
+  if (
+    metadata.parserFormat !== format ||
+    (metadata.parserStatus !== "parsed_needs_ocr" && metadata.parserStatus !== "parsed")
+  ) {
+    return { ready: false, message: `${label} media OCR is waiting for verified local document metadata.` };
+  }
   if (metadata.parserTruncated === true) {
-    return { ready: false, message: "PPTX media OCR is waiting because the parser did not inspect the complete presentation." };
+    return { ready: false, message: `${label} media OCR is waiting because the parser did not inspect the complete document.` };
   }
   const unitCount = positiveInteger(metadata.unitCount);
   const processedUnitCount = positiveInteger(metadata.processedUnitCount);
-  const candidateLocators = slideLocatorArray(metadata.ocrCandidateLocators);
+  const candidateLocators = candidateLocatorArray(metadata.ocrCandidateLocators, format);
   const candidateMediaCount = positiveInteger(metadata.ocrCandidateMediaCount);
   const materializableMediaCount = positiveInteger(metadata.ocrMaterializableMediaCount);
   const materializableMediaBytes = positiveInteger(metadata.ocrMaterializableMediaBytes);
@@ -113,19 +127,19 @@ export function inspectPptxMediaOcrTarget(sourceRecord: SourceRecord): PptxMedia
     materializableMediaBytes === undefined ||
     materializableMediaCount > candidateMediaCount
   ) {
-    return { ready: false, message: "PPTX media OCR is waiting for a complete locator-correct media target set from the parser." };
+    return { ready: false, message: `${label} media OCR is waiting for a complete locator-correct media target set from the parser.` };
   }
   if (materializableMediaCount > OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS) {
     return {
       ready: false,
-      message: `This presentation has ${materializableMediaCount} OCR-ready media targets; bounded local OCR currently supports at most ${OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS} per durable job.`
+      message: `This document has ${materializableMediaCount} OCR-ready media targets; bounded local OCR currently supports at most ${OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS} per durable job.`
     };
   }
   if (materializableMediaBytes > OFFICE_MEDIA_MATERIALIZER_MAX_TOTAL_BYTES) {
-    return { ready: false, message: "Selected PPTX media exceeds the bounded local OCR materializer limit." };
+    return { ready: false, message: `Selected ${label} media exceeds the bounded local OCR materializer limit.` };
   }
   if (materializableMediaCount === 0) {
-    return { ready: false, message: "PPTX image references are preserved, but none use a currently supported bounded raster format." };
+    return { ready: false, message: `${label} image references are preserved, but none use a currently supported bounded raster format.` };
   }
   const skippedMediaCount = candidateMediaCount - materializableMediaCount;
   return {
@@ -133,12 +147,12 @@ export function inspectPptxMediaOcrTarget(sourceRecord: SourceRecord): PptxMedia
     materializableMediaCount,
     skippedMediaCount,
     message: skippedMediaCount > 0
-      ? `${materializableMediaCount} PPTX media target(s) are ready for local OCR; ${skippedMediaCount} unsupported target(s) will remain visible as warnings.`
-      : `${materializableMediaCount} PPTX media target(s) are ready for bounded local OCR.`
+      ? `${materializableMediaCount} ${label} media target(s) are ready for local OCR; ${skippedMediaCount} unsupported target(s) will remain visible as warnings.`
+      : `${materializableMediaCount} ${label} media target(s) are ready for bounded local OCR.`
   };
 }
 
-export class PptxMediaOcrArtifactService {
+export class OfficeMediaOcrArtifactService {
   readonly #sourcePages: SourcePageService;
 
   constructor(sourcePages = new SourcePageService()) {
@@ -147,25 +161,33 @@ export class PptxMediaOcrArtifactService {
 
   async resolveTarget(vaultPath: string, sourceRecord: SourceRecord): Promise<VerifiedPptxMediaOcrTarget> {
     const parsedSource = SourceRecordSchema.parse(sourceRecord);
-    const inspection = inspectPptxMediaOcrTarget(parsedSource);
+    const format = officeFormat(parsedSource);
+    const inspection = inspectOfficeMediaOcrTarget(parsedSource);
     if (!inspection.ready) {
-      throw new PigeDomainError("ocr.pptx.target_not_ready", inspection.message);
+      throw new PigeDomainError(`ocr.${format}.target_not_ready`, inspection.message);
     }
     const sourceFile = await verifyReadableSourceFileAsync(vaultPath, parsedSource);
     const parserMetadataArtifact = parsedSource.artifacts.find((artifact) =>
-      artifact.id === pptxParserMetadataArtifactId(parsedSource.id) && artifact.kind === "metadata"
+      artifact.id === parserMetadataArtifactId(parsedSource.id, format) && artifact.kind === "metadata"
     );
     if (!parserMetadataArtifact?.checksum || parserMetadataArtifact.size === undefined) {
-      throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "PPTX media OCR has no verified parser metadata Artifact.");
+      throw new PigeDomainError(`ocr.${format}.parser_metadata_invalid`, `${format.toUpperCase()} media OCR has no verified parser metadata Artifact.`);
     }
     const sidecar = await readVerifiedJsonArtifact(
       vaultPath,
       parserMetadataArtifact,
       MAX_PPTX_MEDIA_OCR_SIDECAR_BYTES
     );
-    const targets = verifiedParserTargets(sidecar, parsedSource, sourceFile.checksum, inspection);
+    const targets = verifiedOfficeMediaParserTargets(
+      sidecar,
+      parsedSource,
+      sourceFile.checksum,
+      inspection,
+      format,
+      parserMetadataArtifactId(parsedSource.id, format)
+    );
     const nativeTextArtifact = parsedSource.artifacts.find((artifact) =>
-      artifact.id === pptxParserTextArtifactId(parsedSource.id) && artifact.kind === "extracted_text"
+      artifact.id === parserTextArtifactId(parsedSource.id, format) && artifact.kind === "extracted_text"
     );
     const nativeTextReady = sidecar?.agentTextReady === true;
     if (typeof sidecar?.extractedTextChecksum === "string") {
@@ -174,10 +196,10 @@ export class PptxMediaOcrArtifactService {
         nativeTextArtifact.checksum !== sidecar.extractedTextChecksum ||
         !await artifactFileMatches(vaultPath, nativeTextArtifact)
       ) {
-        throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "PPTX native text failed integrity verification before OCR enrichment.");
+        throw new PigeDomainError(`ocr.${format}.parser_metadata_invalid`, `${format.toUpperCase()} native text failed integrity verification before OCR enrichment.`);
       }
     } else if (nativeTextArtifact || nativeTextReady) {
-      throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "PPTX native-text readiness has no matching verified text Artifact.");
+      throw new PigeDomainError(`ocr.${format}.parser_metadata_invalid`, `${format.toUpperCase()} native-text readiness has no matching verified text Artifact.`);
     }
     return {
       ...inspection,
@@ -195,26 +217,27 @@ export class PptxMediaOcrArtifactService {
     job: JobRecord,
     onPublicationStart?: () => void
   ): Promise<OcrSourceResult | undefined> {
-    if (sourceRecord.kind !== "pptx_file") return undefined;
+    if (sourceRecord.kind !== "pptx_file" && sourceRecord.kind !== "docx_file") return undefined;
+    const format = officeFormat(sourceRecord);
     const target = await this.resolveTarget(vaultPath, sourceRecord);
     const sourceFile = await tryVerifyReadableSourceFileAsync(vaultPath, sourceRecord);
     if (!sourceFile) return undefined;
     const metadataArtifact = sourceRecord.artifacts.find((artifact) =>
-      artifact.id === pptxMediaOcrMetadataArtifactId(sourceRecord.id) && artifact.kind === "metadata"
+      artifact.id === mediaOcrMetadataArtifactId(sourceRecord.id, format) && artifact.kind === "metadata"
     );
     if (!metadataArtifact || !await artifactFileMatches(vaultPath, metadataArtifact)) return undefined;
     const textArtifact = sourceRecord.artifacts.find((artifact) =>
-      artifact.id === pptxMediaOcrTextArtifactId(sourceRecord.id) && artifact.kind === "ocr"
+      artifact.id === mediaOcrTextArtifactId(sourceRecord.id, format) && artifact.kind === "ocr"
     );
     if (textArtifact && !await artifactFileMatches(vaultPath, textArtifact)) return undefined;
     const sidecar = await readVerifiedJsonArtifact(vaultPath, metadataArtifact, MAX_PPTX_MEDIA_OCR_SIDECAR_BYTES);
-    if (!isReusableOcrSidecar(sidecar, sourceRecord, sourceFile.checksum, textArtifact, target)) return undefined;
+    if (!isReusableOcrSidecar(sidecar, sourceRecord, sourceFile.checksum, textArtifact, target, format)) return undefined;
 
     onPublicationStart?.();
     const page = this.#sourcePages.refreshForSource(vaultPath, sourceRecord, sourceRecordPath, job.id);
     const storedWarnings = stringArray(sidecar.warnings);
     const warnings = page.conflict ? [...storedWarnings, sourcePageConflictWarning()] : storedWarnings;
-    const operation = writePptxOcrOperation(vaultPath, sourceRecord, job, warnings);
+    const operation = writeOfficeMediaOcrOperation(vaultPath, sourceRecord, job, warnings, format);
     const confidence = normalizedNumber(sidecar.confidence);
     return {
       sourceId: sourceRecord.id,
@@ -238,48 +261,49 @@ export class PptxMediaOcrArtifactService {
     itemResults: readonly PptxMediaOcrItemResult[]
   ): Promise<OcrSourceResult> {
     const requestedSource = SourceRecordSchema.parse(sourceRecord);
-    if (requestedSource.kind !== "pptx_file") {
-      throw new PigeDomainError("ocr.pptx.source_unsupported", "PPTX media OCR accepts preserved presentations only.");
+    if (requestedSource.kind !== "pptx_file" && requestedSource.kind !== "docx_file") {
+      throw new PigeDomainError("ocr.office.source_unsupported", "Office media OCR accepts preserved DOCX or PPTX sources only.");
     }
-    const currentSource = await readCurrentSourceRecord(vaultPath, sourceRecordPath, requestedSource.id);
+    const format = officeFormat(requestedSource);
+    const currentSource = await readCurrentSourceRecord(vaultPath, sourceRecordPath, requestedSource.id, format);
     const parsedSource = currentSource.sourceRecord;
     const target = await this.resolveTarget(vaultPath, parsedSource);
-    const results = validateItemResults(target, itemResults);
+    const results = validateItemResults(target, itemResults, format);
     const firstResult = results[0]?.result;
     if (!firstResult) {
-      throw new PigeDomainError("ocr.pptx.result_invalid", "PPTX media OCR returned no attributable result.");
+      throw new PigeDomainError(`ocr.${format}.result_invalid`, `${format.toUpperCase()} media OCR returned no attributable result.`);
     }
     const sourceFile = await verifyReadableSourceFileAsync(vaultPath, parsedSource);
-    const assembled = assemblePptxMediaOcr(target, results);
+    const assembled = assembleOfficeMediaOcr(target, results, format);
     const dateBucket = sourceDateBucket(parsedSource.id);
     const textArtifactPath = assembled.text.length > 0
-      ? ["artifacts", "ocr", ...dateBucket, `${parsedSource.id}.pptx-media.txt`].join("/")
+      ? ["artifacts", "ocr", ...dateBucket, `${parsedSource.id}.${format}-media.txt`].join("/")
       : undefined;
     if (textArtifactPath) {
       await writeTextAtomicAsync(resolveVaultRelativePath(vaultPath, textArtifactPath), `${assembled.text}\n`, vaultPath);
     }
     const textIntegrity = textArtifactPath
-      ? await fileIntegrity(resolveVaultRelativePath(vaultPath, textArtifactPath), "ocr.pptx.artifact_missing")
+      ? await fileIntegrity(resolveVaultRelativePath(vaultPath, textArtifactPath), `ocr.${format}.artifact_missing`)
       : undefined;
     const metadataArtifactPath = [
       "artifacts",
       "metadata",
       ...dateBucket,
-      `${parsedSource.id}.pptx-media-ocr.json`
+      `${parsedSource.id}.${format}-media-ocr.json`
     ].join("/");
     const metadataAbsolutePath = resolveVaultRelativePath(vaultPath, metadataArtifactPath);
     const now = new Date().toISOString();
     const warnings = uniqueWarnings([
       ...assembled.warnings,
-      ...(target.skippedMediaCount > 0 ? ["ocr_pptx_unsupported_media_skipped"] : [])
+      ...(target.skippedMediaCount > 0 ? [`ocr_${format}_unsupported_media_skipped`] : [])
     ]);
     const ocrTextReady = Boolean(textIntegrity);
     const agentTextReady = target.nativeTextReady || ocrTextReady;
     await writeJsonAtomicAsync(metadataAbsolutePath, {
       schemaVersion: 1,
-      artifactId: pptxMediaOcrMetadataArtifactId(parsedSource.id),
+      artifactId: mediaOcrMetadataArtifactId(parsedSource.id, format),
       sourceId: parsedSource.id,
-      kind: "pptx_media_ocr_metadata",
+      kind: `${format}_media_ocr_metadata`,
       createdAt: now,
       sourceChecksum: sourceFile.checksum,
       sourceSize: sourceFile.size,
@@ -303,13 +327,14 @@ export class PptxMediaOcrArtifactService {
       units: assembled.units,
       warnings
     }, vaultPath);
-    const metadataIntegrity = await fileIntegrity(metadataAbsolutePath, "ocr.pptx.artifact_missing");
-    const artifacts = upsertPptxOcrArtifacts(
+    const metadataIntegrity = await fileIntegrity(metadataAbsolutePath, `ocr.${format}.artifact_missing`);
+    const artifacts = upsertOfficeMediaOcrArtifacts(
       parsedSource,
       textArtifactPath,
       textIntegrity,
       metadataArtifactPath,
-      metadataIntegrity
+      metadataIntegrity,
+      format
     );
     const engineIds = uniqueStrings(results.map((item) => item.result.engine));
     const engineVersions = uniqueStrings(results.map((item) => item.result.engineVersion));
@@ -344,7 +369,7 @@ export class PptxMediaOcrArtifactService {
     writeSourceRecordAtomic(vaultPath, sourceRecordPath, updatedSource, currentSource.fileChecksum);
     const page = this.#sourcePages.refreshForSource(vaultPath, updatedSource, sourceRecordPath, job.id);
     const resultWarnings = page.conflict ? [...warnings, sourcePageConflictWarning()] : warnings;
-    const operation = writePptxOcrOperation(vaultPath, updatedSource, job, resultWarnings);
+    const operation = writeOfficeMediaOcrOperation(vaultPath, updatedSource, job, resultWarnings, format);
     return {
       sourceId: parsedSource.id,
       created: true,
@@ -360,108 +385,15 @@ export class PptxMediaOcrArtifactService {
   }
 }
 
-function verifiedParserTargets(
-  sidecar: Record<string, unknown> | undefined,
-  sourceRecord: SourceRecord,
-  sourceChecksum: string,
-  inspection: PptxMediaOcrTargetReady
-): readonly OfficeMediaTarget[] {
-  if (!sidecar) {
-    throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "The PPTX parser metadata Artifact is unavailable.");
-  }
-  const parser = isRecord(sidecar.parser) ? sidecar.parser : undefined;
-  const units = Array.isArray(sidecar.units) ? sidecar.units : [];
-  const candidateLocators = slideLocatorArray(sidecar.ocrCandidateLocators);
-  if (
-    sidecar.schemaVersion !== 1 ||
-    sidecar.artifactId !== pptxParserMetadataArtifactId(sourceRecord.id) ||
-    sidecar.sourceId !== sourceRecord.id ||
-    sidecar.kind !== "pptx_parse_metadata" ||
-    sidecar.sourceChecksum !== sourceChecksum ||
-    sidecar.mediaTargetSchemaVersion !== OFFICE_MEDIA_TARGET_SCHEMA_VERSION ||
-    parser?.id !== OFFICE_PARSER_ID ||
-    parser.engine !== OFFICE_PARSER_ENGINE ||
-    parser.version !== OFFICE_PARSER_VERSION ||
-    sourceRecord.metadata.parserFormat !== "pptx" ||
-    sourceRecord.metadata.parserId !== OFFICE_PARSER_ID ||
-    sourceRecord.metadata.parserEngine !== OFFICE_PARSER_ENGINE ||
-    sourceRecord.metadata.parserVersion !== OFFICE_PARSER_VERSION ||
-    sidecar.truncated !== false ||
-    sidecar.needsOcr !== true ||
-    !Number.isSafeInteger(sidecar.unitCount) ||
-    sidecar.unitCount !== sidecar.processedUnitCount ||
-    units.length !== sidecar.unitCount ||
-    !sameStringArray(candidateLocators, slideLocatorArray(sourceRecord.metadata.ocrCandidateLocators))
-  ) {
-    throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "The PPTX OCR target does not match verified parser metadata.");
-  }
-  const targets: OfficeMediaTarget[] = [];
-  let candidateMediaCount = 0;
-  for (let index = 0; index < units.length; index += 1) {
-    const unit = units[index];
-    const slide = index + 1;
-    if (
-      !isRecord(unit) ||
-      unit.index !== slide ||
-      unit.locator !== `slide:${slide}` ||
-      typeof unit.needsOcr !== "boolean"
-    ) {
-      throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "A PPTX parser unit has invalid slide provenance.");
-    }
-    const mediaReferences = Array.isArray(unit.mediaReferences) ? unit.mediaReferences : [];
-    if (!unit.needsOcr) continue;
-    if (!candidateLocators.includes(unit.locator as string) || mediaReferences.length === 0) {
-      throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "A PPTX OCR candidate has no locator-correct media references.");
-    }
-    candidateMediaCount += mediaReferences.length;
-    for (let mediaOffset = 0; mediaOffset < mediaReferences.length; mediaOffset += 1) {
-      const media = mediaReferences[mediaOffset];
-      const mediaIndex = mediaOffset + 1;
-      if (
-        !isRecord(media) ||
-        media.mediaIndex !== mediaIndex ||
-        media.locator !== `slide:${slide}/media:${mediaIndex}` ||
-        typeof media.packagePath !== "string" ||
-        !/^ppt\/media\/[^/\\]{1,900}$/u.test(media.packagePath) ||
-        !Number.isSafeInteger(media.size) ||
-        (media.size as number) <= 0 ||
-        typeof media.extension !== "string"
-      ) {
-        throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "A PPTX media reference has invalid package provenance.");
-      }
-      if (
-        (media.size as number) <= OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM &&
-        OFFICE_MEDIA_OCR_EXTENSIONS.includes(media.extension as typeof OFFICE_MEDIA_OCR_EXTENSIONS[number])
-      ) {
-        targets.push({
-          slide,
-          parentLocator: `slide:${slide}`,
-          mediaIndex,
-          locator: media.locator as string,
-          packagePath: media.packagePath,
-          size: media.size as number,
-          extension: media.extension
-        });
-      }
-    }
-  }
-  if (
-    candidateMediaCount !== positiveInteger(sourceRecord.metadata.ocrCandidateMediaCount) ||
-    targets.length !== inspection.materializableMediaCount ||
-    targets.reduce((total, target) => total + target.size, 0) !== positiveInteger(sourceRecord.metadata.ocrMaterializableMediaBytes) ||
-    new Set(targets.map((target) => target.locator)).size !== targets.length
-  ) {
-    throw new PigeDomainError("ocr.pptx.parser_metadata_invalid", "PPTX media targets do not match the Source Record projection.");
-  }
-  return targets;
-}
+export class PptxMediaOcrArtifactService extends OfficeMediaOcrArtifactService {}
 
 function validateItemResults(
   target: VerifiedPptxMediaOcrTarget,
-  itemResults: readonly PptxMediaOcrItemResult[]
+  itemResults: readonly PptxMediaOcrItemResult[],
+  format: OfficeMediaOcrFormat
 ): readonly PptxMediaOcrItemResult[] {
   if (itemResults.length !== target.targets.length) {
-    throw new PigeDomainError("ocr.pptx.result_invalid", "PPTX media OCR did not return the complete selected target set.");
+    throw new PigeDomainError(`ocr.${format}.result_invalid`, `${format.toUpperCase()} media OCR did not return the complete selected target set.`);
   }
   for (let index = 0; index < target.targets.length; index += 1) {
     const expected = target.targets[index];
@@ -477,15 +409,16 @@ function validateItemResults(
       item.result.adapterVersion !== itemResults[0]?.result.adapterVersion ||
       item.result.text !== item.result.blocks.map((block) => block.text).join("\n")
     ) {
-      throw new PigeDomainError("ocr.pptx.result_invalid", "A PPTX media OCR result is inconsistent with the verified target.");
+      throw new PigeDomainError(`ocr.${format}.result_invalid`, `A ${format.toUpperCase()} media OCR result is inconsistent with the verified target.`);
     }
   }
   return itemResults;
 }
 
-function assemblePptxMediaOcr(
+function assembleOfficeMediaOcr(
   target: VerifiedPptxMediaOcrTarget,
-  itemResults: readonly PptxMediaOcrItemResult[]
+  itemResults: readonly PptxMediaOcrItemResult[],
+  format: OfficeMediaOcrFormat
 ): AssembledPptxMediaOcr {
   const chunks: string[] = [];
   const units: Record<string, unknown>[] = [];
@@ -503,7 +436,9 @@ function assemblePptxMediaOcr(
     if (result.confidence !== undefined) confidences.push(result.confidence);
     if (result.text.length > 0) {
       if (chunks.length > 0) characterCursor += 2;
-      const header = `--- Slide ${item.target.slide} Media ${item.target.mediaIndex} ---\n`;
+      const header = format === "pptx"
+        ? `--- Slide ${item.target.slide} Media ${item.target.mediaIndex} ---\n`
+        : `--- Document Image ${item.target.image} ---\n`;
       characterCursor += header.length;
       for (let index = 0; index < result.blocks.length; index += 1) {
         const block = result.blocks[index];
@@ -530,7 +465,7 @@ function assemblePptxMediaOcr(
       chunks.push(`${header}${result.text}`);
     }
     media.push({
-      slide: item.target.slide,
+      ...(format === "pptx" ? { slide: item.target.slide } : { documentImage: item.target.image }),
       locator: item.target.locator,
       parentLocator: item.target.parentLocator,
       packagePath: item.target.packagePath,
@@ -564,16 +499,17 @@ function isReusableOcrSidecar(
   sourceRecord: SourceRecord,
   sourceChecksum: string,
   textArtifact: SourceRecord["artifacts"][number] | undefined,
-  target: VerifiedPptxMediaOcrTarget
+  target: VerifiedPptxMediaOcrTarget,
+  format: OfficeMediaOcrFormat
 ): sidecar is Record<string, unknown> {
   if (!sidecar) return false;
   const adapter = isRecord(sidecar.adapter) ? sidecar.adapter : undefined;
   const media = Array.isArray(sidecar.media) ? sidecar.media : [];
   if (
     sidecar.schemaVersion !== 1 ||
-    sidecar.artifactId !== pptxMediaOcrMetadataArtifactId(sourceRecord.id) ||
+    sidecar.artifactId !== mediaOcrMetadataArtifactId(sourceRecord.id, format) ||
     sidecar.sourceId !== sourceRecord.id ||
-    sidecar.kind !== "pptx_media_ocr_metadata" ||
+    sidecar.kind !== `${format}_media_ocr_metadata` ||
     sidecar.sourceChecksum !== sourceChecksum ||
     sidecar.parserMetadataArtifactId !== target.parserMetadataArtifactId ||
     sidecar.parserMetadataChecksum !== target.parserMetadataChecksum ||
@@ -599,7 +535,7 @@ function isReusableOcrSidecar(
       const expected = target.targets[index];
       const engine = isRecord(value) && isRecord(value.engine) ? value.engine : undefined;
       return !expected || !isRecord(value) ||
-        value.slide !== expected.slide ||
+        (format === "pptx" ? value.slide !== expected.slide : value.documentImage !== expected.image) ||
         value.locator !== expected.locator ||
         value.parentLocator !== expected.parentLocator ||
         value.packagePath !== expected.packagePath ||
@@ -626,24 +562,25 @@ function isReusableOcrSidecar(
     sidecar.agentTextReady === true;
 }
 
-function upsertPptxOcrArtifacts(
+function upsertOfficeMediaOcrArtifacts(
   sourceRecord: SourceRecord,
   textPath: string | undefined,
   textIntegrity: FileIntegrity | undefined,
   metadataPath: string,
-  metadataIntegrity: FileIntegrity
+  metadataIntegrity: FileIntegrity,
+  format: OfficeMediaOcrFormat
 ): SourceRecord["artifacts"] {
   const replacedIds = new Set([
-    pptxMediaOcrTextArtifactId(sourceRecord.id),
-    pptxMediaOcrMetadataArtifactId(sourceRecord.id)
+    mediaOcrTextArtifactId(sourceRecord.id, format),
+    mediaOcrMetadataArtifactId(sourceRecord.id, format)
   ]);
   const artifacts = sourceRecord.artifacts.filter((artifact) => !replacedIds.has(artifact.id));
   const prioritized: SourceRecord["artifacts"] = [];
   if (textPath && textIntegrity) {
-    prioritized.push({ id: pptxMediaOcrTextArtifactId(sourceRecord.id), kind: "ocr", path: textPath, ...textIntegrity });
+    prioritized.push({ id: mediaOcrTextArtifactId(sourceRecord.id, format), kind: "ocr", path: textPath, ...textIntegrity });
   }
   prioritized.push({
-    id: pptxMediaOcrMetadataArtifactId(sourceRecord.id),
+    id: mediaOcrMetadataArtifactId(sourceRecord.id, format),
     kind: "metadata",
     path: metadataPath,
     ...metadataIntegrity
@@ -651,13 +588,14 @@ function upsertPptxOcrArtifacts(
   return [...prioritized, ...artifacts];
 }
 
-function writePptxOcrOperation(
+function writeOfficeMediaOcrOperation(
   vaultPath: string,
   sourceRecord: SourceRecord,
   job: JobRecord,
-  warnings: readonly string[]
+  warnings: readonly string[],
+  format: OfficeMediaOcrFormat
 ): OperationRecord {
-  const operationId = createOperationId(job.id, sourceRecord.id);
+  const operationId = createOperationId(job.id, sourceRecord.id, format);
   const dateKey = /^op_(\d{8})_/.exec(operationId)?.[1];
   if (!dateKey) throw new PigeDomainError("ocr.operation_id_invalid", "The OCR operation ID is invalid.");
   const operationPath = [".pige", "operations", dateKey.slice(0, 4), dateKey.slice(4, 6), `${operationId}.json`].join("/");
@@ -671,12 +609,12 @@ function writePptxOcrOperation(
     return OperationRecordSchema.parse(JSON.parse(fs.readFileSync(absolutePath, "utf8")));
   }
   const targetIds = new Set([
-    pptxMediaOcrTextArtifactId(sourceRecord.id),
-    pptxMediaOcrMetadataArtifactId(sourceRecord.id)
+    mediaOcrTextArtifactId(sourceRecord.id, format),
+    mediaOcrMetadataArtifactId(sourceRecord.id, format)
   ]);
   const sourceIds = new Set([
-    pptxParserMetadataArtifactId(sourceRecord.id),
-    pptxParserTextArtifactId(sourceRecord.id)
+    parserMetadataArtifactId(sourceRecord.id, format),
+    parserTextArtifactId(sourceRecord.id, format)
   ]);
   const operation = OperationRecordSchema.parse({
     id: operationId,
@@ -695,7 +633,7 @@ function writePptxOcrOperation(
         .filter((artifact) => sourceIds.has(artifact.id))
         .map((artifact) => ({ kind: "artifact" as const, id: artifact.id, path: artifact.path }))
     ],
-    summary: `Recorded local embedded-media OCR artifacts for PPTX source ${sourceRecord.id}.`,
+    summary: `Recorded local embedded-media OCR artifacts for ${format.toUpperCase()} source ${sourceRecord.id}.`,
     reversible: "best_effort",
     rollbackHint: "Remove derived PPTX OCR artifacts only after confirming the Source Record no longer references them.",
     warnings: uniqueWarnings(warnings)
@@ -704,27 +642,27 @@ function writePptxOcrOperation(
   return operation;
 }
 
-function createOperationId(jobId: string, sourceId: string): string {
+function createOperationId(jobId: string, sourceId: string, format: OfficeMediaOcrFormat): string {
   const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1] ?? /^src_(\d{8})_/.exec(sourceId)?.[1];
   if (!dateKey) throw new PigeDomainError("ocr.operation_id_invalid", "The OCR operation has no valid date bucket.");
-  const digest = createHash("sha256").update(`${jobId}:${sourceId}:pptx-media-ocr-artifacts`).digest("hex").slice(0, 12);
+  const digest = createHash("sha256").update(`${jobId}:${sourceId}:${format}-media-ocr-artifacts`).digest("hex").slice(0, 12);
   return `op_${dateKey}_${digest}`;
 }
 
-function pptxParserMetadataArtifactId(sourceId: string): string {
-  return `art_${sourceId.replace(/^src_/u, "")}_pptx_metadata`;
+function parserMetadataArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+  return `art_${sourceId.replace(/^src_/u, "")}_${format}_metadata`;
 }
 
-function pptxParserTextArtifactId(sourceId: string): string {
-  return `art_${sourceId.replace(/^src_/u, "")}_pptx_text`;
+function parserTextArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+  return `art_${sourceId.replace(/^src_/u, "")}_${format}_text`;
 }
 
-function pptxMediaOcrTextArtifactId(sourceId: string): string {
-  return `art_${sourceId.replace(/^src_/u, "")}_pptx_media_ocr_text`;
+function mediaOcrTextArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+  return `art_${sourceId.replace(/^src_/u, "")}_${format}_media_ocr_text`;
 }
 
-function pptxMediaOcrMetadataArtifactId(sourceId: string): string {
-  return `art_${sourceId.replace(/^src_/u, "")}_pptx_media_ocr_metadata`;
+function mediaOcrMetadataArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+  return `art_${sourceId.replace(/^src_/u, "")}_${format}_media_ocr_metadata`;
 }
 
 function sourceDateBucket(sourceId: string): [string, string] {
@@ -817,7 +755,8 @@ async function checksumFile(filePath: string): Promise<string> {
 async function readCurrentSourceRecord(
   vaultPath: string,
   sourceRecordPath: string,
-  expectedSourceId: string
+  expectedSourceId: string,
+  format: OfficeMediaOcrFormat
 ): Promise<SourceRecordSnapshot> {
   const resolvedPath = resolveSourceRecordPath(vaultPath, sourceRecordPath);
   let file: fs.promises.FileHandle | undefined;
@@ -856,8 +795,8 @@ async function readCurrentSourceRecord(
       throw new PigeDomainError("ocr.pptx.target_changed", "The PPTX Source Record changed during OCR.");
     }
     const parsed = SourceRecordSchema.parse(JSON.parse(bytes.toString("utf8")) as unknown);
-    if (parsed.id !== expectedSourceId || parsed.kind !== "pptx_file") {
-      throw new PigeDomainError("ocr.pptx.source_record_invalid", "The current Source Record does not identify the expected PPTX source.");
+    if (parsed.id !== expectedSourceId || parsed.kind !== `${format}_file`) {
+      throw new PigeDomainError(`ocr.${format}.source_record_invalid`, `The current Source Record does not identify the expected ${format.toUpperCase()} source.`);
     }
     return {
       sourceRecord: parsed,
@@ -997,6 +936,7 @@ function isContainedPath(candidate: string, root: string): boolean {
 
 function sameTarget(left: OfficeMediaTarget, right: OfficeMediaTarget): boolean {
   return left.slide === right.slide &&
+    left.image === right.image &&
     left.parentLocator === right.parentLocator &&
     left.mediaIndex === right.mediaIndex &&
     left.locator === right.locator &&
@@ -1009,10 +949,17 @@ function sameStringArray(left: readonly string[], right: readonly string[]): boo
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-function slideLocatorArray(value: unknown): string[] {
+function candidateLocatorArray(value: unknown, format: OfficeMediaOcrFormat): string[] {
   if (!Array.isArray(value)) return [];
-  const locators = value.filter((item): item is string => typeof item === "string" && /^slide:[1-9]\d*$/u.test(item));
+  const pattern = format === "pptx" ? /^slide:[1-9]\d*$/u : /^image:[1-9]\d*$/u;
+  const locators = value.filter((item): item is string => typeof item === "string" && pattern.test(item));
   return new Set(locators).size === locators.length ? locators : [];
+}
+
+function officeFormat(sourceRecord: SourceRecord): OfficeMediaOcrFormat {
+  if (sourceRecord.kind === "docx_file") return "docx";
+  if (sourceRecord.kind === "pptx_file") return "pptx";
+  throw new PigeDomainError("ocr.office.source_unsupported", "Office media OCR accepts DOCX or PPTX sources only.");
 }
 
 function positiveInteger(value: unknown): number | undefined {

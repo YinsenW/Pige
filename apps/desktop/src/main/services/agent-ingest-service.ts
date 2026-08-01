@@ -3068,7 +3068,7 @@ function createParseToolResult(
 
 function createAgentOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
   if (sourceRecord.kind === "image_file") return createAgentImageOcrCanonicalInputHash(sourceRecord);
-  if (sourceRecord.kind === "pptx_file") return createAgentPptxOcrCanonicalInputHash(sourceRecord);
+  if (sourceRecord.kind === "docx_file" || sourceRecord.kind === "pptx_file") return createAgentOfficeMediaOcrCanonicalInputHash(sourceRecord);
   const metadataArtifact = sourceRecord.artifacts.find((artifact) =>
     artifact.kind === "metadata" && artifact.path.endsWith(`/${sourceRecord.id}.pdf.json`)
   );
@@ -3130,10 +3130,9 @@ function createAgentImageOcrCanonicalInputHash(sourceRecord: SourceRecord): stri
   }));
 }
 
-function createAgentPptxOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
-  const metadataArtifact = sourceRecord.artifacts.find((artifact) =>
-    artifact.kind === "metadata" && artifact.path.endsWith(`/${sourceRecord.id}.pptx.json`)
-  );
+function createAgentOfficeMediaOcrCanonicalInputHash(sourceRecord: SourceRecord): string {
+  const format = sourceRecord.kind === "docx_file" ? "docx" : "pptx";
+  const metadataArtifact = sourceRecord.artifacts.find((artifact) => artifact.kind === "metadata" && artifact.path.endsWith(`/${sourceRecord.id}.${format}.json`));
   const candidateLocators = strictBoundedStringList(sourceRecord.metadata.ocrCandidateLocators);
   const parserStatus = sourceRecord.metadata.parserStatus;
   const textCoverage = sourceRecord.metadata.textCoverage;
@@ -3145,7 +3144,7 @@ function createAgentPptxOcrCanonicalInputHash(sourceRecord: SourceRecord): strin
   if (
     !metadataArtifact?.checksum ||
     metadataArtifact.size === undefined ||
-    sourceRecord.metadata.parserFormat !== "pptx" ||
+    sourceRecord.metadata.parserFormat !== format ||
     (parserStatus !== "parsed_needs_ocr" && parserStatus !== "parsed") ||
     sourceRecord.metadata.parserTruncated === true ||
     unitCount === undefined ||
@@ -3159,11 +3158,12 @@ function createAgentPptxOcrCanonicalInputHash(sourceRecord: SourceRecord): strin
   ) {
     throw new PigeDomainError(
       "agent_runtime.ocr_tool_binding_invalid",
-      "The current PPTX has no complete parser-selected OCR target binding."
+      `The current ${format.toUpperCase()} has no complete parser-selected OCR target binding.`
     );
   }
   return createAgentPayloadIntegrityHash(JSON.stringify({
     identityVersion: 1,
+    sourceKind: sourceRecord.kind,
     parserMetadataArtifactId: metadataArtifact.id,
     parserMetadataChecksum: metadataArtifact.checksum,
     parserMetadataSize: metadataArtifact.size,
@@ -3189,7 +3189,7 @@ function supportsAgentSelectedDataset(sourceKind: SourceRecord["kind"]): boolean
 }
 
 function supportsAgentSelectedOcr(sourceKind: SourceRecord["kind"]): boolean {
-  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "pptx_file";
+  return sourceKind === "image_file" || sourceKind === "pdf_file" || sourceKind === "docx_file" || sourceKind === "pptx_file";
 }
 
 function createDatasetToolResult(

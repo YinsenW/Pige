@@ -233,27 +233,55 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
     expect(parserCalls).toBe(1);
   });
 
-  it("runs Pi inspect -> parse -> OCR -> inspect -> publish for a media-only PPTX", async () => {
+  it.each([
+    {
+      format: "docx" as const,
+      fileName: "media-only.docx",
+      bytes: createTestDocx,
+      extraction: emptyDocxExtraction,
+      ocrText: "Agent-selected DOCX OCR recovered embedded image evidence.",
+      title: "Agent-selected DOCX OCR knowledge",
+      artifactSuffix: "_docx_media_ocr_text",
+      citation: "#image1-ocr1"
+    },
+    {
+      format: "pptx" as const,
+      fileName: "media-only.pptx",
+      bytes: createTestPptx,
+      extraction: emptyPptxExtraction,
+      ocrText: "Agent-selected PPTX OCR recovered slide evidence.",
+      title: "Agent-selected PPTX OCR knowledge",
+      artifactSuffix: "_pptx_media_ocr_text",
+      citation: "#slide1-media1-ocr1"
+    }
+  ])("runs Pi inspect -> parse -> OCR -> inspect -> publish for media-only $format", async ({
+    format,
+    fileName,
+    bytes,
+    extraction,
+    ocrText,
+    title,
+    artifactSuffix,
+    citation
+  }) => {
     const fixture = makeVault();
-    const captured = await preserveOffice(fixture, "media-only.pptx", await createTestPptx());
-    const adapter = new StaticNativeOcrAdapter(
-      validNativeOcrResult("Agent-selected PPTX OCR recovered slide evidence.")
-    );
+    const captured = await preserveOffice(fixture, fileName, await bytes());
+    const adapter = new StaticNativeOcrAdapter(validNativeOcrResult(ocrText));
     const parser = new DocumentParserService([
-      new OfficeParserService({ extract: async () => emptyPptxExtraction() })
+      new OfficeParserService({ extract: async () => extraction() })
     ]);
     const runtime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
-        toolCall("pige_inspect_source", "pptx_ocr_inspect_before"),
-        toolCall("pige_parse_source", "pptx_ocr_parse"),
-        toolCall("pige_ocr_source", "pptx_ocr_recognize"),
-        toolCall("pige_inspect_source", "pptx_ocr_inspect_after"),
+        toolCall("pige_inspect_source", `${format}_ocr_inspect_before`),
+        toolCall("pige_parse_source", `${format}_ocr_parse`),
+        toolCall("pige_ocr_source", `${format}_ocr_recognize`),
+        toolCall("pige_inspect_source", `${format}_ocr_inspect_after`),
         toolCall(
           "pige_create_knowledge_note",
-          "pptx_ocr_publish",
-          groundedOutput("Agent-selected PPTX OCR knowledge")
+          `${format}_ocr_publish`,
+          groundedOutput(title)
         ),
-        { kind: "text", text: "I recognized the presentation media and created the note." }
+        { kind: "text", text: "I recognized the Office media and created the note." }
       ]
     }));
     const ocr = new OcrService(
@@ -302,9 +330,9 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
         needsOcr: false,
         agentTextReady: true
       });
-      expect(source.artifacts.some((artifact) => artifact.id.endsWith("_pptx_media_ocr_text"))).toBe(true);
-      expect(note).toContain("# Agent-selected PPTX OCR knowledge");
-      expect(note).toContain(`[source:${captured.sourceId}#slide1-media1-ocr1]`);
+      expect(source.artifacts.some((artifact) => artifact.id.endsWith(artifactSuffix))).toBe(true);
+      expect(note).toContain(`# ${title}`);
+      expect(note).toContain(`[source:${captured.sourceId}${citation}]`);
       expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_artifact")
         .map((operation) => operation.jobId)).toEqual(expect.arrayContaining([parseChild.id, ocrChild.id]));
       expect(network.calls).toBe(0);
@@ -661,6 +689,49 @@ function emptyPptxExtraction(): OfficeExtractionResult {
     mediaReferences: [{ packagePath: "ppt/media/image1.png", size: 68, extension: ".png" }],
     structure: { slides: 1 },
     warnings: ["pptx_text_missing"]
+  };
+}
+
+function emptyDocxExtraction(): OfficeExtractionResult {
+  return {
+    parserId: OFFICE_PARSER_ID,
+    engine: OFFICE_PARSER_ENGINE,
+    engineVersion: OFFICE_PARSER_VERSION,
+    format: "docx",
+    title: "Image-only document",
+    text: "",
+    textCharacterCount: 0,
+    textCoverage: "none",
+    truncated: false,
+    needsOcr: true,
+    agentTextReady: false,
+    ocrCandidateLocators: ["image:1"],
+    unitCount: 1,
+    processedUnitCount: 1,
+    unitsWithText: 0,
+    units: [{
+      index: 1,
+      locator: "block:1",
+      kind: "paragraph",
+      characterStart: 0,
+      characterEnd: 0,
+      characterCount: 0,
+      imageCount: 1,
+      mediaReferences: [{
+        mediaIndex: 1,
+        locator: "image:1",
+        packagePath: "word/media/image1.png",
+        size: 68,
+        extension: ".png"
+      }],
+      needsOcr: true,
+      warnings: []
+    }],
+    entryCount: 1,
+    totalUncompressedBytes: 68,
+    mediaReferences: [{ packagePath: "word/media/image1.png", size: 68, extension: ".png" }],
+    structure: { paragraphs: 1, tables: 0, images: 1 },
+    warnings: ["docx_text_missing"]
   };
 }
 
