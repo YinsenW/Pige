@@ -635,6 +635,11 @@ Reader foundation:
   strict resolution, and only `resolved.target.pageId` navigates.
 - `library.related` returns path/body-free stable-ID links/backlinks, right-side when wide and below
   when narrow. Closed states retain Reader; no reconnect/filesystem/Agent/permission/event authority.
+- A Source Page with one exact source reference may show a bounded Derived notes panel. It calls
+  Main-owned `notes.listSourceDerived`, renders only returned page IDs/titles/types/update times,
+  and opens a selected page through the existing Reader owner. Loading, empty, stale, mismatch, or
+  failed results keep the current Reader and focus; the panel never receives source paths, bodies,
+  checksums, or filesystem authority.
 - Eligible referenced or managed Markdown/TXT/PDF/DOCX/PPTX sources offer Check for updates,
   then a bounded preview and explicit Refresh. The dialog exposes no path, keeps Reader and focus
   on closed outcomes, adopts only an authoritative commit, and explains when an edited Source Page

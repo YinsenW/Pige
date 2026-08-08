@@ -1085,6 +1085,43 @@ status: "active"
     });
   });
 
+  it("locates only current source-bound derived pages from a rendered Source Page", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_derived123";
+    const sourcePageId = "page_20260709_derived123";
+    writePage({ vaultPath, fileName: "source.md", pageId: sourcePageId, title: "Source", pageType: "source", sourceIds: [sourceId] });
+    writePage({ vaultPath, fileName: "derived.md", pageId: "page_20260709_derivednote", title: "Derived note", sourceIds: [sourceId] });
+    writePage({ vaultPath, fileName: "unrelated.md", pageId: "page_20260709_unrelated00", title: "Unrelated" });
+    writeSourceRecord({ vaultPath, sourceId, pageId: sourcePageId, pagePath: "sources/source.md" });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: sourcePageId }, OWNER_ID);
+
+    expect(notes.listSourceDerived(OWNER_ID, {
+      apiVersion: 1, requestId: "notesourcederived_abcdefghijklmnop", activeVaultId: vault.vaultId,
+      currentPageId: sourcePageId, renderContextId: rendered.renderContextId!, sourceId
+    })).toEqual({
+      apiVersion: 1, requestId: "notesourcederived_abcdefghijklmnop", status: "ready", sourceId,
+      pages: [{ pageId: "page_20260709_derivednote", title: "Derived note", pageType: "note", updatedAt: "2026-07-09T12:00:00.000Z" }]
+    });
+  });
+
+  it("fails Source Page derived navigation closed when its page or record no longer matches", async () => {
+    const { vaultPath, vault } = makeVault();
+    const sourceId = "src_20260709_derived456";
+    const sourcePageId = "page_20260709_derived456";
+    writePage({ vaultPath, fileName: "source.md", pageId: sourcePageId, title: "Source", pageType: "source", sourceIds: [sourceId] });
+    writeSourceRecord({ vaultPath, sourceId, pageId: sourcePageId, pagePath: "sources/source.md" });
+    const notes = makeNotes(vaultPath, vault);
+    const rendered = await notes.render({ pageId: sourcePageId }, OWNER_ID);
+    const request = { apiVersion: 1 as const, requestId: "notesourcederived_abcdefghijklmnop", activeVaultId: vault.vaultId,
+      currentPageId: sourcePageId, renderContextId: rendered.renderContextId!, sourceId };
+
+    writeSourceRecord({ vaultPath, sourceId, pageId: "page_20260709_other0000", pagePath: "sources/source.md" });
+    expect(notes.listSourceDerived(OWNER_ID, request)).toEqual({ apiVersion: 1, requestId: request.requestId, status: "mismatch" });
+    writePage({ vaultPath, fileName: "source.md", pageId: sourcePageId, title: "Changed", pageType: "source", sourceIds: [sourceId] });
+    expect(notes.listSourceDerived(OWNER_ID, request)).toEqual({ apiVersion: 1, requestId: request.requestId, status: "changed" });
+  });
+
   it("fails saved-source rows closed across page ownership and currentness fences", async () => {
     const { vaultPath, vault } = makeVault();
     const sourceId = "src_20260709_fenced123";

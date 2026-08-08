@@ -8,6 +8,7 @@ import type {
 } from "@pige/contracts";
 import { NoteReaderSourceActions, readerSourceActionLabels } from "./ReaderSourceActions";
 import { ReaderSourceMetadata } from "./ReaderSourceMetadata";
+import { SourceDerivedNotesPanel } from "./SourceDerivedNotesPanel";
 
 const COLLAPSED_SOURCE_COUNT = 5;
 
@@ -85,6 +86,10 @@ export function NoteReaderSources(props: {
           {expanded ? props.t("note.showFewerSources") : props.t("note.showMoreSources")
             .replace("{count}", String(summary.sourceIds.length - COLLAPSED_SOURCE_COUNT))}
         </button>
+      ) : null}
+      {summary.pageType === "source" && summary.sourceIds.length === 1 && props.onOpenPage ? (
+        <SourceDerivedNotesPanel note={props.note} sourceId={summary.sourceIds[0]!} onOpen={props.onOpenPage} t={props.t}
+          {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})} />
       ) : null}
     </section>
   );

@@ -1037,6 +1037,7 @@ describe("desktop shell build contract", () => {
 
     expect(contractsSource).toContain("readonly resolveInlineReference:");
     expect(contractsSource).toContain("readonly openSourceReference:");
+    expect(contractsSource).toContain("readonly listSourceDerived:");
     expect(contractsSource).toContain("readonly revealSource:");
     expect(contractsSource).toContain("readonly revealGenerated:");
     expect(contractsSource).toContain("readonly trashCurrent:");
@@ -1054,6 +1055,9 @@ describe("desktop shell build contract", () => {
     expect(readerIpcSource).toContain('ipcMain.handle("notes.openSourceReference"');
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(readerIpcSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(readerIpcSource).toContain("NOTE_LIST_SOURCE_DERIVED_CHANNEL");
+    expect(readerIpcSource).toContain("NoteListSourceDerivedRequestSchema.parse(request)");
+    expect(readerIpcSource).toContain("NoteListSourceDerivedResultSchema.parse(");
     expect(readerIpcSource).toContain("NOTE_REVEAL_GENERATED_CHANNEL");
     expect(readerIpcSource).toContain("getReaderGeneratedNoteRevealService().reveal(ownerId, parsed)");
     expect(preloadSource).toContain("NoteRevealGeneratedRequestSchema.parse(request)");
@@ -1071,6 +1075,9 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke(\n          "notes.openSourceReference"');
     expect(preloadSource).toContain("NoteOpenSourceReferenceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteOpenSourceReferenceResultSchema.parse(");
+    expect(preloadSource).toContain("NOTE_LIST_SOURCE_DERIVED_CHANNEL,");
+    expect(preloadSource).toContain("NoteListSourceDerivedRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteListSourceDerivedResultSchema.parse(");
     expect(preloadSource).toContain("NOTE_REVEAL_SOURCE_CHANNEL");
     expect(preloadSource).toContain("NoteRevealSourceRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteRevealSourceResultSchema.parse(");
@@ -1110,6 +1117,8 @@ describe("desktop shell build contract", () => {
     );
     expect(notesApi).toContain("request: NoteRevealSourceRequest");
     expect(notesApi).toContain(") => Promise<NoteRevealSourceResult>;");
+    expect(notesApi).toContain("request: NoteListSourceDerivedRequest");
+    expect(notesApi).toContain(") => Promise<NoteListSourceDerivedResult>;");
     expect(notesApi).toContain("request: NoteTrashCurrentRequest");
     expect(notesApi).toContain(") => Promise<NoteTrashCurrentResult>;");
     expect(notesApi).toContain("readonly listTrash: (request: NoteTrashListRequest) => Promise<NoteTrashListResult>;");

@@ -264,6 +264,8 @@ import type {
   NoteGetRequest,
   NoteOpenSearchMatchRequest,
   NoteOpenSearchMatchResult,
+  NoteListSourceDerivedRequest,
+  NoteListSourceDerivedResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteReconnectOriginalSourceRequest,
@@ -930,6 +932,9 @@ import {
   NoteRevisionHistoryOpenResultSchema,
   NoteRevisionHistoryRestoreRequestSchema,
   NoteRevisionHistoryRestoreResultSchema,
+  NOTE_LIST_SOURCE_DERIVED_CHANNEL,
+  NoteListSourceDerivedRequestSchema,
+  NoteListSourceDerivedResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
@@ -2917,6 +2922,15 @@ const api: PigeDesktopApi = {
         await ipcRenderer.invoke(
           "notes.openSourceReference",
           NoteOpenSourceReferenceRequestSchema.parse(request)
+        )
+      ),
+    listSourceDerived: async (
+      request: NoteListSourceDerivedRequest
+    ): Promise<NoteListSourceDerivedResult> =>
+      NoteListSourceDerivedResultSchema.parse(
+        await ipcRenderer.invoke(
+          NOTE_LIST_SOURCE_DERIVED_CHANNEL,
+          NoteListSourceDerivedRequestSchema.parse(request)
         )
       ),
     revealSource: async (

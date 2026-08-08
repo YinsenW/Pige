@@ -263,6 +263,7 @@ describe("registerReaderIpc", () => {
       "notes.unlinkRelation",
       "notes.resolveInlineReference",
       "notes.openSourceReference",
+      "notes.listSourceDerived",
       "notes.revealSource",
       "notes.revealGenerated",
       "notes.reconnectOriginalSource",
@@ -1156,6 +1157,30 @@ describe("registerReaderIpc", () => {
       ...request,
       path: "/private/source.md"
     })).toThrow();
+  });
+
+  it("keeps Source Page derived-note discovery sender-owned and body-free", async () => {
+    const render = vi.fn().mockResolvedValue({
+      summary: {
+        pageId: "page_20260709_source1234", title: "Source", pageType: "source", pagePath: "sources/source.md",
+        tags: [], aliases: [], sourceIds: ["src_20260709_source1234"], status: "active", updatedAt: "2026-07-09T12:00:00.000Z"
+      }, html: "<p>Source</p>", byteSize: 7, renderContextId: "notectx_0123456789abcdef0123456789abcdef"
+    });
+    const listSourceDerived = vi.fn().mockReturnValue({
+      apiVersion: 1, requestId: "notesourcederived_abcdefghijklmnop", status: "ready", sourceId: "src_20260709_source1234",
+      pages: [{ pageId: "page_20260709_derived123", title: "Derived", pageType: "note", updatedAt: "2026-07-09T12:00:00.000Z" }]
+    });
+    const handlers = makeHarness({ render, listSourceDerived } as Partial<NotesService>);
+    const sender = makeSender(24);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: "page_20260709_source1234" });
+    const request = {
+      apiVersion: 1, requestId: "notesourcederived_abcdefghijklmnop", activeVaultId: "vault_20260709_abcdefgh",
+      currentPageId: "page_20260709_source1234", renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260709_source1234"
+    } as const;
+    expect(handlers.get("notes.listSourceDerived")!({ sender } as IpcMainInvokeEvent, request)).toEqual(listSourceDerived.mock.results[0]?.value);
+    expect(listSourceDerived).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), request);
+    expect(() => handlers.get("notes.listSourceDerived")!({ sender } as IpcMainInvokeEvent, { ...request, body: "private" })).toThrow();
   });
 
   it("rejects unsafe service output at the IPC result boundary", async () => {
