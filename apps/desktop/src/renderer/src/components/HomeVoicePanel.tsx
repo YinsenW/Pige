@@ -50,6 +50,7 @@ export function HomeVoicePanel({
   t
 }: HomeVoicePanelProps): React.JSX.Element {
   const panelRef = useRef<HTMLElement>(null);
+  const installLanguageAssetRef = useRef<HTMLButtonElement>(null);
   const recording = state === "recording";
   const stopped = state === "stopped";
   const transcribing = state === "transcribing";
@@ -69,7 +70,10 @@ export function HomeVoicePanel({
 
   useEffect(() => {
     if (installingAsset) panelRef.current?.focus();
-  }, [installingAsset]);
+    else if (assetInstallFailed) {
+      window.requestAnimationFrame(() => installLanguageAssetRef.current?.focus({ preventScroll: true }));
+    }
+  }, [assetInstallFailed, installingAsset]);
 
   return (
     <section
@@ -204,6 +208,7 @@ export function HomeVoicePanel({
             ) : null}
             {assetsUnavailable || assetInstallFailed ? (
               <button
+                ref={installLanguageAssetRef}
                 className="primary"
                 type="button"
                 disabled={!onInstallLanguageAsset}

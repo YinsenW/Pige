@@ -1071,6 +1071,8 @@ describe("Home durable Agent conversation UI", () => {
     await waitFor(dom, () => container.textContent?.includes(enMessages["home.voice.assetInstallFailedTitle"]) === true);
     expect(buttons(container, enMessages["nav.knowledgeTree"])[0]?.disabled).toBe(false);
     expect(container.querySelector<HTMLButtonElement>(".sidebar-settings-control")?.disabled).toBe(false);
+    await waitFor(dom, () => dom.window.document.activeElement ===
+      buttons(container, enMessages["home.voice.installLanguageAsset"])[0]);
 
     await act(async () => root.unmount());
     dom.window.close();
