@@ -85,6 +85,101 @@ export interface AgentTurnProviderContinuation {
   readonly sourceIds: readonly string[];
 }
 
+export interface AgentTurnProviderCheckpointPort {
+  readonly begin: (expected: JobRecord, binding: AgentTurnProviderCallBinding) => JobRecord;
+  readonly checkpoint: (
+    expected: JobRecord,
+    input: AgentTurnProviderCallBinding & {
+      readonly result: PiAgentRunResult;
+      readonly continuation: AgentTurnProviderContinuation;
+    }
+  ) => JobRecord;
+  readonly read: (
+    job: JobRecord,
+    binding: AgentTurnProviderCallBinding
+  ) => AgentTurnProviderAdoption | undefined;
+}
+
+export function createAgentTurnProviderCallBinding(input: {
+  readonly jobId: string;
+  readonly conversationEventId: string;
+  readonly inputHash: string;
+  readonly conversationContextHash: string;
+  readonly toolCatalogHash: string;
+  readonly contextPackHash?: string;
+  readonly providerProfileId: string;
+  readonly modelProfileId: string;
+  readonly modelId: string;
+}): AgentTurnProviderCallBinding {
+  return {
+    ...input,
+    ...(input.contextPackHash ? { contextPackHash: input.contextPackHash } : {})
+  };
+}
+
+export function createAndAdoptAgentTurnProviderCall(input: {
+  readonly port: AgentTurnProviderCheckpointPort;
+  readonly current: JobRecord;
+  readonly jobId: string;
+  readonly conversationEventId: string;
+  readonly inputHash: string;
+  readonly conversationContextHash: string;
+  readonly toolCatalogHash: string;
+  readonly contextPackHash?: string;
+  readonly providerProfileId: string;
+  readonly modelProfileId: string;
+  readonly modelId: string;
+}): {
+  readonly binding: AgentTurnProviderCallBinding;
+  readonly job: JobRecord;
+  readonly adoption?: AgentTurnProviderAdoption;
+} {
+  const binding = createAgentTurnProviderCallBinding(input);
+  return { binding, ...adoptOrBeginAgentTurnProviderCall({ ...input, binding }) };
+}
+
+export function createAgentTurnAnswer(input: {
+  readonly groundedAnswer: AgentTurnAnswer;
+  readonly retrieval?: AgentTurnAnswer["retrieval"];
+  readonly datasetResult?: AgentTurnAnswer["datasetResult"];
+  readonly memoryCount: number;
+}): AgentTurnAnswer {
+  return {
+    ...input.groundedAnswer,
+    ...(input.retrieval ? { retrieval: input.retrieval } : {}),
+    ...(input.datasetResult ? { datasetResult: input.datasetResult } : {}),
+    ...(input.memoryCount > 0 ? { memoryContext: { kind: "vault_memory", count: input.memoryCount } } : {})
+  };
+}
+
+export function adoptOrBeginAgentTurnProviderCall(input: {
+  readonly port: AgentTurnProviderCheckpointPort;
+  readonly current: JobRecord;
+  readonly binding: AgentTurnProviderCallBinding;
+}): { readonly job: JobRecord; readonly adoption?: AgentTurnProviderAdoption } {
+  const adoption = input.port.read(input.current, input.binding);
+  return adoption
+    ? { job: input.current, adoption }
+    : { job: input.port.begin(input.current, input.binding) };
+}
+
+export function checkpointAgentTurnProviderCall(input: {
+  readonly port: AgentTurnProviderCheckpointPort;
+  readonly current: JobRecord;
+  readonly binding: AgentTurnProviderCallBinding;
+  readonly result: PiAgentRunResult;
+  readonly continuation: AgentTurnProviderContinuation;
+}): JobRecord {
+  return input.port.checkpoint(input.current, {
+    ...input.binding,
+    providerProfileId: input.result.providerProfileId,
+    modelProfileId: input.result.modelProfileId,
+    modelId: input.result.modelId,
+    result: input.result,
+    continuation: input.continuation
+  });
+}
+
 export interface AgentTurnProviderAdoption extends AgentTurnProviderContinuation {
   readonly result: PiAgentRunResult;
 }

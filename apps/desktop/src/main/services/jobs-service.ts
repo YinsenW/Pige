@@ -92,6 +92,7 @@ import {
   readAgentTurnProviderCheckpoint,
   type AgentTurnProviderCallBinding,
   type AgentTurnProviderAdoption,
+  type AgentTurnProviderCheckpointPort,
   type AgentTurnProviderContinuation
 } from "./agent-turn-provider-checkpoint";
 import {
@@ -1625,6 +1626,14 @@ export class JobsService {
     binding: AgentTurnProviderCallBinding
   ): AgentTurnProviderAdoption | undefined {
     return readAgentTurnProviderCheckpoint(job, binding);
+  }
+
+  getAgentTurnProviderCheckpointPort(): AgentTurnProviderCheckpointPort {
+    return {
+      begin: this.beginAgentTurnProviderCall.bind(this),
+      checkpoint: this.checkpointAgentTurnProviderCall.bind(this),
+      read: this.readAgentTurnProviderCall.bind(this)
+    };
   }
 
   testOnlyWriteAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord {
