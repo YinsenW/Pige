@@ -131,21 +131,29 @@ export function ReaderSourceRefreshAction(props: {
       setNotice({ sourceId, value: result.status === "refreshed"
         ? (result.sourcePageConflict ? "refreshedConflict" : "refreshed")
         : toNotice(result.status) });
+      setRestoreFocusSourceId(sourceId);
       if (result.status === "refreshed" && result.sourcePageConflict && props.onReadConflict) {
-        const reviewResult = await props.onReadConflict({
-          apiVersion: 1,
-          requestId: `sourcerefreshreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
-          activeVaultId: request.activeVaultId, currentPageId: request.currentPageId,
-          renderContextId: request.renderContextId, sourceId
-        });
-        if (identityRef.current === startedIdentity && reviewResult.status === "ready") {
-          setConflict({ sourceId, value: reviewResult.review });
+        try {
+          const reviewResult = await props.onReadConflict({
+            apiVersion: 1,
+            requestId: `sourcerefreshreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+            activeVaultId: request.activeVaultId, currentPageId: request.currentPageId,
+            renderContextId: request.renderContextId, sourceId
+          });
+          if (identityRef.current === startedIdentity && reviewResult.status === "ready") {
+            setConflict({ sourceId, value: reviewResult.review });
+          }
+        } catch {
+          // The durable refresh already committed; an optional conflict reread is best effort.
         }
       }
-      setRestoreFocusSourceId(sourceId);
       if (result.status === "refreshed" && props.onRender && props.onRefreshed) {
-        const render = await props.onRender(props.currentPageId);
-        if (identityRef.current === startedIdentity) props.onRefreshed(render);
+        try {
+          const render = await props.onRender(props.currentPageId);
+          if (identityRef.current === startedIdentity) props.onRefreshed(render);
+        } catch {
+          // The durable refresh already committed; an optional Reader reread is best effort.
+        }
       }
     } catch {
       if (identityRef.current === startedIdentity) setNotice({ sourceId, value: "failed" });
