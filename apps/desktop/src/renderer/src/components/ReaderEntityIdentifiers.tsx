@@ -7,13 +7,25 @@ export function ReaderEntityIdentifiers(props: { readonly activeVaultId: string;
   readonly onCommitted: (render: NoteRenderResult) => void; readonly t: (key: string) => string }): React.JSX.Element | null {
   const context = props.note.renderContextId, revision = props.note.entityType?.revision;
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${revision ?? ""}`;
-  const ownerRef = useRef(owner), busy = useRef(false), inputRef = useRef<HTMLInputElement>(null);
+  const ownerRef = useRef(owner), busy = useRef(false), restoreFocusRef = useRef(false), inputRef = useRef<HTMLInputElement>(null);
   const [identifiers, setIdentifiers] = useState<readonly string[]>([]), [draft, setDraft] = useState(""), [state, setState] = useState<"loading" | "ready" | "failed" | "pending">("loading");
+  const restoreInputFocus = (): void => {
+    if (!restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    window.requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+  };
   useEffect(() => {
-    ownerRef.current = owner; busy.current = false; setDraft(""); setState("loading");
+    const wasBusy = busy.current;
+    ownerRef.current = owner; busy.current = false; setIdentifiers([]); setDraft(""); setState("loading");
+    if (wasBusy || inputRef.current === document.activeElement) restoreFocusRef.current = true;
     if (props.note.summary.pageType !== "entity" || !context || !revision) return;
     const request: NoteReadEntityIdentifiersRequest = { apiVersion: 1, requestId: requestId(), activeVaultId: props.activeVaultId, currentPageId: props.note.summary.pageId, renderContextId: context, expectedRevision: revision };
-    void props.read(request).then((result) => { if (ownerRef.current === owner && same(request, result) && result.status === "ready") { setIdentifiers(result.identifiers); setState("ready"); } else if (ownerRef.current === owner) setState("failed"); }).catch(() => { if (ownerRef.current === owner) setState("failed"); });
+    void props.read(request).then((result) => {
+      if (ownerRef.current !== owner) return;
+      if (same(request, result) && result.status === "ready") { setIdentifiers(result.identifiers); setState("ready"); }
+      else setState("failed");
+      restoreInputFocus();
+    }).catch(() => { if (ownerRef.current === owner) { setState("failed"); restoreInputFocus(); } });
   }, [owner]);
   if (props.note.summary.pageType !== "entity" || !context || !revision) return null;
   const change = async (action: "add" | "remove", identifier: string): Promise<void> => {
