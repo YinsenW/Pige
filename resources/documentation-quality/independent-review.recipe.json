@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T14:02:29Z",
+  "reviewedAt": "2026-08-08T14:29:37.552Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the Main-owned local ZIP Archive Source boundary: one preserved source/page, bounded private yauzl central-directory inventory, source reproof, retry/restart, and no extraction, recursive import, execution, network, model, or renderer path authority.",
+    "scope": "Review the Main-owned local ZIP Archive Source capture boundary: one preserved source/page, checked bounded private yauzl central-directory inventory, source reproof, retry/restart adoption, and no extraction, recursive import, execution, network, model, or renderer path authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "d6653625a40a8cfede498b5fd321350e9d7da1b5726e05aea232b5a89c1065b9"
+    "reviewedSha256": "8e7158860e7dd7e56cc1fd4800119ee2ee7bcd7d552607af6b20da6aee4767f9"
   },
   "reviewers": [
     {
       "reviewerId": "zip-archive-capture-prefreeze-review",
-      "task": "Review the local ZIP Archive Source boundary and bounded inventory contract",
+      "task": "Review implemented local ZIP Archive Source capture and bounded inventory evidence",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,7 +70,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Main-owned source selection and reproof, bounded yauzl metadata handling, failure/restart semantics, and body/path-free renderer projection separately from future implementation authorship."
+      "independence": "Project review checks Main-owned source selection and reproof, bounded yauzl metadata handling, rejection and restart adoption, and body/path-free renderer projection separately from runtime implementation authorship."
     }
   ],
   "dimensions": [
@@ -86,28 +86,28 @@
       "score": 9.8,
       "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "Source, parser, security, dependency, and Job owners agree on exact limits, source reproof, a private metadata Artifact, and no extraction or recursive import."
+      "summary": "Source, parser, security, dependency, and Job owners match the implemented exact limits, source reproof, private metadata Artifact, and no extraction or recursive import."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
       "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "Trace records the Archive Source branch under source preservation without claiming implementation evidence or changing a requirement or exit status."
+      "summary": "Trace records direct Capture Job, rejection, safe Source Page projection, and restart-adoption evidence while PIGE-CAP-001 remains partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
       "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "The planned private inventory owner reuses the existing capture/source/Job lifecycle and does not create child source/page, operation, IPC, or renderer mutation owners."
+      "summary": "The implemented private inventory owner reuses the existing capture/source/Job lifecycle and does not create child source/page, operation, IPC, or renderer mutation owners."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
       "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "The freeze extends existing product, parser, source, security, dependency, quality, trace, and decision owners without a new dependency or a parallel design document."
+      "summary": "The bind reuses existing product, parser, source, security, dependency, quality, trace, and review owners without a new dependency or design document."
     }
   ],
   "verification": [
@@ -129,12 +129,12 @@
   ],
   "coordination": {
     "taskId": "zip-archive-capture-prefreeze-20260808",
-    "taskTitle": "Local ZIP Archive Source capture prefreeze",
+    "taskTitle": "Local ZIP Archive Source capture",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
     "compatibility": "Main re-proves one selected ZIP before inventory; only a bounded private metadata Artifact can adopt after exact source revision/checksum and limit-profile checks, while renderer projections remain aggregate and pathless.",
-    "acknowledgement": "PIGE-CAP-001 remains partial; this is an implementation prefreeze with no runtime evidence, status promotion, dependency addition, or public contract change."
+    "acknowledgement": "PIGE-CAP-001 remains partial; direct implementation evidence now covers bounded ZIP inventory, rejection, safe projection, and restart adoption without a dependency or public-contract change."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

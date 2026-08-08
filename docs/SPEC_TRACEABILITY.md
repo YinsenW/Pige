@@ -76,7 +76,7 @@ Allowed verification classes are `contract`, `unit`, `integration`, `smoke`, `ev
 
 | ID | Requirement | Primary owner source | Phase | Milestone | Verification |
 | --- | --- | --- | --- | --- | --- |
-| PIGE-CAP-001 | Create a source record and preserve the source according to storage strategy before parsing or model calls; a local ZIP is one Archive Source with a bounded private inventory, not an automatic member import. | `docs/PARSER_INGEST_SPEC.md` | P2 | M2 | integration |
+| PIGE-CAP-001 | Create a source record and preserve the source according to storage strategy before parsing or model calls; a local ZIP is one Archive Source with a bounded checked private inventory, not an automatic member import. | `docs/PARSER_INGEST_SPEC.md` | P2 | M2 | integration |
 | PIGE-CAP-002 | The manifest-owned large-paste boundary stages exact over-limit clipboard payloads with files, preserves each once as a managed source on atomic Send, and keeps deterministic body/path-free Source/Capture/Job references in restart-readable conversation history. | `docs/DATA_ARCHITECTURE.md`; `resources/large-paste-boundary.manifest.json` | P2 | M2 | integration |
 | PIGE-CAP-003 | Supported macOS versions provide local voice dictation in the Home composer; unsupported platforms show a clear unavailable state and never send dictation audio to a model provider. | `docs/PRD.md` | P2 | M2 | integration |
 | PIGE-CAP-004 | Whole-window drop release immediately submits one bounded Agent turn; composer-picked files remain removable local chips with zero durable/network effects until Send atomically binds exact query and attachments to one parent Job. | `docs/UI_PROTOTYPE.md` | P2 | M2 | integration |
