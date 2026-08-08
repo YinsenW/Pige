@@ -102,9 +102,11 @@ export function ReaderTopicRenameDialog(props: ReaderTopicRenameDialogProps): Re
         <PigeIcon name="edit" size={16} />
       </button>
       {open ? (
-        <div className="reader-action-dialog" role="dialog" aria-modal="true" aria-labelledby="topic-rename-title">
+        <div className="reader-action-dialog" role="dialog" aria-modal="true" aria-busy={status === "saving"}
+          aria-labelledby="topic-rename-title">
           <h2 id="topic-rename-title">{props.t("topic.rename.title")}</h2>
           <p>{props.t("topic.rename.description")}</p>
+          {status === "saving" ? <p role="status" aria-live="polite">{props.t("topic.rename.saving")}</p> : null}
           <label>
             <span>{props.t("topic.rename.field")}</span>
             <input

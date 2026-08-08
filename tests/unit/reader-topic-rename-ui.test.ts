@@ -100,6 +100,8 @@ describe("ReaderTopicRenameDialog", () => {
     await click(confirm, harness.dom);
     await click(confirm, harness.dom);
     expect(onRename).toHaveBeenCalledTimes(1);
+    expect(harness.container.querySelector('[role="dialog"]')?.getAttribute("aria-busy")).toBe("true");
+    expect(harness.container.querySelector('[role="status"]')?.textContent).toBe("Renaming");
     const request = onRename.mock.calls[0]?.[0];
     await act(async () => {
       resolveRename({
@@ -115,6 +117,18 @@ describe("ReaderTopicRenameDialog", () => {
     expect(harness.container.querySelector<HTMLInputElement>("input")?.value).toBe("New Topic");
     expect(harness.container.querySelector('[role="alert"]')?.textContent).toContain("failed");
     expect(harness.container.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(harness.container.querySelector('[role="dialog"]')?.getAttribute("aria-busy")).toBe("false");
+    expect(harness.container.querySelector('[role="status"]')).toBeNull();
+    expect(confirm.disabled).toBe(false);
+    await click(confirm, harness.dom);
+    expect(onRename).toHaveBeenCalledTimes(2);
+    const retryRequest = onRename.mock.calls[1]?.[0];
+    await act(async () => {
+      resolveRename({ ...retryRequest, status: "stale" });
+      await Promise.resolve();
+      await new Promise((resolve) => harness.dom.window.setTimeout(resolve, 20));
+    });
+    expect(harness.container.querySelector('[role="alert"]')?.textContent).toContain("changed");
     await harness.unmount();
   });
 });
