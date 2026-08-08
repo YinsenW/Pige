@@ -543,7 +543,14 @@ export function AgentMemorySettingsPanel(
       ) {
         backupPreferenceRequestActiveRef.current = false;
         setBackupPreferenceSaving(false);
-        window.setTimeout(() => backupPreferenceButtonRef.current?.focus(), 0);
+        window.setTimeout(() => {
+          const trigger = backupPreferenceButtonRef.current;
+          if (trigger && !trigger.disabled) {
+            trigger.focus();
+            return;
+          }
+          panelHeadingRef.current?.focus();
+        }, 0);
       }
     }
   };

@@ -6660,6 +6660,57 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("returns focus to the memory heading when backup work blocks the preference", async () => {
+    const dom = createDom();
+    const summary = memorySummary(4, "active");
+    const preference = {
+      apiVersion: 1 as const,
+      activeVaultId: summary.activeVaultId,
+      revision: `backupmemoryrev_${"a".repeat(64)}` as const,
+      includeVaultMemory: true,
+      canUpdate: true
+    };
+    const setMemoryPreference = vi.fn(async (request: any) => ({
+      apiVersion: 1 as const,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      status: "blocked" as const,
+      summary: { ...preference, canUpdate: false }
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        backup: {
+          memoryPreferenceStatus: vi.fn(async () => preference),
+          setMemoryPreference
+        },
+        memory: {
+          list: vi.fn(async () => summary),
+          disable: vi.fn(), edit: vi.fn(), enable: vi.fn(), delete: vi.fn(), export: vi.fn(), reset: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(AgentMemorySettingsPanel, { activeVaultId: summary.activeVaultId, t }));
+      await settle(dom);
+    });
+    const control = requireElement(dom.window.document.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="Include Agent memory in backups"]'
+    ));
+    await act(async () => { control.click(); await settle(dom); });
+    await act(async () => { await settle(dom); });
+    expect(setMemoryPreference).toHaveBeenCalledTimes(1);
+    expect(control.disabled).toBe(true);
+    expect(dom.window.document.activeElement).toBe(
+      dom.window.document.querySelector("#settings-memory-title")
+    );
+    expect(dom.window.document.body.textContent).toContain("Finish the current backup before changing this preference.");
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("manages the reversible vault memory lifecycle with exact CAS and quiet cancellation", async () => {
     const dom = createDom();
     const activeSummary = memorySummary(4, "active");

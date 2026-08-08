@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   PaddleOcrDisableRequest,
   PaddleOcrDisableResult,
@@ -644,6 +644,7 @@ export function LocalCapabilitiesSettingsPanel(
   const speechAssetBufferedEventsRef = useRef<SpeechAssetInstallEvent[]>([]);
   const speechAssetTriggerRef = useRef<HTMLButtonElement | null>(null);
   const speechStatusRef = useRef<HTMLSpanElement | null>(null);
+  const [speechAssetFocusRequest, setSpeechAssetFocusRequest] = useState(0);
   const toolchainReinstallActiveRef = useRef(false);
   const toolchainReinstallTriggerRef = useRef<HTMLButtonElement | null>(null);
   const toolchainRefreshTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -670,8 +671,12 @@ export function LocalCapabilitiesSettingsPanel(
     Boolean(props.speechAssetApi && props.speechLanguageTag && props.onRefreshSpeechAvailability);
 
   const restoreSpeechAssetFocus = (): void => {
-    window.setTimeout(() => (speechAssetTriggerRef.current ?? speechStatusRef.current)?.focus(), 0);
+    setSpeechAssetFocusRequest((current) => current + 1);
   };
+  useLayoutEffect(() => {
+    if (speechAssetFocusRequest === 0) return;
+    (speechAssetTriggerRef.current ?? speechStatusRef.current)?.focus({ preventScroll: true });
+  }, [speechAssetFocusRequest]);
   const applySpeechAssetEvent = (event: SpeechAssetInstallEvent): void => {
     if (
       event.installationId !== speechAssetInstallationRef.current ||
