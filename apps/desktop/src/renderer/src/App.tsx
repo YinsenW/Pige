@@ -8008,6 +8008,7 @@ export function AppearanceSettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const themeOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const languageSelectRef = useRef<HTMLSelectElement | null>(null);
   const themeChoices = ["system", "light", "dark"] as const;
   const [languageBusy, setLanguageBusy] = useState(false);
   const [languageError, setLanguageError] = useState(false);
@@ -8040,6 +8041,7 @@ export function AppearanceSettingsPanel(props: {
       setLanguageError(true);
     } finally {
       setLanguageBusy(false);
+      window.setTimeout(() => languageSelectRef.current?.focus(), 0);
     }
   };
 
@@ -8137,6 +8139,7 @@ export function AppearanceSettingsPanel(props: {
               <span id="appearance-app-language-description">{props.t("appearance.appLanguageDescription")}</span>
             </div>
             <select
+              ref={languageSelectRef}
               className="settings-select"
               value={props.locale}
               disabled={languageBusy}
