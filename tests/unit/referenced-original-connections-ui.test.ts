@@ -55,6 +55,7 @@ describe("referenced original Connections settings", () => {
     });
     await waitFor(harness.dom, () => reconnectOriginal.mock.calls.length === 1);
     await waitFor(harness.dom, () => harness.container.textContent?.includes("All originals are connected.") === true);
+    await waitFor(harness.dom, () => harness.dom.window.document.activeElement === button(harness.container, "Refresh"));
     expect(reconnectOriginal.mock.calls[0]?.[0]).toMatchObject({
       activeVaultId: "vault_20260731_settings01",
       sourceId: candidate.sourceId,
@@ -69,6 +70,32 @@ describe("referenced original Connections settings", () => {
     expect(harness.container.textContent).toContain("Original reconnected.");
     expect(harness.container.textContent).not.toContain("/private/");
     expect(harness.container.textContent).not.toContain("op_20260731");
+    await harness.unmount();
+  });
+
+  it("keeps the last safe source list visible when a refresh fails", async () => {
+    let listCalls = 0;
+    const reconnectableOriginals = vi.fn(async (request: Record<string, unknown>) => {
+      listCalls += 1;
+      if (listCalls > 1) throw new Error("refresh failed");
+      return { ...request, status: "ready" as const, sources: [candidate], truncated: false };
+    });
+    const harness = await mount({
+      reconnectableOriginals,
+      reconnectOriginal: vi.fn(async (request: Record<string, unknown>) => ({ ...request, status: "cancelled" as const })),
+      onRefresh: async () => undefined
+    });
+    await waitFor(harness.dom, () => harness.container.textContent?.includes(candidate.displayName) === true);
+
+    await act(async () => {
+      const refresh = button(harness.container, "Refresh");
+      refresh.focus();
+      refresh.click();
+      await settle(harness.dom);
+    });
+    await waitFor(harness.dom, () => harness.container.textContent?.includes("Could not check originals.") === true);
+    expect(harness.container.textContent).toContain(candidate.displayName);
+    expect(button(harness.container, "Reconnect").disabled).toBe(false);
     await harness.unmount();
   });
 

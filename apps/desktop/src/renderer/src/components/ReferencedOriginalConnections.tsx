@@ -9,9 +9,9 @@ import type {
 import { SourceRelinkChangedDialog } from "./SourceRelinkChangedDialog";
 
 type ListState =
-  | { readonly kind: "loading" }
+  | { readonly kind: "loading"; readonly previous?: Extract<SourceReconnectListResult, { readonly status: "ready" }> }
   | { readonly kind: "ready"; readonly result: Extract<SourceReconnectListResult, { readonly status: "ready" }> }
-  | { readonly kind: "failed" };
+  | { readonly kind: "failed"; readonly previous?: Extract<SourceReconnectListResult, { readonly status: "ready" }> };
 
 type Notice = {
   readonly sourceId: string;
@@ -36,12 +36,22 @@ export function ReferencedOriginalConnections(props: {
     readonly request: SourceReconnectRequest;
     readonly preview: Extract<SourceReconnectResult, { readonly status: "changed" }>["preview"];
   } | null>(null);
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  const restoreFocus = (sourceId: string): void => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const target = triggerRefs.current.get(sourceId) ?? refreshButtonRef.current ?? sectionRef.current;
+      target?.focus({ preventScroll: true });
+    }));
+  };
 
   const load = async (): Promise<void> => {
     const sequence = sequenceRef.current + 1;
     sequenceRef.current = sequence;
     const activeVaultId = props.activeVaultId;
-    setState({ kind: "loading" });
+    const previous = state.kind === "ready" ? state.result : state.previous;
+    setState(previous ? { kind: "loading", previous } : { kind: "loading" });
     try {
       const request = {
         apiVersion: 1 as const,
@@ -51,9 +61,13 @@ export function ReferencedOriginalConnections(props: {
       const result = await window.pige.sources.reconnectableOriginals(request);
       if (sequence !== sequenceRef.current || activeVaultId !== props.activeVaultId ||
         result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId) return;
-      setState(result.status === "ready" ? { kind: "ready", result } : { kind: "failed" });
+      setState(result.status === "ready"
+        ? { kind: "ready", result }
+        : previous ? { kind: "failed", previous } : { kind: "failed" });
     } catch {
-      if (sequence === sequenceRef.current && activeVaultId === props.activeVaultId) setState({ kind: "failed" });
+      if (sequence === sequenceRef.current && activeVaultId === props.activeVaultId) {
+        setState(previous ? { kind: "failed", previous } : { kind: "failed" });
+      }
     }
   };
 
@@ -119,7 +133,7 @@ export function ReferencedOriginalConnections(props: {
       if (pendingRef.current === source.sourceId) {
         pendingRef.current = null;
         setPendingSourceId(null);
-        if (!keepDialogOpen) window.requestAnimationFrame(() => triggerRefs.current.get(source.sourceId)?.focus());
+        if (!keepDialogOpen) restoreFocus(source.sourceId);
       }
     }
   };
@@ -152,7 +166,7 @@ export function ReferencedOriginalConnections(props: {
     } finally {
       pendingRef.current = null;
       setPendingSourceId(null);
-      window.requestAnimationFrame(() => triggerRefs.current.get(value.source.sourceId)?.focus());
+      restoreFocus(value.source.sourceId);
     }
   };
 
@@ -183,15 +197,16 @@ export function ReferencedOriginalConnections(props: {
   };
 
   return (
-    <div className="settings-row tall" aria-busy={state.kind === "loading" || pendingSourceId !== null}>
+    <div ref={sectionRef} className="settings-row tall" role="group" tabIndex={-1}
+      aria-labelledby="source-reconnect-title" aria-busy={state.kind === "loading" || pendingSourceId !== null}>
       <div className="settings-row-copy">
-        <strong>{props.t("sourceReconnect.title")}</strong>
+        <strong id="source-reconnect-title">{props.t("sourceReconnect.title")}</strong>
         <span>{props.t("sourceReconnect.description")}</span>
-        {state.kind === "loading" ? <span role="status">{props.t("sourceReconnect.loading")}</span>
-          : state.kind === "failed" ? <span role="alert">{props.t("sourceReconnect.failed")}</span>
-            : state.result.sources.length === 0 ? <span>{props.t("sourceReconnect.allConnected")}</span>
+        {state.kind === "loading" && !state.previous ? <span role="status" aria-live="polite">{props.t("sourceReconnect.loading")}</span>
+          : state.kind === "failed" && !state.previous ? <span role="alert">{props.t("sourceReconnect.failed")}</span>
+            : (state.kind === "ready" ? state.result : state.previous)?.sources.length === 0 ? <span>{props.t("sourceReconnect.allConnected")}</span>
               : <ul className="settings-compact-list">
-                {state.result.sources.map((source) => (
+                {(state.kind === "ready" ? state.result : state.previous)?.sources.map((source) => (
                   <li key={source.sourceId}>
                     <span>{source.displayName}</span>
                     <button
@@ -212,11 +227,15 @@ export function ReferencedOriginalConnections(props: {
                     </span> : null}
                   </li>
                 ))}
-                {state.result.truncated ? <li>{props.t("sourceReconnect.truncated")}</li> : null}
+                {(state.kind === "ready" ? state.result : state.previous)?.truncated
+                  ? <li>{props.t("sourceReconnect.truncated")}</li>
+                  : null}
               </ul>}
+        {state.kind === "loading" && state.previous ? <span role="status" aria-live="polite">{props.t("sourceReconnect.loading")}</span> : null}
+        {state.kind === "failed" && state.previous ? <span role="alert">{props.t("sourceReconnect.failed")}</span> : null}
         {reconnected ? <span role="status">{props.t("sourceReconnect.reconnected")}</span> : null}
       </div>
-      <button className="settings-button" type="button" disabled={props.disabled || pendingSourceId !== null}
+      <button ref={refreshButtonRef} className="settings-button" type="button" disabled={props.disabled || pendingSourceId !== null}
         onClick={() => void load()}>{props.t("sourceReconnect.refresh")}</button>
       {changedPreview ? <SourceRelinkChangedDialog preview={changedPreview.preview}
         pending={pendingSourceId !== null} t={props.t}
