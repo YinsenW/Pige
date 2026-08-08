@@ -320,8 +320,10 @@ Build:
 Agent Spine Gate: Pi handles preserved input, selected parse/OCR/retrieval, cited create/
 append, bounded tags/link, and transitional review. B3.13/E3.08 remains partial: broader
 tools/routes, legacy ingest repair, real production Broker callers, and broader exceptions
-remain; no deep/forked loop. A compatible cited existing-note append plus bounded tag
-additions is one recovered `update_page` Operation, not a second partial write.
+remain; no deep/forked loop. Same-page cited update plus bounded tags remains one recovered
+`update_page` Operation. AR3 additionally permits at most two distinct existing-page effects
+only for an exact direct authored command; each has an independent tool/input hash,
+checkpoint and Operation, and restart adopts committed effects without Pi replay.
 
 H2 makes `agent.submitTurn` the sole new semantic ingress, marks new sources
 `agent_turn`/`capture_only`, and normalizes old missing fields to `legacy_agent_ingest`.
@@ -376,7 +378,10 @@ Exit criteria:
   and retry-safe, typed validation rejection remains inside Pi until accepted/abstained,
   effects do not block model/inspect/search/parse/OCR continuation; exact owners reject
   conflicting mutations, while one same-page cited update plus bounded tags shares one durable
-  checkpoint/Operation/Undo recovery; cross-page or mixed-target recovery remains AR3. Active-vault eligible knowledge-
+  checkpoint/Operation/Undo recovery. AR3 additionally proves at most two distinct
+  existing-page effects for an exact direct authored command, each independently
+  checkpointed/operation-bound and restart-adopted without Pi replay; broader aggregation
+  remains open. Active-vault eligible knowledge-
   Markdown writes need no Permission prompt; Pi-requested Pige-owned or extension scopes
   outside standing authority remain Phase 8 Broker acceptance.
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps

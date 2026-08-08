@@ -460,6 +460,10 @@ Examples:
   unique durable capture-reference event. Drift fails before publication. Its append-only
   activity line carries the committed Operation ID, so a crash after the log write and a
   subsequent retry adopt that line instead of appending it again or calling the model again.
+- An AR3 compound existing-page request may commit at most two distinct page effects only
+  after exact authored-command proof. Each binds its own tool/input hash, checkpoint and
+  Operation; the parent retains their ordered IDs. Restart re-proves and adopts committed
+  effects without Pi/runtime replay, and request or binding drift fails closed.
 - If a backup zip finalization failed, retry creates a new archive path or replaces only a verified incomplete temp file.
 
 ## 8. Retry Policy
