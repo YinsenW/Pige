@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { ReferencedOriginalReconnectCandidate, SourceReconnectListResult, SourceReconnectRequest, SourceReconnectResult } from "@pige/contracts";
+import type {
+  ReferencedOriginalReconnectCandidate,
+  SourceReconnectCancelRequest,
+  SourceReconnectListResult,
+  SourceReconnectRequest,
+  SourceReconnectResult
+} from "@pige/contracts";
 import { SourceRelinkChangedDialog } from "./SourceRelinkChangedDialog";
 
 type ListState =
@@ -150,6 +156,32 @@ export function ReferencedOriginalConnections(props: {
     }
   };
 
+  const cancelChanged = async (): Promise<void> => {
+    if (!changedPreview || pendingRef.current || props.disabled) return;
+    const value = changedPreview;
+    pendingRef.current = value.source.sourceId;
+    setPendingSourceId(value.source.sourceId);
+    const request: SourceReconnectCancelRequest = {
+      ...value.request,
+      requestId: `sourcereconnectdirect_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      previewId: value.preview.previewId
+    };
+    try {
+      const result = await window.pige.sources.cancelReconnectPreview(request);
+      if (!sameIdentity(request, result)) return;
+      if (result.status !== "cancelled") {
+        setNotice({ sourceId: value.source.sourceId, kind: result.status === "stale" ? "stale" : "failed" });
+      }
+    } catch {
+      setNotice({ sourceId: value.source.sourceId, kind: "failed" });
+    } finally {
+      setChangedPreview(null);
+      pendingRef.current = null;
+      setPendingSourceId(null);
+      window.requestAnimationFrame(() => triggerRefs.current.get(value.source.sourceId)?.focus());
+    }
+  };
+
   return (
     <div className="settings-row tall" aria-busy={state.kind === "loading" || pendingSourceId !== null}>
       <div className="settings-row-copy">
@@ -188,18 +220,25 @@ export function ReferencedOriginalConnections(props: {
         onClick={() => void load()}>{props.t("sourceReconnect.refresh")}</button>
       {changedPreview ? <SourceRelinkChangedDialog preview={changedPreview.preview}
         pending={pendingSourceId !== null} t={props.t}
-        onCancel={() => {
-          const sourceId = changedPreview.source.sourceId;
-          setChangedPreview(null);
-          window.requestAnimationFrame(() => triggerRefs.current.get(sourceId)?.focus());
-        }} onConfirm={() => void confirmChanged()} /> : null}
+        onCancel={() => void cancelChanged()} onConfirm={() => void confirmChanged()} /> : null}
     </div>
   );
 }
 
 function sameIdentity(
   request: Parameters<typeof window.pige.sources.reconnectOriginal>[0],
-  result: Awaited<ReturnType<typeof window.pige.sources.reconnectOriginal>>
+  result: {
+    readonly apiVersion: number;
+    readonly requestId: string;
+    readonly activeVaultId: string;
+    readonly sourceId: string;
+    readonly sourceKind: string;
+    readonly sourceRevision: string;
+    readonly expectedAvailability: "unavailable";
+    readonly expectedChecksum: string;
+    readonly expectedSize: number;
+    readonly formatIdentity: string;
+  }
 ): boolean {
   return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId && result.sourceId === request.sourceId &&

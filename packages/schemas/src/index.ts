@@ -1746,6 +1746,7 @@ export const SourceKindSchema = z.enum([
 export const NOTE_RECONNECT_ORIGINAL_SOURCE_CHANNEL = "notes.reconnectOriginalSource" as const;
 export const SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL = "sources.reconnectableOriginals" as const;
 export const SOURCE_RECONNECT_ORIGINAL_CHANNEL = "sources.reconnectOriginal" as const;
+export const SOURCE_RECONNECT_CANCEL_CHANNEL = "sources.cancelReconnectPreview" as const;
 export const NoteReconnectOriginalSourceRequestIdSchema = z.string()
   .regex(/^notesourcereconnect_[a-z0-9]{16,64}$/);
 export const SourceReconnectListRequestIdSchema = z.string()
@@ -1831,6 +1832,40 @@ export const SourceReconnectResultSchema = z.discriminatedUnion("status", [
     SourceReconnectIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
 ]);
+export const SourceReconnectCancelRequestSchema = SourceReconnectRequestSchema.extend({
+  previewId: SourceRelinkPreviewIdSchema
+}).strict();
+const SourceReconnectCancelIdentitySchema = SourceReconnectCancelRequestSchema;
+export const SourceReconnectCancelResultSchema = z.discriminatedUnion("status", [
+  SourceReconnectCancelIdentitySchema.extend({ status: z.literal("cancelled") }).strict(),
+  SourceReconnectCancelIdentitySchema.extend({ status: z.literal("stale") }).strict(),
+  SourceReconnectCancelIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  SourceReconnectCancelIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SourceReconnectPreviewReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  workflowVersion: z.literal(1),
+  previewId: SourceRelinkPreviewIdSchema,
+  activeVaultId: VaultIdSchema,
+  requestId: z.string().regex(/^sourcereconnectdirect_[a-z0-9]{8,64}$/),
+  ...ReferencedOriginalReconnectProofSchema.shape,
+  recordChecksum: SourceContentChecksumSchema,
+  selectedPath: z.string().min(1).max(4096),
+  selectedIdentity: z.object({
+    path: z.string().min(1).max(4096),
+    parentRealPath: z.string().min(1).max(4096),
+    parentDev: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    parentIno: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    fileDev: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    fileIno: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    mtimeMs: z.number().finite().nonnegative(),
+    ctimeMs: z.number().finite().nonnegative()
+  }).strict(),
+  observedChecksum: SourceContentChecksumSchema,
+  observedSize: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  createdAt: z.string().datetime({ offset: true })
+}).strict();
 
 export const SOURCE_TRASH_CHANNEL = "sources.trash" as const;
 export const SOURCE_TRASH_LIST_CHANNEL = "sources.listTrash" as const;
@@ -14246,6 +14281,9 @@ export type SourceReconnectListRequest = z.infer<typeof SourceReconnectListReque
 export type SourceReconnectListResult = z.infer<typeof SourceReconnectListResultSchema>;
 export type SourceReconnectRequest = z.infer<typeof SourceReconnectRequestSchema>;
 export type SourceReconnectResult = z.infer<typeof SourceReconnectResultSchema>;
+export type SourceReconnectCancelRequest = z.infer<typeof SourceReconnectCancelRequestSchema>;
+export type SourceReconnectCancelResult = z.infer<typeof SourceReconnectCancelResultSchema>;
+export type SourceReconnectPreviewReceipt = z.infer<typeof SourceReconnectPreviewReceiptSchema>;
 export type SourceTrashEligibility = z.infer<typeof SourceTrashEligibilitySchema>;
 export type SourceTrashRequest = z.infer<typeof SourceTrashRequestSchema>;
 export type SourceTrashResult = z.infer<typeof SourceTrashResultSchema>;

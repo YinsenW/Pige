@@ -6,6 +6,7 @@ import type {
   ReferencedOriginalReconnectResult,
   SourceReconnectListRequest,
   SourceReconnectListResult,
+  SourceReconnectCancelResult,
   SourceReconnectRequest,
   SourceReconnectResult
 } from "@pige/contracts";
@@ -15,7 +16,10 @@ import {
   ReferencedOriginalReconnectRequestSchema,
   ReferencedOriginalReconnectResultSchema,
   SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+  SOURCE_RECONNECT_CANCEL_CHANNEL,
   SOURCE_RECONNECT_ORIGINAL_CHANNEL,
+  SourceReconnectCancelRequestSchema,
+  SourceReconnectCancelResultSchema,
   SourceReconnectListRequestSchema,
   SourceReconnectListResultSchema,
   SourceReconnectRequestSchema,
@@ -188,6 +192,19 @@ export function registerSourceReconnectIpc(options: RegisterSourceReconnectIpcOp
       contentState: result.contentState,
       resumedJobCount
     });
+  });
+  options.ipcMain.handle(SOURCE_RECONNECT_CANCEL_CHANNEL, (
+    _event,
+    request: unknown
+  ): SourceReconnectCancelResult => {
+    const parsed = SourceReconnectCancelRequestSchema.parse(request);
+    const status = options.getReconnectService().cancelChanged({
+      activeVaultId: parsed.activeVaultId,
+      requestId: parsed.requestId,
+      ...reconnectProof(parsed),
+      previewId: parsed.previewId
+    });
+    return SourceReconnectCancelResultSchema.parse({ ...parsed, status });
   });
 }
 
