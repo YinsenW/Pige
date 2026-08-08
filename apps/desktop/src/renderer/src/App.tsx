@@ -70,7 +70,7 @@ import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel"
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
 import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
-import { DiagnosticsRecentErrorsCard } from "./components/DiagnosticsRecentErrorsCard";
+import { DiagnosticsRecentErrorsPanel } from "./components/DiagnosticsRecentErrorsPanel";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -128,7 +128,6 @@ import type {
   DiagnosticsClearLocalResult,
   DictationLanguagePreference,
   DiagnosticsHealth,
-  DiagnosticsRecentErrorsResult,
   GeneratedKnowledgeLanguage,
   HomeAgentModelUsage,
   HighRiskConfirmationPendingResult,
@@ -8250,8 +8249,6 @@ export function SystemSettingsPanel(props: {
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
-  const [recentErrors, setRecentErrors] = useState<DiagnosticsRecentErrorsResult | null>(null);
-  const [recentErrorsLoadFailed, setRecentErrorsLoadFailed] = useState(false);
   const [recommendedEventIds, setRecommendedEventIds] = useState<readonly string[] | undefined>();
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
@@ -8271,7 +8268,6 @@ export function SystemSettingsPanel(props: {
     readonly kind: "check" | "download" | "apply";
     readonly requestId: string;
   } | null>(null);
-
   useEffect(() => {
     if (props.surface !== "updates") return;
     let active = true;
@@ -8308,35 +8304,16 @@ export function SystemSettingsPanel(props: {
       unsubscribe();
     };
   }, []);
-
   useEffect(() => {
     if (props.surface !== "diagnostics") return;
     let active = true;
     const refresh = async (): Promise<void> => {
-      const [summaryResult, errorsResult] = await Promise.allSettled([
-        Promise.resolve().then(() => window.pige.diagnostics.workflowSummary()),
-        Promise.resolve().then(() => {
-          if (typeof window.pige.diagnostics.recentErrors !== "function") {
-            throw new Error("diagnostics_recent_errors_unavailable");
-          }
-          return window.pige.diagnostics.recentErrors({
-            apiVersion: 1,
-            requestId: `diagrecentreq_${crypto.randomUUID().replaceAll("-", "")}`
-          });
-        })
-      ]);
-      if (!active) return;
-      if (summaryResult.status === "fulfilled") {
-        setDiagnosticsWorkflow((current) => !current || summaryResult.value.revision >= current.revision ? summaryResult.value : current);
-      } else {
-        setDiagnosticsWorkflow(null);
-      }
-      if (errorsResult.status === "fulfilled") {
-        setRecentErrors(errorsResult.value);
-        setRecentErrorsLoadFailed(false);
-      } else {
-        setRecentErrors(null);
-        setRecentErrorsLoadFailed(true);
+      try {
+        const summary = await window.pige.diagnostics.workflowSummary();
+        if (!active) return;
+        setDiagnosticsWorkflow((current) => !current || summary.revision >= current.revision ? summary : current);
+      } catch {
+        if (active) setDiagnosticsWorkflow(null);
       }
     };
     void refresh();
@@ -8781,10 +8758,8 @@ export function SystemSettingsPanel(props: {
             onRepairSources={props.onRepairRecoverySources}
             t={props.t}
           />
-          <DiagnosticsRecentErrorsCard
-            result={recentErrors}
-            failed={recentErrorsLoadFailed}
-            onPrepareSupport={() => setRecommendedEventIds(recentErrors?.errors.map((error) => error.eventId))}
+          <DiagnosticsRecentErrorsPanel
+            onPrepareSupport={setRecommendedEventIds}
             t={props.t}
           />
           <DiagnosticsEventExportComposer
