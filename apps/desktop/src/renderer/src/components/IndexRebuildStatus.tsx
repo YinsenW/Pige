@@ -45,11 +45,11 @@ export function IndexRebuildStatus(props: IndexRebuildStatusProps): React.JSX.El
         return;
       }
       props.onCancelOutcome("accepted");
-      window.requestAnimationFrame(() => cancelButtonRef.current?.focus());
     } catch {
       props.onCancelOutcome("failed");
     } finally {
       setCancelingJobId(null);
+      window.requestAnimationFrame(() => cancelButtonRef.current?.focus({ preventScroll: true }));
     }
   };
 

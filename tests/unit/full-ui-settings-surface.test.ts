@@ -1169,7 +1169,10 @@ describe("full UI Settings surface", () => {
   it("shows numeric index rebuild progress and keeps the current Job after a stale cancel", async () => {
     const dom = createDom();
     installAnimationFrame(dom);
-    const cancel = vi.fn(async (request) => ({ ...request, status: "stale" as const }));
+    let resolveCancel!: (result: unknown) => void;
+    const cancel = vi.fn((request) => new Promise((resolve) => {
+      resolveCancel = () => resolve({ ...request, status: "stale" as const });
+    }));
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
       value: {
@@ -1216,18 +1219,22 @@ describe("full UI Settings surface", () => {
     expect(progress.getAttribute("aria-valuemax")).toBe("5");
     expect(page.textContent).toContain("3/5");
 
-    await act(async () => {
-      buttonNamed(page, "Cancel rebuild").click();
-      await settle(dom);
-    });
+    const cancelButton = buttonNamed(page, "Cancel rebuild");
+    await act(async () => { cancelButton.click(); await settle(dom); });
     expect(cancel).toHaveBeenCalledOnce();
     expect(cancel.mock.calls[0]![0]).toMatchObject({
       activeVaultId: "vault_20260809_indexprogress",
       jobId: job.id,
       expectedUpdatedAt: job.updatedAt
     });
+    const outside = dom.window.document.createElement("button");
+    outside.textContent = "Other control";
+    page.append(outside);
+    outside.focus();
+    await act(async () => { resolveCancel(); await settle(dom); });
     expect(page.textContent).toContain("Pige could not cancel this rebuild");
     expect(page.querySelector(`[data-maintenance-index-job-id="${job.id}"]`)).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(cancelButton);
 
     await act(async () => root.unmount());
     dom.window.close();
