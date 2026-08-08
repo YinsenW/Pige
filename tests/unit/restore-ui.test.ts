@@ -680,6 +680,39 @@ describe("Restore identity UI", () => {
     dom.window.close();
   });
 
+  it("prepares a previous replacement only once while its request is pending", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const candidate: RestoreRollbackCandidate = {
+      activeVaultId: "vault_restore_ui",
+      restoreJobId: "job_20260714_rollback_oneflight",
+      expectedRestoreJobUpdatedAt: "2026-07-14T08:10:00.000Z"
+    };
+    let resolvePrepare: ((result: RestoreRollbackPrepareResult) => void) | undefined;
+    harness.rollbackRestoreStatus = async () => ({ apiVersion: 1, status: "ready", candidate });
+    harness.prepareRollbackRestore = async (request) => {
+      harness.rollbackRestorePrepareRequests.push(request);
+      return new Promise((resolve) => { resolvePrepare = resolve; });
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await openVaultSettings(dom, container);
+    await waitFor(dom, () => buttons(container, "Restore previous state").length === 1);
+    const trigger = button(container, "Restore previous state");
+    await act(async () => {
+      trigger.click();
+      trigger.click();
+      await Promise.resolve();
+    });
+    expect(harness.rollbackRestorePrepareRequests).toHaveLength(1);
+
+    const request = harness.rollbackRestorePrepareRequests[0]!;
+    resolvePrepare?.({ ...request, status: "failed" });
+    await act(async () => settle(dom));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("activates the restored vault through the ordinary first-run refresh", async () => {
     const dom = createDom();
     const harness = createHarness(blockedOnboarding(), cloneOnlyPreview());
