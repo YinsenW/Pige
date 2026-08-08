@@ -99,11 +99,18 @@ import {
   type RetrievalEvidencePrivacySnapshot
 } from "./retrieval-evidence-boundary";
 import {
-  AGENT_PAGE_UPDATE_CHECKPOINT_ID,
   applyAgentPageUpdate,
-  recoverAgentPageUpdate,
+  recoverAgentPageUpdates,
   type AgentPageUpdatePublicationBinding
 } from "./agent-page-update-service";
+import {
+  compoundEffectCheckpointId,
+  createAgentCompoundEffectCoordinator,
+  hasExplicitAgentCompoundEffectIntent,
+  mergeCompoundEffectOperationIds,
+  type AgentCompoundEffectBinding,
+  type AgentCompoundEffectUserTurn
+} from "./agent-compound-effect-service";
 import { applyRelationshipProposal, isSupportedRelationshipProposal, recoverRelationshipProposal, stageRelationshipProposal,
   verifyRelationshipProposal, type RelationshipProposalBinding } from "./agent-relationship-proposal-service";
 export interface AgentIngestModelConfigPort {
@@ -177,9 +184,7 @@ export interface AgentIngestHooks {
     request: AgentIngestOcrToolRequest
   ) => Promise<AgentIngestOcrToolExecution>;
   readonly signal?: AbortSignal;
-  readonly userTurn?: {
-    readonly text: string;
-  };
+  readonly userTurn?: AgentCompoundEffectUserTurn;
 }
 
 export interface AgentIngestParseToolRequest {
@@ -726,7 +731,7 @@ export class AgentIngestService {
       "tool",
       "pige_agent_tool_catalog"
     );
-    const recoveredUpdate = recoverAgentPageUpdate({
+    const recoveredUpdates = recoverAgentPageUpdates({
       vaultPath,
       job,
       sourceRecord,
@@ -760,7 +765,19 @@ export class AgentIngestService {
         assertSourceCurrent: () => hooks.assertSourceCurrent?.(sourceRecord)
       } : {})
     });
-    if (recoveredUpdate) {
+    if (recoveredUpdates.length > 0) {
+      const recoveredUpdate = recoveredUpdates[recoveredUpdates.length - 1]!;
+      const recoveredBindings: AgentCompoundEffectBinding[] = recoveredUpdates.map((update, ordinal) => ({
+        pageId: update.pageId,
+        toolId: update.relationshipPageId
+          ? LINK_KNOWLEDGE_NOTES_TOOL_NAME
+          : update.tagAdditions?.length
+            ? ADD_KNOWLEDGE_TAGS_TOOL_NAME
+            : UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
+        canonicalInputHash: update.canonicalInputHash,
+        checkpointId: compoundEffectCheckpointId(ordinal),
+        operationId: update.operation.id
+      }));
       return createSettledAgentSourceToolSession({
         outcome: "published",
         mutationKind: "update_page",
@@ -771,7 +788,7 @@ export class AgentIngestService {
         reviewRequired: false,
         warnings: [],
         operationId: recoveredUpdate.operation.id,
-        operationIds: Array.from(new Set([...(job.operationIds ?? []), recoveredUpdate.operation.id])),
+        operationIds: mergeCompoundEffectOperationIds(job.operationIds ?? [], recoveredBindings),
         ...(recoveredUpdate.relationshipPageId ? { knowledgeAction: "linked" as const } : {})
       });
     }
@@ -885,15 +902,13 @@ export class AgentIngestService {
     let publication: AgentIngestPublishedResult | undefined;
     let stagedProposal: AgentIngestProposalResult | undefined;
     let datasetMaterialization: AgentIngestDatasetResult | undefined;
-    let pageEffectBinding: {
+    const compoundEffects = createAgentCompoundEffectCoordinator<AgentIngestPublishToolResult>(
+      hasExplicitAgentCompoundEffectIntent(hooks.userTurn)
+    );
+    let generatedPageEffect = false;
+    let generatedPageEffectBinding: {
       readonly pageId: string;
-      readonly toolId: string;
       readonly canonicalInputHash: string;
-    } | undefined;
-    let pageEffectReplay: {
-      readonly toolId: string;
-      readonly inputHash: string;
-      readonly execute: () => Promise<AgentIngestPublishToolResult>;
     } | undefined;
     const proposalStageAvailable = this.#proposals !== undefined && job.class === "agent_ingest";
 
@@ -1019,33 +1034,6 @@ export class AgentIngestService {
           "dataset.operation_conflict",
           "A Dataset materialization already owns this Agent turn."
         );
-      }
-    };
-    const assertPageEffectCompatible = (next: NonNullable<typeof pageEffectBinding>): void => {
-      if (
-        pageEffectBinding &&
-        (
-          pageEffectBinding.pageId !== next.pageId ||
-          pageEffectBinding.toolId !== next.toolId ||
-          pageEffectBinding.canonicalInputHash !== next.canonicalInputHash
-        )
-      ) {
-        throw generatedNoteConflict("A different page mutation already owns this Agent Job.");
-      }
-    };
-    const replayPageEffect = (
-      toolId: string,
-      inputHash: string
-    ): Promise<AgentIngestPublishToolResult> | undefined => {
-      if (!pageEffectReplay) return undefined;
-      if (pageEffectReplay.toolId !== toolId || pageEffectReplay.inputHash !== inputHash) {
-        throw generatedNoteConflict("A different page mutation already owns this Agent Job.");
-      }
-      return pageEffectReplay.execute();
-    };
-    const assertNoPriorPageEffect = (): void => {
-      if (pageEffectBinding) {
-        throw generatedNoteConflict("A page mutation already owns this Agent Job.");
       }
     };
     let terminalEffectTail: Promise<void> = Promise.resolve();
@@ -1472,7 +1460,7 @@ export class AgentIngestService {
         ...(supportsAgentSelectedDataset(currentSourceRecord.kind) ? {
           materializeDataset: async (context) => withTerminalEffectFence(async () => {
             throwIfAborted(context.signal);
-            assertNoPriorPageEffect();
+            compoundEffects.assertNoPrior(generatedPageEffect);
             assertNoDurableProposal();
             assertNoGeneratedNote();
             hooks.throwIfCancellationRequested?.();
@@ -1757,7 +1745,7 @@ export class AgentIngestService {
             const inputHash = createAgentPayloadIntegrityHash(JSON.stringify(
               AgentIngestLinkSchema.parse(modelOutput)
             ));
-            const replay = replayPageEffect(LINK_KNOWLEDGE_NOTES_TOOL_NAME, inputHash);
+            const replay = compoundEffects.replay(LINK_KNOWLEDGE_NOTES_TOOL_NAME, inputHash);
             if (replay) return replay;
             const prepared = await prepareExistingPageLink(modelOutput, context);
             if (prepared.reviewRequired) {
@@ -1788,7 +1776,7 @@ export class AgentIngestService {
               toolId: LINK_KNOWLEDGE_NOTES_TOOL_NAME,
               canonicalInputHash: prepared.canonicalInputHash
             };
-            assertPageEffectCompatible(effectBinding);
+            const registeredEffect = compoundEffects.register(effectBinding, generatedPageEffect);
             const execute = async (): Promise<AgentIngestPublishToolResult> => {
               const committed = applyAgentPageUpdate({
                 vaultPath,
@@ -1809,8 +1797,7 @@ export class AgentIngestService {
                 keyPoints: [],
                 confidence: prepared.confidence,
                 onPublicationStart: (binding) => {
-                  pageEffectBinding = effectBinding;
-                  hooks.onPublicationStart?.(AGENT_PAGE_UPDATE_CHECKPOINT_ID, binding);
+                  hooks.onPublicationStart?.(registeredEffect.checkpointId, binding);
                 },
                 ...(hooks.throwIfCancellationRequested ? {
                   throwIfCancellationRequested: hooks.throwIfCancellationRequested
@@ -1825,8 +1812,8 @@ export class AgentIngestService {
                   "The committed knowledge relationship no longer matches its selected target."
                 );
               }
+              compoundEffects.recordOperation(registeredEffect, committed.operation.id);
               releaseConsumedRetrievalBinding();
-              pageEffectBinding = effectBinding;
               publication = {
                 outcome: "published",
                 mutationKind: "update_page",
@@ -1838,7 +1825,7 @@ export class AgentIngestService {
                 reviewRequired: false,
                 warnings: [],
                 operationId: committed.operation.id,
-                operationIds: [committed.operation.id]
+                operationIds: mergeCompoundEffectOperationIds(job.operationIds ?? [], compoundEffects.bindings)
               };
               return {
                 modelText: JSON.stringify({
@@ -1853,7 +1840,7 @@ export class AgentIngestService {
                 }
               };
             };
-            pageEffectReplay = { toolId: LINK_KNOWLEDGE_NOTES_TOOL_NAME, inputHash, execute };
+            compoundEffects.remember({ toolId: LINK_KNOWLEDGE_NOTES_TOOL_NAME, inputHash, execute });
             return execute();
           }),
           addTags: async (modelOutput, context) => withTerminalEffectFence(async () => {
@@ -1862,7 +1849,7 @@ export class AgentIngestService {
             const inputHash = createAgentPayloadIntegrityHash(JSON.stringify(
               AgentIngestAddTagsSchema.parse(modelOutput)
             ));
-            const replay = replayPageEffect(ADD_KNOWLEDGE_TAGS_TOOL_NAME, inputHash);
+            const replay = compoundEffects.replay(ADD_KNOWLEDGE_TAGS_TOOL_NAME, inputHash);
             if (replay) return replay;
             const prepared = await prepareExistingPageTags(modelOutput, context);
             const effectBinding = {
@@ -1870,7 +1857,7 @@ export class AgentIngestService {
               toolId: ADD_KNOWLEDGE_TAGS_TOOL_NAME,
               canonicalInputHash: prepared.canonicalInputHash
             };
-            assertPageEffectCompatible(effectBinding);
+            const registeredEffect = compoundEffects.register(effectBinding, generatedPageEffect);
             const execute = async (): Promise<AgentIngestPublishToolResult> => {
               const committed = applyAgentPageUpdate({
                 vaultPath,
@@ -1891,8 +1878,7 @@ export class AgentIngestService {
                 keyPoints: [],
                 confidence: prepared.confidence,
                 onPublicationStart: (binding) => {
-                  pageEffectBinding = effectBinding;
-                  hooks.onPublicationStart?.(AGENT_PAGE_UPDATE_CHECKPOINT_ID, binding);
+                  hooks.onPublicationStart?.(registeredEffect.checkpointId, binding);
                 },
                 ...(hooks.throwIfCancellationRequested ? {
                   throwIfCancellationRequested: hooks.throwIfCancellationRequested
@@ -1901,8 +1887,8 @@ export class AgentIngestService {
                   assertSourceCurrent: () => hooks.assertSourceCurrent?.(currentSourceRecord)
                 } : {})
               });
+              compoundEffects.recordOperation(registeredEffect, committed.operation.id);
               releaseConsumedRetrievalBinding();
-              pageEffectBinding = effectBinding;
               publication = {
                 outcome: "published",
                 mutationKind: "update_page",
@@ -1913,7 +1899,7 @@ export class AgentIngestService {
                 reviewRequired: false,
                 warnings: [],
                 operationId: committed.operation.id,
-                operationIds: [committed.operation.id]
+                operationIds: mergeCompoundEffectOperationIds(job.operationIds ?? [], compoundEffects.bindings)
               };
               return {
                 modelText: JSON.stringify({
@@ -1928,7 +1914,7 @@ export class AgentIngestService {
                 }
               };
             };
-            pageEffectReplay = { toolId: ADD_KNOWLEDGE_TAGS_TOOL_NAME, inputHash, execute };
+            compoundEffects.remember({ toolId: ADD_KNOWLEDGE_TAGS_TOOL_NAME, inputHash, execute });
             return execute();
           }),
           update: async (modelOutput, context) => withTerminalEffectFence(async () => {
@@ -1936,14 +1922,14 @@ export class AgentIngestService {
             assertNoDatasetEffect();
             const parsed = AgentIngestUpdateSchema.parse(modelOutput);
             const inputHash = createAgentPayloadIntegrityHash(JSON.stringify(parsed));
-            const replay = replayPageEffect(UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash);
+            const replay = compoundEffects.replay(UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash);
             if (replay) return replay;
             const prepared = await prepareExistingPageUpdate(modelOutput, context);
             const preparedTags = parsed.tagsToAdd ? await prepareExistingPageTags({ targetPageRef: parsed.targetPageRef, tagsToAdd: parsed.tagsToAdd, reason: parsed.summary, confidence: parsed.confidence }, context) : undefined;
             if (preparedTags && (preparedTags.target.page.pageId !== prepared.target.page.pageId || preparedTags.target.page.contentHash !== prepared.target.page.contentHash)) throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The selected note changed while its compound update was being validated.");
             const canonicalInputHash = preparedTags ? createAgentPayloadIntegrityHash(JSON.stringify({ update: prepared.canonicalInputHash, tagsToAdd: preparedTags.tagsToAdd })) : prepared.canonicalInputHash;
             const effectBinding = { pageId: prepared.target.page.pageId, toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, canonicalInputHash };
-            assertPageEffectCompatible(effectBinding);
+            const registeredEffect = compoundEffects.register(effectBinding, generatedPageEffect);
             const execute = async (): Promise<AgentIngestPublishToolResult> => {
               const committed = applyAgentPageUpdate({
                 vaultPath,
@@ -1964,8 +1950,7 @@ export class AgentIngestService {
                 keyPoints: prepared.keyPoints,
                 confidence: prepared.confidence,
                 onPublicationStart: (binding) => {
-                  pageEffectBinding = effectBinding;
-                  hooks.onPublicationStart?.(AGENT_PAGE_UPDATE_CHECKPOINT_ID, binding);
+                  hooks.onPublicationStart?.(registeredEffect.checkpointId, binding);
                 },
                 ...(hooks.throwIfCancellationRequested ? {
                   throwIfCancellationRequested: hooks.throwIfCancellationRequested
@@ -1974,8 +1959,8 @@ export class AgentIngestService {
                   assertSourceCurrent: () => hooks.assertSourceCurrent?.(currentSourceRecord)
                 } : {})
               });
+              compoundEffects.recordOperation(registeredEffect, committed.operation.id);
               releaseConsumedRetrievalBinding();
-              pageEffectBinding = effectBinding;
               publication = {
                 outcome: "published",
                 mutationKind: "update_page",
@@ -1986,20 +1971,20 @@ export class AgentIngestService {
                 reviewRequired: false,
                 warnings: [],
                 operationId: committed.operation.id,
-                operationIds: [committed.operation.id]
+                operationIds: mergeCompoundEffectOperationIds(job.operationIds ?? [], compoundEffects.bindings)
               };
               return {
                 modelText: JSON.stringify({ status: committed.recovered ? "recovered" : preparedTags ? "updated_and_tagged" : "updated", pageId: committed.pageId, ...(preparedTags ? { tagCount: preparedTags.tagsToAdd.length } : {}) }),
                 details: { pageId: committed.pageId, ...(preparedTags ? { tagCount: preparedTags.tagsToAdd.length } : {}), operationIds: publication.operationIds }
               };
             };
-            pageEffectReplay = { toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash, execute };
+            compoundEffects.remember({ toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash, execute });
             return execute();
           })
         } : {}),
         ...(proposalStageAvailable && this.#proposals ? {
           stageProposal: async (modelOutput, context) => withTerminalEffectFence(async () => {
-            assertNoPriorPageEffect();
+            compoundEffects.assertNoPrior(generatedPageEffect);
             assertNoGeneratedNote();
             assertNoDatasetEffect();
             const prepared = await prepareKnowledgeAction(modelOutput, context.signal);
@@ -2070,16 +2055,24 @@ export class AgentIngestService {
           assertNoDurableProposal();
           assertNoDatasetEffect();
           const prepared = await prepareKnowledgeAction(modelOutput, signal);
-          const effectBinding = {
+          const generatedBinding = {
             pageId,
-            toolId: CREATE_KNOWLEDGE_NOTE_TOOL_NAME,
             canonicalInputHash: createAgentPayloadIntegrityHash(JSON.stringify({
               sourceBindingHash: prepared.sourceBindingHash,
               output: prepared.output,
               relatedPageIds: prepared.relatedPageIds
             }))
           };
-          assertPageEffectCompatible(effectBinding);
+          if (generatedPageEffect) {
+            if (
+              generatedPageEffectBinding?.pageId !== generatedBinding.pageId ||
+              generatedPageEffectBinding.canonicalInputHash !== generatedBinding.canonicalInputHash
+            ) {
+              throw generatedNoteConflict("A different generated page intent already owns this Agent Job.");
+            }
+          } else {
+            compoundEffects.assertNoPrior(generatedPageEffect);
+          }
           const contentHash = createAgentPayloadIntegrityHash(prepared.noteMarkdown);
           const operationId = createOperationId(job.id, pageId);
           const commitResult = createGeneratedNoteExclusive(
@@ -2095,7 +2088,6 @@ export class AgentIngestService {
                 assertSourceCurrent: () => hooks.assertSourceCurrent?.(currentSourceRecord)
               } : {}),
               onPublicationStart: () => {
-                pageEffectBinding = effectBinding;
                 hooks.onPublicationStart?.(
                   AGENT_NOTE_PUBLICATION_CHECKPOINT,
                   {
@@ -2163,7 +2155,8 @@ export class AgentIngestService {
             };
           }
           releaseConsumedRetrievalBinding();
-          pageEffectBinding = effectBinding;
+          generatedPageEffect = true;
+          generatedPageEffectBinding = generatedBinding;
           return {
             modelText: JSON.stringify({ status: publication.created ? "created" : "recovered", pageId }),
             details: { pageId, operationIds: publication.operationIds }

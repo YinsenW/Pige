@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ReaderSelectionIdentity, RetrievalSearchResultItem } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
+import { AGENT_COMPOUND_EFFECT_CHECKPOINT_ID, compoundEffectCheckpointIds } from "./agent-compound-effect-service";
 import {
   createPigeTagKey,
   extractPigeMarkdownLinkRefs,
@@ -79,7 +80,7 @@ export interface AgentPageUpdateCommitResult {
   readonly title: string;
   readonly operation: OperationRecord;
   readonly recovered: boolean;
-  readonly relationshipPageId?: string;
+  readonly toolId: string; readonly canonicalInputHash: string; readonly tagAdditions?: readonly string[]; readonly relationshipPageId?: string;
 }
 
 export interface AgentPageUpdateOperationBinding {
@@ -242,7 +243,7 @@ export function applyAgentPageUpdate(input: {
   if (existingOperation) {
     input.throwIfCancellationRequested?.(); input.assertSourceCurrent?.();
     assertRelationshipTargetCurrent(input.vaultPath, binding); requireExact(input.vaultPath, binding.pagePath, binding.contentHash);
-    return { pageId: binding.pageId, pagePath: binding.pagePath, title: target.title, operation: existingOperation, recovered: true, ...(relationshipTarget ? { relationshipPageId: relationshipTarget.pageId } : {}) };
+    return { pageId: binding.pageId, pagePath: binding.pagePath, title: target.title, operation: existingOperation, recovered: true, toolId: binding.toolId, canonicalInputHash: binding.canonicalInputHash, ...(binding.tagAdditions ? { tagAdditions: binding.tagAdditions } : {}), ...(relationshipTarget ? { relationshipPageId: relationshipTarget.pageId } : {}) };
   }
   stageExact(input.vaultPath, binding.stagedPath, nextMarkdown, binding.contentHash);
   try {
@@ -294,6 +295,7 @@ export function applyAgentPageUpdate(input: {
     title: target.title,
     operation,
     recovered: false,
+    toolId: binding.toolId, canonicalInputHash: binding.canonicalInputHash, ...(binding.tagAdditions ? { tagAdditions: binding.tagAdditions } : {}),
     ...(relationshipTarget ? { relationshipPageId: relationshipTarget.pageId } : {})
   };
 }
@@ -396,7 +398,7 @@ export function createReaderSelectionReplacementContentHash(before: string, jobC
 export function recoverAgentPageUpdate(input: {
   readonly vaultPath: string;
   readonly job: JobRecord;
-  readonly sourceRecord: SourceRecord;
+  readonly sourceRecord: SourceRecord; readonly checkpointId?: string;
   readonly allowedCatalogHashes: {
     readonly update: readonly string[];
     readonly relationship: readonly string[];
@@ -406,7 +408,7 @@ export function recoverAgentPageUpdate(input: {
 }): AgentPageUpdateCommitResult | undefined {
   const job = JobRecordSchema.parse(input.job);
   const sourceRecord = SourceRecordSchema.parse(input.sourceRecord);
-  const binding = readUpdateBinding(job);
+  const checkpointId = input.checkpointId ?? AGENT_COMPOUND_EFFECT_CHECKPOINT_ID; const binding = readUpdateBinding(job, checkpointId);
   if (!binding) return undefined;
   const compoundTagsAndUpdate = hasCompoundTagsAndUpdate(binding);
   const expectedToolId = compoundTagsAndUpdate ? UPDATE_KNOWLEDGE_NOTE_TOOL_ID : binding.tagAdditions ? ADD_KNOWLEDGE_TAGS_TOOL_ID : binding.relationshipTarget ? "pige_link_knowledge_notes" : UPDATE_KNOWLEDGE_NOTE_TOOL_ID;
@@ -510,15 +512,10 @@ export function recoverAgentPageUpdate(input: {
     binding.contentHash,
     MAX_AGENT_PAGE_UPDATE_BYTES
   );
-  return {
-    pageId: binding.pageId,
-    pagePath: binding.pagePath,
-    title,
-    operation,
-    recovered: true,
-    ...(binding.relationshipTarget ? { relationshipPageId: binding.relationshipTarget.pageId } : {})
-  };
+  return { pageId: binding.pageId, pagePath: binding.pagePath, title, operation, recovered: true, toolId: binding.toolId, canonicalInputHash: binding.canonicalInputHash, ...(binding.tagAdditions ? { tagAdditions: binding.tagAdditions } : {}), ...(binding.relationshipTarget ? { relationshipPageId: binding.relationshipTarget.pageId } : {}) };
 }
+
+export function recoverAgentPageUpdates(input: Parameters<typeof recoverAgentPageUpdate>[0]): AgentPageUpdateCommitResult[] { const job = JobRecordSchema.parse(input.job); return compoundEffectCheckpointIds(job.checkpoints).flatMap((checkpointId) => { const recovered = recoverAgentPageUpdate({ ...input, checkpointId }); return recovered ? [recovered] : []; }); }
 
 export function createAgentPageUpdateOperationId(jobId: string, pageId: string): string {
   const dateKey = /^job_(\d{8})_/.exec(jobId)?.[1] ?? "19700101";
@@ -1564,8 +1561,8 @@ function preflightUpdateOperation(vaultPath: string, operation: OperationRecord)
 
 function hasCompoundTagsAndUpdate(binding: AgentPageUpdatePublicationBinding): boolean { return binding.toolId === UPDATE_KNOWLEDGE_NOTE_TOOL_ID && (binding.tagAdditions?.length ?? 0) > 0; }
 
-function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | undefined {
-  const matches = job.checkpoints?.filter((checkpoint) => checkpoint.id === AGENT_PAGE_UPDATE_CHECKPOINT_ID) ?? [];
+function readUpdateBinding(job: JobRecord, checkpointId = AGENT_COMPOUND_EFFECT_CHECKPOINT_ID): AgentPageUpdatePublicationBinding | undefined {
+  const matches = job.checkpoints?.filter((checkpoint) => checkpoint.id === checkpointId) ?? [];
   if (matches.length === 0) return undefined;
   if (matches.length !== 1) throw pageConflict("The existing-note update checkpoint is ambiguous.");
   const checkpoint = matches[0]!;
@@ -1586,7 +1583,7 @@ function readUpdateBinding(job: JobRecord): AgentPageUpdatePublicationBinding | 
   const operation = findOutput("expected_update_operation");
   const artifactIds = findInput("update_evidence_artifact").map((ref) => ref.id).filter((id): id is string => !!id);
   if (
-    checkpoint.step !== AGENT_PAGE_UPDATE_CHECKPOINT_ID ||
+    checkpoint.step !== checkpointId ||
     !["running", "done"].includes(checkpoint.state) ||
     source.length !== 1 || policy.length !== 1 || toolInput.length !== 1 || catalog.length !== 1 ||
     provenance.length !== 1 || target.length !== 1 || relationshipTarget.length > 1 || tagAdditions.length > 6 ||
