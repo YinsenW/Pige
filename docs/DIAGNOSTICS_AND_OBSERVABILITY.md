@@ -220,6 +220,14 @@ blocked by active export, and removes only Pige-owned machine diagnostics artifa
 Unsafe bodies, symlink/root/destination drift, redaction failure or changed payload fail closed.
 Final syscall windows, optional content and broader platform/path evidence remain open.
 
+A `failed_retryable` export whose private destination is missing or changed may be repaired only
+through `diagnostics.reconnectSupportBundleDestination`. The request binds the active Vault,
+scope context, workflow revision and exact Job; Main owns the replacement picker and immediately
+re-proves all of those facts. A selected destination replaces only the private binding and resumes
+the same durable Job, never a new export. Picker cancellation, stale, missing, ineligible, or
+failed repair leaves the authoritative pathless workflow unchanged, and restart adopts the exact
+repaired Job once.
+
 A completed or completed-with-warnings bundle may be revealed only through a current
 scope/revision-bound, pathless request. Main rechecks the exact Job, active-vault binding and
 private destination before showing the unchanged local bundle in the OS file manager; it never

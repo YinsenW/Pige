@@ -1075,6 +1075,7 @@ Commands:
 - `diagnostics.exportSupportBundle`
 - `diagnostics.cancelSupportBundleExport`
 - `diagnostics.retrySupportBundleExport`
+- `diagnostics.reconnectSupportBundleDestination`
 - `diagnostics.clearLocalDiagnostics`
 
 Queries:
@@ -1106,7 +1107,7 @@ type DiagnosticsHealth = {
 ```
 
 Canonical strict schemas are `DiagnosticsWorkflowSummary`, recent-error query,
-preview/export, shared cancel/retry mutation, and clear-local request/results in
+preview/export, shared cancel/retry mutation, destination-repair, and clear-local request/results in
 `@pige/schemas`. They bind request, machine/vault scope context, workflow revision and
 exact Job; readable outcomes return the authoritative workflow, while `failed` remains
 identity-only.
@@ -1122,6 +1123,12 @@ Rules:
 - Main owns the destination and durable machine-local Job. Start, retry and cancel recheck
   scope/revision/Job identity; restart adopts exact prepared or published state once. Clear is
   trash-first, refuses an active export and never touches Vault data or user-created bundles.
+- `diagnostics.reconnectSupportBundleDestination` is the distinct Main-owned picker action for
+  one `failed_retryable` export whose private destination is missing or changed. It binds active
+  Vault, scope context, revision and Job; Main re-proves them before replacing only the private
+  binding and resuming that same Job. `resumed`, `cancelled`, `stale`, `not_found`, and
+  `ineligible` carry the safe authoritative workflow; `failed` is identity-only, and no result
+  contains a destination path.
 - Diagnostics APIs never return raw secrets. Default diagnostics also exclude full source bodies, full notes, full memory, and raw prompts/responses; an explicit support export may add only separately reviewed, redacted content categories.
 - Existing `diagnostics.previewSupportBundle` carries a bounded selection of 1–32 event IDs from at most 64 pathless redacted summaries; Main rechecks the event-selection revision immediately before preview/export and persists the exact selection for restart adoption.
 - `diagnostics.recentErrors` is a trusted read-only query returning at most ten redacted
