@@ -22,7 +22,7 @@ jobs:
       commit: ${{ steps.release.outputs.commit }}
     steps:
       - name: Checkout exact release tag
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout validated release commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
@@ -87,7 +87,7 @@ jobs:
       PIGE_SCALE_SKIP_BUILD: "1"
     steps:
       - name: Checkout validated release commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
@@ -174,7 +174,7 @@ jobs:
       PIGE_RELEASE_COMMIT: ${{ needs.validate.outputs.commit }}
     steps:
       - name: Checkout verifier at validated commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
@@ -274,7 +274,7 @@ jobs:
       PIGE_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     steps:
       - name: Checkout publisher at validated commit
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.validate.outputs.commit }}
 
