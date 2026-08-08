@@ -40,7 +40,14 @@ export function ActivityHistorySettingsPanel(props: {
   const loadTriggerRef = useRef<HTMLButtonElement | null>(null);
   const historyTitleRef = useRef<HTMLHeadingElement | null>(null);
   const loadInFlightRef = useRef(false);
+  const activityActionInFlightRef = useRef<{ readonly id: string; readonly kind: "undo" | "redo" } | null>(null);
+  const activityOwnerRef = useRef(props.activeVaultId);
+  const activityRowRefs = useRef(new Map<string, HTMLElement>());
   const [focusEpoch, setFocusEpoch] = useState(0);
+  const [activityActionInFlight, setActivityActionInFlight] = useState<{
+    readonly id: string;
+    readonly kind: "undo" | "redo";
+  } | null>(null);
   const jobRowRefs = useRef(new Map<string, HTMLElement>());
   const refreshButtonRef = useRef<HTMLButtonElement | null>(null);
   const [jobAction, setJobAction] = useState<{ readonly jobId: string; readonly kind: "cancel" | "retry" } | null>(null);
@@ -60,6 +67,7 @@ export function ActivityHistorySettingsPanel(props: {
   const historyOwnerRef = useRef(props.activeVaultId);
   const historySearchReturnFocusRef = useRef<HTMLElement | null>(null);
   historyOwnerRef.current = props.activeVaultId;
+  activityOwnerRef.current = props.activeVaultId;
   const backgroundJobs = (props.jobs ?? []).filter((job) => job.class !== "agent_turn");
   const activeJobs = backgroundJobs.filter(isActivityJob);
   const recentJobs = backgroundJobs.filter(isTerminalActivityJob).slice(0, 20);
@@ -75,6 +83,10 @@ export function ActivityHistorySettingsPanel(props: {
     setHistoryAppliedFilter({ query: props.filter?.query ?? "", status: props.filter?.status ?? "all" });
     historySearchInFlightRef.current = false;
     historySearchSequenceRef.current += 1;
+  }, [props.activeVaultId]);
+  useLayoutEffect(() => {
+    activityActionInFlightRef.current = null;
+    setActivityActionInFlight(null);
   }, [props.activeVaultId]);
   const loadMore = async (): Promise<void> => {
     if (loadInFlightRef.current || props.loadingMore) return;
@@ -120,6 +132,29 @@ export function ActivityHistorySettingsPanel(props: {
       const target = (jobId ? jobRowRefs.current.get(jobId) : null) ?? fallback ?? historyTitleRef.current;
       target?.focus({ preventScroll: true });
     }));
+  };
+  const restoreActivityFocus = (operationId: string): void => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      (activityRowRefs.current.get(operationId) ?? historyTitleRef.current)?.focus({ preventScroll: true });
+    }));
+  };
+  const runActivityAction = async (kind: "undo" | "redo", operationId: string): Promise<void> => {
+    if (activityActionInFlightRef.current || props.undoingId !== null || props.redoingId !== null
+      || props.blockedIds.includes(operationId)) return;
+    const owner = props.activeVaultId;
+    const action = { id: operationId, kind } as const;
+    activityActionInFlightRef.current = action;
+    setActivityActionInFlight(action);
+    try {
+      if (kind === "undo") await props.onUndo(operationId);
+      else await props.onRedo(operationId);
+    } finally {
+      if (activityOwnerRef.current === owner && activityActionInFlightRef.current?.id === operationId) {
+        activityActionInFlightRef.current = null;
+        setActivityActionInFlight(null);
+        restoreActivityFocus(operationId);
+      }
+    }
   };
   const refreshJobs = async (): Promise<boolean> => {
     if (!props.onRefreshJobs || jobsRefreshing || jobAction !== null) return false;
@@ -167,7 +202,7 @@ export function ActivityHistorySettingsPanel(props: {
     const pending = jobAction?.jobId === job.id;
     const failure = jobActionFailure?.jobId === job.id ? jobActionFailure.kind : null;
     return <article ref={(node) => { if (node) jobRowRefs.current.set(job.id, node); else jobRowRefs.current.delete(job.id); }}
-      className="settings-row tall activity-history-row" key={job.id} data-activity-job-id={job.id} tabIndex={-1}>
+      className="settings-row tall activity-history-row" role="listitem" key={job.id} data-activity-job-id={job.id} tabIndex={-1}>
       <span className="activity-row-dot" aria-hidden="true" />
       <div className="settings-row-copy">
         <strong>{label}</strong>
@@ -215,7 +250,7 @@ export function ActivityHistorySettingsPanel(props: {
         {activeJobs.length === 0 ? (
           <p className="settings-note">{props.t("activity.activeWorkEmpty")}</p>
         ) : (
-          <div className="settings-card activity-history-list">
+          <div className="settings-card activity-history-list" role="list" aria-labelledby="activity-active-work-title">
             {activeJobs.map(renderJob)}
           </div>
         )}
@@ -228,7 +263,7 @@ export function ActivityHistorySettingsPanel(props: {
               ? "activity.backgroundRefreshing" : "activity.backgroundRefresh")}</button> : null}
         </div>
         {recentJobs.length === 0 ? <p className="settings-note">{props.t("activity.backgroundEmpty")}</p>
-          : <div className="settings-card activity-history-list">{recentJobs.map(renderJob)}</div>}
+          : <div className="settings-card activity-history-list" role="list" aria-labelledby="activity-background-history-title">{recentJobs.map(renderJob)}</div>}
         {jobsRefreshFailed ? <p role="alert" className="settings-note">{props.t("activity.backgroundRefreshFailed")}</p> : null}
       </section>
       <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
@@ -266,7 +301,7 @@ export function ActivityHistorySettingsPanel(props: {
             <span>{props.t(historyAppliedFilter.query || historyAppliedFilter.status !== "all" ? "activity.search.emptyDescription" : "activity.emptyDescription")}</span>
           </div>
         ) : (
-          <div className="settings-card activity-history-list">
+          <div className="settings-card activity-history-list" role="list" aria-labelledby="activity-recent-title">
             {props.activities.map((activity, index) => {
               const activityMessageKey = collectionViewActivityMessageKey(activity.kind) ?? (activity.kind === "update_collection_cell"
                 ? "activity.updatedCollection"
@@ -300,26 +335,32 @@ export function ActivityHistorySettingsPanel(props: {
                 ? props.t("activity.timeUnavailable")
                 : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(createdAt);
               return (
-                <article className="settings-row tall activity-history-row" key={activity.operationId} aria-label={activityLabel} data-activity-row-id={activity.operationId} tabIndex={-1}>
+                <article ref={(node) => {
+                  if (node) activityRowRefs.current.set(activity.operationId, node);
+                  else activityRowRefs.current.delete(activity.operationId);
+                }} className="settings-row tall activity-history-row" role="listitem" key={activity.operationId}
+                  aria-label={activityLabel} aria-posinset={index + 1}
+                  aria-setsize={props.total ?? props.activities.length} data-activity-row-id={activity.operationId}
+                  data-activity-row-status={activity.status} tabIndex={-1}>
                   <span className={`activity-row-dot${activity.status === "undone" ? " is-undone" : ""}`} aria-hidden="true" />
                   <div className="settings-row-copy">
                     <strong>{props.t(activityMessageKey)}{activity.targetLabel ? `: ${activity.targetLabel}` : ""}</strong>
                     <span>{createdAtLabel} · {props.t(activity.status === "undone" ? "activity.statusUndone" : "activity.statusApplied")}</span>
                   </div>
-                  <div className="settings-row-control">
+                  <div className="settings-row-control" role="group" aria-label={activityLabel}>
                     {activity.status === "applied" && activity.target ? (
                       <button type="button" className="settings-button" aria-label={`${props.t("activity.open")}: ${activityLabel}`} data-activity-open-id={activity.operationId} disabled={props.openingId !== null} onClick={() => void props.onOpen(activity)}>
                         {props.t("activity.open")}
                       </button>
                     ) : null}
                     {activity.canUndo ? (
-                      <button type="button" className="settings-button" aria-label={`${props.t("activity.undo")}: ${activityLabel}`} data-activity-undo-id={activity.operationId} disabled={props.undoingId !== null || props.redoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onUndo(activity.operationId)}>
-                        {props.t(props.undoingId === activity.operationId ? "activity.undoing" : "activity.undo")}
+                      <button type="button" className="settings-button" aria-label={`${props.t("activity.undo")}: ${activityLabel}`} data-activity-undo-id={activity.operationId} disabled={props.undoingId !== null || props.redoingId !== null || activityActionInFlight !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void runActivityAction("undo", activity.operationId)}>
+                        {props.t(props.undoingId === activity.operationId || (activityActionInFlight?.id === activity.operationId && activityActionInFlight.kind === "undo") ? "activity.undoing" : "activity.undo")}
                       </button>
                     ) : null}
                     {activity.canRedo ? (
-                      <button type="button" className="settings-button" aria-label={`${props.t("activity.redo")}: ${activityLabel}`} data-activity-redo-id={activity.operationId} disabled={props.redoingId !== null || props.undoingId !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void props.onRedo(activity.operationId)}>
-                        {props.t(props.redoingId === activity.operationId ? "activity.redoing" : "activity.redo")}
+                      <button type="button" className="settings-button" aria-label={`${props.t("activity.redo")}: ${activityLabel}`} data-activity-redo-id={activity.operationId} disabled={props.redoingId !== null || props.undoingId !== null || activityActionInFlight !== null || props.blockedIds.includes(activity.operationId)} onClick={() => void runActivityAction("redo", activity.operationId)}>
+                        {props.t(props.redoingId === activity.operationId || (activityActionInFlight?.id === activity.operationId && activityActionInFlight.kind === "redo") ? "activity.redoing" : "activity.redo")}
                       </button>
                     ) : null}
                   </div>
@@ -329,7 +370,8 @@ export function ActivityHistorySettingsPanel(props: {
           </div>
         )}
         {props.hasMore ? (
-          <button ref={loadTriggerRef} type="button" className="settings-button" disabled={props.loadingMore} onClick={() => void loadMore()}>
+          <button ref={loadTriggerRef} type="button" className="settings-button" aria-busy={props.loadingMore}
+            disabled={props.loadingMore} onClick={() => void loadMore()}>
             {props.t(props.loadingMore ? "activity.loadingMore" : "activity.loadMore")}
           </button>
         ) : null}

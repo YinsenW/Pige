@@ -276,6 +276,46 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("exposes activity rows as an ordered timeline and fences duplicate Undo activation", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const undo = vi.fn(async () => { await pending; });
+    await act(async () => {
+      root.render(createElement(ActivityHistorySettingsPanel, {
+        activeVaultId: null,
+        activities: [activitySummary("op_20260801_activityquality01", "2026-08-01T08:00:00.000Z")],
+        total: 1, hasMore: false, loadingMore: false, loadMoreFailed: false,
+        undoingId: null, redoingId: null, openingId: null, blockedIds: [], locale: "en",
+        onOpen: async () => undefined, onUndo: undo, onRedo: async () => undefined,
+        onLoadMore: async () => false, t
+      }));
+      await settle(dom);
+    });
+    const list = requireElement(dom.window.document.querySelector<HTMLElement>(
+      '[role="list"][aria-labelledby="activity-recent-title"]'
+    ));
+    expect(list.querySelectorAll('[role="listitem"]')).toHaveLength(1);
+    const row = requireElement(dom.window.document.querySelector<HTMLElement>(
+      '[data-activity-row-id="op_20260801_activityquality01"]'
+    ));
+    expect(row.getAttribute("aria-posinset")).toBe("1");
+    expect(row.getAttribute("aria-setsize")).toBe("1");
+    expect(row.getAttribute("data-activity-row-status")).toBe("applied");
+    const undoButton = requireElement(row.querySelector<HTMLButtonElement>("[data-activity-undo-id]"));
+    undoButton.focus();
+    await act(async () => { undoButton.click(); undoButton.click(); await settle(dom); });
+    expect(undo).toHaveBeenCalledOnce();
+    expect(undoButton.disabled).toBe(true);
+    await act(async () => { release(); await pending; await settle(dom); });
+    await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
+    expect(dom.window.document.activeElement).toBe(row);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("loads older Activity once and returns focus to the history heading on the final page", async () => {
     const dom = createDom();
     installAnimationFrame(dom);
