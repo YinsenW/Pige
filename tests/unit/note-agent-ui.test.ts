@@ -1048,6 +1048,26 @@ describe("Note Agent production UI", () => {
     await unmount(dom, mount.root);
   });
 
+  it("retains the model menu and reports a body-free failure when selection rejects", async () => {
+    const dom = createDom();
+    const selectModel = vi.fn(async () => { throw new Error("private model transport detail"); });
+    const mount = await mountPanel(dom, {
+      modal: true,
+      availability: "ready",
+      onSelectModel: selectModel
+    });
+    const switcher = required(mount.container.querySelector<HTMLButtonElement>(".note-agent-model-switcher"));
+    await click(dom, switcher);
+    const option = required(mount.container.querySelectorAll<HTMLButtonElement>('[role="option"]')[1]);
+    await click(dom, option);
+    await waitFor(dom, () => mount.container.querySelector('[role="alert"]') !== null);
+    expect(selectModel).toHaveBeenCalledWith("model-b");
+    expect(mount.container.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(mount.container.querySelector('[role="alert"]')?.textContent).toBe(t("note.agentModelSwitchFailed"));
+    expect(mount.container.textContent).not.toContain("private model transport detail");
+    await unmount(dom, mount.root);
+  });
+
   it("keeps Enter-to-send IME-safe and preserves Shift+Enter", async () => {
     const dom = createDom();
     let submits = 0;

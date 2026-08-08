@@ -204,7 +204,13 @@ export function NoteAgentPanel(props: {
       return;
     }
     setModelSwitchFailed(false);
-    const changed = await props.onSelectModel(modelId);
+    let changed = false;
+    try {
+      changed = await props.onSelectModel(modelId);
+    } catch {
+      // Keep the model menu and the safe current selection visible on transport failure.
+      changed = false;
+    }
     if (changed) closeModelMenu(true);
     else setModelSwitchFailed(true);
   };
