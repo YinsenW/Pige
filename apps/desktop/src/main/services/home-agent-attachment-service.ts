@@ -20,6 +20,7 @@ import {
 } from "./pi-agent-runtime-adapter";
 import {
   safeAttachmentDisplayName,
+  isDeferredMediaSourceKind,
   supportedFileSourceKind,
   type AgentTurnFilePreservationBinding,
   type AgentTurnTextPreservationBinding,
@@ -364,7 +365,7 @@ export class HomeAgentAttachmentService {
         captureId: preserved.captureId,
         displayName: entry.displayName,
         sourceKind,
-        ...(sourceKind === "markdown_file" || sourceKind === "plain_text_file"
+        ...(sourceKind === "markdown_file" || sourceKind === "plain_text_file" || isDeferredMediaSourceKind(sourceKind)
           ? { pageId: sourcePageIdForSourceId(sourceId) }
           : {})
       });

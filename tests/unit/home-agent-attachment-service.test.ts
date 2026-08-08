@@ -175,6 +175,37 @@ describe("HomeAgentAttachmentService", () => {
     })));
   });
 
+  it("keeps local media renderer-safe while binding its deterministic Source Page", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-media-"));
+    roots.push(root);
+    const filePath = path.join(root, "meeting.m4a");
+    fs.writeFileSync(filePath, "media fixture", "utf8");
+    const service = new HomeAgentAttachmentService({
+      preserveFilesForAgentTurn: async (_request, binding) => ({
+        status: "queued" as const,
+        captureId: "cap_20260808_mediafixture",
+        sourceIds: [binding.sourceId],
+        jobIds: [], conversationEventIds: [], rejectedFiles: [], preservedAt: "2026-08-08T00:00:00.000Z"
+      }),
+      preserveTextForAgentTurn: vi.fn()
+    });
+    const prepared = await service.prepare([{ displayName: "meeting.m4a", internalPath: filePath }]);
+    const result = await service.preserve({
+      prepared,
+      turn: { schemaVersion: 1, inputKind: "file_picker", locale: "en" },
+      jobId: "job_20260808_mediafixture",
+      firstSourceId: "src_20260808_mediafixture"
+    });
+
+    expect(result.captureReferences).toEqual([{
+      sourceId: "src_20260808_mediafixture",
+      captureId: "cap_20260808_mediafixture",
+      displayName: "meeting.m4a",
+      sourceKind: "audio_file",
+      pageId: "page_20260808_mediafixture"
+    }]);
+  });
+
   it("returns a path-free partial failure and retries the same ordered set", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-attachment-partial-"));
     roots.push(root);

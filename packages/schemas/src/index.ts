@@ -12341,7 +12341,8 @@ export const WaitingDependencySummarySchema = z.object({
     "repair_tool",
     "download_model",
     "enable_capability",
-    "reconnect_path"
+    "reconnect_path",
+    "unavailable"
   ]),
   messageKey: z.string().min(1)
 });

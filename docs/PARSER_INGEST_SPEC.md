@@ -243,12 +243,17 @@ semantic workflow by itself.
 
 ### 8.8 Folders, Archives, Git Repositories, Audio, Video
 
-v0.1 may preserve and record these as sources even when full parsing is deferred.
+v0.1 preserves `.m4a`, `.aac`, `.wav`, `.flac`, `.ogg`, `.opus`, `.mp4`, `.m4v`,
+`.mov`, and `.webm` as `audio_file` or `video_file` sources even while transcription is deferred.
 
 Minimum behavior:
 
-- Create source records.
+- Create one deterministic Source Record and Source Page per accepted item.
 - Record inventory metadata where safe.
+- Audio/video capture enters `waiting_for_tool` on the unavailable
+  `runtime_capability:media_transcription`, with `modelUsage: none`; it performs no parser,
+  OCR, model invocation, or network egress. Restart reprojects that same wait rather than
+  sending the preserved media. Transcription remains P2.
 - Avoid recursive parsing surprises.
 - Bound and queue expensive work; process or defer it autonomously. Ask only when it needs a
   new capability/authority, irreversible effect, or other exceptional boundary.

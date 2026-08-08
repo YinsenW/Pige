@@ -166,6 +166,10 @@ Jobs may have parent-child structure:
   normalize to `legacy_agent_ingest`, the sole compatibility parent; unknown values fail.
 - Pi-selected parse/OCR/Dataset children bind parent plus Pi run/call provenance and
   return one deterministic outcome; they never choose a successor tool.
+- A preserved audio/video source creates no parser/OCR child in v0.1. Its same
+  `agent_turn` remains `waiting_dependency` / `waiting_for_tool` on
+  `runtime_capability:media_transcription` with no model or network use; restart restores
+  only that exact wait.
 - Recovery may resume that child, not invent another call. Its mechanical index/log
   projection may finish inside the approved write recovery boundary.
 - Backup/restore may create child jobs for scan, manifest, compression, extraction, and rebuild.
