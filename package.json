@@ -79,7 +79,7 @@
     "smoke:macos-speech": "node scripts/build/macos-speech-helper.mjs && node scripts/verify/macos-speech-helper-smoke.mjs"
   },
   "dependencies": {
-    "react": "19.2.7",
+    "react": "19.2.8",
     "react-dom": "19.2.7",
     "zod": "4.4.3"
   },
@@ -87,7 +87,7 @@
     "@electron/asar": "4.2.0",
     "@types/jsdom": "28.0.3",
     "@types/proper-lockfile": "4.1.4",
-    "@types/react": "19.2.17",
+    "@types/react": "19.2.18",
     "@types/react-dom": "19.2.3",
     "@types/yauzl": "3.4.0",
     "@types/yazl": "3.3.1",
