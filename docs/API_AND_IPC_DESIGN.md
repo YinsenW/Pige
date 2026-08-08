@@ -294,11 +294,15 @@ type LocalDatabaseStatus = {
 `maintenance.runKnowledgeHealth` returns a body-free report. Complete coverage may bind one
 broken link for unlink/retarget, or one orphan plus an explicitly selected current parent for
 `connect_orphan_to_parent`, or one exact two-topic candidate plus the explicitly selected survivor
-for `maintenance.repairKnowledgeHealthDuplicateTopic`. Repair/search requests bind vault,
-report/index and opaque page proofs; Main re-proves every affected page immediately before reversible
-`update_page`. A duplicate-topic commit preserves the survivor identity, moves the absorbed topic to
-recoverable private trash, and binds both exact pages to one Operation. Only committed results add
-safe revision/Operation IDs; other states stay body-free.
+for `maintenance.repairKnowledgeHealthDuplicateTopic`. An unsourced Claim uses only
+`maintenance.searchKnowledgeHealthClaimSources` and
+`maintenance.repairKnowledgeHealthUnsourcedClaim`: the bounded search projects opaque source contexts
+and safe current Source Page identities, while both requests bind vault, report request/epoch/index,
+Claim revision/render proof, and the repair's selected opaque source context. Main re-proves every
+affected page and Source Record immediately before reversible `update_page`. A duplicate-topic commit
+preserves the survivor identity, moves the absorbed topic to recoverable private trash, and binds both
+exact pages to one Operation. Only committed results add safe revision/Operation IDs; stale,
+not-found, ineligible, and failed results stay body-free.
 
 Rules:
 

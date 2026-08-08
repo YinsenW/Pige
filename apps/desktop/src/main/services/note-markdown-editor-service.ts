@@ -33,25 +33,25 @@ import {
   type MarkdownFileSignatureRecord
 } from "./markdown-page-index";
 import { createUserPageUpdateRedoOperationId, createUserPageUpdateUndoOperationId } from "./note-markdown-editor-activity-ids";
+import { abortClaimSourcePageUpdate, assertValidActivityUpdate, createUserPageUpdatePendingPath, pendingPageUpdateReceipt, prepareClaimSourcePageUpdate, readUserPageUpdateOperations, recoverPendingPageUpdates, removeExactPrivateFile, resolvePrivateVaultPath, stableJson } from "./note-markdown-editor-activity-recovery";
 import { isEditableMarkdownPage, isEditableMarkdownPageType, preservesEditableMarkdownOwnership, preservesEditableMarkdownPageOwnership } from "./markdown-source-editor-policy";
+export { createUserPageUpdatePendingPath, readUserPageUpdateOperations } from "./note-markdown-editor-activity-recovery";
 export const MAX_NOTE_MARKDOWN_EDITOR_BYTES = 4 * 1024 * 1024;
 const MAX_RENDER_BINDINGS = 64;
 const MAX_REQUEST_ID_LENGTH = 128;
 const MAX_REFERENCE_LENGTH = 256;
-const MAX_OPERATION_BYTES = 256 * 1024;
+export const MAX_OPERATION_BYTES = 256 * 1024;
 const UNSAFE_TEXT_PATTERN = /[\u0000\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
 const SOURCE_CITATION_PATTERN = /^source:src_\d{8}_[a-z0-9]{8,}(?:#[^\s\]\u0000-\u001f\u007f-\u009f]{1,256})?$/u;
 export interface NoteMarkdownEditorVaultPort {
   current(): VaultSummary | undefined;
   activeVaultPath(): string | undefined;
 }
+export interface NoteMarkdownEditorActivityUpdateInput { readonly vaultPath: string; readonly operation: OperationRecord; readonly beforeMarkdown: string; readonly afterMarkdown: string; readonly recoveryKind?: "claim_source"; }
 export interface NoteMarkdownEditorActivityPort {
-  recordPageUpdate(input: {
-    readonly vaultPath: string;
-    readonly operation: OperationRecord;
-    readonly beforeMarkdown: string;
-    readonly afterMarkdown: string;
-  }): void;
+  readonly preparePageUpdate?: (input: NoteMarkdownEditorActivityUpdateInput) => void;
+  recordPageUpdate(input: NoteMarkdownEditorActivityUpdateInput): void;
+  readonly abortPageUpdate?: (input: NoteMarkdownEditorActivityUpdateInput) => void;
 }
 export interface NoteMarkdownEditorOpenRequest {
   readonly activeVaultId: string;
@@ -75,6 +75,7 @@ export interface NoteMarkdownEditorSaveRequest {
   readonly renderIdentity: string;
   readonly markdown: string;
   readonly operationId?: string;
+  readonly recoveryKind?: "claim_source";
 }
 export type NoteMarkdownEditorSaveResult =
   | {
@@ -214,23 +215,68 @@ export class NoteMarkdownEditorService {
       pagePath: binding.pagePath,
       beforeRevisionId: binding.revisionId,
       afterRevisionId,
-      operationKind
+      operationKind,
+      ...(request.recoveryKind === "claim_source"
+        ? { summary: "Bound one user-selected Source Page to a claim." }
+        : {})
     });
-    let committedSignature: MarkdownFileSignatureRecord;
+    let committedSignature: MarkdownFileSignatureRecord | undefined;
     try {
+      this.#activity.preparePageUpdate?.({
+        vaultPath: binding.vaultPath,
+        operation,
+        beforeMarkdown,
+        afterMarkdown: request.markdown,
+        ...(request.recoveryKind ? { recoveryKind: request.recoveryKind } : {})
+      });
       committedSignature = this.#replaceExact(binding, beforeMarkdown, request.markdown);
       this.#activity.recordPageUpdate({
         vaultPath: binding.vaultPath,
         operation,
         beforeMarkdown,
-        afterMarkdown: request.markdown
+        afterMarkdown: request.markdown,
+        ...(request.recoveryKind ? { recoveryKind: request.recoveryKind } : {})
       });
     } catch (caught) {
+      try {
+        this.#activity.abortPageUpdate?.({
+          vaultPath: binding.vaultPath,
+          operation,
+          beforeMarkdown,
+          afterMarkdown: request.markdown,
+          ...(request.recoveryKind ? { recoveryKind: request.recoveryKind } : {})
+        });
+      } catch {
+        // Preserve the receipt when the page may already contain the committed after-image.
+      }
+      if (committedSignature) {
+        const renderIdentity = createRenderIdentity({
+          activeVaultId: binding.activeVaultId,
+          pageId: binding.pageId,
+          pagePath: binding.pagePath,
+          revisionId: afterRevisionId
+        });
+        this.#bindings.delete(binding.renderIdentity);
+        this.#registerBinding({
+          ...binding,
+          signature: committedSignature,
+          revisionId: afterRevisionId,
+          renderIdentity
+        });
+        return {
+          status: "committed",
+          ...identity,
+          revisionId: afterRevisionId,
+          renderIdentity,
+          operationId
+        };
+      }
       return {
         status: caught instanceof StaleMarkdownPageError ? "stale" : "failed",
         ...identity
       };
     }
+    if (!committedSignature) return { status: "failed", ...identity };
     const renderIdentity = createRenderIdentity({
       activeVaultId: binding.activeVaultId,
       pageId: binding.pageId,
@@ -359,23 +405,12 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
   constructor(vaults: NoteMarkdownEditorVaultPort) {
     this.#vaults = vaults;
   }
-  recordPageUpdate(input: {
-    readonly vaultPath: string;
-    readonly operation: OperationRecord;
-    readonly beforeMarkdown: string;
-    readonly afterMarkdown: string;
-  }): void {
-    const binding = readUserPageUpdateBinding(input.operation);
-    if (
-      !binding ||
-      hashMarkdown(input.beforeMarkdown) !== binding.beforeHash ||
-      hashMarkdown(input.afterMarkdown) !== binding.afterHash ||
-      !validateActivityMarkdown(input.beforeMarkdown, binding.pageId) ||
-      !validateActivityMarkdown(input.afterMarkdown, binding.pageId) ||
-      !preservesEditableMarkdownPageOwnership(input.beforeMarkdown, input.afterMarkdown, true, true, true, true, true)
-    ) {
-      throw new Error("The Markdown Activity update binding is invalid.");
-    }
+  preparePageUpdate(input: NoteMarkdownEditorActivityUpdateInput): void {
+    prepareClaimSourcePageUpdate(input, this.#activeVaultPath());
+  }
+  recordPageUpdate(input: NoteMarkdownEditorActivityUpdateInput): void {
+    assertValidActivityUpdate(input);
+    const binding = readUserPageUpdateBinding(input.operation)!;
     const active = this.#activeVaultPath();
     if (!active || active !== path.resolve(input.vaultPath)) {
       throw new Error("The Markdown Activity vault binding is stale.");
@@ -387,6 +422,13 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
     }
     persistExactPrivateFile(active, binding.beforePath, input.beforeMarkdown, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
     persistExactOperation(active, input.operation);
+    if (input.recoveryKind === "claim_source") {
+      removeExactPrivateFile(active, createUserPageUpdatePendingPath(input.operation.id), pendingPageUpdateReceipt(input.operation));
+      removeExactPrivateFile(active, createUserPageUpdateStagedPath(input.operation.id), input.afterMarkdown, MAX_NOTE_MARKDOWN_EDITOR_BYTES);
+    }
+  }
+  abortPageUpdate(input: NoteMarkdownEditorActivityUpdateInput): void {
+    abortClaimSourcePageUpdate(input, this.#activeVaultPath());
   }
   activitySummary(
     operation: OperationRecord,
@@ -504,8 +546,9 @@ export class NoteMarkdownEditorActivityAdapter implements NoteMarkdownEditorActi
   recoverIncompleteOperations(): NoteMarkdownEditorActivityRecoveryResult {
     const vaultPath = this.#activeVaultPath();
     if (!vaultPath) return { recovered: 0, failed: 0 };
-    let recovered = 0;
-    let failed = 0;
+    const forward = recoverPendingPageUpdates(vaultPath);
+    let recovered = forward.recovered;
+    let failed = forward.failed;
     for (const operation of readUserPageUpdateOperations(vaultPath)) {
       const binding = readUserPageUpdateBinding(operation);
       if (!binding) continue;
@@ -651,6 +694,7 @@ export function createUpdateOperation(input: {
   readonly beforeRevisionId: string;
   readonly afterRevisionId: string;
   readonly operationKind: "update_page" | "archive_page" | "restore_page";
+  readonly summary?: string;
 }): OperationRecord {
   const dateKey = /^op_(\d{8})_/u.exec(input.operationId)?.[1] ?? "19700101";
   const beforePath = `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${input.operationId}.before.md`;
@@ -664,11 +708,11 @@ export function createUpdateOperation(input: {
     sourceRefs: [],
     before: { kind: "page", id: input.beforeRevisionId, path: beforePath },
     after: { kind: "page", id: input.afterRevisionId, path: input.pagePath },
-    summary: input.operationKind === "archive_page"
+    summary: input.summary ?? (input.operationKind === "archive_page"
       ? "Archived a Markdown knowledge page."
       : input.operationKind === "restore_page"
         ? "Restored an archived Markdown knowledge page."
-        : "Edited a Markdown knowledge page.",
+        : "Edited a Markdown knowledge page."),
     reversible: "yes",
     rollbackHint: "Restore the exact private before-image while the current page revision still matches.",
     warnings: []
@@ -845,34 +889,6 @@ export function readOperationOrUndefined(vaultPath: string, operationId: string)
     throw new Error("The Markdown Activity Operation is malformed.");
   }
 }
-export function readUserPageUpdateOperations(vaultPath: string): readonly OperationRecord[] {
-  const root = resolvePrivateVaultPath(vaultPath, ".pige/operations");
-  if (!pathStillExists(root)) return [];
-  const operations: OperationRecord[] = [];
-  for (const year of readSafeDirectories(root, /^\d{4}$/u)) {
-    for (const month of readSafeDirectories(path.join(root, year), /^\d{2}$/u)) {
-      const directory = path.join(root, year, month);
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        if (!entry.isFile() || !/^op_\d{8}_[a-z0-9]{8,}\.json$/u.test(entry.name)) continue;
-        try {
-          const operation = readOperationOrUndefined(vaultPath, entry.name.slice(0, -5));
-          if (operation && readUserPageUpdateBinding(operation)) operations.push(operation);
-        } catch {
-          // A malformed record cannot gain recovery authority.
-        }
-      }
-    }
-  }
-  return operations;
-}
-function readSafeDirectories(root: string, namePattern: RegExp): readonly string[] {
-  const rootStat = fs.lstatSync(root);
-  if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) throw new Error("Unsafe Activity directory.");
-  return fs.readdirSync(root, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink() && namePattern.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((left, right) => left.localeCompare(right, "en-US"));
-}
 export function readPrivateTextOrUndefined(
   vaultPath: string,
   relativePath: string,
@@ -889,17 +905,6 @@ function operationRelativePath(operationId: string): string {
   if (!dateKey) throw new Error("The Markdown Activity operation identity is invalid.");
   return `.pige/operations/${dateKey.slice(0, 4)}/${dateKey.slice(4, 6)}/${operationId}.json`;
 }
-function resolvePrivateVaultPath(vaultPath: string, relativePath: string): string {
-  if (
-    path.isAbsolute(relativePath) ||
-    relativePath.includes("\\") ||
-    relativePath.split("/").some((segment) => !segment || segment === "." || segment === "..")
-  ) throw new Error("The Markdown Activity path is invalid.");
-  const root = path.resolve(vaultPath);
-  const resolved = path.resolve(root, ...relativePath.split("/"));
-  if (!resolved.startsWith(`${root}${path.sep}`)) throw new Error("The Markdown Activity path escaped its vault.");
-  return resolved;
-}
 function isSafePagePath(value: string | undefined, pageId: string): value is string {
   if (!value || !/^(?:wiki|sources)\/.+\.md$/u.test(value)) return false;
   if (value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) return false;
@@ -913,16 +918,6 @@ function safePageTitle(markdown: string, pageId: string): string | undefined {
 }
 function isSha256(value: string): boolean {
   return /^sha256:[a-f0-9]{64}$/u.test(value);
-}
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right, "en-US"))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stableJson(child)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 function createOperationId(
   now: Date,

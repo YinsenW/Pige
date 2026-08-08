@@ -16,7 +16,11 @@ import {
   KnowledgeHealthRunResultSchema
 } from "@pige/schemas";
 import type { LocalDatabaseKnowledgeHealthSnapshot } from "./local-database-knowledge-health";
-import { scanMarkdownPages } from "./markdown-page-index";
+import {
+  findMarkdownPageByIdAtSignature,
+  readMarkdownPageContentAtSignature,
+  scanMarkdownPages
+} from "./markdown-page-index";
 import type { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readCurrentSourceRecordSnapshot, type CurrentSourceRecordSnapshot } from "./source-file-access";
 
@@ -42,6 +46,8 @@ interface SourceContext {
   readonly sourcePageId: string;
   readonly sourcePagePath: string;
   readonly sourcePageTitle: string;
+  readonly sourcePageRevision: string;
+  readonly sourcePageRenderIdentity: string;
   readonly record: CurrentSourceRecordSnapshot;
 }
 
@@ -64,7 +70,7 @@ export class KnowledgeHealthUnsourcedClaimService {
   ): KnowledgeHealthRunResult {
     this.#claims.clear();
     this.#sources.clear();
-    this.#epoch += 1;
+    this.#epoch = result.status === "ready" ? result.reportEpoch : 0;
     if (result.status !== "ready" || result.coverage !== "complete") return result;
     const issues = result.issues.map((issue) => this.#projectIssue(vaultPath, request, result, issue));
     const candidate = { ...result, issues };
@@ -82,17 +88,27 @@ export class KnowledgeHealthUnsourcedClaimService {
       }
       const query = request.query.normalize("NFKC").trim().toLocaleLowerCase("en-US");
       const eligible = scanMarkdownPages(vaultPath).pages
-        .filter(({ summary }) => summary.pageType === "source" && summary.sourceIds.length === 1)
+        .filter(({ summary }) => summary.pageType === "source" && summary.status === "active" && summary.sourceIds.length === 1)
         .filter(({ summary }) => !query || summary.title.toLocaleLowerCase("en-US").includes(query))
         .sort((left, right) => left.summary.title.localeCompare(right.summary.title, "en-US") ||
           left.summary.pageId.localeCompare(right.summary.pageId, "en-US"));
       const sources: Array<{ sourceContextId: string; page: { pageId: string; title: string } }> = [];
+      let eligibleSourceCount = 0;
+      let truncated = false;
       for (const page of eligible) {
-        if (sources.length >= KNOWLEDGE_HEALTH_MAX_CLAIM_SOURCE_CANDIDATES) break;
         const sourceId = page.summary.sourceIds[0]!;
+        const sourcePage = currentSourcePage(vaultPath, page.summary.pageId);
+        if (!sourcePage || sourcePage.page.summary.pageType !== "source" || sourcePage.page.summary.status !== "active" ||
+          sourcePage.page.summary.pagePath !== page.summary.pagePath || sourcePage.page.summary.title !== page.summary.title ||
+          sourcePage.page.summary.sourceIds.length !== 1 || sourcePage.page.summary.sourceIds[0] !== sourceId) continue;
         const record = readCurrentSourceRecordSnapshot(vaultPath, sourceId);
-        if (!record || record.record.knowledgePageId !== page.summary.pageId ||
-          (record.record.knowledgePagePath && record.record.knowledgePagePath !== page.summary.pagePath)) continue;
+        if (!record || record.record.knowledgePageId !== sourcePage.page.summary.pageId ||
+          (record.record.knowledgePagePath && record.record.knowledgePagePath !== sourcePage.page.summary.pagePath)) continue;
+        eligibleSourceCount += 1;
+        if (sources.length >= KNOWLEDGE_HEALTH_MAX_CLAIM_SOURCE_CANDIDATES) {
+          truncated = true;
+          continue;
+        }
         const sourceContextId = this.#contextId("source");
         this.#sources.set(sourceContextId, {
           claimContextId: request.repairContextId,
@@ -100,6 +116,8 @@ export class KnowledgeHealthUnsourcedClaimService {
           sourcePageId: page.summary.pageId,
           sourcePagePath: page.summary.pagePath,
           sourcePageTitle: page.summary.title,
+          sourcePageRevision: sourcePage.revision,
+          sourcePageRenderIdentity: sourcePage.renderIdentity,
           record
         });
         sources.push({ sourceContextId, page: { pageId: page.summary.pageId, title: page.summary.title } });
@@ -109,7 +127,7 @@ export class KnowledgeHealthUnsourcedClaimService {
         ...request,
         status: "ready",
         sources,
-        truncated: eligible.length > sources.length
+        truncated: truncated || eligibleSourceCount > sources.length
       });
     } catch {
       return searchResult(request, "failed");
@@ -139,7 +157,8 @@ export class KnowledgeHealthUnsourcedClaimService {
         pageId: request.pageId,
         expectedRevisionId: opened.revisionId,
         renderIdentity: opened.renderIdentity,
-        markdown
+        markdown,
+        recoveryKind: "claim_source"
       });
       if (saved.status === "committed") {
         this.#claims.delete(request.repairContextId);
@@ -185,6 +204,9 @@ export class KnowledgeHealthUnsourcedClaimService {
   }
 
   #claimStillCurrent(vaultPath: string, claim: ClaimContext): boolean {
+    if (claim.epoch < 1 || claim.claimRenderProof !== renderProof(claim.epoch, claim.renderIdentity, claim.pageId)) {
+      return false;
+    }
     const snapshot = this.database.knowledgeHealth(vaultPath);
     if (!snapshot || snapshot.indexGeneration !== claim.indexGeneration ||
       !snapshot.issues.some((issue) => issue.kind === "unsourced_claim" && issue.page.pageId === claim.pageId)) return false;
@@ -202,20 +224,41 @@ export class KnowledgeHealthUnsourcedClaimService {
 
 function matchesClaim(claim: ClaimContext, request: KnowledgeHealthClaimSourceSearchRequest | KnowledgeHealthClaimSourceRepairRequest): boolean {
   return claim.reportRequestId === request.reportRequestId && claim.activeVaultId === request.activeVaultId &&
-    claim.indexGeneration === request.indexGeneration && claim.pageId === request.pageId &&
+    claim.epoch === request.reportEpoch && claim.indexGeneration === request.indexGeneration && claim.pageId === request.pageId &&
     claim.claimRevision === request.claimRevision && claim.claimRenderProof === request.claimRenderProof;
 }
 
 function sourceStillCurrent(vaultPath: string, context: SourceContext): boolean {
-  const page = scanMarkdownPages(vaultPath).pages.find(({ summary }) => summary.pageId === context.sourcePageId);
-  if (!page || page.summary.pageType !== "source" || page.summary.pagePath !== context.sourcePagePath ||
-    page.summary.title !== context.sourcePageTitle || page.summary.sourceIds.length !== 1 ||
-    page.summary.sourceIds[0] !== context.sourceId) return false;
+  const page = currentSourcePage(vaultPath, context.sourcePageId);
+  if (!page || page.page.summary.pageType !== "source" || page.page.summary.status !== "active" ||
+    page.page.summary.pagePath !== context.sourcePagePath || page.page.summary.title !== context.sourcePageTitle ||
+    page.page.summary.sourceIds.length !== 1 || page.page.summary.sourceIds[0] !== context.sourceId ||
+    page.revision !== context.sourcePageRevision || page.renderIdentity !== context.sourcePageRenderIdentity) return false;
   const current = readCurrentSourceRecordSnapshot(vaultPath, context.sourceId);
   return !!current && current.record.knowledgePageId === context.sourcePageId &&
     (!current.record.knowledgePagePath || current.record.knowledgePagePath === context.sourcePagePath) &&
     JSON.stringify(current.identity) === JSON.stringify(context.record.identity) &&
     JSON.stringify(current.record) === JSON.stringify(context.record.record);
+}
+
+function currentSourcePage(vaultPath: string, pageId: string): {
+  readonly page: NonNullable<ReturnType<typeof findMarkdownPageByIdAtSignature>>["page"];
+  readonly revision: string;
+  readonly renderIdentity: string;
+} | undefined {
+  const located = findMarkdownPageByIdAtSignature(vaultPath, pageId);
+  if (!located) return undefined;
+  try {
+    const markdown = readMarkdownPageContentAtSignature(vaultPath, located.signature, 4 * 1024 * 1024 + 1).markdown;
+    const revision = `sha256:${digest(markdown)}`;
+    return {
+      page: located.page,
+      revision,
+      renderIdentity: digest(`pige.knowledge-health.source-page-render.v1\0${pageId}\0${located.signature.pagePath}\0${revision}`)
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function isCanonicalUnsourcedClaim(markdown: string): boolean {

@@ -143,10 +143,10 @@ export class KnowledgeHealthService {
       const issues = snapshot.invalidPageCount === 0
         ? this.#attachRepairContexts(vaultPath, request, snapshot)
         : [...snapshot.issues];
-      let result = readyResult(request, snapshot, this.#now(), issues, snapshot.truncated);
+      let result = readyResult(request, snapshot, this.#now(), issues, snapshot.truncated, this.#reportEpoch);
       while (utf8ByteLength(result) > KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES && issues.length > 0) {
         issues.pop();
-        result = readyResult(request, snapshot, result.checkedAt, issues, true);
+        result = readyResult(request, snapshot, result.checkedAt, issues, true, this.#reportEpoch);
       }
       if (utf8ByteLength(result) > KNOWLEDGE_HEALTH_MAX_RESULT_UTF8_BYTES) return failed(request);
       return KnowledgeHealthRunResultSchema.parse(result);
@@ -602,12 +602,14 @@ function readyResult(
   snapshot: LocalDatabaseKnowledgeHealthSnapshot,
   checkedAt: string,
   issues: readonly KnowledgeHealthIssueSummary[],
-  truncated: boolean
+  truncated: boolean,
+  reportEpochForResult: number
 ): Extract<KnowledgeHealthRunResult, { readonly status: "ready" }> {
   return {
     ...request,
     status: "ready",
     checkedAt,
+    reportEpoch: reportEpochForResult,
     indexGeneration: snapshot.indexGeneration,
     coverage: snapshot.invalidPageCount === 0 ? "complete" : "partial",
     invalidPageCount: snapshot.invalidPageCount,

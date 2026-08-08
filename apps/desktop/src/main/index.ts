@@ -3651,7 +3651,14 @@ registerKnowledgeHealthIpc({
     getKnowledgeHealthUnsourcedClaimService().search(vaultPath, request),
   repairKnowledgeHealthUnsourcedClaim: (vaultPath, request) => {
     const result = getKnowledgeHealthUnsourcedClaimService().repair(vaultPath, request);
-    if (result.status === "committed") scheduleActivityIndexRebuild();
+    if (result.status === "committed") {
+      try {
+        getLocalDatabaseService().rebuild(vaultPath);
+      } catch {
+        // The durable repair remains committed; the scheduled rebuild adopts it.
+      }
+      scheduleActivityIndexRebuild();
+    }
     return result;
   },
   repairKnowledgeHealth: (vaultPath, request) => getKnowledgeHealthService().repair(vaultPath, request)

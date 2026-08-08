@@ -87,6 +87,7 @@ const duplicateTopicRepairRequest = {
 const claimSearchRequest = {
   apiVersion: 1, requestId: "knowledge_health_claim_source_search_abcdefghijklmnop",
   activeVaultId: binding.vaultId, reportRequestId: request.requestId,
+  reportEpoch: 1,
   indexGeneration: "2026-07-31T12:00:00.000Z#claimsource", issueKind: "unsourced_claim",
   pageId: "page_20260731_claimsource", repairContextId: `knowledge_health_repair_context_${"a".repeat(64)}`,
   claimRevision: `noteeditrev_${"b".repeat(64)}`, claimRenderProof: `knowledge_health_render_${"c".repeat(64)}`,
@@ -103,6 +104,7 @@ function readyResult() {
     ...request,
     status: "ready" as const,
     checkedAt: "2026-07-27T12:30:00.000Z",
+    reportEpoch: 1,
     indexGeneration: "2026-07-27T12:00:00.000Z#abcdefghijklmnop",
     coverage: "complete" as const,
     invalidPageCount: 0,
@@ -343,5 +345,14 @@ describe("registerKnowledgeHealthIpc", () => {
       {} as IpcMainInvokeEvent,
       orphanRepairRequest
     )).resolves.toEqual({ ...orphanRepairRequest, status: "failed" });
+
+    const mismatchedClaim = makeHarness({
+      searchKnowledgeHealthClaimSources: () => ({ ...claimSearchRequest, reportEpoch: 2, status: "ready" as const,
+        sources: [], truncated: false })
+    });
+    await expect(mismatchedClaim.handlers.get("maintenance.searchKnowledgeHealthClaimSources")!(
+      {} as IpcMainInvokeEvent,
+      claimSearchRequest
+    )).resolves.toEqual({ ...claimSearchRequest, status: "failed" });
   });
 });

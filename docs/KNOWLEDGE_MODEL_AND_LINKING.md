@@ -190,6 +190,7 @@ Use claim pages when:
 Claim rules:
 
 - Claims require citations unless explicitly marked `needs_review`.
+- An unsourced Claim may gain one citation only after the user selects one bounded current Source Page from its exact Knowledge Health report. Main re-proves the report epoch/index, Claim revision/render, and the selected active Source Page/SourceRecord/revision/render before one reversible `update_page`; stale, ambiguous, missing, or changed proof writes nothing. The private before/after receipt supports exact restart adoption and Activity Undo.
 - `supports`, `contradicts`, `supersedes`, and `updates` relationships on claims require source evidence.
 - Reader support edits store only bounded stable Claim IDs in `claim.supports`: both Claims must still be active and source-backed, the current render/revision and target revision are re-proved, and cycles fail closed. Add/remove uses the existing `update_page` Operation, so Activity Undo and restart recovery restore the exact prior frontmatter.
 - Reader supersession edits store only bounded stable Claim IDs in `claim.supersedes`: both Claims must still be active and source-backed, the current render/revision and target revision are re-proved, and directed cycles fail closed. Add/remove uses the existing `update_page` Operation, so Activity Undo and restart recovery restore the exact prior frontmatter while the relationship index rebuilds from Markdown.

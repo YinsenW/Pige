@@ -55,6 +55,7 @@ describe("KnowledgeHealthService", () => {
       ...request,
       status: "ready",
       checkedAt: "2026-07-27T12:30:00.000Z",
+      reportEpoch: 1,
       indexGeneration: "2026-07-27T12:00:00.000Z#abcdefghijklmnop",
       coverage: "partial",
       invalidPageCount: 1,

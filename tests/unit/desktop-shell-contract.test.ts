@@ -1184,6 +1184,14 @@ describe("desktop shell build contract", () => {
     expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.repairKnowledgeHealth"');
     expect(preloadSource).toContain("KnowledgeHealthRepairRequestSchema.parse(request)");
     expect(preloadSource).toContain("KnowledgeHealthRepairResultSchema.parse(");
+    expect(registrarSource).toContain('ipcMain.handle("maintenance.searchKnowledgeHealthClaimSources"');
+    expect(registrarSource).toContain('ipcMain.handle("maintenance.repairKnowledgeHealthUnsourcedClaim"');
+    expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.searchKnowledgeHealthClaimSources"');
+    expect(preloadSource).toContain("KnowledgeHealthClaimSourceSearchRequestSchema.parse(request)");
+    expect(preloadSource).toContain('ipcRenderer.invoke("maintenance.repairKnowledgeHealthUnsourcedClaim"');
+    expect(preloadSource).toContain("KnowledgeHealthClaimSourceRepairRequestSchema.parse(request)");
+    expect(preloadSource).toContain("sameKnowledgeHealthClaimSourceSearchIdentity");
+    expect(preloadSource).toContain("sameKnowledgeHealthClaimSourceRepairIdentity");
     for (const privateField of ["pagePath", "target", "sourceIds", "error", "body"]) {
       expect(registrarSource).not.toContain(`${privateField}:`);
     }

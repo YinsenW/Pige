@@ -321,7 +321,7 @@ function sameClaimIdentity(
 ): boolean {
   return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
     result.activeVaultId === request.activeVaultId && result.reportRequestId === request.reportRequestId &&
-    result.indexGeneration === request.indexGeneration && result.issueKind === request.issueKind &&
+    result.reportEpoch === request.reportEpoch && result.indexGeneration === request.indexGeneration && result.issueKind === request.issueKind &&
     result.pageId === request.pageId && result.repairContextId === request.repairContextId &&
     result.claimRevision === request.claimRevision && result.claimRenderProof === request.claimRenderProof;
 }
