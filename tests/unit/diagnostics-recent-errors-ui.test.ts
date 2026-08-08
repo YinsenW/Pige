@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DiagnosticsRecentErrorsResult } from "@pige/contracts";
 import { DiagnosticsRecentErrorsCard } from "../../apps/desktop/src/renderer/src/components/DiagnosticsRecentErrorsCard";
+import { DiagnosticsRecentErrorsPanel } from "../../apps/desktop/src/renderer/src/components/DiagnosticsRecentErrorsPanel";
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -66,6 +67,51 @@ describe("DiagnosticsRecentErrorsCard", () => {
     expect(failure?.classList.contains("diagnostics-recent-errors-card-failed")).toBe(true);
     expect(failure?.querySelector("[role=status]")?.textContent).toContain("system.recentErrorsUnavailable");
     expect(failure?.textContent).toContain("system.recentErrorsUnavailable");
+    await act(async () => root.unmount());
+  });
+
+  it("retains the last safe error projection when a refresh fails", async () => {
+    const dom = installDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => root.render(createElement(DiagnosticsRecentErrorsCard, {
+      result: recentErrors(), failed: true, onPrepareSupport: vi.fn(), t: (key: string) => key
+    })));
+    expect(dom.window.document.querySelectorAll("details")).toHaveLength(1);
+    expect(dom.window.document.querySelector("[role=alert]")?.textContent)
+      .toContain("system.recentErrorsUnavailable");
+    expect(dom.window.document.body.textContent).toContain("provider.failure");
+    await act(async () => root.unmount());
+  });
+
+  it("retains the last safe projection when the panel refresh interval fails", async () => {
+    const dom = installDom();
+    let calls = 0;
+    const recentErrorsQuery = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) return recentErrors();
+      throw new Error("/Users/alice/private-diagnostics.json");
+    });
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { diagnostics: { recentErrors: recentErrorsQuery } }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(DiagnosticsRecentErrorsPanel, {
+        onPrepareSupport: vi.fn(),
+        t: (key: string) => key
+      }));
+      await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
+    });
+    expect(dom.window.document.body.textContent).toContain("provider.failure");
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 650));
+    });
+    expect(calls).toBeGreaterThanOrEqual(2);
+    expect(dom.window.document.body.textContent).toContain("provider.failure");
+    expect(dom.window.document.body.textContent).not.toContain("/Users/alice/private-diagnostics.json");
+    expect(dom.window.document.querySelector("[role=alert]")?.textContent)
+      .toContain("system.recentErrorsUnavailable");
     await act(async () => root.unmount());
   });
 });
