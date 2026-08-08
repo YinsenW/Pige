@@ -454,6 +454,10 @@ Examples:
 - If a model call completed but the write did not apply, retry may call the model again only when no durable proposal or operation exists. A committed compatible Operation is
   reconciled before model-readiness checks; recovery must not require credentials or a
   replacement model turn merely to adopt an already durable effect.
+- A Pi provider call first records its exact Job, conversation-event, input, context, tool-catalog,
+  Provider, and model binding. A started checkpoint never replays after restart; only a matching
+  completed result and continuation may be adopted once before assistant publication. Duplicate,
+  tampered, or drifted bindings fail closed.
 - If a wiki note already exists for the deterministic source-derived page ID, retry treats the note as existing rather than creating a duplicate.
 - Before an eligible Agent ingest publishes its first knowledge effect, Main re-proves the
   exact active Vault, immutable running Job identity, bound Source/capture identity, and

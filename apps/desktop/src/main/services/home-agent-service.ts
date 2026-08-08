@@ -104,6 +104,7 @@ import {
   type PigeAgentToolDefinition,
   type PigeAgentToolResult
 } from "./pi-agent-runtime-adapter";
+import { createAndAdoptAgentTurnProviderCall, createAgentTurnAnswer, checkpointAgentTurnProviderCall, type AgentTurnProviderCheckpointPort } from "./agent-turn-provider-checkpoint";
 import {
   createRetrievalEvidencePrivacyHash,
   readCurrentNoteEvidenceBinding,
@@ -313,6 +314,7 @@ export interface HomeAgentJobPort {
       readonly markDurableCheckpoint: (checkpointId: string) => void;
     }) => Promise<T>
   ): Promise<T>;
+  getAgentTurnProviderCheckpointPort(): AgentTurnProviderCheckpointPort;
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord;
   attachAgentTurnSources(jobId: string, sourceIds: readonly string[], attachmentSetHash: string): JobRecord;
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined;
@@ -898,6 +900,7 @@ export class HomeAgentService {
             activeSession,
             runtimeBinding.model,
             runtimeBinding.provider,
+            conversationContextHash,
             history,
             jobExecution.signal,
             assertConversationCurrent,
@@ -1213,6 +1216,7 @@ export class HomeAgentService {
             session,
             currentBinding.model,
             currentBinding.provider,
+            conversationContextHash,
             history,
             jobExecution.signal,
             assertConversationCurrent,
@@ -1308,6 +1312,7 @@ export class HomeAgentService {
     session: HomeAgentJobSession,
     defaultModel: ModelProfileSummary,
     defaultProvider: ProviderProfileSummary,
+    conversationContextHash: string,
     history: readonly PiAgentHistoryMessage[] = [],
     signal?: AbortSignal,
     assertConversationCurrent?: () => void,
@@ -2029,7 +2034,23 @@ export class HomeAgentService {
     ];
     toolCatalogHash = createPigeAgentToolCatalogHash(tools);
     sourceSession?.bindCatalog(toolCatalogHash);
+
+    const providerCall = createAndAdoptAgentTurnProviderCall({
+      port: this.#jobs.getAgentTurnProviderCheckpointPort(), current: session.current, jobId,
+      conversationEventId: request.sourceEventId, inputHash: request.sourceTurn.inputHash, conversationContextHash,
+      toolCatalogHash, contextPackHash: contextPackBinding?.contextPackHash,
+      providerProfileId: runtimeConfig.provider.id, modelProfileId: runtimeConfig.model.id, modelId: runtimeConfig.model.modelId
+    });
+    if (providerCall.adoption) {
+      session.modelInvocationStarted = true;
+      return {
+        answer: providerCall.adoption.answer,
+        sourceIds: providerCall.adoption.sourceIds,
+        ...(currentNoteScope ? { assertPublicationCurrent: assertCurrentNotePublicationCurrent } : {})
+      };
+    }
     let runtimeResult: PiAgentRunResult;
+    session.current = providerCall.job;
     try {
       runtimeResult = await this.#runtime.run({
         runtimeConfig,
@@ -2146,15 +2167,13 @@ export class HomeAgentService {
       ...(datasetResult?.evidence.sourceIds ?? []), ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : []),
       ...capturedAuthoredTextSourceIds
     ]));
+    const answer = createAgentTurnAnswer({ groundedAnswer, retrieval: searchResult, datasetResult: datasetResult?.preview, memoryCount: recalledMemories.length });
+    session.current = checkpointAgentTurnProviderCall({
+      port: this.#jobs.getAgentTurnProviderCheckpointPort(), current: session.current, binding: providerCall.binding,
+      result: runtimeResult, continuation: { answer, sourceIds }
+    });
     return {
-      answer: {
-        ...groundedAnswer,
-        ...(searchResult ? { retrieval: searchResult } : {}),
-        ...(datasetResult ? { datasetResult: datasetResult.preview } : {}),
-        ...(recalledMemories.length > 0 ? {
-          memoryContext: { kind: "vault_memory" as const, count: recalledMemories.length }
-        } : {})
-      },
+      answer,
       sourceIds,
       ...(currentNoteAppendPublication ? { currentNoteAppendPublication } : {}),
       ...(currentNoteScope ? { assertPublicationCurrent: assertCurrentNotePublicationCurrent } : {})
