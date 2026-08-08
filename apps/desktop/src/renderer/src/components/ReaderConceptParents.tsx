@@ -20,10 +20,11 @@ export function ReaderConceptParents(props: {
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${summary?.revision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null);
-  const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteConceptParentItem[]>([]);
+  const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteConceptParentItem[]>([]), [resultsQuery, setResultsQuery] = useState("");
+  const queryRef = useRef(query); queryRef.current = query;
   const [pending, setPending] = useState(false), [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
-    setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false;
+    setQuery(""); setResults([]); setResultsQuery(""); setPending(false); setNotice(null); busyRef.current = false;
   }, [owner]);
   if (props.note.summary.pageType !== "concept" || !summary || !context) return null;
 
@@ -33,18 +34,24 @@ export function ReaderConceptParents(props: {
   }); };
   const search = async (): Promise<void> => {
     if (busyRef.current || !query.trim()) return;
+    const searchQuery = query.trim();
     busyRef.current = true; setPending(true); setNotice(null); const identity = owner;
     const request: NoteSearchConceptParentsRequest = {
       apiVersion: 1, requestId: id(), activeVaultId: props.activeVaultId,
       currentPageId: props.note.summary.pageId, renderContextId: context,
-      expectedRevision: summary.revision, query: query.trim()
+      expectedRevision: summary.revision, query: searchQuery
     };
     try {
       const result = await props.search(request);
-      if (ownerRef.current !== identity) return;
-      if (result.status === "ready" && sameSearch(request, result)) setResults(result.candidates);
+      if (ownerRef.current !== identity || queryRef.current.trim() !== searchQuery) return;
+      if (result.status === "ready" && sameSearch(request, result)) {
+        setResults(result.candidates);
+        setResultsQuery(searchQuery);
+      }
       else setNotice(result.status);
-    } catch { if (ownerRef.current === identity) setNotice("failed"); }
+    } catch {
+      if (ownerRef.current === identity && queryRef.current.trim() === searchQuery) setNotice("failed");
+    }
     finally { if (ownerRef.current === identity) { busyRef.current = false; setPending(false); restoreFocus(); } }
   };
   const change = async (action: "add" | "remove", target: NoteConceptParentItem): Promise<void> => {
@@ -74,7 +81,11 @@ export function ReaderConceptParents(props: {
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; void change("remove", item); }}>
       {props.t("note.conceptParents.remove")}</button></span>)}
     <span><input value={query} maxLength={160} placeholder={props.t("note.conceptParents.searchPlaceholder")}
-      onChange={(event) => setQuery(event.currentTarget.value)} />
+      onChange={(event) => {
+        const nextQuery = event.currentTarget.value;
+        setQuery(nextQuery);
+        if (nextQuery.trim() !== resultsQuery) { setResults([]); setResultsQuery(""); }
+      }} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();
       }}>{props.t("note.conceptParents.search")}</button></span>
