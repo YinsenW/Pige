@@ -10,6 +10,7 @@ import type { SourceRefreshService } from "../../apps/desktop/src/main/services/
 import type { SourceRefreshConflictService } from "../../apps/desktop/src/main/services/source-refresh-conflict-service";
 import type { NoteTrashService } from "../../apps/desktop/src/main/services/note-trash-service";
 import type { NoteTrashPurgeService } from "../../apps/desktop/src/main/services/note-trash-purge-service";
+import type { SourceTrashService } from "../../apps/desktop/src/main/services/source-trash-service";
 import type { NoteMergeService } from "../../apps/desktop/src/main/services/note-merge-service";
 import type { NoteArchiveService } from "../../apps/desktop/src/main/services/note-archive-service";
 import type { NoteTagService } from "../../apps/desktop/src/main/services/note-tag-service";
@@ -65,7 +66,8 @@ function makeHarness(
   entityTypeService?: Partial<EntityTypeService>,
   topicParentService?: Partial<TopicParentService>,
   entityMentionService?: Partial<EntityMentionService>,
-  sourceRefreshConflictService?: Partial<SourceRefreshConflictService>
+  sourceRefreshConflictService?: Partial<SourceRefreshConflictService>,
+  sourceTrashService?: Partial<SourceTrashService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -109,6 +111,10 @@ function makeHarness(
     getNoteTrashService: () => {
       if (noteTrashService) return noteTrashService as NoteTrashService;
       throw new Error("Note trash service was not expected.");
+    },
+    getSourceTrashService: () => {
+      if (sourceTrashService) return sourceTrashService as SourceTrashService;
+      throw new Error("Source trash service was not expected.");
     },
     getNoteTrashPurgeService: () => {
       if (noteTrashService && "purge" in noteTrashService) return noteTrashService as unknown as NoteTrashPurgeService;
@@ -212,6 +218,9 @@ describe("registerReaderIpc", () => {
       "notes.openRevisionHistory",
       "notes.restoreRevisionHistory",
       "notes.trashCurrent",
+      "sources.trash",
+      "sources.listTrash",
+      "sources.restoreTrash",
       "notes.listTrash",
       "notes.restoreTrash",
       "notes.purgeTrash",
@@ -774,6 +783,44 @@ describe("registerReaderIpc", () => {
     expect(unowned.get("notes.trashCurrent")!({ sender: makeSender(32) } as IpcMainInvokeEvent, identity))
       .toEqual({ ...identity, status: "failed" });
     expect(trash).toHaveBeenCalledTimes(2);
+  });
+
+  it("binds recoverable Source evidence trash and restore to exact pathless authority", async () => {
+    const activeVaultId = "vault_20260802_abcdefgh", currentPageId = "page_20260802_sourcepage1";
+    const sourceId = "src_20260802_sourceevidence1", renderContextId = "notectx_0123456789abcdef0123456789abcdef";
+    const expectedSourceRevision = `sourcerev_${"a".repeat(64)}` as const;
+    const render = vi.fn().mockResolvedValue({ summary: { pageId: currentPageId, title: "Evidence", pageType: "source",
+      status: "active", pagePath: "sources/evidence.md", createdAt: "2026-08-02T08:00:00.000Z",
+      updatedAt: "2026-08-02T08:00:00.000Z", sourceIds: [sourceId] }, html: "<h1>Evidence</h1>", byteSize: 24,
+      renderContextId, sourceTrashEligibility: { canTrash: true, sourceId, sourceRevision: expectedSourceRevision,
+        storage: "managed_copy" } });
+    const trashRequest = { apiVersion: 1 as const, requestId: "sourcetrashreq_abcdefghijklmnop", activeVaultId,
+      currentPageId, renderContextId, sourceId, expectedSourceRevision, confirmation: "move_to_trash" as const };
+    const trash = vi.fn(() => ({ ...trashRequest, status: "committed" as const,
+      operationId: "op_20260802_sourcetrash1234" }));
+    const trashRevision = `sourcetrashrev_${"b".repeat(64)}` as const;
+    const list = vi.fn((request) => ({ ...request, status: "ready" as const, sources: [{ sourceId, pageId: currentPageId,
+      title: "Evidence", storage: "managed_copy" as const, trashedAt: "2026-08-02T09:00:00.000Z",
+      trashOperationId: "op_20260802_sourcetrash1234", trashRevision }] }));
+    const restore = vi.fn((request) => ({ ...request, status: "committed" as const,
+      operationId: "op_20260802_sourcerestore12" }));
+    const refreshed = vi.fn(), handlers = makeHarness({ render }, undefined, undefined, refreshed, undefined, undefined,
+      undefined, vi.fn(), undefined, vi.fn(), undefined, undefined, undefined, vi.fn(), undefined, undefined,
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      { trash, list, restore });
+    const sender = makeSender(52);
+    await handlers.get("notes.render")!({ sender } as IpcMainInvokeEvent, { pageId: currentPageId });
+    expect(handlers.get("sources.trash")!({ sender } as IpcMainInvokeEvent, trashRequest))
+      .toMatchObject({ status: "committed", operationId: "op_20260802_sourcetrash1234" });
+    expect(trash).toHaveBeenCalledWith(expect.stringMatching(/^notes_owner_/u), trashRequest);
+    const listRequest = { apiVersion: 1 as const, requestId: "sourcetrashlistreq_abcdefghijklmnop", activeVaultId };
+    expect(handlers.get("sources.listTrash")!({ sender } as IpcMainInvokeEvent, listRequest))
+      .toMatchObject({ status: "ready", sources: [{ sourceId, pageId: currentPageId }] });
+    const restoreRequest = { apiVersion: 1 as const, requestId: "sourcetrashrestorereq_abcdefghijklmnop", activeVaultId,
+      sourceId, pageId: currentPageId, trashOperationId: "op_20260802_sourcetrash1234", expectedTrashRevision: trashRevision };
+    expect(handlers.get("sources.restoreTrash")!({ sender } as IpcMainInvokeEvent, restoreRequest))
+      .toMatchObject({ status: "committed", operationId: "op_20260802_sourcerestore12" });
+    expect(refreshed).toHaveBeenCalledTimes(2);
   });
 
   it("lists pathless Trash summaries and restores one through the tracked Reader", async () => {

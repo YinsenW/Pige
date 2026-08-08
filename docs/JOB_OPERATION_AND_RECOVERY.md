@@ -658,6 +658,11 @@ Rules:
 - Public knowledge-page restore binds the exact trash receipt/revision, restores original bytes/path
   only when free/current, and restart adopts one forward `restore_page` Operation. Notes and active
   claims/questions/concepts/entities/topics participate; source pages do not.
+- Source evidence uses its own `trash_source_asset` / `restore_source_asset` owner: one private receipt
+  binds the stable Source ID, Source Page ID, exact file identities and managed-copy eligibility. The
+  reference-original asset never moves; an in-vault managed copy moves only after current durable-page
+  and active-Job use are disproved. Restore, Activity Undo and restart re-prove that receipt and adopt
+  one forward Operation, while uncertain references, occupied destinations or identity drift fail closed.
 - Confirmed knowledge-page purge binds the exact trash receipt/revision and persists its intent,
   tombstone and irreversible `purge_page` Operation before payload removal. Restart finishes the
   same deletion once; it never infers a new target or deletes a mismatched payload.

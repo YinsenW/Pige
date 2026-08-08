@@ -431,6 +431,14 @@ import type {
   SourceReconnectListResult,
   SourceReconnectRequest,
   SourceReconnectResult,
+  SourceTrashEligibility,
+  SourceTrashRequest,
+  SourceTrashResult,
+  SourceTrashSummary,
+  SourceTrashListRequest,
+  SourceTrashListResult,
+  SourceTrashRestoreRequest,
+  SourceTrashRestoreResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteResolveInlineReferenceRequest,
@@ -948,6 +956,14 @@ export type {
   SourceReconnectListResult,
   SourceReconnectRequest,
   SourceReconnectResult,
+  SourceTrashEligibility,
+  SourceTrashRequest,
+  SourceTrashResult,
+  SourceTrashSummary,
+  SourceTrashListRequest,
+  SourceTrashListResult,
+  SourceTrashRestoreRequest,
+  SourceTrashRestoreResult,
   NoteResolveInlineReferenceRequest,
   NoteResolveInlineReferenceResult,
   ReaderSelectionEndpoint,
@@ -2462,6 +2478,11 @@ export interface PigeDesktopApi {
     readonly reconnectOriginal: (
       request: SourceReconnectRequest
     ) => Promise<SourceReconnectResult>;
+    readonly trash: (request: SourceTrashRequest) => Promise<SourceTrashResult>;
+    readonly listTrash: (request: SourceTrashListRequest) => Promise<SourceTrashListResult>;
+    readonly restoreTrash: (
+      request: SourceTrashRestoreRequest
+    ) => Promise<SourceTrashRestoreResult>;
   };
   readonly confirmations: {
     readonly pending: () => Promise<HighRiskConfirmationPendingResult>;

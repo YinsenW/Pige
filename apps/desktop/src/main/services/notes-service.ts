@@ -39,14 +39,13 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+import { projectSourceTrashEligibility, resolveNotesSourceTrashTarget, type NotesSourceTrashProjectionPort, type NotesSourceTrashResolution } from "./source-trash-service";
 import { isLifecycleKnowledgePage, isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isRevisionHistoryKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { readClaimConfidence } from "./claim-confidence-service"; import { readEntityType } from "./entity-type-service"; import { projectEntityMentions } from "./entity-mention-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { projectClaimEvidence } from "./claim-evidence-service"; import { projectConceptParents } from "./concept-parent-service"; import { projectTopicParents } from "./topic-parent-service"; import { openNoteSearchMatch } from "./note-search-match-service";
 const MAX_RENDER_CONTEXTS_PER_OWNER = 16, MAX_RENDER_CONTEXT_HREFS = 128, RENDER_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const MAX_NOTE_RENDER_BYTES = 4 * 1024 * 1024, UNSAFE_REFERENCE_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u, EDITOR_PAGE_TYPES = new Set(["note", "source", "claim", "question", "concept", "entity"]);
-export interface NotesVaultPort {
-  current(): VaultSummary | undefined;
-  activeVaultPath(): string | undefined;
-}
+
+export interface NotesVaultPort { current(): VaultSummary | undefined; activeVaultPath(): string | undefined }
 export interface NotesInlineReferenceIndexPort {
   inlineReferenceRevision(vaultPath: string): string | undefined;
   inlineReferenceCandidates(
@@ -58,19 +57,13 @@ export interface NotesInlineReferenceIndexPort {
     }
   ): readonly LibraryPageSummary[] | undefined;
 }
-export interface NotesMarkdownRenderer {
-  (markdown: string): Promise<{
-    readonly html: string;
-    readonly selectionSegments?: readonly PigeMarkdownSelectionSegment[];
-  }>;
-}
+export interface NotesMarkdownRenderer { (markdown: string): Promise<{
+  readonly html: string; readonly selectionSegments?: readonly PigeMarkdownSelectionSegment[];
+}> }
 export interface NotesSourceRefreshProjectionPort { refreshableSourceIds(sourceIds: readonly string[]): readonly string[] }
 interface FileIdentity {
-  readonly size: number;
-  readonly mtimeMs: number;
-  readonly ctimeMs: number;
-  readonly deviceId: string;
-  readonly fileId: string;
+  readonly size: number; readonly mtimeMs: number; readonly ctimeMs: number;
+  readonly deviceId: string; readonly fileId: string;
 }
 
 interface NoteRenderContext {
@@ -85,8 +78,7 @@ interface NoteRenderContext {
 
 interface StableNoteDocument {
   readonly document: NoteDocument; readonly markdown: string; readonly bodyStartOffset: number;
-  readonly pageContentHash: string; readonly pagePath: string; readonly absolutePath: string;
-  readonly identity: FileIdentity;
+  readonly pageContentHash: string; readonly pagePath: string; readonly absolutePath: string; readonly identity: FileIdentity;
 }
 export type NotesSourceRevealResolution =
   | {
@@ -136,15 +128,15 @@ export class NotesService {
   readonly #referenceIndex: NotesInlineReferenceIndexPort | undefined;
   readonly #renderMarkdown: NotesMarkdownRenderer;
   readonly #editor: NoteMarkdownEditorService | undefined; readonly #sourceRefresh: NotesSourceRefreshProjectionPort | undefined;
+  readonly #sourceTrash: NotesSourceTrashProjectionPort | undefined;
   readonly #renderContexts = new Map<string, Map<string, NoteRenderContext>>();
   readonly #editorBindings = new Map<string, NoteEditorBinding>();
   readonly #ownerEpochs = new Map<string, number>();
 
-  constructor(vaults: NotesVaultPort, referenceIndex?: NotesInlineReferenceIndexPort,
-    renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml, editor?: NoteMarkdownEditorService,
-    sourceRefresh?: NotesSourceRefreshProjectionPort) {
+  constructor(vaults: NotesVaultPort, referenceIndex?: NotesInlineReferenceIndexPort, renderMarkdown: NotesMarkdownRenderer = renderPigeMarkdownToHtml,
+    editor?: NoteMarkdownEditorService, sourceRefresh?: NotesSourceRefreshProjectionPort, sourceTrash?: NotesSourceTrashProjectionPort) {
     this.#vaults = vaults; this.#referenceIndex = referenceIndex; this.#renderMarkdown = renderMarkdown;
-    this.#editor = editor; this.#sourceRefresh = sourceRefresh;
+    this.#editor = editor; this.#sourceRefresh = sourceRefresh; this.#sourceTrash = sourceTrash;
   }
 
   get(request: NoteGetRequest): NoteDocument {
@@ -202,6 +194,7 @@ export class NotesService {
         ownerId === undefined ? undefined : this.#sourceRefresh?.refreshableSourceIds(stable.document.summary.sourceIds)),
       ...(renderContextId ? {
         renderContextId,
+        ...(projectSourceTrashEligibility(vaultPath, stable.document.summary.pageId, stable.document.summary.pageType, stable.document.summary.sourceIds, this.#sourceTrash) ?? {}),
         ...(isTrashableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { trashEligibility: { canTrash: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(isRenamableKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { renameEligibility: { canRename: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
         ...(stable.document.summary.pageType !== "note" && isRevisionHistoryKnowledgePage(stable.document.summary.pageType, stable.document.summary.status) ? { historyEligibility: { canBrowse: true as const, revision: publicEditorRevision(stable.pageContentHash) } } : {}),
@@ -470,6 +463,12 @@ export class NotesService {
         );
       }
     };
+  }
+  resolveSourceTrashTarget(ownerId: string, request: { readonly activeVaultId: string; readonly currentPageId: string;
+    readonly renderContextId: string; readonly sourceId: string; readonly expectedSourceRevision: string }): NotesSourceTrashResolution {
+    return resolveNotesSourceTrashTarget({ vault: this.#vaults.current(), vaultPath: this.#vaults.activeVaultPath(), ownerId, request,
+      readContext: (owner, id) => this.#readRenderContext(owner, id), ownerEpoch: (owner) => this.#ownerEpochs.get(owner),
+      matchesCurrentPage: (context) => this.#matchesCurrentPage(context as NoteRenderContext), sameIdentity: sameFileIdentity });
   }
   resolveGeneratedReveal(ownerId: string, request: NoteRevealGeneratedRequest): NotesGeneratedRevealResolution {
     const context = this.#readRenderContext(ownerId, request.renderContextId);

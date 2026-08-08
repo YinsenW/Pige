@@ -54,6 +54,12 @@ import type {
   NoteTrashListResult,
   NoteTrashRestoreRequest,
   NoteTrashRestoreResult,
+  SourceTrashRequest,
+  SourceTrashResult,
+  SourceTrashListRequest,
+  SourceTrashListResult,
+  SourceTrashRestoreRequest,
+  SourceTrashRestoreResult,
   NoteTrashPurgeRequest,
   NoteTrashPurgeResult,
   NoteRevisionHistoryListRequest,
@@ -195,6 +201,15 @@ import {
   NoteTrashListResultSchema,
   NoteTrashRestoreRequestSchema,
   NoteTrashRestoreResultSchema,
+  SOURCE_TRASH_CHANNEL,
+  SOURCE_TRASH_LIST_CHANNEL,
+  SOURCE_TRASH_RESTORE_CHANNEL,
+  SourceTrashRequestSchema,
+  SourceTrashResultSchema,
+  SourceTrashListRequestSchema,
+  SourceTrashListResultSchema,
+  SourceTrashRestoreRequestSchema,
+  SourceTrashRestoreResultSchema,
   NOTE_TRASH_PURGE_CHANNEL,
   NoteTrashPurgeRequestSchema,
   NoteTrashPurgeResultSchema,
@@ -254,6 +269,7 @@ import type { ClaimContradictionService } from "./services/claim-contradiction-s
 import type { ClaimEvidenceService } from "./services/claim-evidence-service";
 import type { ConceptParentService } from "./services/concept-parent-service";
 import type { TopicParentService } from "./services/topic-parent-service";
+import type { SourceTrashService } from "./services/source-trash-service";
 
 interface RegisterReaderIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -273,6 +289,7 @@ interface RegisterReaderIpcOptions {
     readonly filePaths: readonly string[];
   }>;
   readonly getNoteTrashService: () => NoteTrashService;
+  readonly getSourceTrashService: () => SourceTrashService;
   readonly getNoteTrashPurgeService: () => NoteTrashPurgeService;
   readonly getNoteArchiveService: () => NoteArchiveService;
   readonly getQuestionStateService: () => QuestionStateService;
@@ -520,6 +537,33 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteTrashCurrentResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(SOURCE_TRASH_CHANNEL, (event, request: unknown): SourceTrashResult => {
+    const parsed = SourceTrashRequestSchema.parse(request) as SourceTrashRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (!ownerId || event.sender.isDestroyed()) return SourceTrashResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = SourceTrashResultSchema.parse(options.getSourceTrashService().trash(ownerId, parsed));
+      if (result.status === "committed") options.onNoteTrashCommitted();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed()
+        ? result : SourceTrashResultSchema.parse({ ...parsed, status: "failed" });
+    } catch {
+      return SourceTrashResultSchema.parse({ ...parsed, status: "failed" });
+    }
+  });
+  options.ipcMain.handle(SOURCE_TRASH_LIST_CHANNEL, (_event, request: unknown): SourceTrashListResult => {
+    const parsed = SourceTrashListRequestSchema.parse(request) as SourceTrashListRequest;
+    try { return SourceTrashListResultSchema.parse(options.getSourceTrashService().list(parsed)); }
+    catch { return SourceTrashListResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(SOURCE_TRASH_RESTORE_CHANNEL, (event, request: unknown): SourceTrashRestoreResult => {
+    const parsed = SourceTrashRestoreRequestSchema.parse(request) as SourceTrashRestoreRequest;
+    if (event.sender.isDestroyed()) return SourceTrashRestoreResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = SourceTrashRestoreResultSchema.parse(options.getSourceTrashService().restore(parsed));
+      if (result.status === "committed") options.onNoteTrashCommitted();
+      return event.sender.isDestroyed() ? SourceTrashRestoreResultSchema.parse({ ...parsed, status: "failed" }) : result;
+    } catch { return SourceTrashRestoreResultSchema.parse({ ...parsed, status: "failed" }); }
   });
   options.ipcMain.handle(NOTE_TRASH_LIST_CHANNEL, (_event, request: unknown): NoteTrashListResult => {
     const parsed = NoteTrashListRequestSchema.parse(request);

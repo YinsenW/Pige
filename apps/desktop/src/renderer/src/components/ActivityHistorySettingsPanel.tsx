@@ -3,6 +3,7 @@ import type { JobSummary, KnowledgeActivityListResult, KnowledgeActivitySummary 
 import type { Locale } from "@pige/schemas";
 import { collectionViewActivityMessageKey } from "../collection-view-lifecycle";
 import { NoteTrashRestorePanel } from "./NoteTrashRestorePanel";
+import { SourceTrashRestorePanel } from "./SourceTrashRestorePanel";
 
 export function ActivityHistorySettingsPanel(props: {
   readonly activeVaultId?: string | null;
@@ -231,6 +232,8 @@ export function ActivityHistorySettingsPanel(props: {
         {jobsRefreshFailed ? <p role="alert" className="settings-note">{props.t("activity.backgroundRefreshFailed")}</p> : null}
       </section>
       <NoteTrashRestorePanel activeVaultId={props.activeVaultId ?? null} locale={props.locale} onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
+      <SourceTrashRestorePanel activeVaultId={props.activeVaultId ?? null}
+        onCommitted={props.onRestored ?? (async () => false)} t={props.t} />
       <section className="settings-section" aria-labelledby="activity-recent-title">
         <h2 className="settings-section-title" id="activity-recent-title">{props.t("activity.recent")}</h2>
         {props.onSearchResult ? <form className="settings-inline-actions" role="search"

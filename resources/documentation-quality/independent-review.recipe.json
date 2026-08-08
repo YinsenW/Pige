@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-02T07:05:00.000+08:00",
+  "reviewedAt": "2026-08-08T08:04:08.633Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review exact installed Pi package inspection, Main-owned tree and manifest revalidation, honest catalog disclosure, and pathless Settings details.",
+    "scope": "Review recoverable Source evidence trash and restore with stable identities, reference-original preservation, managed-copy currentness guards, and pathless Reader and Activity controls.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "b0b74b210f777bde2d7b7a0985d13e3d9ebf8df29d8901009bc84ef4f2fc3cef"
+    "reviewedSha256": "10e619e2edf89331f10130a5a98c198c140c0f9061bc3ce2108fa9471c0b5954"
   },
   "reviewers": [
     {
-      "reviewerId": "collection-revision-review",
-      "task": "Review Managed Collection history and forward restore",
+      "reviewerId": "source-evidence-lifecycle-review",
+      "task": "Review recoverable Source evidence trash and restore",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks reachable history, read-only projection, explicit restore, forward Undo and durable identity evidence separately from implementation authorship."
+      "independence": "Project review checks stable Source/Page identity, reference-original protection, managed-copy guardrails and restart adoption separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "collection-revision-review",
+      "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Main owns history traversal and restore authority; renderer receives bounded pathless summaries and read-only snapshots, while stale or failed restore preserves current data and focus."
+      "summary": "Main keeps all Source paths and receipts private; Reader and Activity receive bounded pathless controls, while cancel, stale and failed results retain the current safe surface and focus."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "collection-revision-review",
+      "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Data, Jobs, API, UI, decision, schemas, IPC and tests agree on reachable immutable history, explicit forward restore and exact Activity Undo semantics."
+      "summary": "Source and Job owners, schemas, IPC, renderer and direct tests agree on reference-original preservation, managed-copy reproof, stable identifiers and reversible Operations."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "collection-revision-review",
+      "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "PIGE-VAULT-002/007 and PIGE-DATA-003 gain exact table, view and revision-history evidence while remaining partial for broader durable identity, backup, conflict and platform coverage."
+      "summary": "PIGE-VAULT-004 and PIGE-JOB-002 gain exact service, guard, IPC and UI evidence while remaining partial for their broader durable lifecycle and recovery coverage."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "collection-revision-review",
+      "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "One bounded revision-history owner reuses Dataset Bundle, writer and Activity owners; no import, Source, query, provider, network, model or release owner expands."
+      "summary": "One bounded Source lifecycle owner reuses Notes, Jobs, Operation and Activity composition without altering capture, parser, OCR, backup or external-root authority."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "collection-revision-review",
+      "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "Existing Data, API, UI, Job and playbook owners plus one durable decision record the workflow without adding a new design document."
+      "summary": "Existing Source and Job owner documents and the trace manifest record the lifecycle without adding a design document or duplicating durable rules."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/schemas.test.ts tests/unit/register-managed-collection-history-ipc.test.ts tests/unit/managed-collection-service.test.ts tests/unit/managed-collection-ui.test.ts tests/unit/managed-collection-table-contract.test.ts tests/unit/managed-collection-table-rename-ui.test.ts tests/unit/managed-collection-view-service.test.ts",
+      "command": "npx vitest run tests/unit/source-trash-service.test.ts tests/unit/source-trash-ui.test.ts tests/unit/register-reader-ipc.test.ts tests/unit/notes-service.test.ts tests/unit/jobs-service.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused schema, service, IPC and renderer tests prove bounded history paging, read-only preview, explicit forward restore, restart adoption, exact Undo, stable table rename and saved-view editing."
+      "evidence": "Focused Source lifecycle, Jobs guard, Notes projection, IPC and pathless Reader and Activity tests prove trash, restore, replay and restart-safe behavior."
     },
     {
-      "command": "git diff --check",
+      "command": "npm run verify:architecture-reset && npm run verify:change",
       "status": "passed",
-      "evidence": "The focused Main, preload, renderer, tests and governed Data/API/UI/Job delta has no whitespace or conflict-marker defects."
+      "evidence": "The bounded private owner is inventoried and existing ownership budgets and change rules remain enforced."
     },
     {
-      "command": "npm run verify:independent-documentation-review",
+      "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "The current Data/API/UI/Job owners, exact evidence selectors, semantic lock and five-dimensional review agree on immutable history and forward restore."
+      "evidence": "Source and Job contracts, acceptance evidence, semantic claims and review snapshot agree while requirements remain partial."
     }
   ],
   "coordination": {
-    "taskId": "collection-revision-history-20260802",
-    "taskTitle": "Managed Collection history and forward restore",
+    "taskId": "source-evidence-trash-restore-20260808",
+    "taskTitle": "Recoverable Source evidence trash and restore",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing historical revisions, Source evidence, imports, saved views, active paging, formulas, relations and collection mutation semantics remain unchanged.",
-    "acknowledgement": "Bounded history, read-only preview and forward restore are bound while PIGE-VAULT-002/007 and PIGE-DATA-003 remain partial for broader durable identity, backup, conflict and platform coverage."
+    "compatibility": "Existing Source capture, parser and OCR access, source reconnect, backup, external roots and durable Job semantics remain unchanged; only a pathless trash-first lifecycle is added.",
+    "acknowledgement": "PIGE-VAULT-004 and PIGE-JOB-002 gain bounded Source evidence lifecycle proof while both remain partial for broader durable classes, recovery and platform coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
