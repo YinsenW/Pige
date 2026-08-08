@@ -74,7 +74,7 @@ export function ReaderClaimEvidence(props: {
       disabled={!summary.canEdit || pending || summary.items.length <= 1}
       onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>
       {props.t("note.claimEvidence.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.claimEvidence.searchPlaceholder")}
+    <span><input type="search" aria-label={props.t("note.claimEvidence.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.claimEvidence.searchPlaceholder")}
       onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();
@@ -82,7 +82,10 @@ export function ReaderClaimEvidence(props: {
     {candidates.map((candidate) => <button key={candidate.sourceId} type="button" disabled={pending}
       onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "add", target: candidate }); }}>
       {props.t("note.claimEvidence.add")} {candidate.title}</button>)}
-    {intent ? <div role="alertdialog" aria-label={props.t("note.claimEvidence.confirmTitle")}>
+    {intent ? <div role="alertdialog" aria-label={props.t("note.claimEvidence.confirmTitle")} onKeyDown={(event) => {
+      if (event.key !== "Escape" || pending) return;
+      event.preventDefault(); restoreIntentFocusRef.current = true; setIntent(null);
+    }}>
       <p>{props.t(intent.action === "add" ? "note.claimEvidence.confirmAdd" : "note.claimEvidence.confirmRemove")} {intent.target.title}</p>
       <button type="button" disabled={pending} onClick={() => { restoreIntentFocusRef.current = true; setIntent(null); }}>{props.t("note.claimEvidence.cancel")}</button>
       <button ref={confirmRef} type="button" disabled={pending} onClick={() => void commit()}>{props.t("note.claimEvidence.confirm")}</button>

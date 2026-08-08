@@ -35,7 +35,7 @@ export function ReaderQuestionAnswers(props: { activeVaultId: string; note: Note
   return <section ref={sectionRef} tabIndex={-1} className="reader-question-answers" aria-label={props.t("note.questionAnswers.title")}>
     <strong>{props.t("note.questionAnswers.title")}</strong>
     {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button" ref={(node) => { if (node) focusRef.current = node; }} disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; void change("remove", item); }}>{props.t("note.questionAnswers.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.questionAnswers.searchPlaceholder")} onChange={(event) => setQuery(event.currentTarget.value)} />
+    <span><input type="search" aria-label={props.t("note.questionAnswers.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.questionAnswers.searchPlaceholder")} onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => { focusRef.current = event.currentTarget; void search(); }}>{props.t("note.questionAnswers.search")}</button></span>
     {results.filter((candidate) => !summary.items.some(({ pageId }) => pageId === candidate.pageId)).map((candidate) => <button key={candidate.pageId} type="button" disabled={pending} onClick={(event) => { focusRef.current = event.currentTarget; void change("add", candidate); }}>{props.t("note.questionAnswers.add")} {candidate.title}</button>)}
     {pending ? <span role="status">{props.t("note.questionAnswers.saving")}</span> : null}

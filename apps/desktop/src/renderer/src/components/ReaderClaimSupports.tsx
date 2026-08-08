@@ -79,7 +79,7 @@ export function ReaderClaimSupports(props: {
     {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button"
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>
       {props.t("note.claimSupports.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.claimSupports.searchPlaceholder")}
+    <span><input type="search" aria-label={props.t("note.claimSupports.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.claimSupports.searchPlaceholder")}
       onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();
@@ -87,7 +87,10 @@ export function ReaderClaimSupports(props: {
     {candidates.map((candidate) => <button key={candidate.pageId} type="button" disabled={pending} onClick={(event) => {
       focusRef.current = event.currentTarget; setIntent({ action: "add", target: candidate });
     }}>{props.t("note.claimSupports.add")} {candidate.title}</button>)}
-    {intent ? <div role="alertdialog" aria-label={props.t("note.claimSupports.confirmTitle")}>
+    {intent ? <div role="alertdialog" aria-label={props.t("note.claimSupports.confirmTitle")} onKeyDown={(event) => {
+      if (event.key !== "Escape" || pending) return;
+      event.preventDefault(); restoreIntentFocusRef.current = true; setIntent(null);
+    }}>
       <p>{props.t(intent.action === "add" ? "note.claimSupports.confirmAdd" : "note.claimSupports.confirmRemove")} {intent.target.title}</p>
       <button type="button" disabled={pending} onClick={() => { restoreIntentFocusRef.current = true; setIntent(null); }}>{props.t("note.claimSupports.cancel")}</button>
       <button ref={confirmRef} type="button" disabled={pending} onClick={() => void commit()}>{props.t("note.claimSupports.confirm")}</button>
