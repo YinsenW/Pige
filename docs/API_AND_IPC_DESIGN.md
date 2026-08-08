@@ -1118,6 +1118,7 @@ Rules:
   scope/revision/Job identity; restart adopts exact prepared or published state once. Clear is
   trash-first, refuses an active export and never touches Vault data or user-created bundles.
 - Diagnostics APIs never return raw secrets. Default diagnostics also exclude full source bodies, full notes, full memory, and raw prompts/responses; an explicit support export may add only separately reviewed, redacted content categories.
+- Existing `diagnostics.previewSupportBundle` carries a bounded selection of 1–32 event IDs from at most 64 pathless redacted summaries; Main rechecks the event-selection revision immediately before preview/export and persists the exact selection for restart adoption.
 
 ### 6.10 Backup And Restore
 
