@@ -89,6 +89,27 @@ describe("AnalyticalSnapshotPanel", () => {
     expect(harness.dom.window.document.activeElement).toBe(createButton);
     await harness.unmount();
   });
+
+  it("offers a body-free retry when the snapshot list fails and restores the create trigger focus", async () => {
+    let attempts = 0;
+    const list = vi.fn(async (request: Parameters<NonNullable<typeof window.pige.collections.listAnalyticalSnapshots>>[0]) => {
+      attempts += 1;
+      return attempts === 1
+        ? ({ ...request, status: "failed" as const } satisfies CollectionAnalyticalSnapshotListResult)
+        : ({ ...request, status: "ready" as const, snapshots: [] } satisfies CollectionAnalyticalSnapshotListResult);
+    });
+    const harness = await mount({ list, create: vi.fn(), open: vi.fn(), openCitation: vi.fn() });
+    await settle(harness.dom);
+    expect(harness.container.textContent).toContain("collection.snapshot_failed");
+    const retry = button(harness.container, "confirmation.retry");
+    const create = button(harness.container, "collection.snapshotCreate");
+    create.focus();
+    await act(async () => { retry.click(); await settle(harness.dom); });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(harness.container.textContent).not.toContain("collection.snapshot_failed");
+    expect(harness.dom.window.document.activeElement).toBe(create);
+    await harness.unmount();
+  });
 });
 
 async function mount(actions: {

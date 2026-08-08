@@ -22,6 +22,7 @@ export function AnalyticalSnapshotPanel(props: {
   const [preview, setPreview] = useState<CollectionAnalyticalSnapshotPreview | null>(null);
   const [citation, setCitation] = useState<Extract<CollectionAnalyticalSnapshotCitationResult, { readonly status: "ready" }>["citation"] | null>(null);
   const [notice, setNotice] = useState<SnapshotNotice | null>(null);
+  const [listFailed, setListFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlightRef = useRef(false);
   const requestSequence = useRef(0);
@@ -40,6 +41,7 @@ export function AnalyticalSnapshotPanel(props: {
     setPreview(null);
     setCitation(null);
     setNotice(null);
+    setListFailed(false);
     setBusy(false);
     void loadSnapshots(requestSequence.current, ownerKey);
   }, [ownerKey]);
@@ -60,18 +62,31 @@ export function AnalyticalSnapshotPanel(props: {
     try {
       result = await window.pige.collections.listAnalyticalSnapshots(request);
     } catch {
-      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setNotice("failed");
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        setListFailed(true);
+        setNotice("failed");
+      }
       return;
     }
     if (sequence !== requestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
         result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId) return;
     if (result.status !== "ready") {
+      setListFailed(true);
       setNotice("failed");
       return;
     }
+    setListFailed(false);
     setSnapshots(result.snapshots.filter((item) =>
       item.datasetId === props.snapshot.datasetId && item.tableId === props.snapshot.tableId
     ));
+  };
+
+  const retrySnapshots = (): void => {
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    focusCreateRef.current = true;
+    setNotice(null);
+    void loadSnapshots(sequence, ownerKey);
   };
 
   const createSnapshot = async (): Promise<void> => {
@@ -199,6 +214,7 @@ export function AnalyticalSnapshotPanel(props: {
       ) : null}
       {citation ? <p className="settings-inline-status success" role="status">{props.t("collection.snapshotCitationReady")} · {citation.citationRef}</p> : null}
       {notice && notice !== "created" && notice !== "citation_ready" ? <p className="settings-inline-status error" role="status">{props.t(`collection.snapshot_${notice}`)}</p> : null}
+      {listFailed ? <button type="button" className="settings-button" onClick={retrySnapshots}>{props.t("confirmation.retry")}</button> : null}
     </section>
   );
 }
