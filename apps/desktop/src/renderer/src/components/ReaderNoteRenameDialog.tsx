@@ -47,16 +47,23 @@ export function ReaderNoteRenameDialog(props: {
 }): React.JSX.Element {
   const [draft, setDraft] = useState(props.currentTitle), [pending, setPending] = useState(false), [failed, setFailed] = useState(false);
   const activeRef = useRef(false), sequenceRef = useRef(0), ownerRef = useRef(props.ownerIdentity);
-  const inputRef = useRef<HTMLInputElement>(null), dialogRef = useRef<HTMLElement>(null); ownerRef.current = props.ownerIdentity;
-  useEffect(() => { sequenceRef.current += 1; activeRef.current = false; setDraft(props.currentTitle); setPending(false); setFailed(false); inputRef.current?.select(); }, [props.ownerIdentity]);
+  const inputRef = useRef<HTMLInputElement>(null), dialogRef = useRef<HTMLElement>(null), restoreFocusRef = useRef(false); ownerRef.current = props.ownerIdentity;
+  useEffect(() => { sequenceRef.current += 1; activeRef.current = false; setDraft(props.currentTitle); setPending(false); setFailed(false); restoreFocusRef.current = false; inputRef.current?.select(); }, [props.ownerIdentity]);
+  const scheduleRestoreFocus = (): void => {
+    if (!restoreFocusRef.current) return;
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      restoreFocusRef.current = false;
+      inputRef.current?.focus({ preventScroll: true });
+    }));
+  };
   const title = canonicalNoteTitle(draft), valid = Boolean(title && title !== props.currentTitle && title.length <= 120 && !/[\u0000-\u001f\u007f]/u.test(title));
   const cancel = (): void => { if (activeRef.current) return; props.onCancel(); window.requestAnimationFrame(() => props.returnFocusRef.current?.focus({ preventScroll: true })); };
   const submit = async (): Promise<void> => {
     if (activeRef.current || !valid) return; activeRef.current = true; const sequence = ++sequenceRef.current, owner = props.ownerIdentity; setPending(true); setFailed(false);
     try { const outcome = await props.onRename(title); if (sequence !== sequenceRef.current || owner !== ownerRef.current) return;
-      if (outcome.status === "committed") { props.onCommitted(outcome.render); return; } setFailed(true); inputRef.current?.focus({ preventScroll: true });
-    } catch { if (sequence === sequenceRef.current && owner === ownerRef.current) { setFailed(true); inputRef.current?.focus({ preventScroll: true }); } }
-    finally { if (sequence === sequenceRef.current && owner === ownerRef.current) { activeRef.current = false; setPending(false); } }
+      if (outcome.status === "committed") { props.onCommitted(outcome.render); return; } setFailed(true); restoreFocusRef.current = true;
+    } catch { if (sequence === sequenceRef.current && owner === ownerRef.current) { setFailed(true); restoreFocusRef.current = true; } }
+    finally { if (sequence === sequenceRef.current && owner === ownerRef.current) { activeRef.current = false; setPending(false); scheduleRestoreFocus(); } }
   };
   return <div className="confirmation-backdrop"><section ref={dialogRef} className="confirmation-dialog" role="dialog" aria-modal="true"
     aria-labelledby="reader-note-rename-title" aria-describedby="reader-note-rename-description" aria-busy={pending}
