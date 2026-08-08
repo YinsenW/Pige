@@ -236,9 +236,9 @@ Build:
   exact-once managed-source boundary.
 - [B2.02 -> E2.04] Local macOS voice dictation when supported, with explicit unavailable states elsewhere.
 - [B2.03 -> E2.05] Markdown and TXT file capture.
-- [B2.04 -> E2.06] PDF, DOCX, PPTX, and common-image preservation with metadata-only
-  source projections and one visible Agent dependency job; parser/OCR child Jobs begin
-  only from later Agent tool calls.
+- [B2.04 -> E2.06] PDF, DOCX, PPTX, common-image, audio, and video preservation with
+  metadata-only source projections and one visible Agent dependency job; parser/OCR child
+  Jobs begin only from later Agent tool calls, while media waits without model egress for P2 transcription.
 - [B2.05 -> E2.07] Immediate whole-window drop plus staged composer attachments.
 - [B2.06 -> E2.08] Stable source ID generation.
 - [B2.07 -> E2.08] Source-record creation and policy-driven source-asset preservation.
@@ -269,8 +269,9 @@ Exit criteria:
   page-backed captures reopen through Reader while only bounded short chat text remains inline.
 - [E2.04] Supported macOS dictation inserts local transcript text after on-demand microphone permission; unsupported platforms show a clear state and no dictation audio is sent to model providers.
 - [E2.05] Markdown and TXT capture preserves the original source, creates one source record, and does not duplicate large bodies into conversation events.
-- [E2.06] PDF, DOCX, PPTX, and image capture preserves evidence before processing and
-  creates a visible retryable Agent dependency job without starting parser/OCR work.
+- [E2.06] PDF, DOCX, PPTX, image, audio, and video capture preserve evidence before processing
+  and create a visible retryable Agent dependency job without starting parser/OCR work; media
+  remains waiting for P2 transcription without model egress.
 - [E2.07] Drop release immediately submits one bounded Agent turn; composer picker stays
   side-effect-free until Send atomically creates one parent Job, and failed submit keeps
   exact text/chips without exposing paths or duplicating retry.

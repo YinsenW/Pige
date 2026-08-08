@@ -52,12 +52,12 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review confirmed bounded Reader Entity identifier add/remove through the existing exact page update, Operation, Activity Undo and restart recovery.",
+    "scope": "Review the bounded Reader Entity identifier correction and local audio/video evidence preservation; each reuses existing durable records without exposing bodies or paths.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "581c6ee04ebd49882b10b4b0fb959107c063ecefb00cc10442d0cd94b72bfb72"
+    "reviewedSha256": "90bc27f309ee740891131f5024608667cb2c96680175b0dbc85b1b4be9e3b87d"
   },
   "reviewers": [
     {
@@ -71,29 +71,39 @@
         "documentation_leanness_and_maintainability"
       ],
       "independence": "Project review checks Entity frontmatter bounds, current-page CAS, Activity before-image recovery and renderer-safe identifier projection separately from implementation authorship."
+    },
+    {
+      "reviewerId": "media-evidence-capture-review",
+      "task": "Review local media evidence capture without transcription",
+      "independentDimensions": [
+        "navigation_and_resource_lifecycle",
+        "cross_document_contract_consistency",
+        "continuous_traceability_and_acceptance"
+      ],
+      "independence": "Project review checks local preservation, pathless Source projection, waiting capability recovery, and no-model/no-egress boundaries separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "media-evidence-capture-review",
       "blockerCount": 0,
-      "summary": "Reader sends only a current-page identity and one bounded identifier; Main keeps Markdown, hashes and receipts private while Activity exposes one existing reversible update."
+      "summary": "Main preserves media and keeps paths and bytes private; the Source Page and waiting result expose only safe capability facts."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "media-evidence-capture-review",
       "blockerCount": 0,
-      "summary": "Typed IPC, Entity schema validation, page CAS, editor recovery and Activity Undo agree that every identifier correction is one exact same-page effect."
+      "summary": "Capture, Source Page, Job, and restart owners agree that unavailable transcription is a durable no-model wait, not a parser or Agent route."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "media-evidence-capture-review",
       "blockerCount": 0,
-      "summary": "PIGE-KNOW-003 gains bounded Entity identity correction evidence while its broader relationship, merge and unresolved-conflict routes remain partial."
+      "summary": "PIGE-CAP-001 gains exact local media preservation evidence while it remains partial for its broader capture boundary."
     },
     {
       "id": "ongoing_development_support",
@@ -125,16 +135,21 @@
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
       "evidence": "Pi and Job contracts, trace text and the review snapshot agree while requirements remain partial."
+    },
+    {
+      "command": "npx vitest run tests/unit/home-agent-media-capture-service.test.ts tests/unit/capture-service.test.ts tests/unit/home-agent-attachment-service.test.ts --maxWorkers=1",
+      "status": "passed",
+      "evidence": "Focused capture tests prove typed local media preservation, deterministic Source Page projection, and a no-model/no-egress unavailable transcription wait."
     }
   ],
   "coordination": {
-    "taskId": "entity-identifier-current-page-20260808",
-    "taskTitle": "Current Entity identifier add and remove",
+    "taskId": "entity-identifiers-and-local-media-capture-20260808",
+    "taskTitle": "Entity identifier correction and local media evidence capture",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Entity type, mention, merge, relationship and generic Markdown editing flows remain unchanged; only one validated canonical identifier add or remove shares the established same-page Operation.",
-    "acknowledgement": "PIGE-KNOW-003 gains bounded Entity identifier correction and recovery proof while broader relationship, merge and unresolved-conflict coverage remains partial."
+    "compatibility": "Existing Entity, capture, parser/OCR, Agent, Source Page, and durable Job semantics remain unchanged; one canonical identifier update and local media preservation share established reversible or waiting boundaries.",
+    "acknowledgement": "PIGE-KNOW-003 and PIGE-CAP-001 gain bounded evidence while their broader requirements remain partial."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
