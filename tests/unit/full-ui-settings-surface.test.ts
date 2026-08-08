@@ -5348,7 +5348,11 @@ describe("full UI Settings surface", () => {
     });
     expect(container.textContent).not.toContain("Calendar · v1.0.0 · Read events");
     expect(container.textContent).toContain("Permissions changed elsewhere. The current settings are shown.");
-    expect(dom.window.document.activeElement).not.toBe(firstRevoke);
+    await settle(dom);
+    await settle(dom);
+    expect(dom.window.document.activeElement).toBe(
+      container.querySelector<HTMLInputElement>('input[name="privacy-permission-mode"]:checked')
+    );
 
     const ask = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
       .find((input) => input.parentElement?.textContent?.includes("Ask every time"))!;
@@ -5525,6 +5529,7 @@ describe("full UI Settings surface", () => {
     const returnToAsk = buttonNamed(container, "Return to Ask Every Time");
     await act(async () => {
       returnToAsk.click();
+      await settle(dom);
       await settle(dom);
     });
     expect(setDefaultMode).toHaveBeenCalledTimes(2);
