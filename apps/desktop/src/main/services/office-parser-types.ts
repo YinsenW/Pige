@@ -64,7 +64,6 @@ export interface OfficeExtractionUnit {
   readonly characterEnd: number;
   readonly characterCount: number;
   readonly imageCount: number;
-  readonly notesCharacterCount?: number;
   readonly mediaReferences?: readonly OfficeUnitMediaReference[];
   readonly needsOcr: boolean;
   readonly warnings: readonly string[];

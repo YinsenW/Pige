@@ -27,6 +27,7 @@ import {
   PptxMediaOcrArtifactService,
   type PptxMediaOcrItemResult
 } from "../../apps/desktop/src/main/services/pptx-media-ocr-artifact-service";
+import { PptxSlideMaterializerService } from "../../apps/desktop/src/main/services/pptx-slide-materializer-core";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
 import { JobRecordSchema, SourceRecordSchema, type JobRecord, type SourceRecord } from "@pige/schemas";
@@ -293,11 +294,18 @@ describe("PPTX media OCR artifact service", () => {
     expect(listFiles(outside, ".txt")).toHaveLength(0);
   });
 
-  it("runs materialized bytes through a private disposable OCR input", async () => {
+  it("runs bounded full-slide renders through in-memory OCR and persists a reusable Source Page", async () => {
     const setup = await makeParsedPptx();
-    const materializer = new StaticOfficeMediaMaterializer();
     const adapter = new InspectingOcrAdapter();
-    const service = new OcrService(adapter, undefined, undefined, undefined, materializer);
+    const service = new OcrService(
+      adapter,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new PptxSlideMaterializerService()
+    );
 
     const result = await service.ocrSource(
       setup.vaultPath,
@@ -307,12 +315,28 @@ describe("PPTX media OCR artifact service", () => {
     );
 
     expect(result).toMatchObject({ created: true, agentTextReady: true });
-    expect(materializer.inputPath).toBeTruthy();
-    expect(materializer.inputPath).not.toBe(path.join(setup.vaultPath, requireValue(setup.sourceRecord.managedCopy?.path)));
-    expect(fs.existsSync(requireValue(materializer.inputPath))).toBe(false);
-    expect(adapter.inputPath).toBeTruthy();
-    expect(fs.existsSync(requireValue(adapter.inputPath))).toBe(false);
-    expect(adapter.inputBytes).toEqual(TINY_PNG);
+    expect(adapter.inputPath).toBeUndefined();
+    expect(adapter.inputBytes?.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const finalRecord = readSourceRecord(setup.sourceRecordPath);
+    const textArtifact = requireValue(finalRecord.artifacts.find((artifact) => artifact.id.endsWith("_pptx_slide_ocr_text")));
+    const text = fs.readFileSync(path.join(setup.vaultPath, textArtifact.path), "utf8");
+    expect(text).toContain("--- Slide 1 Render ---");
+    expect(text).toContain("--- Slide 2 Render ---");
+    expect(finalRecord.metadata).toMatchObject({
+      ocrProcessedSlideCount: 2,
+      ocrMaterializerId: "pige_openxml_canvas",
+      ocrMaterializerVersion: "1",
+      needsOcr: false,
+      agentTextReady: true
+    });
+    const reused = await service.ocrSource(
+      setup.vaultPath,
+      finalRecord,
+      setup.sourceRecordPath,
+      setup.ocrJob
+    );
+    expect(reused).toMatchObject({ created: false, agentTextReady: true });
+    expect(adapter.bytesCalls).toBe(2);
   });
 
   it("supports a verified referenced-original PPTX without copying its path into OCR metadata", async () => {
@@ -368,6 +392,7 @@ class StaticOfficeMediaMaterializer implements OfficeMediaMaterializerPort {
 class InspectingOcrAdapter implements NativeImageOcrAdapterPort {
   inputPath: string | undefined;
   inputBytes: Buffer | undefined;
+  bytesCalls = 0;
 
   isAvailable(): boolean {
     return true;
@@ -377,6 +402,13 @@ class InspectingOcrAdapter implements NativeImageOcrAdapterPort {
     this.inputPath = inputPath;
     this.inputBytes = fs.readFileSync(inputPath);
     return nativeResult("Private media OCR evidence");
+  }
+
+  async recognizeBytes(bytes: Uint8Array): Promise<NativeOcrResult> {
+    this.bytesCalls += 1;
+    this.inputPath = undefined;
+    this.inputBytes = Buffer.from(bytes);
+    return nativeResult("Full-slide OCR evidence");
   }
 }
 

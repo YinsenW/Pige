@@ -138,9 +138,7 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
 
   const units: OfficeExtractionUnit[] = [];
   const ocrCandidateLocators: string[] = [];
-  let firstSlideTitle: string | undefined;
   let externalRelationshipCount = presentationRelations.filter((relation) => relation.external).length;
-  let slidesWithNotes = 0;
   let slidesWithImages = 0;
   let ocrCandidateMediaCount = 0;
   let ocrMaterializableMediaCount = 0;
@@ -148,7 +146,6 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
   const mediaByPath = new Map(packageData.mediaReferences.map((media) => [media.packagePath, media]));
   const slideVisibleText: string[] = [];
 
-  const speakerNotes: Array<{ readonly index: number; readonly text: string }> = [];
   for (let index = 0; index < slideParts.length; index += 1) {
     const slidePart = slideParts[index];
     if (!slidePart) continue;
@@ -159,7 +156,6 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
     }
     const slideNodes = parseOrderedXml(slideXml, "pptx");
     const visibleParagraphs = extractParagraphs(slideNodes);
-    if (!firstSlideTitle) firstSlideTitle = visibleParagraphs.find(Boolean);
     const slideRelsPart = `${path.posix.dirname(slidePart)}/_rels/${path.posix.basename(slidePart)}.rels`;
     const slideRelations = packageData.entries.has(slideRelsPart)
       ? parseRelationships(requirePart(packageData, slideRelsPart, "pptx"), slidePart, "pptx")
@@ -188,16 +184,9 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
     }
     const imageCount = mediaReferences.length;
     if (imageCount > 0) slidesWithImages += 1;
-    const notesRelation = slideRelations.find((relation) => relation.type.endsWith("/notesSlide") && !relation.external);
-    const notesPart = notesRelation ? resolveRelationshipTarget(slidePart, notesRelation.target, "pptx") : undefined;
-    const noteParagraphs = notesPart && packageData.entries.has(notesPart)
-      ? extractParagraphs(parseOrderedXml(requirePart(packageData, notesPart, "pptx"), "pptx"))
-      : [];
-    if (noteParagraphs.length > 0) slidesWithNotes += 1;
     const visibleText = normalizeParagraphs(visibleParagraphs);
     slideVisibleText.push(visibleText);
-    const notesText = normalizeParagraphs(noteParagraphs);
-    const needsOcr = imageCount > 0 && visibleText.length < 80;
+    const needsOcr = visibleText.length < 80;
     if (needsOcr) {
       ocrCandidateLocators.push(`slide:${index + 1}`);
       ocrCandidateMediaCount += mediaReferences.length;
@@ -205,27 +194,22 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
       ocrMaterializableMediaCount += materializable.length;
       ocrMaterializableMediaBytes += materializable.reduce((total, media) => total + media.size, 0);
     }
-    if (notesText) speakerNotes.push({ index: index + 1, text: notesText });
     units.push({
       index: index + 1,
       locator: `slide:${index + 1}`,
       kind: "slide",
       characterStart: 0,
       characterEnd: 0,
-      characterCount: visibleText.length + notesText.length,
+      characterCount: visibleText.length,
       imageCount,
-      ...(notesText ? { notesCharacterCount: notesText.length } : {}),
       ...(mediaReferences.length > 0 ? { mediaReferences } : {}),
       needsOcr,
-      warnings: needsOcr ? ["Slide has sparse text and image references; OCR may recover visible content."] : []
+      warnings: needsOcr ? ["Slide has sparse visible text; full-slide OCR may recover rendered content."] : []
     });
   }
 
   const converted = await convertAnyDocSnapshot(request.filePath, "pptx", request.limits.maxBytes);
-  const notesBridge = speakerNotes.length > 0
-    ? `\n\n## Speaker notes\n\n${speakerNotes.map((note) => `### Slide ${note.index}\n${note.text}`).join("\n\n")}`
-    : "";
-  const limited = limitConvertedMarkdown(`${converted.markdown}${notesBridge}`, request.limits.maxTextCharacters);
+  const limited = limitConvertedMarkdown(converted.markdown, request.limits.maxTextCharacters);
   const text = limited.text;
   const textRanges = mapSlideTextRanges(text, slideVisibleText);
   const finalizedUnits = units.map((unit, index) => {
@@ -246,7 +230,7 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
   const textCoverage = classifyUnitCoverage(finalizedUnits.length, meaningfulUnits, text.length);
   if (textCoverage === "none" || textCoverage === "low") warnings.push("The PPTX contains too little readable text for Agent ingest.");
   if (limited.truncated) warnings.push("Presentation text was truncated at the configured extracted-text limit.");
-  const title = extractCoreTitle(packageData, "pptx") ?? firstMarkdownHeading(text) ?? firstSlideTitle;
+  const title = extractCoreTitle(packageData, "pptx") ?? firstMarkdownHeading(text);
 
   return {
     parserId: OFFICE_PARSER_ID,
@@ -272,9 +256,9 @@ async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPac
       mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
       slideCount: originalSlideCount,
       processedSlideCount: finalizedUnits.length,
-      slidesWithNotes,
       slidesWithImages,
       imageCount: packageData.mediaReferences.length,
+      ocrCandidateSlideCount: ocrCandidateLocators.length,
       ocrCandidateMediaCount,
       ocrMaterializableMediaCount,
       ocrMaterializableMediaBytes,

@@ -617,7 +617,7 @@ function localName(value: string): string {
 
 function attribute(node: OrderedNode | undefined, name: string): string | undefined {
   if (!node) return undefined;
-  const attributes = node[":@"]; 
+  const attributes = node[":@"];
   if (!isRecord(attributes)) return undefined;
   const value = attributes[name];
   return typeof value === "string" ? value : undefined;

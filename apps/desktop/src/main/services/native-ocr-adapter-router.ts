@@ -37,4 +37,23 @@ export class NativeOcrAdapterRouter implements NativeImageOcrAdapterPort {
       "No verified local OCR adapter is available."
     ));
   }
+
+  recognizeBytes(
+    bytes: Uint8Array,
+    preferredLanguages: readonly string[],
+    signal?: AbortSignal
+  ): ReturnType<NativeImageOcrAdapterPort["recognize"]> {
+    const ordered = this.#preference() === "paddleocr_local"
+      ? [this.#fallbackAdapter, this.#nativeAdapter]
+      : [this.#nativeAdapter, this.#fallbackAdapter];
+    for (const adapter of ordered) {
+      if (adapter.isAvailable() && adapter.recognizeBytes) {
+        return adapter.recognizeBytes(bytes, preferredLanguages, signal);
+      }
+    }
+    return Promise.reject(new PigeDomainError(
+      "ocr.pptx.bytes_adapter_unavailable",
+      "No verified local OCR adapter accepts in-memory rendered pixels."
+    ));
+  }
 }

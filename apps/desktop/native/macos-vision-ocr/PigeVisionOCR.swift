@@ -6,13 +6,14 @@ import Vision
 
 private let protocolVersion = 1
 private let helperVersion = "1.0.0"
-private let maxRequestBytes = 64 * 1024
+private let maxRequestBytes = 18 * 1024 * 1024
 
 private struct HelperRequest: Decodable {
     let schemaVersion: Int
     let requestId: String
     let operation: String
     let inputPath: String?
+    let inputBytesBase64: String?
     let preferredLanguages: [String]?
     let limits: OcrLimits?
 }
@@ -139,11 +140,18 @@ private struct PigeVisionOCR {
                 guard #available(macOS 26.0, *) else {
                     throw HelperFailure(code: "ocr.platform_unsupported", message: "Apple Vision document OCR requires macOS 26 or later.")
                 }
-                guard let inputPath = request.inputPath, let limits = request.limits else {
+                guard let limits = request.limits else {
                     throw HelperFailure(code: "ocr.helper.invalid_request", message: "The OCR request omitted its input or limits.")
                 }
                 try validateLimits(limits)
-                let prepared = try prepareImage(path: inputPath, limits: limits)
+                let prepared: PreparedImage
+                if let inputPath = request.inputPath {
+                    prepared = try prepareImage(path: inputPath, limits: limits)
+                } else if let inputBytesBase64 = request.inputBytesBase64 {
+                    prepared = try prepareImage(base64: inputBytesBase64, limits: limits)
+                } else {
+                    throw HelperFailure(code: "ocr.helper.invalid_request", message: "The OCR request omitted its input.")
+                }
                 let result = try await recognize(
                     image: prepared.image,
                     metadata: prepared.metadata,
@@ -226,6 +234,20 @@ private func prepareImage(path: String, limits: OcrLimits) throws -> PreparedIma
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
         throw HelperFailure(code: "ocr.image.invalid", message: "The preserved source is not a readable image.")
     }
+    return try prepareImage(source: source, limits: limits)
+}
+
+private func prepareImage(base64: String, limits: OcrLimits) throws -> PreparedImage {
+    guard let data = Data(base64Encoded: base64), data.count > 0, data.count <= limits.maxFileBytes else {
+        throw HelperFailure(code: "ocr.image.invalid", message: "The rendered slide bytes are not a readable image.")
+    }
+    guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+        throw HelperFailure(code: "ocr.image.invalid", message: "The rendered slide bytes are not a readable image.")
+    }
+    return try prepareImage(source: source, limits: limits)
+}
+
+private func prepareImage(source: CGImageSource, limits: OcrLimits) throws -> PreparedImage {
     guard let typeIdentifier = CGImageSourceGetType(source) as String?,
           let imageType = UTType(typeIdentifier),
           imageType.conforms(to: .image) else {

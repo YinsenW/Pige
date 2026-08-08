@@ -82,7 +82,7 @@ describe("Office parser core", () => {
     ]);
   });
 
-  it("uses presentation relationship order and preserves notes without opening external targets", async () => {
+  it("uses presentation relationship order while leaving semantic notes to AnyDoc", async () => {
     const filePath = await writeFixture("roadmap.pptx", await createTestPptx());
 
     const result = await extractOfficeText({
@@ -100,17 +100,17 @@ describe("Office parser core", () => {
       needsOcr: true,
       structure: {
         slideCount: 2,
-        slidesWithNotes: 1,
         slidesWithImages: 1,
         imageCount: 1,
         externalRelationshipCount: 1
       }
     });
     expect(result.text.indexOf("Roadmap first")).toBeLessThan(result.text.indexOf("Second in presentation order"));
-    expect(result.text).toContain("### Slide 1\nSpeaker note: verify the local-first release gate.");
-    expect(result.text).toContain("Speaker note: verify the local-first release gate.");
+    expect(result.text).toContain("> Speaker note: verify the local-first release gate.");
+    expect(result.text).not.toContain("## Speaker notes");
+    expect(result.text).not.toContain("### Slide 1\nSpeaker note: verify the local-first release gate.");
     expect(result.text).not.toContain("fixture-secret");
-    expect(result.ocrCandidateLocators).toEqual(["slide:1"]);
+    expect(result.ocrCandidateLocators).toEqual(["slide:1", "slide:2"]);
     expect(result.units.map((unit) => unit.locator)).toEqual(["slide:1", "slide:2"]);
     expect(result.units[0]?.mediaReferences).toEqual([{
       mediaIndex: 1,
