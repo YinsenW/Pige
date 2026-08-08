@@ -637,13 +637,14 @@ Build:
 - [B7.09 -> E7.04] Implemented deterministic 90-day compaction for settled successful
   Job detail with exact reference retention, `compact_job` attribution, CAS drift
   rejection, and Operation-first restart adoption; conversation events remain intact.
-- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/view, formula create/update,
+- [B7.10 -> E7.06] Managed Collections: stable-ID CAS cell/row/field/table/view, formula create/update,
   bounded acyclic same-table nested formula dependencies with stable downstream recomputation,
   one same-Dataset row relation with an editable target/display definition, editable read-only scalar lookup, and editable count/numeric-sum
   rollup definitions use distinct Activity/Undo. Numeric lookup/rollup values feed formulas and propagate
   through relation retarget, target scalar edit, descriptor update, exact Undo, and restart. Target-table
   changes clear old row links; dependent lookup/rollup definitions block relation-definition edits.
-  Saved-view definitions and stable table display names are editable through exact CAS/Activity/Undo.
+  Pige-owned tables start with a nullable Name field; saved-view definitions and stable table display names
+  are editable through exact CAS/Activity/Undo.
   Bounded immutable revision history supports read-only preview and explicit forward-only restore with
   restart-safe Undo. Relation/lookup breadth, complete backup/restore, concurrency, broader schema,
   scale/platform and exceptions stay open.

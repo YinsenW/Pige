@@ -85,6 +85,8 @@ publishing a new schema/revision/Operation; Undo restores the prior display name
 An eligible non-final Pige-owned table can move out of the active schema and payload through stable-ID
 CAS; its exact prior revision stays immutable, while Activity Undo publishes a new forward revision
 that restores the complete table. Tables referenced by a current relation remain ineligible.
+Creating a Pige-owned table likewise uses stable-ID CAS and publishes one immutable revision with a
+nullable `Name` column; Activity Undo advances to a revision without that created table.
 Pige-owned view definition update/rename/trash/restore uses stable-ID CAS and forward Undo without changing
 the Dataset revision or rows. Trashing the active view selects All Rows. Evidence, originals, old
 revisions and previews stay immutable. Managed Collection history walks only the current manifest's

@@ -1366,6 +1366,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "add_collection_rollup",
     "update_collection_rollup",
     "rename_collection_column",
+    "add_collection_table",
     "rename_collection_table",
     "trash_collection_table",
     "create_collection_view",
@@ -7646,6 +7647,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_table_add"),
+      tableId: TableIdSchema,
+      name: CollectionTableNameSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_table_add_undo"),
+      tableId: TableIdSchema,
+      name: CollectionTableNameSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_table_rename"),
       tableId: TableIdSchema,
       previousName: CollectionTableNameSchema,
@@ -8165,6 +8177,7 @@ export const COLLECTION_LIST_DATASET_TRASH_CHANNEL = "collections.listDatasetTra
 export const COLLECTION_RESTORE_DATASET_CHANNEL = "collections.restoreDataset" as const;
 export const COLLECTION_PURGE_DATASET_CHANNEL = "collections.purgeDataset" as const;
 export const COLLECTION_RENAME_DATASET_CHANNEL = "collections.renameDataset" as const;
+export const COLLECTION_ADD_TABLE_CHANNEL = "collections.addTable" as const;
 export const COLLECTION_RENAME_TABLE_CHANNEL = "collections.renameTable" as const;
 export const COLLECTION_TRASH_TABLE_CHANNEL = "collections.trashTable" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
@@ -9208,6 +9221,16 @@ export const CollectionRenameTableRequestSchema = z.object({
   name: CollectionTableNameSchema
 }).strict();
 
+/** Creates one Pige-owned table with one nullable Name field, ready for the existing row editor. */
+export const CollectionAddTableRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema,
+  name: CollectionTableNameSchema
+}).strict();
+
 /** Moves one eligible Pige-managed table out of the active immutable Dataset revision. */
 export const CollectionTrashTableRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -9729,6 +9752,28 @@ export const CollectionRenameColumnResultSchema = z.discriminatedUnion("status",
 const CollectionRenameTableResultIdentitySchema = CollectionResultIdentitySchema.extend({
   name: CollectionTableNameSchema
 }).strict();
+
+const CollectionAddTableResultIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  name: CollectionTableNameSchema
+}).strict();
+
+export const CollectionAddTableResultSchema = z.discriminatedUnion("status", [
+  CollectionAddTableResultIdentitySchema.extend({
+    status: z.literal("committed"), tableId: DatasetQueryTableIdSchema,
+    operationId: OperationIdSchema, snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionAddTableResultIdentitySchema.extend({ status: z.enum(["stale", "duplicate", "ineligible", "not_found", "failed"]) }).strict()
+]).superRefine((result, context) => {
+  if (result.status !== "committed") return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId ||
+      result.snapshot.tableName !== result.name) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Committed Collection tables must project the created table identity." });
+  }
+});
 
 export const CollectionRenameTableResultSchema = z.discriminatedUnion("status", [
   CollectionRenameTableResultIdentitySchema.extend({
@@ -12704,6 +12749,7 @@ export const OperationRecordSchema = z.object({
     "add_collection_rollup",
     "update_collection_rollup",
     "rename_collection_column",
+    "add_collection_table",
     "rename_collection_table",
     "trash_collection_table",
     "create_collection_view",
@@ -13371,6 +13417,8 @@ export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColum
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionRenameTableRequest = z.infer<typeof CollectionRenameTableRequestSchema>;
 export type CollectionRenameTableResult = z.infer<typeof CollectionRenameTableResultSchema>;
+export type CollectionAddTableRequest = z.infer<typeof CollectionAddTableRequestSchema>;
+export type CollectionAddTableResult = z.infer<typeof CollectionAddTableResultSchema>;
 export type CollectionTrashTableRequest = z.infer<typeof CollectionTrashTableRequestSchema>;
 export type CollectionTrashTableResult = z.infer<typeof CollectionTrashTableResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;

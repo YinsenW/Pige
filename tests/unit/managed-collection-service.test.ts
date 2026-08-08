@@ -2062,6 +2062,46 @@ describe("ManagedCollectionService", () => {
       tableId: table.id, name: table.name, undoOfOperationId: recovered.id });
   }, 30_000);
 
+  it("adds a Pige-owned table through CAS, replay, Activity Undo, and restart recovery", async () => {
+    const fixture = await makeCollectionFixture();
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionTableService(port);
+    const initial = readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId)!;
+    const request = { apiVersion: 1 as const, requestId: "collection_request_tableadd00000001",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId,
+      expectedRevisionId: initial.revision.id, name: "Projects" };
+    const committed = await service.add(request);
+    expect(committed).toMatchObject({ status: "committed", tableId: expect.stringMatching(/^table_/),
+      snapshot: { tableName: "Projects", rows: [], columns: [{ label: "Name", logicalType: "string", canRename: true }] } });
+    if (committed.status !== "committed") throw new Error("Collection table add did not commit");
+    const added = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(added.revision.change).toEqual({ kind: "collection_table_add", tableId: committed.tableId, name: "Projects" });
+    expect(added.schema.tables.find((table) => table.id === committed.tableId)).toMatchObject({ rowCount: 0, columnCount: 1,
+      columns: [{ name: "Name", nullable: true, logicalType: "string" }] });
+    expect(readPayloadSourceName(added.payloadPath, committed.tableId)).toBe("Projects");
+    await expect(service.add(request)).resolves.toEqual(committed);
+    await expect(service.add({ ...request, requestId: "collection_request_tableadd00000002", expectedRevisionId: committed.snapshot.revisionId, name: " projects " }))
+      .resolves.toMatchObject({ status: "duplicate" });
+
+    const operationPath = operationPathFor(fixture.vaultPath, committed.operationId);
+    fs.rmSync(operationPath);
+    const restarted = new ManagedCollectionTableService(port);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const activity = new KnowledgeActivityService(port, restarted);
+    const summary = required(activity.list({ limit: 20 }).activities.find((entry) => entry.kind === "add_collection_table"));
+    expect(summary).toMatchObject({ operationId: committed.operationId, status: "applied", canUndo: true,
+      target: { kind: "collection", datasetId: initial.manifest.datasetId, tableId: committed.tableId,
+        revisionId: committed.snapshot.revisionId } });
+    const undone = await activity.undo({ operationId: summary.operationId, expectedRevisionId: committed.snapshot.revisionId });
+    expect(undone.status).toBe("undone");
+    const restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(restored.schema.tables.some((table) => table.id === committed.tableId)).toBe(false);
+    expect(restored.revision.change).toMatchObject({ kind: "collection_table_add_undo", tableId: committed.tableId,
+      name: "Projects", undoOfOperationId: committed.operationId });
+    await expect(restarted.add(request)).resolves.toMatchObject({ status: "stale" });
+  }, 30_000);
+
   it("moves one eligible table out of the active revision, recovers the Operation, and restores it through Activity Undo", async () => {
     const fixture = await makeCollectionFixture();
     addSecondCollectionTable(fixture);

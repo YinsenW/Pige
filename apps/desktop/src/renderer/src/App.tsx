@@ -1733,14 +1733,14 @@ export function App(): React.JSX.Element {
     return result;
   };
 
-  const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string): boolean => {
+  const adoptCollectionSnapshot = (snapshot: CollectionSnapshot, expectedRevisionId: string, expectedTableId = snapshot.tableId): boolean => {
     const active = selectedCollectionRef.current;
     if (
       !active ||
       active.mode !== "editable" ||
       active.vaultId !== activeVaultIdRef.current ||
       active.snapshot.datasetId !== snapshot.datasetId ||
-      active.snapshot.tableId !== snapshot.tableId ||
+      active.snapshot.tableId !== expectedTableId ||
       active.snapshot.revisionId !== expectedRevisionId
     ) return false;
     const { nextRowCursor: _discardedCursor, ...identity } = active;
