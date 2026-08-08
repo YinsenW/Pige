@@ -5684,6 +5684,7 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(appLanguage.disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(appLanguage);
     expect(onLocaleChange).toHaveBeenCalledWith("fr");
     expect(ipcRead).toBe(false);
 
@@ -5735,6 +5736,7 @@ describe("full UI Settings surface", () => {
       .toBe("appearance-app-language-description appearance-language-error");
     expect(container.querySelector("#appearance-language-error")?.getAttribute("role")).toBe("status");
     expect(appLanguage.disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(appLanguage);
     expect(container.textContent).not.toContain("raw locale persistence failure");
     expect(container.textContent).not.toContain("/Users/private");
 
