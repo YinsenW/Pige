@@ -38,16 +38,30 @@ export function DiagnosticsJobCard(props: {
   readonly jobCardRef?: React.Ref<HTMLDivElement> | undefined;
   readonly t: Translate;
 }): React.JSX.Element {
+  const progress = Math.max(0, Math.min(100, props.job.progress.percent));
+  const jobStateLabel = props.t(`system.supportJobState.${props.job.state}`);
   return (
     <div ref={props.jobCardRef} className="settings-card settings-diagnostics-job" aria-live="polite" data-diagnostics-job-id={props.job.jobId} tabIndex={props.jobCardRef ? -1 : undefined}>
-      <div className="settings-row tall">
+      <div className="settings-row tall settings-diagnostics-job-row">
         <div className="settings-row-copy">
-          <strong>{props.t("system.supportJobTitle")}</strong>
-          <span>{props.t(`system.supportJobState.${props.job.state}`)}</span>
-          <span>{`${props.t("system.supportJobProgress")} ${props.job.progress.percent}%`}</span>
-          <span>{props.job.jobId}</span>
+          <span className="diagnostics-job-eyebrow">{props.t("system.supportJobTitle")}</span>
+          <strong>{jobStateLabel}</strong>
+          <div className="diagnostics-job-progress-copy">
+            <span id={`diagnostics-job-progress-${props.job.jobId}`}>{`${props.t("system.supportJobProgress")} ${progress}%`}</span>
+            <div
+              className="diagnostics-job-progress"
+              role="progressbar"
+              aria-label={props.t("system.supportJobProgress")}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progress}
+            >
+              <span style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+          <code className="diagnostics-job-id">{props.job.jobId}</code>
         </div>
-        <div className="settings-row-control">
+        <div className="settings-row-control diagnostics-job-actions" aria-describedby={`diagnostics-job-progress-${props.job.jobId}`}>
           {props.job.canCancel ? <button className="settings-button" type="button" disabled={props.busy} onClick={props.onCancel}>{props.t("maintenance.cancelSupportExport")}</button> : null}
           {props.job.canRetry ? <button className="settings-button primary" type="button" disabled={props.busy} onClick={props.onRetry}>{props.t("system.retrySupportExport")}</button> : null}
           {props.job.canReveal ? <button ref={props.revealTriggerRef} className="settings-button" type="button" disabled={props.busy} onClick={props.onReveal}>{props.t("system.revealSupportBundle")}</button> : null}
