@@ -599,9 +599,12 @@ export function PiPackagesSettingsPanel(props: {
             </div>
           </div>
         ) : (
-          <div className="settings-card" data-package-catalog-count={catalogEntries.length}>
-            {catalogEntries.map((entry) => (
-              <div className="settings-row tall" data-package-catalog-id={entry.catalogId} key={entry.catalogId}>
+          <div className="settings-card" role="list" aria-labelledby="packages-catalog-title"
+            data-package-catalog-count={catalogEntries.length}>
+            {catalogEntries.map((entry, index) => (
+              <div className="settings-row tall" role="listitem" aria-posinset={index + 1}
+                aria-setsize={catalogEntries.length} aria-label={`${entry.displayName} v${entry.version}`}
+                data-package-catalog-id={entry.catalogId} key={entry.catalogId}>
                 <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="package" size={17} /></span>
                 <div className="settings-row-copy">
                   <strong>{entry.displayName}</strong>
@@ -661,13 +664,19 @@ export function PiPackagesSettingsPanel(props: {
             </button>
           </div>
         ) : registry && registry.packages.length > 0 ? (
-          <div className="settings-card" data-package-registry-revision={registry.revision}>
-            {registry.packages.map((item) => {
+          <div className="settings-card" role="list" aria-labelledby="packages-registry-title"
+            aria-busy={mutationBusy} data-package-registry-revision={registry.revision}>
+            {registry.packages.map((item, index) => {
               const updateDraft = updateDrafts[item.packageId] ?? { targetVersion: "", targetIntegrity: "" };
               return (
               <form
                 className="settings-row tall"
+                role="listitem"
+                aria-posinset={index + 1}
+                aria-setsize={registry.packages.length}
+                aria-label={`${item.packageName} v${item.version}`}
                 data-package-id={item.packageId}
+                data-package-state={item.state}
                 key={item.packageId}
                 tabIndex={-1}
                 onSubmit={(event) => {
@@ -820,9 +829,14 @@ export function PiPackagesSettingsPanel(props: {
         {(registry?.restorablePackages?.length ?? 0) > 0 ? (
           <>
             <h3 className="settings-section-title">{props.t("packages.restoreTitle")}</h3>
-            <div className="settings-card" data-package-restore-count={registry!.restorablePackages!.length}>
-              {registry!.restorablePackages!.map((candidate) => (
-                <div className="settings-row tall" data-package-restore-context={candidate.restoreContextId} key={candidate.restoreContextId}>
+            <div className="settings-card" role="list" aria-labelledby="packages-restore-title"
+              data-package-restore-count={registry!.restorablePackages!.length}>
+              <h3 className="sr-only" id="packages-restore-title">{props.t("packages.restoreTitle")}</h3>
+              {registry!.restorablePackages!.map((candidate, index) => (
+                <div className="settings-row tall" role="listitem" aria-posinset={index + 1}
+                  aria-setsize={registry!.restorablePackages!.length}
+                  aria-label={`${candidate.packageName} v${candidate.version}`}
+                  data-package-restore-context={candidate.restoreContextId} key={candidate.restoreContextId}>
                   <span className="settings-list-icon neutral" aria-hidden="true"><PigeIcon name="package" size={17} /></span>
                   <div className="settings-row-copy">
                     <strong>{candidate.packageName}</strong>

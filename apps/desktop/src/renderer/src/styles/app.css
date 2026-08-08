@@ -5541,11 +5541,44 @@ dd {
     gap: 10px;
   }
 
-  .settings-history-page .activity-history-row .settings-row-control {
+.settings-history-page .activity-history-row .settings-row-control {
     grid-column: 2;
     justify-content: flex-start;
     width: 100%;
     margin-top: -2px;
+  }
+}
+
+.settings-packages .settings-card[role="list"] > .settings-row[role="listitem"] {
+  align-items: flex-start;
+  transition: background-color 140ms ease;
+}
+
+.settings-packages .settings-card[role="list"] > .settings-row[role="listitem"]:hover {
+  background: var(--surface-muted);
+}
+
+.settings-packages .settings-card[role="list"] > .settings-row[role="listitem"]:focus-within {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.settings-packages .settings-card[role="list"][aria-busy="true"] {
+  opacity: .78;
+}
+
+@media (max-width: 520px) {
+  .settings-packages .settings-card[role="list"] > .settings-row[role="listitem"] {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .settings-packages .settings-card[role="list"] > .settings-row[role="listitem"] > .settings-row-control {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

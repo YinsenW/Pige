@@ -4128,7 +4128,14 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     const page = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-packages"));
+    const registryList = requireElement(page.querySelector<HTMLElement>(
+      '[role="list"][aria-labelledby="packages-registry-title"]'
+    ));
     const row = requireElement(page.querySelector<HTMLElement>(`[data-package-id="${installedPackage.packageId}"]`));
+    expect(row.getAttribute("role")).toBe("listitem");
+    expect(row.getAttribute("aria-posinset")).toBe("1");
+    expect(row.getAttribute("aria-setsize")).toBe("1");
+    expect(row.getAttribute("data-package-state")).toBe("installed_disabled");
     const pin = buttonNamed(row, "Pin version");
     await act(async () => {
       pin.click();
@@ -4136,6 +4143,7 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(setPinned).toHaveBeenCalledTimes(1);
+    expect(registryList.getAttribute("aria-busy")).toBe("true");
     const pinRequest = setPinned.mock.calls[0]![0];
     expect(pinRequest).toMatchObject({
       apiVersion: 1,
