@@ -52,6 +52,17 @@ export function LocalRerankerSettingsPanel(props: {
   const [failed, setFailed] = useState(false);
   const mounted = useRef(true);
   const sequence = useRef(0);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const actionTriggerRefs = useRef(new Map<Action, HTMLButtonElement>());
+  const pendingFocusActionRef = useRef<Action | null>(null);
+
+  useEffect(() => {
+    if (pending !== null || pendingFocusActionRef.current === null) return;
+    const action = pendingFocusActionRef.current;
+    pendingFocusActionRef.current = null;
+    const firstAvailableAction = actionTriggerRefs.current.values().next().value;
+    (actionTriggerRefs.current.get(action) ?? firstAvailableAction ?? rowRef.current)?.focus({ preventScroll: true });
+  }, [failed, pending, readState, status]);
 
   const read = useCallback(async (id: number, minimumRevision = 0): Promise<void> => {
     try {
@@ -87,6 +98,7 @@ export function LocalRerankerSettingsPanel(props: {
     if (!current || pending || !actions(current).includes(action)) return;
     const id = ++sequence.current;
     const idempotencyKey = requestId();
+    pendingFocusActionRef.current = action;
     setPending(action);
     setFailed(false);
     try {
@@ -110,7 +122,7 @@ export function LocalRerankerSettingsPanel(props: {
       : `capabilities.semanticAsset.state.${status?.assetState ?? "failed"}`;
 
   return (
-    <div className="settings-row tall" data-reranker-state={status?.assetState ?? readState}>
+    <div ref={rowRef} className="settings-row tall" data-reranker-state={status?.assetState ?? readState} tabIndex={-1}>
       <div className="settings-row-copy">
         <strong>{props.t("capabilities.reranker.title")}</strong>
         <span>{props.t("capabilities.reranker.description")}</span>
@@ -124,6 +136,10 @@ export function LocalRerankerSettingsPanel(props: {
             className="settings-button"
             type="button"
             key={action}
+            ref={(node) => {
+              if (node) actionTriggerRefs.current.set(action, node);
+              else actionTriggerRefs.current.delete(action);
+            }}
             data-reranker-action={action}
             disabled={pending !== null}
             onClick={() => void run(action)}

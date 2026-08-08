@@ -56,13 +56,55 @@ describe("LocalRerankerSettingsPanel", () => {
     expect(container.querySelector('[data-reranker-action="install"]')).toBeTruthy();
     expect(container.querySelector('[data-reranker-action="enable"]')).toBeNull();
 
+    const installButton = container.querySelector('[data-reranker-action="install"]') as HTMLButtonElement;
+    installButton.focus();
     await act(async () => {
-      (container.querySelector('[data-reranker-action="install"]') as HTMLButtonElement).click();
+      installButton.click();
       await settle();
     });
     expect(install).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[data-reranker-action="enable"]')).toBeTruthy();
+    const enableButton = container.querySelector('[data-reranker-action="enable"]') as HTMLButtonElement;
+    expect(enableButton).toBeTruthy();
+    expect(dom.window.document.activeElement).toBe(enableButton);
     expect(container.textContent).not.toContain("/private/");
+    await act(async () => { root.unmount(); });
+  });
+
+  it("returns focus to the failed lifecycle action while retaining the confirmed state", async () => {
+    const dom = installDom();
+    const api: LocalRerankerApi = {
+      localRerankerStatus: async () => ({
+        apiVersion: 1, revision: 3, assetId: "qwen3_reranker_0_6b_q3_k_m", assetState: "ready",
+        downloadSizeBytes: 346_896_352, hybridSearchRemainsAvailable: true
+      }),
+      installLocalReranker: async (request) => ({
+        apiVersion: 1, requestId: request.requestId, revision: 3, status: "already_installed"
+      }),
+      enableLocalReranker: async (request) => ({
+        apiVersion: 1, requestId: request.requestId, revision: 3, status: "already_enabled"
+      }),
+      disableLocalReranker: async (request) => ({
+        apiVersion: 1, requestId: request.requestId, revision: 3, status: "failed"
+      }),
+      removeLocalReranker: async (request) => ({
+        apiVersion: 1, requestId: request.requestId, revision: 3, status: "failed"
+      })
+    };
+    const container = dom.window.document.querySelector("#root")!;
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(LocalRerankerSettingsPanel, { api, t: (key: string) => key }));
+      await settle();
+    });
+    const removeButton = container.querySelector('[data-reranker-action="remove"]') as HTMLButtonElement;
+    removeButton.focus();
+    await act(async () => {
+      removeButton.click();
+      await settle();
+    });
+    expect(container.textContent).toContain("capabilities.reranker.actionFailed");
+    expect(dom.window.document.activeElement).toBe(removeButton);
+    expect(container.querySelector('[data-reranker-state="ready"]')).toBeTruthy();
     await act(async () => { root.unmount(); });
   });
 });
