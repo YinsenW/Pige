@@ -512,6 +512,26 @@ describe("desktop shell build contract", () => {
       expect(evidenceSchemas).not.toContain(privateField);
     }
   });
+  it("freezes pathless directed Claim support search and mutation authority", () => {
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const supportSchemas = schemasSource.slice(
+      schemasSource.indexOf('NOTE_SEARCH_CLAIM_SUPPORTS_CHANNEL = "notes.searchClaimSupports"'),
+      schemasSource.indexOf("export const NoteAddTagRequestSchema")
+    );
+    expect(supportSchemas).toContain('NOTE_CHANGE_CLAIM_SUPPORT_CHANNEL = "notes.changeClaimSupport"');
+    expect(supportSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
+    expect(supportSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
+    expect(supportSchemas).toContain("expectedTargetUpdatedAt");
+    expect(contractsSource).toContain("readonly searchClaimSupports:");
+    expect(contractsSource).toContain("readonly changeClaimSupport:");
+    expect(preloadSource).toContain("NoteSearchClaimSupportsRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeClaimSupportResultSchema.parse(");
+    for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
+      expect(supportSchemas).not.toContain(privateField);
+    }
+  });
 
   it("freezes one Main-owned machine-local diagnostics clear channel", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");

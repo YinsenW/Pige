@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the bounded Reader Entity identifier correction, local audio/video evidence preservation, and revalidated rollback replacement preview; each reuses existing durable records without exposing bodies or paths.",
+    "scope": "Review bounded Reader Entity identifier and directed Claim-support corrections, local audio/video evidence preservation, and revalidated rollback replacement preview; each reuses existing durable records without exposing bodies or paths.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "9d4ee051492e14fae1c5aea6aaf1f67312c9846eaf22572ae9369e18542d1428"
+    "reviewedSha256": "81c6765f164d01aba5783601028dadfe9d7b5869e5f111e0749b0175278c4321"
   },
   "reviewers": [
     {
       "reviewerId": "entity-identifier-review",
-      "task": "Review Entity identifier correction and rollback replacement preview",
+      "task": "Review Entity identifier and Claim-support correction plus rollback replacement preview",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,7 +70,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Entity frontmatter bounds, current-page CAS, Activity recovery, and latest replacement/archive identity before a sender-local preview separately from implementation authorship."
+      "independence": "Project review checks Entity and Claim frontmatter bounds, current-page CAS, directed-cycle rejection, rebuildable relationship projection, Activity recovery, and latest replacement/archive identity before a sender-local preview separately from implementation authorship."
     },
     {
       "reviewerId": "media-evidence-capture-review",
@@ -110,14 +110,14 @@
       "score": 9.8,
       "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "The rollback preview owner only revalidates private restore proof and delegates all writes, Operations and restart adoption to the established Restore owners."
+      "summary": "Claim-support and rollback-preview owners only delegate durable writes to established page-edit or Restore Operation/recovery paths while Claim edges rebuild from Markdown."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
       "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "Knowledge-model and trace documents record the bounded identifier correction without adding a design document or duplicating durable rules."
+      "summary": "Knowledge-model and trace documents record bounded identifier and Claim-support corrections without adding a design document or duplicating durable rules."
     }
   ],
   "verification": [
@@ -137,6 +137,11 @@
       "evidence": "Pi and Job contracts, trace text and the review snapshot agree while requirements remain partial."
     },
     {
+      "command": "npx vitest run tests/unit/claim-support-service.test.ts tests/unit/reader-claim-supports-ui.test.ts tests/unit/local-database-service.test.ts",
+      "status": "passed",
+      "evidence": "Focused Claim tests prove directed source-backed support, rebuildable related-page projection, exact page update and stale-preserving Reader confirmation."
+    },
+    {
       "command": "npx vitest run tests/unit/home-agent-media-capture-service.test.ts tests/unit/capture-service.test.ts tests/unit/home-agent-attachment-service.test.ts --maxWorkers=1",
       "status": "passed",
       "evidence": "Focused capture tests prove typed local media preservation, deterministic Source Page projection, and a no-model/no-egress unavailable transcription wait."
@@ -149,12 +154,12 @@
   ],
   "coordination": {
     "taskId": "entity-media-and-rollback-preview-20260808",
-    "taskTitle": "Entity identifier, local media, and rollback restore preview",
+    "taskTitle": "Entity identifier, Claim support, local media, and rollback restore preview",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Entity, capture, parser/OCR, Agent, Source Page, Restore confirmation, and durable Job semantics remain unchanged; the rollback action only prepares an existing proof-bound replace preview.",
-    "acknowledgement": "PIGE-KNOW-003 and PIGE-CAP-001 gain bounded evidence while their broader requirements remain partial; verified PIGE-BACKUP-004 gains exact rollback-preview evidence."
+    "compatibility": "Existing Entity, Claim confidence/evidence/contradiction, capture, parser/OCR, Agent, Source Page, Restore confirmation, and durable Job semantics remain unchanged; the directed support action uses one existing proof-bound page update while rollback only prepares an existing replacement preview.",
+    "acknowledgement": "PIGE-KNOW-003 gains bounded identifier and Claim-support evidence, PIGE-CAP-001 gains bounded media evidence, and their broader requirements remain partial; verified PIGE-BACKUP-004 gains exact rollback-preview evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

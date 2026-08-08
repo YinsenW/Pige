@@ -16,7 +16,7 @@ export const KNOWLEDGE_RELATION_SOURCE_MIGRATION_ID = "004_knowledge_relation_so
 
 export type DurableKnowledgeRelationType =
   | "has_topic" | "links_to" | "cites_source" | "derived_from" | "mentions_entity"
-  | "related_to" | "contradicts" | "answers" | "broader_than";
+  | "related_to" | "contradicts" | "supports" | "answers" | "broader_than";
 
 export interface KnowledgeTreeEntityInput {
   readonly entityId: string;
@@ -177,6 +177,11 @@ export function indexPageKnowledgeRelations(db: DatabaseSync, pages: readonly Ma
         const target = pageById.get(pageId);
         if (!target || target.summary.pageType !== "claim" || !isActiveSourced(target) || pageId === page.summary.pageId) continue;
         insertEdge(insertRelation, "contradicts", page.summary.pageId, pageId, "claim.contradicts", pageId);
+      }
+      for (const pageId of page.knowledge.claimSupports) {
+        const target = pageById.get(pageId);
+        if (!target || target.summary.pageType !== "claim" || !isActiveSourced(target) || pageId === page.summary.pageId) continue;
+        insertEdge(insertRelation, "supports", page.summary.pageId, pageId, "claim.supports", pageId);
       }
     }
     if (page.summary.pageType === "question" && page.summary.status === "active") {
