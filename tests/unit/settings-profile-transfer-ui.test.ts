@@ -4,7 +4,12 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import type { SettingsProfileImportPreviewRequest } from "@pige/contracts";
+import type {
+  SettingsProfileExportRequest,
+  SettingsProfileExportResult,
+  SettingsProfileImportPreviewRequest,
+  SettingsProfileImportPreviewResult
+} from "@pige/contracts";
 import { SettingsProfileTransferPanel } from "../../apps/desktop/src/renderer/src/components/SettingsProfileTransferPanel";
 
 describe("SettingsProfileTransferPanel", () => {
@@ -99,13 +104,12 @@ describe("SettingsProfileTransferPanel", () => {
         previewId: "settingspreview_0123456789abcdef0123456789abcdef",
         changes: [{ key: "app_locale" as const, before: "en" as const, after: "fr" as const }]
       }));
-      api.applyImport.mockResolvedValueOnce({
-        apiVersion: 1,
-        requestId: "settingsprofilereq_ffffffffffffffffffffffffffffffff",
-        previewId: "settingspreview_0123456789abcdef0123456789abcdef",
-        status: "committed",
-        keys: ["app_locale"]
-      });
+      api.applyImport.mockImplementationOnce(async (request) => ({
+        ...request,
+        previewId: "settingspreview_ffffffffffffffffffffffffffffffff",
+        status: "committed" as const,
+        keys: ["app_locale"] as const
+      }));
       await act(async () => { choose.click(); await Promise.resolve(); });
       const apply = findButton(container, "Import");
       expect(container.querySelector(".settings-card")?.getAttribute("aria-busy")).toBe("false");
@@ -143,6 +147,90 @@ describe("SettingsProfileTransferPanel", () => {
       dom.window.close();
     }
   });
+
+  it("fails closed on mismatched preview and export identities", async () => {
+    const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
+      pretendToBeVisual: true,
+      url: "http://pige.test"
+    });
+    const originals = installDom(dom);
+    const api = {
+      exportProfile: vi.fn(async (request: SettingsProfileExportRequest): Promise<SettingsProfileExportResult> => ({
+        ...request,
+        requestId: "settingsprofilereq_ffffffffffffffffffffffffffffffff",
+        status: "exported",
+        keys: ["app_locale"]
+      })),
+      previewImport: vi.fn(async (request: SettingsProfileImportPreviewRequest): Promise<SettingsProfileImportPreviewResult> => ({
+        ...request,
+        requestId: "settingsprofilereq_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        status: "ready",
+        previewId: "settingspreview_0123456789abcdef0123456789abcdef",
+        changes: [{ key: "app_locale", before: "en", after: "fr" }]
+      })),
+      applyImport: vi.fn()
+    };
+    const container = dom.window.document.querySelector("#root")!;
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(SettingsProfileTransferPanel, { api, t: (key: string) => key })));
+      await act(async () => {
+        findButton(container, "settings.general.profileTransferImport").click();
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+      });
+      expect(container.querySelector("dl")).toBeNull();
+      expect(container.textContent).toContain("settings.general.profileTransferFailed");
+
+      await act(async () => {
+        findButton(container, "settings.general.profileTransferExport").click();
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+      });
+      expect(container.textContent).toContain("settings.general.profileTransferFailed");
+    } finally {
+      await act(async () => root.unmount());
+      restoreDom(originals);
+      dom.window.close();
+    }
+  });
+
+  it("ignores a deferred preview completion after unmount", async () => {
+    const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
+      pretendToBeVisual: true,
+      url: "http://pige.test"
+    });
+    const originals = installDom(dom);
+    const deferredPreview = deferred<SettingsProfileImportPreviewResult>();
+    const api = {
+      exportProfile: vi.fn(),
+      previewImport: vi.fn(async (_request: SettingsProfileImportPreviewRequest) => deferredPreview.promise),
+      applyImport: vi.fn()
+    };
+    const container = dom.window.document.querySelector("#root")!;
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(createElement(SettingsProfileTransferPanel, { api, t: (key: string) => key })));
+      await act(async () => {
+        findButton(container, "settings.general.profileTransferImport").click();
+        await Promise.resolve();
+        root.unmount();
+      });
+      deferredPreview.resolve({
+        apiVersion: 1,
+        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
+        status: "ready",
+        previewId: "settingspreview_0123456789abcdef0123456789abcdef",
+        changes: [{ key: "app_locale", before: "en", after: "fr" }]
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+      });
+      expect(container.textContent).toBe("");
+    } finally {
+      restoreDom(originals);
+      dom.window.close();
+    }
+  });
 });
 
 const domKeys = [
@@ -174,4 +262,10 @@ function findButton(container: Element, label: string): HTMLButtonElement {
     .find((candidate) => candidate.textContent === label);
   if (!button) throw new Error(`Missing button: ${label}`);
   return button;
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
 }
