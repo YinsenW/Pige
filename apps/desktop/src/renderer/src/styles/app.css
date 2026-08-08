@@ -6734,13 +6734,18 @@ dd {
   stroke: var(--warning);
   stroke-dasharray: 2 2;
 }
-.knowledge-map-node:hover circle:not(.knowledge-map-pulse),
-.knowledge-map-node:focus-visible circle:not(.knowledge-map-pulse) {
+.knowledge-map-node:hover circle:not(.knowledge-map-pulse) {
   fill: var(--knowledge-node-hover);
   filter: drop-shadow(0 2px 4px rgb(21 31 48 / 24%));
 }
+.knowledge-map-node.active:not(.needs-review) circle:not(.knowledge-map-pulse) { fill: var(--knowledge-node-active); stroke: var(--surface); stroke-width: 1.8; }
+.knowledge-map-node.active.needs-review circle:not(.knowledge-map-pulse) {
+  fill: var(--knowledge-node-active);
+  stroke: var(--warning);
+  stroke-width: 1.8;
+  stroke-dasharray: 2 2;
+}
 .knowledge-map-node:focus-visible circle:not(.knowledge-map-pulse) { stroke: var(--focus); stroke-width: 2.4; }
-.knowledge-map-node.active circle:not(.knowledge-map-pulse) { fill: var(--knowledge-node-active); stroke: var(--surface); stroke-width: 1.8; }
 
 .knowledge-map-label {
   fill: var(--text-primary);
