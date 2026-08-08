@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SourceRecord } from "@pige/schemas";
+import { readOperation } from "../../apps/desktop/src/main/services/note-trash-service";
+import { SourceTrashRedoService } from "../../apps/desktop/src/main/services/source-trash-redo-service";
 import { NotesService } from "../../apps/desktop/src/main/services/notes-service";
 import { SourceTrashService, sourceTrashCandidateEligible } from "../../apps/desktop/src/main/services/source-trash-service";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -111,6 +113,82 @@ describe("source trash service", () => {
     const restarted = new SourceTrashService({ current: () => value.vault, activeVaultPath: () => value.vaultPath }, value.notes, value.usage);
     expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
     expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+  });
+
+  it("re-proves restored source evidence before Redo and recovers one interrupted Redo", async () => {
+    const value = fixture(), input = await request(value);
+    const trashed = value.service.trash("owner_source_trash", input);
+    if (trashed.status !== "committed") throw new Error("Expected committed trash.");
+    const original = readOperation(value.vaultPath, trashed.operationId);
+    if (!original) throw new Error("Expected trash Operation.");
+    const undone = value.service.undo(original);
+    if (undone.status !== "undone" || !undone.undoOperationId) throw new Error("Expected source restore.");
+    const undo = readOperation(value.vaultPath, undone.undoOperationId);
+    if (!undo) throw new Error("Expected restore Operation.");
+    const redo = new SourceTrashRedoService({ current: () => value.vault, activeVaultPath: () => value.vaultPath }, value.usage,
+      { now: () => new Date("2026-08-02T10:00:00.000Z") });
+    expect(redo.activityState(original, undo)).toEqual({ canRedo: true });
+    expect(redo.redo({ operationId: original.id })).toMatchObject({ status: "redone", operationId: original.id,
+      undoOperationId: undo.id });
+    expect(fs.existsSync(value.recordPath)).toBe(false);
+    expect(fs.existsSync(value.pagePath)).toBe(false);
+    expect(fs.existsSync(value.managedPath)).toBe(false);
+    expect(redo.redo({ operationId: original.id }).status).toBe("already_redone");
+
+    const active = fixture(), activeInput = await request(active);
+    const activeTrash = active.service.trash("owner_source_trash", activeInput);
+    if (activeTrash.status !== "committed") throw new Error("Expected committed trash.");
+    const activeOriginal = readOperation(active.vaultPath, activeTrash.operationId);
+    if (!activeOriginal) throw new Error("Expected trash Operation.");
+    const activeUndo = active.service.undo(activeOriginal);
+    if (activeUndo.status !== "undone" || !activeUndo.undoOperationId) throw new Error("Expected source restore.");
+    const activeRestore = readOperation(active.vaultPath, activeUndo.undoOperationId);
+    if (!activeRestore) throw new Error("Expected restore Operation.");
+    active.usage.hasActiveSourceUse.mockReturnValue(true);
+    const blocked = new SourceTrashRedoService({ current: () => active.vault, activeVaultPath: () => active.vaultPath }, active.usage);
+    expect(blocked.activityState(activeOriginal, activeRestore)).toEqual({ canRedo: false, redoUnavailableReason: "content_changed" });
+    expect(blocked.redo({ operationId: activeOriginal.id }).status).toBe("stale");
+    expect(fs.existsSync(active.recordPath)).toBe(true);
+
+    const drifted = fixture(), driftedInput = await request(drifted);
+    const driftedTrash = drifted.service.trash("owner_source_trash", driftedInput);
+    if (driftedTrash.status !== "committed") throw new Error("Expected committed trash.");
+    const driftedOriginal = readOperation(drifted.vaultPath, driftedTrash.operationId);
+    if (!driftedOriginal) throw new Error("Expected trash Operation.");
+    const driftedUndoResult = drifted.service.undo(driftedOriginal);
+    if (driftedUndoResult.status !== "undone" || !driftedUndoResult.undoOperationId) throw new Error("Expected source restore.");
+    const driftedUndo = readOperation(drifted.vaultPath, driftedUndoResult.undoOperationId);
+    if (!driftedUndo) throw new Error("Expected restore Operation.");
+    fs.appendFileSync(drifted.pagePath, "\nChanged after restore.\n");
+    const driftedRedo = new SourceTrashRedoService({ current: () => drifted.vault, activeVaultPath: () => drifted.vaultPath }, drifted.usage);
+    expect(driftedRedo.activityState(driftedOriginal, driftedUndo)).toEqual({ canRedo: false, redoUnavailableReason: "content_changed" });
+    expect(driftedRedo.redo({ operationId: driftedOriginal.id }).status).toBe("stale");
+    expect(fs.existsSync(drifted.recordPath)).toBe(true);
+
+    const reference = fixture("reference"), referenceInput = await request(reference);
+    const referenceTrash = reference.service.trash("owner_source_trash", referenceInput);
+    if (referenceTrash.status !== "committed") throw new Error("Expected committed trash.");
+    const referenceOriginal = readOperation(reference.vaultPath, referenceTrash.operationId);
+    if (!referenceOriginal) throw new Error("Expected trash Operation.");
+    const referenceUndo = reference.service.undo(referenceOriginal);
+    if (referenceUndo.status !== "undone" || !referenceUndo.undoOperationId) throw new Error("Expected source restore.");
+    expect(new SourceTrashRedoService({ current: () => reference.vault, activeVaultPath: () => reference.vaultPath }, reference.usage)
+      .redo({ operationId: referenceOriginal.id }).status).toBe("redone");
+    expect(fs.readFileSync(reference.outsidePath, "utf8")).toBe("evidence bytes");
+
+    const interrupted = fixture(), interruptedInput = await request(interrupted);
+    const interruptedTrash = interrupted.service.trash("owner_source_trash", interruptedInput);
+    if (interruptedTrash.status !== "committed") throw new Error("Expected committed trash.");
+    const interruptedOriginal = readOperation(interrupted.vaultPath, interruptedTrash.operationId);
+    if (!interruptedOriginal) throw new Error("Expected trash Operation.");
+    expect(interrupted.service.undo(interruptedOriginal).status).toBe("undone");
+    const failing = new SourceTrashRedoService({ current: () => interrupted.vault, activeVaultPath: () => interrupted.vaultPath }, interrupted.usage,
+      { afterReceiptPersisted: () => { throw new Error("simulated interruption"); } });
+    expect(failing.redo({ operationId: interruptedOriginal.id }).status).toBe("stale");
+    const restarted = new SourceTrashRedoService({ current: () => interrupted.vault, activeVaultPath: () => interrupted.vaultPath }, interrupted.usage);
+    expect(restarted.recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    expect(restarted.recoverIncompleteRedos()).toEqual({ recovered: 0, failed: 0 });
+    expect(fs.existsSync(interrupted.recordPath)).toBe(false);
   });
 });
 

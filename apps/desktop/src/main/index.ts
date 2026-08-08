@@ -413,6 +413,7 @@ import { SourceOriginalReconnectService } from "./services/source-original-recon
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { SourceRefreshService } from "./services/source-refresh-service";
 import { SourceRefreshConflictService } from "./services/source-refresh-conflict-service";
+import { SourceTrashRedoService } from "./services/source-trash-redo-service";
 import { SourceTrashService, sourceTrashCandidateEligible } from "./services/source-trash-service";
 import { WebSourceRefreshService } from "./services/web-source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
@@ -586,6 +587,7 @@ let documentParserService: DocumentParserService | undefined;
 let sourceRefreshService: SourceRefreshService | undefined;
 let sourceRefreshConflictService: SourceRefreshConflictService | undefined;
 let sourceTrashService: SourceTrashService | undefined;
+let sourceTrashRedoService: SourceTrashRedoService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
@@ -1632,6 +1634,8 @@ const getSourceRefreshConflictService = (): SourceRefreshConflictService =>
 
 const getSourceTrashService = (): SourceTrashService =>
   sourceTrashService ??= new SourceTrashService(getVaultService(), getNotesService(), getJobsService());
+const getSourceTrashRedoService = (): SourceTrashRedoService =>
+  sourceTrashRedoService ??= new SourceTrashRedoService(getVaultService(), getJobsService());
 
 const getDatasetService = (): DatasetService => {
   if (!datasetService) datasetService = new DatasetService(new DatasetIngestWorkerService());
@@ -2223,16 +2227,21 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
 };
 
 const createSourceLifecycleActivityPort = (): KnowledgeActivitySourcePort => {
-  const refresh = getSourceRefreshService(), trash = getSourceTrashService();
+  const refresh = getSourceRefreshService(), trash = getSourceTrashService(), redo = getSourceTrashRedoService();
   return {
-    activitySummary: (operation, undo) => trash.activitySummary(operation, undo) ?? refresh.activitySummary(operation, undo),
+    activitySummary: (operation, undo) => {
+      const summary = trash.activitySummary(operation, undo) ?? refresh.activitySummary(operation, undo);
+      const state = summary && redo.activityState(operation, undo);
+      return summary && state ? { ...summary, ...state } : summary;
+    },
     findUndoOperation: (operation, operations) => trash.findUndoOperation(operation, operations) ??
       refresh.findUndoOperation(operation, operations),
     undo: (operation) => trash.activitySummary(operation) ? trash.undo(operation) : refresh.undo(operation),
     recoverIncompleteOperations: () => {
-      const trashResult = trash.recoverIncompleteOperations(), refreshResult = refresh.recoverIncompleteOperations();
-      return { recovered: trashResult.recovered + refreshResult.recovered,
-        failed: trashResult.failed + refreshResult.failed };
+      const trashResult = trash.recoverIncompleteOperations(), redoResult = redo.recoverIncompleteRedos(),
+        refreshResult = refresh.recoverIncompleteOperations();
+      return { recovered: trashResult.recovered + redoResult.recovered + refreshResult.recovered,
+        failed: trashResult.failed + redoResult.failed + refreshResult.failed };
     }
   };
 };
@@ -3729,7 +3738,8 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
     : collectionResult;
   const datasetResult = viewResult.status === "not_found" ? getManagedDatasetLifecycleService().redo(request) : viewResult;
   const trashResult = datasetResult.status === "not_found" ? getNoteTrashRedoService().redo(request) : datasetResult;
-  const renameResult = trashResult.status === "not_found" ? getNoteRenameService().redo(request) : trashResult;
+  const sourceTrashResult = trashResult.status === "not_found" ? getSourceTrashRedoService().redo(request) : trashResult;
+  const renameResult = sourceTrashResult.status === "not_found" ? getNoteRenameService().redo(request) : sourceTrashResult;
   const topicResult = renameResult.status === "not_found" ? getLibraryTopicRenameService().redo(request) : renameResult;
   const tagResult = topicResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : topicResult;
   const mergeResult = tagResult.status === "not_found" ? getNoteMergeService().redo(request) : tagResult;

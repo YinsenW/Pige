@@ -271,7 +271,9 @@ Storage ownership rules:
   into one recoverable receipt. Any uncertain reference or external managed root fails closed.
 - Source evidence restore preserves the original Source and Page IDs, restores only the exact
   receipt-bound files into vacant current destinations, and records a forward `restore_source_asset`
-  Operation. Activity Undo and startup recovery converge the same receipt without deleting evidence.
+  Operation. Matching Activity Redo re-proves the restored files and managed-copy eligibility before
+  recording one deterministic forward trash Operation; both directions converge after restart without
+  deleting evidence.
 - Do not follow symlinks during archive extraction or backup without explicit policy.
 - Do not treat paths from source content as trusted.
 - Do not let renderer code access arbitrary original paths.

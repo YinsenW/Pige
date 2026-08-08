@@ -174,14 +174,14 @@ export function sourceTrashCandidateEligible(
   catch { return false; }
 }
 
-interface StoredFileBinding {
+export interface SourceTrashStoredFileBinding {
   readonly originalPath: string;
   readonly trashPath: string;
   readonly checksum: string;
   readonly size: number;
 }
 
-interface SourceTrashReceipt {
+export interface SourceTrashReceipt {
   readonly schemaVersion: 1;
   readonly kind: "source_trash_receipt";
   readonly requestId: string;
@@ -193,9 +193,11 @@ interface SourceTrashReceipt {
   readonly storage: "managed_copy" | "reference_original";
   readonly title: string;
   readonly createdAt: string;
-  readonly sourceRecord: StoredFileBinding;
-  readonly sourcePage: StoredFileBinding;
-  readonly managedAsset?: StoredFileBinding;
+  readonly sourceRecord: SourceTrashStoredFileBinding;
+  readonly sourcePage: SourceTrashStoredFileBinding;
+  readonly managedAsset?: SourceTrashStoredFileBinding;
+  readonly redoOfOperationId?: string;
+  readonly undoOperationId?: string;
 }
 
 interface SourceRestoreIntent {
@@ -237,7 +239,7 @@ export class SourceTrashService {
       const replay = readReceiptByRequest(vaultPath, request.requestId);
       if (replay) {
         if (replay.requestDigest !== requestDigest(request)) return { ...identity, status: "stale" };
-        completeTrash(vaultPath, replay, () => this.#assertReceiptEligible(vaultPath, replay));
+        completeSourceTrashReceipt(vaultPath, replay, this.#usage);
         return { ...identity, status: "committed", operationId: replay.operationId };
       }
       const target = this.#targets.resolveSourceTrashTarget(ownerId, request);
@@ -274,7 +276,7 @@ export class SourceTrashService {
       if (!target.assertCurrent()) throw stale();
       if (managedAsset && (this.#usage!.hasActiveSourceUse(request.sourceId) ||
         hasOtherPageReference(vaultPath, request.sourceId, request.currentPageId))) throw stale();
-      completeTrash(vaultPath, receipt, () => this.#assertReceiptEligible(vaultPath, receipt));
+      completeSourceTrashReceipt(vaultPath, receipt, this.#usage);
       return { ...identity, status: "committed", operationId };
     } catch (caught) {
       return { ...identity, status: caught instanceof PigeDomainError && caught.code === "source_trash.stale" ? "stale" : "failed" };
@@ -287,8 +289,8 @@ export class SourceTrashService {
     const vaultPath = this.#scope(request.activeVaultId);
     if (!vaultPath) return { ...identity, status: "failed" };
     try {
-      const sources = readAllReceipts(vaultPath).flatMap((receipt): SourceTrashSummary[] =>
-        isRestorable(vaultPath, receipt) ? [{ sourceId: receipt.sourceId, pageId: receipt.pageId,
+      const sources = readAllSourceTrashReceipts(vaultPath).flatMap((receipt): SourceTrashSummary[] =>
+        isSourceTrashRestorable(vaultPath, receipt) ? [{ sourceId: receipt.sourceId, pageId: receipt.pageId,
           title: receipt.title, storage: receipt.storage, trashedAt: receipt.createdAt,
           trashOperationId: receipt.operationId, trashRevision: trashRevision(receipt) }] : [])
         .sort((left, right) => right.trashedAt.localeCompare(left.trashedAt) ||
@@ -309,14 +311,14 @@ export class SourceTrashService {
       if (replay) return matchesIntent(replay, request)
         ? this.#completeIntent(vaultPath, replay, identity)
         : { ...identity, status: "stale" };
-      const receipt = readReceiptByOperation(vaultPath, request.trashOperationId);
+      const receipt = readSourceTrashReceiptByOperation(vaultPath, request.trashOperationId);
       if (!receipt) return { ...identity, status: "not_found" };
       if (!matchesRestoreRequest(receipt, request)) return { ...identity, status: "stale" };
       const existing = readOperation(vaultPath, restoreOperationId(receipt.operationId));
-      if (existing) return matchesRestoreOperation(receipt, existing)
+      if (existing) return matchesSourceRestoreOperation(receipt, existing)
         ? { ...identity, status: "committed", operationId: existing.id }
         : { ...identity, status: "stale" };
-      if (!isRestorable(vaultPath, receipt)) return { ...identity, status: "not_found" };
+      if (!isSourceTrashRestorable(vaultPath, receipt)) return { ...identity, status: "not_found" };
       const intent: SourceRestoreIntent = { schemaVersion: 1, kind: "source_restore_intent",
         requestId: request.requestId, activeVaultId: request.activeVaultId, sourceId: request.sourceId,
         pageId: request.pageId, trashOperationId: request.trashOperationId,
@@ -333,14 +335,14 @@ export class SourceTrashService {
   activitySummary(operation: OperationRecord, undo?: OperationRecord): KnowledgeActivitySummary | undefined {
     if (operation.kind !== "trash_source_asset") return undefined;
     const vaultPath = this.#vaults.activeVaultPath();
-    const receipt = vaultPath ? readReceiptByOperation(vaultPath, operation.id) : undefined;
-    if (!vaultPath || !receipt || !matchesTrashOperation(receipt, operation)) return undefined;
-    const restored = undo && matchesRestoreOperation(receipt, undo);
+    const receipt = vaultPath ? readSourceTrashReceiptByOperation(vaultPath, operation.id) : undefined;
+    if (!vaultPath || !receipt || !matchesSourceTrashOperation(receipt, operation)) return undefined;
+    const restored = undo && matchesSourceRestoreOperation(receipt, undo);
     return { operationId: operation.id, kind: "update_source_record", createdAt: operation.createdAt,
       targetLabel: receipt.title, ...(restored ? { target: { kind: "page" as const, pageId: receipt.pageId } } : {}),
-      status: restored ? "undone" : "applied", canUndo: !restored && isRestorable(vaultPath, receipt),
+      status: restored ? "undone" : "applied", canUndo: !restored && isSourceTrashRestorable(vaultPath, receipt),
       ...(restored ? { undoUnavailableReason: "already_undone" as const } :
-        !isRestorable(vaultPath, receipt) ? { undoUnavailableReason: "target_missing" as const } : {}) };
+        !isSourceTrashRestorable(vaultPath, receipt) ? { undoUnavailableReason: "target_missing" as const } : {}) };
   }
 
   findUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
@@ -350,10 +352,10 @@ export class SourceTrashService {
 
   undo(operation: OperationRecord): KnowledgeActivityUndoResult {
     const vaultPath = this.#requireVaultPath();
-    const receipt = readReceiptByOperation(vaultPath, operation.id);
-    if (!receipt || !matchesTrashOperation(receipt, operation)) return { status: "not_found", operationId: operation.id };
+    const receipt = readSourceTrashReceiptByOperation(vaultPath, operation.id);
+    if (!receipt || !matchesSourceTrashOperation(receipt, operation)) return { status: "not_found", operationId: operation.id };
     const existing = readOperation(vaultPath, restoreOperationId(operation.id));
-    if (existing) return matchesRestoreOperation(receipt, existing)
+    if (existing) return matchesSourceRestoreOperation(receipt, existing)
       ? { status: "already_undone", operationId: operation.id, undoOperationId: existing.id }
       : { status: "stale", operationId: operation.id };
     try {
@@ -372,7 +374,7 @@ export class SourceTrashService {
     const intents = readAllIntents(vaultPath);
     for (const intent of intents) {
       try {
-        const receipt = readReceiptByOperation(vaultPath, intent.trashOperationId);
+        const receipt = readSourceTrashReceiptByOperation(vaultPath, intent.trashOperationId);
         if (!receipt || !matchesIntentReceipt(intent, receipt)) throw stale();
         const before = readOperation(vaultPath, restoreOperationId(receipt.operationId));
         completeRestore(vaultPath, receipt);
@@ -380,11 +382,11 @@ export class SourceTrashService {
       } catch { failed += 1; }
     }
     const intended = new Set(intents.map(({ trashOperationId }) => trashOperationId));
-    for (const receipt of readAllReceipts(vaultPath)) {
-      if (intended.has(receipt.operationId) || readOperation(vaultPath, restoreOperationId(receipt.operationId))) continue;
+    for (const receipt of readAllSourceTrashReceipts(vaultPath).filter((candidate) => !candidate.redoOfOperationId)) {
+        if (intended.has(receipt.operationId) || readOperation(vaultPath, restoreOperationId(receipt.operationId))) continue;
       try {
         const before = readOperation(vaultPath, receipt.operationId);
-        completeTrash(vaultPath, receipt, () => this.#assertReceiptEligible(vaultPath, receipt));
+        completeSourceTrashReceipt(vaultPath, receipt, this.#usage);
         if (!before) recovered += 1;
       } catch { failed += 1; }
     }
@@ -393,7 +395,7 @@ export class SourceTrashService {
 
   #completeIntent(vaultPath: string, intent: SourceRestoreIntent,
     identity: ReturnType<typeof restoreIdentity>): SourceTrashRestoreResult {
-    const receipt = readReceiptByOperation(vaultPath, intent.trashOperationId);
+    const receipt = readSourceTrashReceiptByOperation(vaultPath, intent.trashOperationId);
     if (!receipt) return { ...identity, status: "not_found" };
     if (!matchesIntentReceipt(intent, receipt)) return { ...identity, status: "stale" };
     const restored = completeRestore(vaultPath, receipt);
@@ -404,10 +406,6 @@ export class SourceTrashService {
     const current = this.#vaults.current(), vaultPath = this.#vaults.activeVaultPath();
     return current?.vaultId === activeVaultId ? vaultPath : undefined;
   }
-  #assertReceiptEligible(vaultPath: string, receipt: SourceTrashReceipt): void {
-    if (receipt.managedAsset && (!this.#usage || this.#usage.hasActiveSourceUse(receipt.sourceId) ||
-      hasOtherPageReference(vaultPath, receipt.sourceId, receipt.pageId))) throw stale();
-  }
   #requireVaultPath(): string {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath) throw stale();
@@ -415,14 +413,31 @@ export class SourceTrashService {
   }
 }
 
+export function completeSourceTrashReceipt(
+  vaultPath: string,
+  receipt: SourceTrashReceipt,
+  usage: SourceTrashUsagePort | undefined
+): void {
+  completeTrash(vaultPath, receipt, () => assertSourceTrashReceiptEligible(vaultPath, receipt, usage));
+}
+
+function assertSourceTrashReceiptEligible(
+  vaultPath: string,
+  receipt: SourceTrashReceipt,
+  usage: SourceTrashUsagePort | undefined
+): void {
+  if (receipt.managedAsset && (!usage || usage.hasActiveSourceUse(receipt.sourceId) ||
+    hasOtherPageReference(vaultPath, receipt.sourceId, receipt.pageId))) throw stale();
+}
+
 function completeTrash(vaultPath: string, receipt: SourceTrashReceipt, assertEligible: () => void): void {
   const existing = readOperation(vaultPath, receipt.operationId);
   if (existing) {
-    if (!matchesTrashOperation(receipt, existing) || !isRestorable(vaultPath, receipt)) throw stale();
+    if (!matchesSourceTrashOperation(receipt, existing) || !isSourceTrashRestorable(vaultPath, receipt)) throw stale();
     return;
   }
   assertEligible();
-  for (const binding of [receipt.sourceRecord, receipt.sourcePage, receipt.managedAsset].filter(Boolean) as StoredFileBinding[])
+  for (const binding of [receipt.sourceRecord, receipt.sourcePage, receipt.managedAsset].filter(Boolean) as SourceTrashStoredFileBinding[])
     { if (binding === receipt.managedAsset) assertEligible(); moveVerified(vaultPath, binding.originalPath, binding.trashPath, binding); }
   commitOperationExclusive(vaultPath, trashOperation(receipt));
 }
@@ -430,17 +445,17 @@ function completeTrash(vaultPath: string, receipt: SourceTrashReceipt, assertEli
 function completeRestore(vaultPath: string, receipt: SourceTrashReceipt): OperationRecord {
   const existing = readOperation(vaultPath, restoreOperationId(receipt.operationId));
   if (existing) {
-    if (!matchesRestoreOperation(receipt, existing)) throw stale();
+    if (!matchesSourceRestoreOperation(receipt, existing)) throw stale();
     return existing;
   }
   const trash = readOperation(vaultPath, receipt.operationId);
-  if (!trash || !matchesTrashOperation(receipt, trash)) throw stale();
-  for (const binding of [receipt.managedAsset, receipt.sourcePage, receipt.sourceRecord].filter(Boolean) as StoredFileBinding[])
+  if (!trash || !matchesSourceTrashOperation(receipt, trash)) throw stale();
+  for (const binding of [receipt.managedAsset, receipt.sourcePage, receipt.sourceRecord].filter(Boolean) as SourceTrashStoredFileBinding[])
     moveVerified(vaultPath, binding.trashPath, binding.originalPath, binding);
   return commitOperationExclusive(vaultPath, restoreOperation(receipt));
 }
 
-function moveVerified(vaultPath: string, fromRelative: string, toRelative: string, expected: StoredFileBinding): void {
+function moveVerified(vaultPath: string, fromRelative: string, toRelative: string, expected: SourceTrashStoredFileBinding): void {
   const from = resolveVaultRelative(vaultPath, fromRelative), to = resolveVaultRelative(vaultPath, toRelative);
   const fromExists = exists(from), toExists = exists(to);
   if (fromExists && toExists) throw stale();
@@ -453,7 +468,7 @@ function moveVerified(vaultPath: string, fromRelative: string, toRelative: strin
   assertFile(to, expected);
 }
 
-function managedAssetBinding(vaultPath: string, record: SourceRecord, trashRoot: string): StoredFileBinding | undefined {
+function managedAssetBinding(vaultPath: string, record: SourceRecord, trashRoot: string): SourceTrashStoredFileBinding | undefined {
   if (record.storageStrategy === "reference_original") return undefined;
   const copy = record.managedCopy;
   if (!copy || (copy.rootId && copy.rootId !== "root_vault_managed") || copy.pathBasis === "root_relative") throw stale();
@@ -498,7 +513,9 @@ function trashOperation(receipt: SourceTrashReceipt): OperationRecord {
     targetRefs: [{ kind: "source", id: receipt.sourceId, path: receipt.sourceRecord.trashPath },
       { kind: "page", id: receipt.pageId, path: receipt.sourcePage.trashPath }],
     sourceRefs: [{ kind: "source", id: receipt.sourceId, path: receipt.sourceRecord.originalPath },
-      { kind: "page", id: receipt.pageId, path: receipt.sourcePage.originalPath }],
+      { kind: "page", id: receipt.pageId, path: receipt.sourcePage.originalPath },
+      ...(receipt.redoOfOperationId ? [{ kind: "operation" as const, id: receipt.redoOfOperationId },
+        { kind: "operation" as const, id: receipt.undoOperationId! }] : [])],
     before: { kind: "source", id: receipt.sourceId, path: receipt.sourceRecord.originalPath,
       checksum: receipt.sourceRecord.checksum },
     after: { kind: "source", id: receipt.sourceId, path: receipt.sourceRecord.trashPath,
@@ -525,27 +542,47 @@ function restoreOperation(receipt: SourceTrashReceipt): OperationRecord {
   };
 }
 
-function matchesTrashOperation(receipt: SourceTrashReceipt, operation: OperationRecord): boolean {
+export function matchesSourceTrashOperation(receipt: SourceTrashReceipt, operation: OperationRecord): boolean {
   return operation.kind === "trash_source_asset" && operation.id === receipt.operationId &&
     operation.targetRefs.some((ref) => ref.kind === "source" && ref.id === receipt.sourceId && ref.path === receipt.sourceRecord.trashPath) &&
     operation.targetRefs.some((ref) => ref.kind === "page" && ref.id === receipt.pageId && ref.path === receipt.sourcePage.trashPath) &&
-    operation.before?.checksum === receipt.sourceRecord.checksum;
+    operation.before?.checksum === receipt.sourceRecord.checksum &&
+    (!receipt.redoOfOperationId || (operation.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === receipt.redoOfOperationId) &&
+      operation.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === receipt.undoOperationId)));
 }
-function matchesRestoreOperation(receipt: SourceTrashReceipt, operation: OperationRecord): boolean {
+export function matchesSourceRestoreOperation(receipt: SourceTrashReceipt, operation: OperationRecord): boolean {
   return operation.kind === "restore_source_asset" && operation.id === restoreOperationId(receipt.operationId) &&
     operation.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === receipt.operationId) &&
     operation.targetRefs.some((ref) => ref.kind === "source" && ref.id === receipt.sourceId && ref.path === receipt.sourceRecord.originalPath);
 }
 
-function isRestorable(vaultPath: string, receipt: SourceTrashReceipt): boolean {
-  if (!matchesTrashOperation(receipt, readOperation(vaultPath, receipt.operationId) ?? ({} as OperationRecord))) return false;
+export function isSourceTrashRestorable(vaultPath: string, receipt: SourceTrashReceipt): boolean {
+  if (!matchesSourceTrashOperation(receipt, readOperation(vaultPath, receipt.operationId) ?? ({} as OperationRecord))) return false;
   if (readOperation(vaultPath, restoreOperationId(receipt.operationId))) return false;
   return [receipt.sourceRecord, receipt.sourcePage, receipt.managedAsset].filter(Boolean)
     .every((binding) => !exists(resolveVaultRelative(vaultPath, binding!.originalPath)) &&
       verified(resolveVaultRelative(vaultPath, binding!.trashPath), binding!));
 }
 
-function readAllReceipts(vaultPath: string): SourceTrashReceipt[] {
+export function sourceTrashRedoEligibility(
+  vaultPath: string,
+  receipt: SourceTrashReceipt,
+  usage: SourceTrashUsagePort | undefined
+): "ready" | "target_missing" | "content_changed" {
+  const bindings = [receipt.sourceRecord, receipt.sourcePage, receipt.managedAsset]
+    .filter(Boolean) as SourceTrashStoredFileBinding[];
+  if (bindings.some((binding) => !exists(resolveVaultRelative(vaultPath, binding.originalPath)))) return "target_missing";
+  if (bindings.some((binding) => !verified(resolveVaultRelative(vaultPath, binding.originalPath), binding) ||
+    exists(resolveVaultRelative(vaultPath, binding.trashPath)))) return "content_changed";
+  try {
+    assertSourceTrashReceiptEligible(vaultPath, receipt, usage);
+    return "ready";
+  } catch {
+    return "content_changed";
+  }
+}
+
+export function readAllSourceTrashReceipts(vaultPath: string): SourceTrashReceipt[] {
   return readDirectory(vaultPath, receiptRoot(vaultPath), /^receipt_[a-f0-9]{32}\.json$/u, readReceipt);
 }
 function readAllIntents(vaultPath: string): SourceRestoreIntent[] {
@@ -559,7 +596,13 @@ function readDirectory<T>(vaultPath: string, root: string, pattern: RegExp, read
   return entries.map((entry) => reader(path.join(root, entry.name)));
 }
 function readReceiptByRequest(vaultPath: string, requestId: string) { const file = receiptPathForRequest(vaultPath, requestId); return exists(file) ? readReceipt(file) : undefined; }
-function readReceiptByOperation(vaultPath: string, operationId: string) { return readAllReceipts(vaultPath).find((item) => item.operationId === operationId); }
+export function readSourceTrashReceiptByOperation(vaultPath: string, operationId: string) {
+  return readAllSourceTrashReceipts(vaultPath).find((item) => item.operationId === operationId);
+}
+
+export function writeSourceTrashReceiptExclusive(vaultPath: string, receipt: SourceTrashReceipt): void {
+  writeExclusive(receiptPathForRequest(vaultPath, receipt.requestId), receipt, vaultPath);
+}
 function readIntentByRequest(vaultPath: string, requestId: string) { const file = intentPathForRequest(vaultPath, requestId); return exists(file) ? readIntent(file) : undefined; }
 
 function readReceipt(filePath: string): SourceTrashReceipt {
@@ -567,7 +610,9 @@ function readReceipt(filePath: string): SourceTrashReceipt {
   if (value?.schemaVersion !== 1 || value.kind !== "source_trash_receipt" || !OPERATION_ID.test(value.operationId) ||
     !/^sourcetrashreq_[a-z0-9]{16,64}$/u.test(value.requestId) || !/^src_\d{8}_[a-z0-9]{8,}$/u.test(value.sourceId) ||
     !/^page_\d{8}_[a-z0-9]{8,}$/u.test(value.pageId) || !Number.isFinite(Date.parse(value.createdAt)) ||
-    !validBinding(value.sourceRecord) || !validBinding(value.sourcePage) || (value.managedAsset && !validBinding(value.managedAsset))) throw stale();
+    !validBinding(value.sourceRecord) || !validBinding(value.sourcePage) || (value.managedAsset && !validBinding(value.managedAsset)) ||
+    (value.redoOfOperationId !== undefined && (!OPERATION_ID.test(value.redoOfOperationId) || !OPERATION_ID.test(value.undoOperationId ?? ""))) ||
+    (value.undoOperationId !== undefined && (!OPERATION_ID.test(value.undoOperationId) || !OPERATION_ID.test(value.redoOfOperationId ?? "")))) throw stale();
   return value;
 }
 function readIntent(filePath: string): SourceRestoreIntent {
@@ -587,11 +632,11 @@ function readVerified(vaultPath: string, relativePath: string): { readonly check
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw stale();
   return { checksum: hashFile(absolute), size: stat.size };
 }
-function assertFile(filePath: string, expected: Pick<StoredFileBinding, "checksum" | "size">): void {
+function assertFile(filePath: string, expected: Pick<SourceTrashStoredFileBinding, "checksum" | "size">): void {
   const stat = fs.lstatSync(filePath);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size !== expected.size || hashFile(filePath) !== expected.checksum) throw stale();
 }
-function verified(filePath: string, expected: StoredFileBinding): boolean { try { assertFile(filePath, expected); return true; } catch { return false; } }
+function verified(filePath: string, expected: SourceTrashStoredFileBinding): boolean { try { assertFile(filePath, expected); return true; } catch { return false; } }
 function hashFile(filePath: string): string {
   const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try { const hash = createHash("sha256"), buffer = Buffer.allocUnsafe(64 * 1024); let offset = 0, count;
@@ -635,8 +680,8 @@ function assertConfinedParents(vaultPath: string, candidate: string): void {
 function resolveVaultRelative(vaultPath: string, relative: string): string { const safe = normalizeVaultRelative(relative), resolved = path.resolve(vaultPath, ...safe.split("/")); if (!resolved.startsWith(`${path.resolve(vaultPath)}${path.sep}`)) throw stale(); return resolved; }
 function normalizeVaultRelative(relative: string): string { if (path.posix.isAbsolute(relative) || relative.split("/").some((part) => !part || part === "." || part === "..")) throw stale(); return relative; }
 function relativeVaultPath(vaultPath: string, absolute: string): string { return normalizeVaultRelative(path.relative(vaultPath, absolute).split(path.sep).join("/")); }
-function fileBinding(originalPath: string, trashPath: string, snapshot: { checksum: string; size: number }): StoredFileBinding { return { originalPath, trashPath, ...snapshot }; }
-function validBinding(value: StoredFileBinding | undefined): value is StoredFileBinding { return !!value && typeof value.originalPath === "string" && typeof value.trashPath === "string" && /^sha256:[a-f0-9]{64}$/u.test(value.checksum) && Number.isSafeInteger(value.size) && value.size >= 0; }
+function fileBinding(originalPath: string, trashPath: string, snapshot: { checksum: string; size: number }): SourceTrashStoredFileBinding { return { originalPath, trashPath, ...snapshot }; }
+function validBinding(value: SourceTrashStoredFileBinding | undefined): value is SourceTrashStoredFileBinding { return !!value && typeof value.originalPath === "string" && typeof value.trashPath === "string" && /^sha256:[a-f0-9]{64}$/u.test(value.checksum) && Number.isSafeInteger(value.size) && value.size >= 0; }
 function exists(filePath: string): boolean { try { fs.lstatSync(filePath); return true; } catch (caught) { if (typeof caught === "object" && caught && "code" in caught && caught.code === "ENOENT") return false; throw caught; } }
 function receiptRoot(vaultPath: string) { return path.join(vaultPath, ".pige", "trash", "source-receipts"); }
 function intentRoot(vaultPath: string) { return path.join(vaultPath, ".pige", "trash", "source-restore-intents"); }
@@ -644,6 +689,7 @@ function receiptPathForRequest(vaultPath: string, requestId: string) { return pa
 function intentPathForRequest(vaultPath: string, requestId: string) { return path.join(intentRoot(vaultPath), `intent_${hashText(requestId).slice(7, 39)}.json`); }
 function createOperationId(createdAt: string, request: SourceTrashRequest, random: string) { return `op_${createdAt.slice(0, 10).replaceAll("-", "")}_${createHash("sha256").update(`${request.requestId}\0${request.sourceId}\0${random}`).digest("hex").slice(0, 24)}`; }
 function restoreOperationId(operationId: string) { const date = OPERATION_ID.exec(operationId)?.[1]; if (!date) throw stale(); return `op_${date}_${createHash("sha256").update(`restore\0${operationId}`).digest("hex").slice(0, 24)}`; }
+export function sourceTrashRestoreOperationId(operationId: string): string { return restoreOperationId(operationId); }
 function requestDigest(request: SourceTrashRequest) { return hashText(JSON.stringify(request)); }
 function trashRevision(receipt: SourceTrashReceipt) { return `sourcetrashrev_${createHash("sha256").update(JSON.stringify(receipt)).digest("hex")}`; }
 function hashText(value: string) { return `sha256:${createHash("sha256").update(value).digest("hex")}`; }
