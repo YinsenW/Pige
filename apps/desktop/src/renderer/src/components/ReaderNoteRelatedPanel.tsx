@@ -23,6 +23,7 @@ export function ReaderNoteRelatedPanel(props: {
   const ownerRef = useRef(ownerIdentity);
   const inFlightRef = useRef(false);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<LibraryRelatedPage | null>(null);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -33,6 +34,9 @@ export function ReaderNoteRelatedPanel(props: {
     setPending(false);
     setFailed(false);
   }, [ownerIdentity]);
+  useEffect(() => {
+    if (failed && confirmTarget && !pending) confirmRef.current?.focus({ preventScroll: true });
+  }, [confirmTarget, failed, pending]);
 
   const restoreFocus = (pageId: string): void => {
     window.requestAnimationFrame(() => triggerRefs.current.get(pageId)?.focus({ preventScroll: true }));
@@ -66,11 +70,9 @@ export function ReaderNoteRelatedPanel(props: {
         return;
       }
       setFailed(true);
-      restoreFocus(target.summary.pageId);
     } catch {
       if (ownerRef.current === identity) {
         setFailed(true);
-        restoreFocus(target.summary.pageId);
       }
     } finally {
       if (ownerRef.current === identity) {
@@ -101,13 +103,20 @@ export function ReaderNoteRelatedPanel(props: {
     <RelatedGroup title={props.t("note.backlinks")} pages={backlinks} loadingPageId={props.loadingPageId}
       onOpen={props.onOpen} triggerRefs={triggerRefs.current} t={props.t} />
     {confirmTarget ? <div className="confirmation-backdrop"><section className="confirmation-dialog" role="alertdialog" aria-modal="true"
-      aria-labelledby="note-unlink-title" aria-describedby="note-unlink-description" aria-busy={pending}>
+      aria-labelledby="note-unlink-title" aria-describedby="note-unlink-description" aria-busy={pending} onKeyDown={(event) => {
+        if (event.key !== "Escape" || pending) return;
+        event.preventDefault();
+        const pageId = confirmTarget.summary.pageId;
+        setConfirmTarget(null);
+        setFailed(false);
+        restoreFocus(pageId);
+      }}>
       <div className="confirmation-copy"><h2 id="note-unlink-title">{props.t("note.unlink.title")}</h2>
         <p id="note-unlink-description">{props.t("note.unlink.description")}</p>
         {failed ? <p role="alert">{props.t("note.unlink.failed")}</p> : null}</div>
       <div className="confirmation-actions"><button type="button" disabled={pending} autoFocus onClick={() => {
         const pageId = confirmTarget.summary.pageId; setConfirmTarget(null); setFailed(false); restoreFocus(pageId);
-      }}>{props.t("note.unlink.cancel")}</button><button type="button" className="danger" disabled={pending} onClick={() => void unlink()}>
+      }}>{props.t("note.unlink.cancel")}</button><button ref={confirmRef} type="button" className="danger" disabled={pending} onClick={() => void unlink()}>
         {props.t(pending ? "note.unlink.pending" : "note.unlink.confirm")}</button></div>
     </section></div> : null}
   </aside>;

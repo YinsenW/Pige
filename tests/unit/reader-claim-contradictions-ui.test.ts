@@ -18,6 +18,7 @@ describe("ReaderClaimContradictions", () => {
       operationId: "op_20260801_claimrelation1", render: render([item()], "b") }));
     const committed = vi.fn(), harness = await mount(render(), search, change, committed);
     const input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.claimContradictions.searchPlaceholder");
     await act(async () => { setInput(harness.dom, input, "Conflict"); await settle(harness.dom); });
     const searchButton = button(harness.container, "note.claimContradictions.search");
     await act(async () => { searchButton.click(); searchButton.click(); await settle(harness.dom); });
@@ -42,6 +43,22 @@ describe("ReaderClaimContradictions", () => {
     expect(change).toHaveBeenCalledWith(expect.objectContaining({ action: "remove", targetPageId: item().pageId }));
     expect(harness.container.textContent).toContain("Conflicting claim");
     expect(harness.container.querySelector('[role="status"]')?.textContent).toBe("note.claimContradictions.notice.stale");
+    expect(harness.dom.window.document.activeElement).toBe(remove);
+    await harness.unmount();
+  });
+
+  it("closes an unchanged confirmation with Escape and returns focus to its trigger", async () => {
+    const harness = await mount(render([item()]), vi.fn(), vi.fn(), vi.fn());
+    const remove = button(harness.container, "note.claimContradictions.remove");
+    remove.focus();
+    await act(async () => { remove.click(); await settle(harness.dom); });
+    const dialog = harness.container.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(harness.dom.window.document.activeElement).toBe(button(harness.container, "note.claimContradictions.confirm"));
+    await act(async () => {
+      dialog.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });

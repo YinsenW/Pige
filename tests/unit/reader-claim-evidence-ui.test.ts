@@ -23,7 +23,9 @@ describe("ReaderClaimEvidence", () => {
       operationId: "op_20260802_claimevidence1", render: note([candidate]) }));
     const harness = await mount(vi.fn(async (request) => ({ ...request, status: "ready" as const,
       candidates: [candidate] })), change);
-    await act(async () => { setInput(harness.dom, input(harness, "searchPlaceholder"), "Evidence"); await settle(); });
+    const searchInput = input(harness, "searchPlaceholder");
+    expect(searchInput.getAttribute("aria-label")).toBe("searchPlaceholder");
+    await act(async () => { setInput(harness.dom, searchInput, "Evidence"); await settle(); });
     await act(async () => { button(harness, "search").click(); await settle(); });
     const add = [...harness.container.querySelectorAll("button")].find((node) => node.textContent?.includes("Evidence source"))!;
     add.focus();
@@ -45,6 +47,23 @@ describe("ReaderClaimEvidence", () => {
     await act(async () => remove.click());
     await act(async () => { button(harness, "confirm").click(); await settle(); });
     expect(harness.container.textContent).toContain("notice.stale");
+    expect(harness.dom.window.document.activeElement).toBe(remove);
+    await harness.unmount();
+  });
+
+  it("closes an unchanged confirmation with Escape and returns focus to its trigger", async () => {
+    const harness = await mount(vi.fn(), vi.fn(), [candidate,
+      { ...candidate, sourcePageId: "page_20260802_secondsource", sourceId: "src_20260802_secondsource", title: "Second source" }]);
+    const remove = button(harness, "remove");
+    remove.focus();
+    await act(async () => { remove.click(); await settle(); });
+    const dialog = harness.container.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(harness.dom.window.document.activeElement).toBe(button(harness, "confirm"));
+    await act(async () => {
+      dialog.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle();
+    });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });

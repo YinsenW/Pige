@@ -59,6 +59,28 @@ describe("Reader knowledge-page relationships", () => {
     expect(dom.window.document.querySelector("[role=alert]")?.textContent).toBe("The relationship could not be removed.");
     expect(button(dom, "Open")).toBeTruthy();
     expect(button(dom, "Unlink")).toBeTruthy();
+    expect(dom.window.document.activeElement?.textContent).toBe("Remove relationship");
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
+  it("closes unlink confirmation with Escape and restores focus to its relationship trigger", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => { root.render(createElement(ReaderNoteRelatedPanel, {
+      note, activeVaultId: "vault_20260731_unlink", related, loadingPageId: null,
+      onOpen: async () => undefined, onUnlink: vi.fn(), t,
+    })); await settle(dom); });
+    const unlink = button(dom, "Unlink");
+    unlink.focus();
+    await click(dom, unlink);
+    const dialog = dom.window.document.querySelector<HTMLElement>("[role=alertdialog]")!;
+    expect(dom.window.document.activeElement?.textContent).toBe("Cancel");
+    await act(async () => {
+      dialog.dispatchEvent(new dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle(dom);
+    });
+    expect(dom.window.document.querySelector("[role=alertdialog]")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(unlink);
     await act(async () => root.unmount()); dom.window.close();
   });
 

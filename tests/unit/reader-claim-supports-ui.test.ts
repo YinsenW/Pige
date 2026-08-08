@@ -14,6 +14,7 @@ describe("ReaderClaimSupports", () => {
     const search = vi.fn(async (request) => ({ ...request, status: "ready" as const, candidates: [item()] }));
     const change = vi.fn(async (request) => ({ ...request, status: "committed" as const, operationId: "op_20260808_claimsupport1", render: render([item()], "b") }));
     const committed = vi.fn(), harness = await mount(render(), search, change, committed), input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.claimSupports.searchPlaceholder");
     await act(async () => { setInput(harness.dom, input, "Support"); await settle(harness.dom); });
     await act(async () => { const searchButton = button(harness.container, "note.claimSupports.search"); searchButton.click(); searchButton.click(); await settle(harness.dom); });
     expect(search).toHaveBeenCalledTimes(1);
@@ -33,6 +34,22 @@ describe("ReaderClaimSupports", () => {
     expect(harness.container.textContent).toContain("Supporting claim");
     expect(harness.container.querySelector('[role="status"]')?.textContent).toBe("note.claimSupports.notice.stale");
     expect(harness.dom.window.document.activeElement).toBe(remove); await harness.unmount();
+  });
+
+  it("closes an unchanged confirmation with Escape and returns focus to its trigger", async () => {
+    const harness = await mount(render([item()]), vi.fn(), vi.fn(), vi.fn());
+    const remove = button(harness.container, "note.claimSupports.remove");
+    remove.focus();
+    await act(async () => { remove.click(); await settle(harness.dom); });
+    const dialog = harness.container.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(harness.dom.window.document.activeElement).toBe(button(harness.container, "note.claimSupports.confirm"));
+    await act(async () => {
+      dialog.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(remove);
+    await harness.unmount();
   });
 });
 

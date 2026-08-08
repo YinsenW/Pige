@@ -26,6 +26,7 @@ describe("ReaderQuestionAnswers", () => {
     const committed = vi.fn();
     const harness = await mount(questionRender(), search, change, committed);
     const input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.questionAnswers.searchPlaceholder");
     await act(async () => {
       Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Answer");
       const propertyChange = new harness.dom.window.Event("propertychange", { bubbles: true });

@@ -87,7 +87,7 @@ export function ReaderEntityMentions(props: {
       onClick={(event) => { focusRef.current = event.currentTarget; void change("remove", item); }}>
       {props.t("note.entityMentions.remove")}
     </button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.entityMentions.searchPlaceholder")}
+    <span><input type="search" aria-label={props.t("note.entityMentions.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.entityMentions.searchPlaceholder")}
       onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()}
         onClick={(event) => { focusRef.current = event.currentTarget; void search(); }}>
