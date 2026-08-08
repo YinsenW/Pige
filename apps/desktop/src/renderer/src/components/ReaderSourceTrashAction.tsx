@@ -13,7 +13,7 @@ export function ReaderSourceTrashAction(props: {
   const renderContextId = props.note.renderContextId;
   const [confirming, setConfirming] = useState(false), [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false), triggerRef = useRef<HTMLButtonElement>(null);
-  const confirmRef = useRef<HTMLButtonElement>(null), inFlightRef = useRef(false);
+  const cancelRef = useRef<HTMLButtonElement>(null), confirmRef = useRef<HTMLButtonElement>(null), inFlightRef = useRef(false);
   const owner = `${props.activeVaultId ?? ""}:${props.note.summary.pageId}:${renderContextId ?? ""}:${eligibility?.sourceId ?? ""}:${eligibility?.sourceRevision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
   useLayoutEffect(() => { if (confirming) confirmRef.current?.focus({ preventScroll: true }); }, [confirming]);
@@ -21,6 +21,11 @@ export function ReaderSourceTrashAction(props: {
   if (!props.activeVaultId || !renderContextId || !eligibility?.canTrash || props.note.summary.pageType !== "source") return null;
   const restoreFocus = (): void => { window.requestAnimationFrame(() => window.requestAnimationFrame(() =>
     triggerRef.current?.focus({ preventScroll: true }))); };
+  const dismissConfirmation = (): void => {
+    if (pending) return;
+    setConfirming(false);
+    restoreFocus();
+  };
   const submit = async (): Promise<void> => {
     if (inFlightRef.current) return;
     inFlightRef.current = true; setPending(true); setFailed(false);
@@ -46,13 +51,21 @@ export function ReaderSourceTrashAction(props: {
       disabled={pending} onClick={() => { setFailed(false); setConfirming(true); }}>
       <PigeIcon name="trash" size={16} />
     </button>
-    {confirming ? <div role="alertdialog" aria-modal="true" aria-labelledby="source-trash-title">
+    {confirming ? <div role="alertdialog" aria-modal="true" aria-busy={pending || undefined}
+      aria-labelledby="source-trash-title" aria-describedby="source-trash-description" onKeyDown={(event) => {
+        if (event.key === "Escape" && !pending) { event.preventDefault(); dismissConfirmation(); return; }
+        if (event.key !== "Tab") return;
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+        const first = controls[0], last = controls.at(-1);
+        if (!first || !last) return;
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }}>
       <strong id="source-trash-title">{props.t("note.sourceTrash.title")}</strong>
-      <p>{props.t(eligibility.storage === "reference_original"
+      <p id="source-trash-description">{props.t(eligibility.storage === "reference_original"
         ? "note.sourceTrash.referenceDescription" : "note.sourceTrash.managedDescription")}</p>
-      <button type="button" className="settings-button" disabled={pending} onClick={() => {
-        setConfirming(false); restoreFocus();
-      }}>{props.t("note.sourceTrash.cancel")}</button>
+      {pending ? <p role="status" aria-live="polite">{props.t("note.sourceTrash.moving")}</p> : null}
+      <button ref={cancelRef} type="button" className="settings-button" disabled={pending} onClick={dismissConfirmation}>{props.t("note.sourceTrash.cancel")}</button>
       <button ref={confirmRef} type="button" className="settings-button danger" disabled={pending}
         onClick={() => void submit()}>{props.t(pending ? "note.sourceTrash.moving" : "note.sourceTrash.confirm")}</button>
     </div> : null}
