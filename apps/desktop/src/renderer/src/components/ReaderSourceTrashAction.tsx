@@ -46,7 +46,13 @@ export function ReaderSourceTrashAction(props: {
       disabled={pending} onClick={() => { setFailed(false); setConfirming(true); }}>
       <PigeIcon name="trash" size={16} />
     </button>
-    {confirming ? <div role="alertdialog" aria-modal="true" aria-labelledby="source-trash-title">
+    {confirming ? <div role="alertdialog" aria-modal="true" aria-labelledby="source-trash-title" onKeyDown={(event) => {
+      if (event.key !== "Escape" || pending) return;
+      event.preventDefault();
+      setConfirming(false);
+      setFailed(false);
+      restoreFocus();
+    }}>
       <strong id="source-trash-title">{props.t("note.sourceTrash.title")}</strong>
       <p>{props.t(eligibility.storage === "reference_original"
         ? "note.sourceTrash.referenceDescription" : "note.sourceTrash.managedDescription")}</p>
