@@ -9813,6 +9813,10 @@ function ProviderModelGroup(props: {
 }): React.JSX.Element {
   const [modelId, setModelId] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const refreshButtonRef = useRef<HTMLButtonElement>(null);
+  const focusProviderModels = (): void => {
+    window.setTimeout(() => refreshButtonRef.current?.focus({ preventScroll: true }), 0);
+  };
   const addModel = async (): Promise<void> => {
     const added = await props.onAddCustom(modelId.trim(), displayName.trim());
     if (!added) return;
@@ -9827,7 +9831,7 @@ function ProviderModelGroup(props: {
           <strong>{props.t("models.automaticSync")}</strong>
           <span>{props.t("models.automaticSyncDescription")}</span>
         </span>
-        <button type="button" className="settings-button" disabled={props.busy} onClick={() => void props.onRefresh()}>
+        <button ref={refreshButtonRef} type="button" className="settings-button" disabled={props.busy} onClick={() => void props.onRefresh()}>
           {props.t(props.syncFailed ? "models.retry" : "library.refresh")}
         </button>
       </div>
@@ -9839,6 +9843,7 @@ function ProviderModelGroup(props: {
               model={model}
               busy={props.busy}
               onDeleteManual={props.onDeleteManual}
+              onManualRemoved={focusProviderModels}
               onSetEnabled={props.onSetEnabled}
               onSetDisplayName={props.onSetDisplayName}
               t={props.t}
