@@ -12,8 +12,10 @@ export function BackupRestoreRollbackAction(props: {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<"failed" | "stale" | "not_found" | null>(null);
   const sequenceRef = useRef(0);
+  const candidateRef = useRef<RestoreRollbackCandidate | null>(candidate);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  candidateRef.current = candidate;
 
   const loadStatus = useCallback(async (): Promise<void> => {
     const sequence = ++sequenceRef.current;
@@ -29,8 +31,13 @@ export function BackupRestoreRollbackAction(props: {
         setCandidate(result.candidate);
         setNotice(null);
       } else {
-        setCandidate(null);
-        setNotice(null);
+        if (candidateRef.current) {
+          setNotice("failed");
+        }
+        else {
+          setCandidate(null);
+          setNotice(null);
+        }
       }
     } catch {
       if (sequence === sequenceRef.current) setNotice("failed");
@@ -40,6 +47,7 @@ export function BackupRestoreRollbackAction(props: {
   useEffect(() => {
     setCandidate(null);
     setNotice(null);
+    setBusy(false);
     void loadStatus();
     return () => { sequenceRef.current += 1; };
   }, [loadStatus]);
@@ -47,6 +55,9 @@ export function BackupRestoreRollbackAction(props: {
   const prepare = async (): Promise<void> => {
     const request = window.pige.backup.prepareRollbackRestore;
     if (!request || !candidate || props.disabled || busy || !props.restoreIdle) return;
+    const sequence = sequenceRef.current;
+    const expectedVaultId = props.activeVaultId;
+    const expectedCandidate = candidate;
     setBusy(true);
     setNotice(null);
     try {
@@ -55,6 +66,12 @@ export function BackupRestoreRollbackAction(props: {
         requestId: `restorerollbackreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
         ...candidate
       });
+      if (sequence !== sequenceRef.current || candidateRef.current !== expectedCandidate || props.activeVaultId !== expectedVaultId) return;
+      if (result.activeVaultId !== expectedVaultId || result.restoreJobId !== expectedCandidate.restoreJobId ||
+        result.expectedRestoreJobUpdatedAt !== expectedCandidate.expectedRestoreJobUpdatedAt) {
+        setNotice("failed");
+        return;
+      }
       if (result.status !== "prepared") {
         setNotice(result.status);
         return;
@@ -65,10 +82,12 @@ export function BackupRestoreRollbackAction(props: {
         setNotice("failed");
       }
     } catch {
-      setNotice("failed");
+      if (sequence === sequenceRef.current && candidateRef.current === expectedCandidate) setNotice("failed");
     } finally {
-      setBusy(false);
-      window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+      if (sequence === sequenceRef.current && candidateRef.current === expectedCandidate) {
+        setBusy(false);
+        window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+      }
     }
   };
 
