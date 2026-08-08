@@ -2230,7 +2230,7 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   return {
     activitySummary: (operation, undo) => {
       const summary = pigePolicy.activitySummary(operation, undo) ?? sourceStoragePreference.activitySummary(operation, undo) ?? backupConversationPreference.activitySummary(operation, undo) ?? duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
-      const redo = summary && getNoteTrashRedoService().activityState(operation, undo);
+      const redo = summary && (sourceStoragePreference.activityState(operation, undo) ?? getNoteTrashRedoService().activityState(operation, undo));
       return summary && redo ? { ...summary, ...redo } : summary;
     },
     findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? sourceStoragePreference.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
@@ -3806,7 +3806,12 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
     : tableResult;
   const datasetResult = viewResult.status === "not_found" ? getManagedDatasetLifecycleService().redo(request) : viewResult;
   const trashResult = datasetResult.status === "not_found" ? getNoteTrashRedoService().redo(request) : datasetResult;
-  const sourceTrashResult = trashResult.status === "not_found" ? getSourceTrashRedoService().redo(request) : trashResult;
+  const sourceStoragePreferenceResult = trashResult.status === "not_found"
+    ? getSourceStoragePreferenceService().redo(request)
+    : trashResult;
+  const sourceTrashResult = sourceStoragePreferenceResult.status === "not_found"
+    ? getSourceTrashRedoService().redo(request)
+    : sourceStoragePreferenceResult;
   const renameResult = sourceTrashResult.status === "not_found" ? getNoteRenameService().redo(request) : sourceTrashResult;
   const topicResult = renameResult.status === "not_found" ? getLibraryTopicRenameService().redo(request) : renameResult;
   const tagResult = topicResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : topicResult;
