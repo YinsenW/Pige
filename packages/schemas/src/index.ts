@@ -5274,6 +5274,23 @@ export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
   .regex(/^supportpreview_[a-f0-9]{32,64}$/u);
+export const DiagnosticsEventIdSchema = z.string()
+  .regex(/^diagevent_[a-f0-9]{32}$/u);
+export const DiagnosticsEventSelectionRevisionSchema = z.string()
+  .regex(/^diagevents_[a-f0-9]{64}$/u);
+export const DIAGNOSTICS_EVENT_SELECTION_MAX_ITEMS = 64;
+export const DIAGNOSTICS_EVENT_EXPORT_MAX_ITEMS = 32;
+export const DiagnosticEventSummarySchema = z.object({
+  eventId: DiagnosticsEventIdSchema,
+  recordedAt: z.string().datetime({ offset: true }),
+  level: z.enum(["info", "warning", "error"]),
+  code: z.string().min(1).max(80).regex(/^[A-Za-z0-9_.:-]+$/u),
+  redactedDetailCount: z.number().int().nonnegative().max(32)
+}).strict();
+export const DiagnosticsEventSelectionSchema = z.object({
+  revision: DiagnosticsEventSelectionRevisionSchema,
+  events: z.array(DiagnosticEventSummarySchema).max(DIAGNOSTICS_EVENT_SELECTION_MAX_ITEMS)
+}).strict();
 export const DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES = 2 * 1024;
 export const DiagnosticsOptionalSupportCategorySchema = z.enum(["provider_metadata", "private_excerpt"]);
 export const DiagnosticsPrivateExcerptTextSchema = z.string().min(1).max(DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES)
@@ -5346,6 +5363,7 @@ export const DiagnosticsWorkflowSummarySchema = z.object({
   activeVaultId: VaultIdSchema.nullable(),
   localOnly: z.literal(true),
   ownedArtifactCount: z.number().int().nonnegative().max(10_000),
+  eventSelection: DiagnosticsEventSelectionSchema.optional(),
   job: DiagnosticsSupportBundleJobSummarySchema.optional()
 }).strict();
 export const SupportBundleCategorySchema = z.object({
@@ -5364,6 +5382,9 @@ export const SupportBundlePreviewSchema = z.object({
   scopeContextId: DiagnosticsScopeContextIdSchema,
   expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
   activeVaultId: VaultIdSchema.nullable(),
+  eventSelectionRevision: DiagnosticsEventSelectionRevisionSchema,
+  selectedDiagnosticEventIds: z.array(DiagnosticsEventIdSchema).min(1).max(DIAGNOSTICS_EVENT_EXPORT_MAX_ITEMS),
+  selectedDiagnosticEvents: z.array(DiagnosticEventSummarySchema).min(1).max(DIAGNOSTICS_EVENT_EXPORT_MAX_ITEMS),
   selectedOptionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(2),
   includedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
   excludedCategories: z.array(SupportBundleCategorySchema).min(1).max(32),
@@ -5374,6 +5395,11 @@ export const SupportBundlePreviewSchema = z.object({
   if (new Set(selected).size !== selected.length) {
     context.addIssue({ code: "custom", path: ["selectedOptionalCategories"], message: "Optional support categories must be unique." });
   }
+  if (new Set(preview.selectedDiagnosticEventIds).size !== preview.selectedDiagnosticEventIds.length ||
+    preview.selectedDiagnosticEventIds.length !== preview.selectedDiagnosticEvents.length ||
+    preview.selectedDiagnosticEventIds.some((eventId, index) => preview.selectedDiagnosticEvents[index]?.eventId !== eventId)) {
+    context.addIssue({ code: "custom", path: ["selectedDiagnosticEventIds"], message: "Selected diagnostic events must be unique and exactly match their safe summaries." });
+  }
   const includesExcerpt = selected.includes("private_excerpt");
   if (includesExcerpt !== (preview.reviewedPrivateExcerpt !== undefined)) {
     context.addIssue({ code: "custom", path: ["reviewedPrivateExcerpt"], message: "The reviewed private excerpt must match its selected category." });
@@ -5382,12 +5408,17 @@ export const SupportBundlePreviewSchema = z.object({
 export const DiagnosticsPreviewSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: DiagnosticsPreviewRequestIdSchema,
+  eventSelectionRevision: DiagnosticsEventSelectionRevisionSchema,
+  selectedDiagnosticEventIds: z.array(DiagnosticsEventIdSchema).min(1).max(DIAGNOSTICS_EVENT_EXPORT_MAX_ITEMS),
   optionalCategories: z.array(DiagnosticsOptionalSupportCategorySchema).max(2).optional(),
   privateExcerpt: DiagnosticsPrivateExcerptTextSchema.optional()
 }).strict().superRefine((request, context) => {
   const selected = request.optionalCategories ?? [];
   if (new Set(selected).size !== selected.length) {
     context.addIssue({ code: "custom", path: ["optionalCategories"], message: "Optional support categories must be unique." });
+  }
+  if (new Set(request.selectedDiagnosticEventIds).size !== request.selectedDiagnosticEventIds.length) {
+    context.addIssue({ code: "custom", path: ["selectedDiagnosticEventIds"], message: "Selected diagnostic events must be unique." });
   }
   const includesExcerpt = selected.includes("private_excerpt");
   if (includesExcerpt !== (request.privateExcerpt !== undefined)) {
@@ -13878,6 +13909,10 @@ export type SettingsProfileImportApplyRequest = z.infer<typeof SettingsProfileIm
 export type SettingsProfileImportApplyResult = z.infer<typeof SettingsProfileImportApplyResultSchema>;
 export type DiagnosticsWorkflowRequestId = z.infer<typeof DiagnosticsWorkflowRequestIdSchema>;
 export type DiagnosticsScopeContextId = z.infer<typeof DiagnosticsScopeContextIdSchema>;
+export type DiagnosticsEventId = z.infer<typeof DiagnosticsEventIdSchema>;
+export type DiagnosticsEventSelectionRevision = z.infer<typeof DiagnosticsEventSelectionRevisionSchema>;
+export type DiagnosticEventSummary = z.infer<typeof DiagnosticEventSummarySchema>;
+export type DiagnosticsEventSelection = z.infer<typeof DiagnosticsEventSelectionSchema>;
 export type DiagnosticsSupportBundleJobSummary = z.infer<typeof DiagnosticsSupportBundleJobSummarySchema>;
 export type DiagnosticsWorkflowSummary = z.infer<typeof DiagnosticsWorkflowSummarySchema>;
 export type SupportBundleCategory = z.infer<typeof SupportBundleCategorySchema>;

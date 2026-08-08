@@ -440,6 +440,9 @@ Tests must verify:
   worker bounds, held-temp and POSIX-descriptor/Windows-digest binding, successor identity,
   and sender cancel; packaged smoke loads the worker. Exclusions and
   retention remain in `docs/DIAGNOSTICS_AND_OBSERVABILITY.md`.
+- The diagnostics selection matrix also covers the 1–32 selection bound over at most 64
+  available summaries, revision/CAS drift before durable export, pathless redaction, and
+  exact selection recovery after restart.
 
 ## 7. Submitted-Turn And High-Risk Authority Gates
 

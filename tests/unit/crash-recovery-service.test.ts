@@ -61,7 +61,19 @@ describe("crash recovery service", () => {
     const diagnostics = new DiagnosticsService(root, {
       crashRecoverySummary: () => recovery.summary(), crashRecoveryHistory: () => recovery.history()
     });
-    const payload = JSON.parse(diagnostics.createSupportBundlePayload(diagnostics.previewSupportBundle())) as {
+    diagnostics.recordEvent({ level: "info", code: "app.ready", message: "App ready." });
+    const selection = diagnostics.eventSelection();
+    const event = selection.events[0];
+    if (!event) throw new Error("Expected a selectable diagnostics event.");
+    const payload = JSON.parse(diagnostics.createSupportBundlePayload(diagnostics.previewSupportBundle({
+      apiVersion: 1,
+      requestId: "diagpreviewreq_crashrecovery000",
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      expectedRevision: 0,
+      activeVaultId: null,
+      eventSelectionRevision: selection.revision,
+      selectedDiagnosticEventIds: [event.eventId]
+    }))) as {
       diagnosticsHealth: { crashRecovery?: CrashRecoverySummary; crashRecoveryHistory?: CrashRecoverySummary[] };
     };
     expect(payload.diagnosticsHealth.crashRecovery).toMatchObject({ status: "recovered", jobsRecovered: 1 });

@@ -47,6 +47,21 @@ function eventStorageBytes(userDataPath: string): number {
   return eventFiles(userDataPath).reduce((total, filePath) => total + fs.statSync(filePath).size, 0);
 }
 
+function previewContext(service: DiagnosticsService, suffix: string) {
+  const selection = service.eventSelection();
+  const event = selection.events[0];
+  if (!event) throw new Error("Expected a selectable diagnostics event.");
+  return {
+    apiVersion: 1 as const,
+    requestId: `diagpreviewreq_${suffix.padEnd(16, "0")}`,
+    scopeContextId: `diagctx_${"a".repeat(48)}`,
+    expectedRevision: 3,
+    activeVaultId: null,
+    eventSelectionRevision: selection.revision,
+    selectedDiagnosticEventIds: [event.eventId]
+  };
+}
+
 afterEach(() => {
   for (const root of tempRoots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
@@ -222,7 +237,8 @@ describe("diagnostics service", () => {
 
   it("previews support bundle categories before export", () => {
     const service = new DiagnosticsService(makeTempRoot());
-    const preview = service.previewSupportBundle();
+    service.recordEvent({ level: "info", code: "app.ready", message: "App ready." });
+    const preview = service.previewSupportBundle(previewContext(service, "categories"));
 
     expect(preview.localOnly).toBe(true);
     expect(preview.selectedOptionalCategories).toEqual([]);
@@ -234,12 +250,9 @@ describe("diagnostics service", () => {
 
   it("includes an explicitly previewed provider aggregate without private provider identity", () => {
     const service = new DiagnosticsService(makeTempRoot());
+    service.recordEvent({ level: "info", code: "app.ready", message: "App ready." });
     const preview = service.previewSupportBundle({
-      apiVersion: 1,
-      requestId: "diagpreviewreq_providermetadata0",
-      scopeContextId: `diagctx_${"a".repeat(48)}`,
-      expectedRevision: 3,
-      activeVaultId: null,
+      ...previewContext(service, "providermetadata"),
       selectedOptionalCategories: ["provider_metadata"]
     });
     const payload = service.createSupportBundlePayload(preview, {
@@ -296,11 +309,16 @@ describe("diagnostics service", () => {
         sourceId: "src_01HSAFE"
       }
     });
+    service.recordEvent({
+      level: "warning",
+      code: "runtime.child_process_gone",
+      message: "A child process stopped unexpectedly."
+    });
 
     const persistedBeforeExport = eventFiles(userDataPath)
       .map((filePath) => fs.readFileSync(filePath, "utf8"))
       .join("");
-    const preview = service.previewSupportBundle();
+    const preview = service.previewSupportBundle(previewContext(service, "selected"));
     const outputPath = path.join(userDataPath, "support.json");
     const result = await service.exportSupportBundle(outputPath, preview);
     const exported = fs.readFileSync(outputPath, "utf8");
@@ -310,6 +328,7 @@ describe("diagnostics service", () => {
     expect(exported).toContain('"redactedSecretCount": 1');
     expect(exported).toContain('"redactedContentCount": 5');
     expect(exported).toContain('"redactedUnknownCount": 1');
+    expect(exported).not.toContain('"code": "runtime.child_process_gone"');
     expect(persistedBeforeExport).toContain('"message":"[REDACTED_CONTENT]"');
     expect(exported).toContain('"message": "[REDACTED_CONTENT]"');
     expect(persistedBeforeExport).not.toContain(opaqueTopLevelMessage);
@@ -351,11 +370,21 @@ describe("diagnostics service", () => {
         }
       }
     });
-    const preview = service.previewSupportBundle();
+    service.recordEvent({ level: "error", code: "provider.failure", message: "Provider failed." });
+    const preview = service.previewSupportBundle(previewContext(service, "workerfailure"));
 
     await expect(service.exportSupportBundle(path.join(userDataPath, "support.json"), preview)).rejects.toThrow();
     expect(readEvents(userDataPath).map(({ code }) => code)).not.toContain("diagnostics.exportSupportBundle");
     expect(fs.existsSync(path.join(userDataPath, "support.json"))).toBe(false);
+  });
+
+  it("fails closed when a selected diagnostics event changes before export", () => {
+    const service = new DiagnosticsService(makeTempRoot());
+    service.recordEvent({ level: "error", code: "provider.failure", message: "Provider failed." });
+    const preview = service.previewSupportBundle(previewContext(service, "stale"));
+    service.recordEvent({ level: "warning", code: "jobs.resume_failed", message: "Durable background job recovery failed." });
+
+    expect(() => service.createSupportBundlePayload(preview)).toThrow("Diagnostics event selection is stale.");
   });
 
   it("clears only owned event segments after the exact writer guard passes", () => {

@@ -43,6 +43,9 @@ function validContent(): string {
     preview: {
       previewId: "support_20260715000000",
       generatedAt: "2026-07-15T00:00:00.000Z",
+      eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+      selectedDiagnosticEventIds: [`diagevent_${"b".repeat(32)}`],
+      selectedOptionalCategories: [],
       includedCategories: [
         { id: "app_runtime", label: "App version, platform, and architecture", included: true, reason: "Needed to diagnose platform-specific failures." },
         { id: "diagnostics_health", label: "Diagnostics health summary", included: true, reason: "Redacted operational status only." },
@@ -51,7 +54,8 @@ function validContent(): string {
       excludedCategories: [
         { id: "secrets", label: "API keys, tokens, cookies, and credentials", included: false, reason: "Secrets are never exported by default." },
         { id: "content", label: "Full notes, source files, conversations, memory, prompts, and model responses", included: false, reason: "Support bundles must not duplicate private knowledge content by default." },
-        { id: "binaries", label: "Local models, parser binaries, packages, and source artifacts", included: false, reason: "Large binaries and artifacts are excluded." }
+        { id: "binaries", label: "Local models, parser binaries, packages, and source artifacts", included: false, reason: "Large binaries and artifacts are excluded." },
+        { id: "provider_metadata", label: "Model-provider metadata", included: false, reason: "Provider metadata is included only after explicit preview selection." }
       ],
       privacyWarnings: [
         "The bundle is created locally and is not uploaded automatically.",
@@ -67,7 +71,13 @@ function validContent(): string {
       recentErrorCount: 0,
       checks: [{ id: "diagnostics_store", status: "ok", message: "Local diagnostics store is writable." }]
     },
-    recentEvents: []
+    recentEvents: [{
+      eventId: `diagevent_${"b".repeat(32)}`,
+      recordedAt: "2026-07-15T00:00:00.000Z",
+      level: "info",
+      code: "diagnostics.safe",
+      message: "[REDACTED_CONTENT]"
+    }]
   })}\n`;
 }
 

@@ -220,6 +220,11 @@ blocked by active export, and removes only Pige-owned machine diagnostics artifa
 Unsafe bodies, symlink/root/destination drift, redaction failure or changed payload fail closed.
 Final syscall windows, optional content and broader platform/path evidence remain open.
 
+The event-selection surface may select one to 32 items from at most 64 available
+renderer-safe redacted summaries. Main binds the selected IDs to an event-selection
+revision and revalidates that revision immediately before preview/export; the selected
+set remains in the durable export Job for crash/restart adoption.
+
 ## 10. Redaction Rules
 
 Redaction runs before storage when possible and always before export.

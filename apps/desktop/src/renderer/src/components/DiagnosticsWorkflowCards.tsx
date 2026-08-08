@@ -99,6 +99,7 @@ export function PrivateExcerptSupportOption(props: {
 export function SupportBundlePreviewTrigger(props: {
   readonly disabled: boolean;
   readonly onPreview: () => void;
+  readonly triggerRef?: React.Ref<HTMLButtonElement>;
   readonly t: Translate;
 }): React.JSX.Element {
   return <div className="settings-row tall">
@@ -106,7 +107,7 @@ export function SupportBundlePreviewTrigger(props: {
       <strong>{props.t("system.supportBundle")}</strong>
       <span>{props.t("system.supportBundleDescription")}</span>
     </div>
-    <button className="settings-button" type="button" disabled={props.disabled} onClick={props.onPreview}>
+    <button ref={props.triggerRef} className="settings-button" type="button" disabled={props.disabled} onClick={props.onPreview}>
       {props.t("system.previewSupport")}
     </button>
   </div>;
@@ -117,6 +118,7 @@ export function SupportBundlePreviewCard(props: {
   readonly busy: boolean;
   readonly exportBlocked: boolean;
   readonly onExport: () => void;
+  readonly exportTriggerRef?: React.Ref<HTMLButtonElement>;
   readonly t: Translate;
 }): React.JSX.Element {
   const included = props.preview.includedCategories.map((category) => CATEGORY_PROJECTIONS[category.id]);
@@ -146,7 +148,7 @@ export function SupportBundlePreviewCard(props: {
           ? "support.privateExcerptRedacted" : "support.privateExcerptUnchanged")}</span>
       </section> : null}
       {!complete ? <p className="error" role="alert">{props.t("support.previewUnsafe")}</p> : null}
-      <div className="settings-inline-actions"><button className="settings-button primary" type="button" disabled={!complete || props.busy || props.exportBlocked} onClick={props.onExport}>{props.t("maintenance.exportSupport")}</button></div>
+      <div className="settings-inline-actions"><button ref={props.exportTriggerRef} className="settings-button primary" type="button" disabled={!complete || props.busy || props.exportBlocked} onClick={props.onExport}>{props.t("maintenance.exportSupport")}</button></div>
     </div>
   );
 }

@@ -33,6 +33,8 @@ function safeBundle(event?: Record<string, unknown>): string {
     preview: {
       previewId: "support_20260715000000",
       generatedAt: "2026-07-15T00:00:00.000Z",
+      eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+      selectedDiagnosticEventIds: [`diagevent_${"b".repeat(32)}`],
       selectedOptionalCategories: [],
       includedCategories: [
         { id: "app_runtime", label: "App version, platform, and architecture", included: true, reason: "Needed to diagnose platform-specific failures." },
@@ -59,7 +61,13 @@ function safeBundle(event?: Record<string, unknown>): string {
       recentErrorCount: 0,
       checks: [{ id: "diagnostics_store", status: "ok", message: "Local diagnostics store is writable." }]
     },
-    recentEvents: event ? [event] : []
+    recentEvents: [event ?? {
+      eventId: `diagevent_${"b".repeat(32)}`,
+      recordedAt: "2026-07-15T00:00:00.000Z",
+      level: "info",
+      code: "diagnostics.safe",
+      message: "[REDACTED_CONTENT]"
+    }]
   }, null, 2)}\n`;
 }
 
@@ -105,6 +113,7 @@ describe("diagnostics export core", () => {
     const root = makeRoot();
     const outputPath = path.join(root, "support.json");
     const content = safeBundle({
+      eventId: `diagevent_${"b".repeat(32)}`,
       recordedAt: "2026-07-15T00:00:00.000Z",
       level: "info",
       code: "diagnostics.safe",
@@ -121,9 +130,9 @@ describe("diagnostics export core", () => {
   });
 
   it.each([
-    ["raw secret", safeBundle({ recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", apiKey: "opaque-value-123456" })],
-    ["absolute path", safeBundle({ recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", detail: "/private/tmp/private-note.md" })],
-    ["opaque nested body", safeBundle({ recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", payload: "private note body" })],
+    ["raw secret", safeBundle({ eventId: `diagevent_${"b".repeat(32)}`, recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", apiKey: "opaque-value-123456" })],
+    ["absolute path", safeBundle({ eventId: `diagevent_${"b".repeat(32)}`, recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", detail: "/private/tmp/private-note.md" })],
+    ["opaque nested body", safeBundle({ eventId: `diagevent_${"b".repeat(32)}`, recordedAt: "2026-07-15T00:00:00.000Z", level: "error", code: "diagnostics.safe", message: "[REDACTED_CONTENT]", payload: "private note body" })],
     ["invalid envelope", `${JSON.stringify({ schemaVersion: 2, localOnly: true })}\n`],
     ["control byte", safeBundle({ detail: "unsafe value" }).replace("unsafe value", "unsafe\u0000value")]
   ])("fails closed for %s", (_label, content) => {

@@ -1556,6 +1556,31 @@ describe("desktop shell build contract", () => {
     expect(rendererSource).toContain("window.pige.diagnostics.cancelSupportBundleExport({");
   });
 
+  it("routes only a bounded redacted diagnostics event selection through the existing export IPC", () => {
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
+    const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
+    const diagnosticsIpcSource = fs.readFileSync(
+      path.resolve("apps/desktop/src/main/register-diagnostics-ipc.ts"), "utf8"
+    );
+    const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
+    const rendererSource = [
+      "apps/desktop/src/renderer/src/App.tsx",
+      "apps/desktop/src/renderer/src/components/DiagnosticsEventSelection.tsx"
+    ].map((file) => fs.readFileSync(path.resolve(file), "utf8")).join("\n");
+
+    expect(schemasSource).toContain("DiagnosticsEventSelectionSchema");
+    expect(schemasSource).toContain("eventSelectionRevision: DiagnosticsEventSelectionRevisionSchema");
+    expect(schemasSource).toContain("selectedDiagnosticEventIds: z.array(DiagnosticsEventIdSchema).min(1).max(DIAGNOSTICS_EVENT_EXPORT_MAX_ITEMS)");
+    expect(contractsSource).toContain("DiagnosticsEventSelection,");
+    expect(diagnosticsIpcSource).toContain("DiagnosticsPreviewSupportBundleRequestSchema.parse(input)");
+    expect(mainSource).toContain("preview: (request) => getDiagnosticsLifecycleService().preview(request)");
+    expect(preloadSource).toContain("DiagnosticsPreviewSupportBundleRequestSchema.parse(request)");
+    expect(rendererSource).toContain("eventSelectionRevision: selection.revision");
+    expect(rendererSource).toContain("selectedDiagnosticEventIds: [...selectedEventIds]");
+    expect(rendererSource).not.toContain("event.message");
+  });
+
   it("binds restore apply to the exact preview token across renderer, preload, and main", () => {
     const contractsSource = fs.readFileSync(path.resolve("packages/contracts/src/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");

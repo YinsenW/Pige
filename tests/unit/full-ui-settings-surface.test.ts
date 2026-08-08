@@ -4274,12 +4274,24 @@ describe("full UI Settings surface", () => {
       scopeContextId: `diagctx_${"a".repeat(48)}`,
       activeVaultId: "vault_20260730_diagnostics",
       localOnly: true as const,
-      ownedArtifactCount: 0
+      ownedArtifactCount: 0,
+      eventSelection: {
+        revision: `diagevents_${"c".repeat(64)}`,
+        events: [{
+          eventId: `diagevent_${"d".repeat(32)}`,
+          recordedAt: "2026-07-16T00:00:00.000Z",
+          level: "warning" as const,
+          code: "jobs.resume_failed",
+          redactedDetailCount: 1
+        }]
+      }
     };
     let echoOptionalCategories = true;
     const previewSupportBundle = vi.fn(async (request: {
       apiVersion: 1;
       requestId: string;
+      eventSelectionRevision: string;
+      selectedDiagnosticEventIds: readonly string[];
       optionalCategories?: readonly ("provider_metadata" | "private_excerpt")[];
       privateExcerpt?: string;
     }) => ({
@@ -4291,6 +4303,11 @@ describe("full UI Settings surface", () => {
       scopeContextId: workflow.scopeContextId,
       expectedRevision: workflow.revision,
       activeVaultId: workflow.activeVaultId,
+      eventSelectionRevision: request.eventSelectionRevision,
+      selectedDiagnosticEventIds: request.selectedDiagnosticEventIds,
+      selectedDiagnosticEvents: request.selectedDiagnosticEventIds.map((eventId) => ({
+        ...workflow.eventSelection.events.find((event) => event.eventId === eventId)!
+      })),
       selectedOptionalCategories: echoOptionalCategories ? request.optionalCategories ?? [] : [],
       ...(request.optionalCategories?.includes("private_excerpt") ? {
         reviewedPrivateExcerpt: { text: "Contact [REDACTED_EMAIL]", redactionApplied: true }
@@ -4348,6 +4365,15 @@ describe("full UI Settings surface", () => {
     const privateExcerptToggle = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include a private excerpt"]'));
     expect(providerMetadata.checked).toBe(false);
     expect(privateExcerptToggle.checked).toBe(false);
+    expect(buttonNamed(panel, "Preview and export…").disabled).toBe(true);
+    const eventSelection = requireElement(panel.querySelector<HTMLElement>("[data-diagnostics-event-selection]"));
+    const diagnosticEvent = requireElement(eventSelection.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    expect(eventSelection.textContent).not.toContain("private body");
+    await act(async () => {
+      diagnosticEvent.click();
+      await settle(dom);
+    });
+    expect(diagnosticEvent.checked).toBe(true);
 
     await act(async () => {
       providerMetadata.click();
@@ -4378,6 +4404,8 @@ describe("full UI Settings surface", () => {
     });
     expect(previewSupportBundle).toHaveBeenCalledOnce();
     expect(previewSupportBundle).toHaveBeenCalledWith(expect.objectContaining({
+      eventSelectionRevision: workflow.eventSelection.revision,
+      selectedDiagnosticEventIds: [workflow.eventSelection.events[0]!.eventId],
       optionalCategories: ["provider_metadata", "private_excerpt"],
       privateExcerpt: "Contact alice@example.test"
     }));
@@ -4410,6 +4438,7 @@ describe("full UI Settings surface", () => {
     });
     expect(panel.textContent).toContain("Pige could not prepare a safe support bundle preview.");
     expect(panel.textContent).not.toContain("Preview ready");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(panel, "Preview and export…"));
 
     await act(async () => root.unmount());
     dom.window.close();
