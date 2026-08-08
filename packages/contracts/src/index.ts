@@ -153,6 +153,14 @@ import type {
   CollectionOpenCitationResult,
   CollectionOpenRequest,
   CollectionOpenResult,
+  CollectionAnalyticalSnapshotListRequest,
+  CollectionAnalyticalSnapshotListResult,
+  CollectionAnalyticalSnapshotCreateRequest,
+  CollectionAnalyticalSnapshotCreateResult,
+  CollectionAnalyticalSnapshotOpenRequest,
+  CollectionAnalyticalSnapshotOpenResult,
+  CollectionAnalyticalSnapshotCitationRequest,
+  CollectionAnalyticalSnapshotCitationResult,
   CollectionRevealRequest,
   CollectionRevealResult,
   CollectionAppendDefaultRowRequest,
@@ -2675,8 +2683,20 @@ export interface PigeDesktopApi {
   };
   readonly collections: {
     readonly list: (request: CollectionListRequest) => Promise<CollectionListResult>;
-    readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
-    readonly listRevisionHistory: (
+  readonly open: (request: CollectionOpenRequest) => Promise<CollectionOpenResult>;
+  readonly listAnalyticalSnapshots: (
+    request: CollectionAnalyticalSnapshotListRequest
+  ) => Promise<CollectionAnalyticalSnapshotListResult>;
+  readonly createAnalyticalSnapshot: (
+    request: CollectionAnalyticalSnapshotCreateRequest
+  ) => Promise<CollectionAnalyticalSnapshotCreateResult>;
+  readonly openAnalyticalSnapshot: (
+    request: CollectionAnalyticalSnapshotOpenRequest
+  ) => Promise<CollectionAnalyticalSnapshotOpenResult>;
+  readonly openAnalyticalSnapshotCitation: (
+    request: CollectionAnalyticalSnapshotCitationRequest
+  ) => Promise<CollectionAnalyticalSnapshotCitationResult>;
+  readonly listRevisionHistory: (
       request: CollectionListRevisionHistoryRequest
     ) => Promise<CollectionListRevisionHistoryResult>;
     readonly openRevisionHistory: (

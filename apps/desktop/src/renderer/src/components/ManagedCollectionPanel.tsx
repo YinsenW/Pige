@@ -35,6 +35,7 @@ import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormula
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog"; import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
 import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableAddAction } from "./ManagedCollectionTableAddAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction"; import { ManagedCollectionTableTrashAction } from "./ManagedCollectionTableTrashAction"; import { ManagedCollectionRevisionHistory } from "./ManagedCollectionRevisionHistory";
 import { ManagedCollectionRelatedRecordPanel } from "./ManagedCollectionRelatedRecords";
+import { AnalyticalSnapshotPanel } from "./AnalyticalSnapshotPanel";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -721,6 +722,12 @@ export function ManagedCollectionPanel(props: {
           ) : null}
         </div>
       </header>
+      <AnalyticalSnapshotPanel
+        activeVaultId={props.activeVaultId}
+        snapshot={props.snapshot}
+        blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
+        t={props.t}
+      />
       <ManagedCollectionRevisionHistory activeVaultId={props.activeVaultId} snapshot={props.snapshot} blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null} onAdoptSnapshot={props.onAdoptSnapshot} t={props.t} />
       <ManagedCollectionViewControls activeVaultId={props.activeVaultId} snapshot={props.snapshot}
         blocked={busy || columnActionsBusy || edit !== null || columnDraft !== null}
