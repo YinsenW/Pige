@@ -94,6 +94,7 @@ import {
   KnowledgeActivityListResultSchema,
   AppearanceSettingsSummarySchema,
   DiagnosticsClearLocalResultSchema,
+  DiagnosticsRecentErrorsResultSchema,
   AppearanceThemeMutationResultSchema,
   KnowledgeLanguageMutationResultSchema,
   HighRiskConfirmationPendingResultSchema,
@@ -4151,6 +4152,18 @@ registerDiagnosticsIpc({
     return !!window && mainWindows.has(window);
   },
   health: () => getDiagnosticsService().health(),
+  recentErrors: (request) => {
+    const diagnostics = getDiagnosticsService();
+    const health = diagnostics.health();
+    return DiagnosticsRecentErrorsResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      checkedAt: health.checkedAt,
+      localOnly: true,
+      eventSelectionRevision: diagnostics.eventSelection().revision,
+      errors: diagnostics.recentErrors()
+    });
+  },
   workflowSummary: () => getDiagnosticsLifecycleService().summary(),
   preview: (request) => getDiagnosticsLifecycleService().preview(request),
   chooseDestination: async (sender) => {

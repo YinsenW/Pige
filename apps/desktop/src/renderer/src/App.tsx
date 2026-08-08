@@ -70,6 +70,7 @@ import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel"
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
 import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
+import { DiagnosticsRecentErrorsCard } from "./components/DiagnosticsRecentErrorsCard";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -127,6 +128,7 @@ import type {
   DiagnosticsClearLocalResult,
   DictationLanguagePreference,
   DiagnosticsHealth,
+  DiagnosticsRecentErrorsResult,
   GeneratedKnowledgeLanguage,
   HomeAgentModelUsage,
   HighRiskConfirmationPendingResult,
@@ -8248,6 +8250,9 @@ export function SystemSettingsPanel(props: {
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
+  const [recentErrors, setRecentErrors] = useState<DiagnosticsRecentErrorsResult | null>(null);
+  const [recentErrorsLoadFailed, setRecentErrorsLoadFailed] = useState(false);
+  const [recommendedEventIds, setRecommendedEventIds] = useState<readonly string[] | undefined>();
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
@@ -8308,12 +8313,30 @@ export function SystemSettingsPanel(props: {
     if (props.surface !== "diagnostics") return;
     let active = true;
     const refresh = async (): Promise<void> => {
-      try {
-        const summary = await window.pige.diagnostics.workflowSummary();
-        if (!active) return;
-        setDiagnosticsWorkflow((current) => !current || summary.revision >= current.revision ? summary : current);
-      } catch {
-        if (active) setDiagnosticsWorkflow(null);
+      const [summaryResult, errorsResult] = await Promise.allSettled([
+        Promise.resolve().then(() => window.pige.diagnostics.workflowSummary()),
+        Promise.resolve().then(() => {
+          if (typeof window.pige.diagnostics.recentErrors !== "function") {
+            throw new Error("diagnostics_recent_errors_unavailable");
+          }
+          return window.pige.diagnostics.recentErrors({
+            apiVersion: 1,
+            requestId: `diagrecentreq_${crypto.randomUUID().replaceAll("-", "")}`
+          });
+        })
+      ]);
+      if (!active) return;
+      if (summaryResult.status === "fulfilled") {
+        setDiagnosticsWorkflow((current) => !current || summaryResult.value.revision >= current.revision ? summaryResult.value : current);
+      } else {
+        setDiagnosticsWorkflow(null);
+      }
+      if (errorsResult.status === "fulfilled") {
+        setRecentErrors(errorsResult.value);
+        setRecentErrorsLoadFailed(false);
+      } else {
+        setRecentErrors(null);
+        setRecentErrorsLoadFailed(true);
       }
     };
     void refresh();
@@ -8758,8 +8781,15 @@ export function SystemSettingsPanel(props: {
             onRepairSources={props.onRepairRecoverySources}
             t={props.t}
           />
+          <DiagnosticsRecentErrorsCard
+            result={recentErrors}
+            failed={recentErrorsLoadFailed}
+            onPrepareSupport={() => setRecommendedEventIds(recentErrors?.errors.map((error) => error.eventId))}
+            t={props.t}
+          />
           <DiagnosticsEventExportComposer
             workflow={diagnosticsWorkflow}
+            recommendedEventIds={recommendedEventIds}
             disabled={Boolean(diagnosticsBusy)}
             onPreviewReady={props.onSupportBundlePreviewChange}
             previewRequestRef={previewSupportBundleRef}

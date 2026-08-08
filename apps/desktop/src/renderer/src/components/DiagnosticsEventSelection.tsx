@@ -57,6 +57,7 @@ export function DiagnosticsEventSelection(props: DiagnosticsEventSelectionProps)
 
 export function DiagnosticsEventExportComposer(props: {
   readonly workflow: DiagnosticsWorkflowSummary | null;
+  readonly recommendedEventIds: readonly string[] | undefined;
   readonly disabled: boolean;
   readonly onPreviewReady: (preview: SupportBundlePreview | null) => void;
   readonly previewRequestRef?: { current: (() => Promise<void>) | null };
@@ -79,6 +80,15 @@ export function DiagnosticsEventExportComposer(props: {
     setRestorePreviewFocus(false);
     previewTriggerRef.current?.focus();
   }, [previewBusy, restorePreviewFocus]);
+
+  useEffect(() => {
+    if (!props.recommendedEventIds || !selection) return;
+    const available = new Set(selection.events.map((event) => event.eventId));
+    const next = props.recommendedEventIds.filter((eventId) => available.has(eventId)).slice(0, 32);
+    setSelectedEventIds(next);
+    props.onPreviewReady(null);
+    setNotice(null);
+  }, [props.recommendedEventIds, selection, props.onPreviewReady]);
 
   const invalidatePreview = (): void => {
     props.onPreviewReady(null);

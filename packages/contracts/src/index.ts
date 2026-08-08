@@ -101,6 +101,9 @@ import type {
   DiagnosticsEventId,
   DiagnosticsEventSelection,
   DiagnosticsEventSelectionRevision,
+  DiagnosticsRecentError,
+  DiagnosticsRecentErrorsRequest,
+  DiagnosticsRecentErrorsResult,
   DiagnosticsExportSupportBundleRequest,
   DiagnosticsExportSupportBundleResult,
   DiagnosticEventSummary,
@@ -699,6 +702,9 @@ export type {
   DiagnosticsEventId,
   DiagnosticsEventSelection,
   DiagnosticsEventSelectionRevision,
+  DiagnosticsRecentError,
+  DiagnosticsRecentErrorsRequest,
+  DiagnosticsRecentErrorsResult,
   DiagnosticsExportSupportBundleRequest,
   DiagnosticsExportSupportBundleResult,
   DiagnosticEventSummary,
@@ -3050,6 +3056,9 @@ export interface PigeDesktopApi {
   };
   readonly diagnostics: {
     readonly health: () => Promise<DiagnosticsHealth>;
+    readonly recentErrors: (
+      request: DiagnosticsRecentErrorsRequest
+    ) => Promise<DiagnosticsRecentErrorsResult>;
     readonly workflowSummary: () => Promise<DiagnosticsWorkflowSummary>;
     readonly clearLocalDiagnostics: (
       request: DiagnosticsClearLocalRequest

@@ -6334,6 +6334,67 @@ dd {
   background: var(--surface-elevated);
 }
 
+.diagnostics-recent-errors-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.diagnostics-recent-error {
+  border: .5px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+
+.diagnostics-recent-error summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style-position: inside;
+  padding: 8px 9px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.diagnostics-recent-error summary code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics-recent-error-detail {
+  display: grid;
+  gap: 6px;
+  border-top: .5px solid var(--border-default);
+  padding: 8px 9px 9px 27px;
+}
+
+.diagnostics-recent-error-detail dl {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+}
+
+.diagnostics-recent-error-detail dl div {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.diagnostics-recent-error-detail dt {
+  color: var(--text-tertiary);
+}
+
+.diagnostics-recent-error-detail dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
 .support-preview-section {
   display: grid;
   gap: 6px;

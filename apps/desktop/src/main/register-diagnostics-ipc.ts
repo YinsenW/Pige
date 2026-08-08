@@ -5,6 +5,7 @@ import {
   DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_RECENT_ERRORS_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
@@ -14,6 +15,8 @@ import {
   DiagnosticsPreviewSupportBundleRequestSchema,
   DiagnosticsRevealSupportBundleRequestSchema,
   DiagnosticsRevealSupportBundleResultSchema,
+  DiagnosticsRecentErrorsRequestSchema,
+  DiagnosticsRecentErrorsResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
   DiagnosticsWorkflowSummarySchema,
@@ -25,6 +28,8 @@ import {
   type DiagnosticsPreviewSupportBundleRequest,
   type DiagnosticsRevealSupportBundleRequest,
   type DiagnosticsRevealSupportBundleResult,
+  type DiagnosticsRecentErrorsRequest,
+  type DiagnosticsRecentErrorsResult,
   type DiagnosticsSupportBundleMutationRequest,
   type DiagnosticsSupportBundleMutationResult,
   type DiagnosticsWorkflowSummary,
@@ -38,6 +43,7 @@ export interface RegisterDiagnosticsIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
   readonly isTrustedSender: (sender: WebContents) => boolean;
   readonly health: () => Awaitable<DiagnosticsHealth>;
+  readonly recentErrors: (request: DiagnosticsRecentErrorsRequest) => Awaitable<DiagnosticsRecentErrorsResult>;
   readonly workflowSummary: () => Awaitable<DiagnosticsWorkflowSummary>;
   readonly preview: (request: DiagnosticsPreviewSupportBundleRequest) => Awaitable<SupportBundlePreview>;
   readonly chooseDestination: (sender: WebContents) => Awaitable<string | undefined>;
@@ -53,6 +59,11 @@ export function registerDiagnosticsIpc(options: RegisterDiagnosticsIpcOptions): 
   options.ipcMain.handle("diagnostics.health", async (event) => {
     if (!options.isTrustedSender(event.sender)) throw new Error("Untrusted diagnostics sender.");
     return DiagnosticsHealthSchema.parse(await options.health());
+  });
+  options.ipcMain.handle(DIAGNOSTICS_RECENT_ERRORS_CHANNEL, async (event, input: unknown) => {
+    const request = DiagnosticsRecentErrorsRequestSchema.parse(input);
+    if (!options.isTrustedSender(event.sender)) throw new Error("Untrusted diagnostics sender.");
+    return DiagnosticsRecentErrorsResultSchema.parse(await options.recentErrors(request));
   });
   options.ipcMain.handle(DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL, async (event) => {
     if (!options.isTrustedSender(event.sender)) throw new Error("Untrusted diagnostics sender.");

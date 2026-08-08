@@ -52,6 +52,8 @@ import type {
   BackupRestoreStatus,
   CreateVaultRequest,
   DiagnosticsHealth,
+  DiagnosticsRecentErrorsRequest,
+  DiagnosticsRecentErrorsResult,
   DiagnosticsClearLocalRequest,
   DiagnosticsClearLocalResult,
   DiagnosticsPreviewSupportBundleRequest,
@@ -517,9 +519,12 @@ import {
   DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_RECENT_ERRORS_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
   DiagnosticsHealthSchema,
+  DiagnosticsRecentErrorsRequestSchema,
+  DiagnosticsRecentErrorsResultSchema,
   DiagnosticsExportSupportBundleRequestSchema,
   DiagnosticsExportSupportBundleResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
@@ -3480,6 +3485,13 @@ const api: PigeDesktopApi = {
   diagnostics: {
     health: async (): Promise<DiagnosticsHealth> =>
       DiagnosticsHealthSchema.parse(await ipcRenderer.invoke("diagnostics.health")),
+    recentErrors: async (request: DiagnosticsRecentErrorsRequest): Promise<DiagnosticsRecentErrorsResult> => {
+      const parsedRequest = DiagnosticsRecentErrorsRequestSchema.parse(request);
+      return DiagnosticsRecentErrorsResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_RECENT_ERRORS_CHANNEL,
+        parsedRequest
+      ));
+    },
     workflowSummary: async (): Promise<DiagnosticsWorkflowSummary> =>
       DiagnosticsWorkflowSummarySchema.parse(await ipcRenderer.invoke(DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL)),
     clearLocalDiagnostics: async (
