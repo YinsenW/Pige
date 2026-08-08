@@ -46,6 +46,10 @@ export function ReaderNoteMergeDialog(props: {
   ownerIdentityRef.current = props.ownerIdentity;
 
   useEffect(() => {
+    requestActiveRef.current = false;
+    setTargets([]);
+    setSelectedPageId("");
+    setState("loading");
     const sequence = ++sequenceRef.current;
     const ownerIdentity = props.ownerIdentity;
     void props.onLoadTargets().then((loaded) => {
@@ -59,7 +63,7 @@ export function ReaderNoteMergeDialog(props: {
       setState("failed");
       window.requestAnimationFrame(() => cancelRef.current?.focus({ preventScroll: true }));
     });
-    return () => { sequenceRef.current += 1; };
+    return () => { sequenceRef.current += 1; requestActiveRef.current = false; };
   }, [props.ownerIdentity]);
 
   const cancel = (): void => {
