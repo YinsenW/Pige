@@ -1025,22 +1025,25 @@ describe("ManagedCollectionPanel", () => {
     const initial = withRelationColumn(source, relationAddRequest(source), "row_relationtarget01", "Acme", source.revisionId);
     const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
     const requests: CollectionOpenRelatedRecordsRequest[] = [];
+    let resolveReady!: (result: CollectionOpenRelatedRecordsResult) => void;
+    const pendingReady = new Promise<CollectionOpenRelatedRecordsResult>((resolve) => { resolveReady = resolve; });
     await act(async () => {
       root.render(createElement(RelationCollectionHarness, {
         initialSnapshot: initial,
         onOpenRelatedRecords: async (request) => {
           requests.push(request);
           return requests.length === 1
-            ? {
-                ...relatedRecordIdentity(request),
-                status: "ready",
-                targetTableId: target.tableId,
-                targetRowId: "row_relationtarget01",
-                snapshot: target
-              } satisfies CollectionOpenRelatedRecordsResult
-            : {
+            ? pendingReady
+            : requests.length === 2
+              ? {
                 ...relatedRecordIdentity(request),
                 status: "failed"
+                } satisfies CollectionOpenRelatedRecordsResult
+              : {
+                ...relatedRecordIdentity(request),
+                status: "empty",
+                targetTableId: target.tableId,
+                snapshot: target
               } satisfies CollectionOpenRelatedRecordsResult;
         }
       }));
@@ -1050,6 +1053,24 @@ describe("ManagedCollectionPanel", () => {
     const openTrigger = buttonNamed(container, "Open related record");
     await click(dom, openTrigger);
     expect(requests).toHaveLength(1);
+    const loadingPanel = requireElement(container.querySelector<HTMLElement>(".managed-collection-related-record"));
+    expect(loadingPanel.getAttribute("data-related-state")).toBe("loading");
+    expect(loadingPanel.getAttribute("aria-busy")).toBe("true");
+    expect(loadingPanel.getAttribute("aria-labelledby")).toBe("managed-collection-related-record-title");
+    expect(loadingPanel.querySelector('[role="status"]')?.textContent).toContain("Opening");
+    expect(dom.window.document.activeElement).toBe(loadingPanel);
+    await click(dom, openTrigger);
+    expect(requests).toHaveLength(1);
+    await act(async () => {
+      resolveReady({
+        ...relatedRecordIdentity(requests[0]),
+        status: "ready",
+        targetTableId: target.tableId,
+        targetRowId: "row_relationtarget01",
+        snapshot: target
+      } satisfies CollectionOpenRelatedRecordsResult);
+      await settle(dom);
+    });
     expect(requests[0]).toMatchObject({
       activeVaultId: "vault_20260727_collection01",
       datasetId: initial.datasetId,
@@ -1068,10 +1089,17 @@ describe("ManagedCollectionPanel", () => {
     expect(container.querySelector(".managed-collection-related-record")).toBeNull();
     expect(container.textContent).toContain("Customers");
     expect(dom.window.document.activeElement).toBe(openTrigger);
-    await click(dom, openTrigger);
+    await click(dom, buttonNamed(container, "Open related record"));
     expect(requests).toHaveLength(2);
+    expect(container.querySelector<HTMLElement>(".managed-collection-related-record")?.getAttribute("data-related-state")).toBe("failed");
     expect(container.textContent).toContain("Pige could not open the related record.");
-    expect(dom.window.document.activeElement).toBe(openTrigger);
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Open related record"));
+    await click(dom, buttonNamed(container, "Back"));
+    await click(dom, buttonNamed(container, "Open related record"));
+    expect(requests).toHaveLength(3);
+    expect(container.querySelector<HTMLElement>(".managed-collection-related-record")?.getAttribute("data-related-state")).toBe("empty");
+    expect(container.textContent).toContain(t("collection.relatedEmpty"));
+    expect(dom.window.document.activeElement).toBe(container.querySelector(".managed-collection-related-record"));
     await act(async () => root.unmount());
     dom.window.close();
   });

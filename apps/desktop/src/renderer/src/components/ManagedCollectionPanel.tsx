@@ -86,38 +86,52 @@ export function ManagedCollectionCitationPanel(props: CitationPanelProps): React
 type RelatedRecordReady = Extract<CollectionOpenRelatedRecordsResult, { readonly status: "ready" }>;
 
 export function ManagedCollectionRelatedRecordPanel(props: {
-  readonly result: CollectionOpenRelatedRecordsResult;
+  readonly result: CollectionOpenRelatedRecordsResult | null;
+  readonly loading?: boolean;
   readonly onClose: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const panelRef = useRef<HTMLElement | null>(null);
-  const ready = props.result.status === "ready" ? props.result : undefined;
-  const snapshot = ready?.snapshot ?? (props.result.status === "empty" ? props.result.snapshot : undefined);
-  const statusMessage = props.result.status === "stale"
+  const ready = props.result?.status === "ready" ? props.result : undefined;
+  const snapshot = ready?.snapshot ?? (props.result?.status === "empty" ? props.result.snapshot : undefined);
+  const statusMessage = props.loading
+    ? props.t("collection.openingRelatedRecord")
+    : props.result?.status === "stale"
     ? props.t("collection.relatedStale")
-    : props.result.status === "not_found" || props.result.status === "ineligible"
+    : props.result?.status === "not_found" || props.result?.status === "ineligible"
       ? props.t("collection.relatedUnavailable")
-      : props.result.status === "failed"
+      : props.result?.status === "failed"
         ? props.t("collection.relatedFailed")
-        : props.result.status === "empty"
+        : props.result?.status === "empty"
           ? props.t("collection.relatedEmpty")
           : undefined;
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
-    const target = panel.querySelector<HTMLElement>('[data-related-target="true"]');
+    const target = props.loading ? null : panel.querySelector<HTMLElement>('[data-related-target="true"]');
     (target ?? panel).focus({ preventScroll: true });
-  }, [props.result]);
+  }, [props.loading, props.result]);
+  const state = props.loading
+    ? "loading"
+    : props.result?.status ?? "unknown";
   return (
-    <section ref={panelRef} className="settings-card settings-row tall managed-collection-related-record" aria-live="polite" aria-label={props.t("collection.relatedRecords")} tabIndex={-1}>
+    <section
+      ref={panelRef}
+      className="settings-card settings-row tall managed-collection-related-record"
+      aria-labelledby="managed-collection-related-record-title"
+      aria-busy={props.loading || undefined}
+      data-related-state={state}
+      role="region"
+      tabIndex={-1}
+    >
       <header className="dataset-answer-header">
         <div>
           <p className="retrieval-eyebrow">{props.t("collection.relatedRecords")}</p>
-          <h2>{snapshot?.tableName ?? props.t("collection.relatedRecords")}</h2>
+          <h2 id="managed-collection-related-record-title">{snapshot?.tableName ?? props.t("collection.relatedRecords")}</h2>
         </div>
-        <button type="button" className="ghost back-button" onClick={props.onClose}>{props.t("collection.back")}</button>
+        <button type="button" className="ghost back-button" disabled={props.loading} onClick={props.onClose}>{props.t("collection.back")}</button>
       </header>
-      {statusMessage ? <p className={props.result.status === "empty" ? "muted" : "settings-inline-status error"} role="status">{statusMessage}</p> : null}
+      {statusMessage ? <p className={props.result?.status === "empty" || props.loading ? "muted" : "settings-inline-status error"} role="status" aria-live="polite">{statusMessage}</p> : null}
       {snapshot && ready ? <RelatedRecordTable ready={ready} t={props.t} /> : null}
     </section>
   );
@@ -1078,7 +1092,7 @@ export function ManagedCollectionPanel(props: {
           </tbody>
         </table>
       </div>
-      {relatedRecordResult ? <ManagedCollectionRelatedRecordPanel result={relatedRecordResult} onClose={closeRelatedRecords} t={props.t} /> : null}
+      {relatedRecordBusy || relatedRecordResult ? <ManagedCollectionRelatedRecordPanel result={relatedRecordResult} loading={relatedRecordBusy} onClose={closeRelatedRecords} t={props.t} /> : null}
       {visibleRows.length === 0 ? <p className="muted">{props.t("collection.empty")}</p> : null}
       {rowsLoadFailed ? <p className="muted retrieval-warning" role="status">{props.t("collection.rowsLoadFailed")}</p> : null}
       {nextRowCursor ? (
