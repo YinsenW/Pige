@@ -46,6 +46,7 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
   const activeRestoreIdentity = useRef<{ readonly previewId: string; readonly mode: RestoreMode } | null>(null);
   const pendingRestoreFocus = useRef<RefObject<HTMLButtonElement | null> | null>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const previewCancelButtonRef = useRef<HTMLButtonElement>(null);
   const applyButtonRef = useRef<HTMLButtonElement>(null);
   const commitRestoreFocus = (): void => {
     if (!pendingRestoreFocus.current) return;
@@ -182,6 +183,7 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
     previewButtonRef,
     previewRestoreFrom,
     previewRestore,
+    previewCancelButtonRef,
     restoreErrorKey,
     restoreMode,
     restorePhase,
@@ -198,6 +200,7 @@ export function RestorePreviewPanel(props: {
   readonly mode: RestoreMode | null;
   readonly phase: RestorePhase;
   readonly errorKey: string | null;
+  readonly cancelButtonRef: RefObject<HTMLButtonElement | null>;
   readonly applyButtonRef: RefObject<HTMLButtonElement | null>;
   readonly onModeChange: (mode: RestoreMode) => void;
   readonly onApply: () => Promise<void>;
@@ -221,6 +224,9 @@ export function RestorePreviewPanel(props: {
   const formatCount = (value: number): string => settingsVariant && locale
     ? value.toLocaleString(locale) : String(value);
   const warningCategoryCount = props.preview.warnings.length + (props.preview.invalidFileCount > 0 ? 1 : 0);
+  useEffect(() => {
+    props.cancelButtonRef.current?.focus({ preventScroll: true });
+  }, [props.cancelButtonRef]);
 
   const summary = (
     <dl className={settingsVariant ? "restore-settings-summary" : "restore-summary"}>
@@ -333,7 +339,7 @@ export function RestorePreviewPanel(props: {
       disabled={applyDisabled} onClick={() => void props.onApply()}>
       {restoreActive ? props.t("backup.restoring") : props.t(props.mode === "replace_existing" ? "backup.applyReplace" : "backup.applyClone")}
     </button>
-    {!settingsVariant ? <button type="button" className="secondary" disabled={props.phase === "previewing" || cancelling || finishing} onClick={() => void props.onCancel()}>
+    {!settingsVariant ? <button ref={props.cancelButtonRef} type="button" className="secondary" disabled={props.phase === "previewing" || cancelling || finishing} onClick={() => void props.onCancel()}>
       {props.t(cancelling ? "backup.restoreStopping" : "backup.restoreCancel")}
     </button> : null}
   </div>;
@@ -341,7 +347,7 @@ export function RestorePreviewPanel(props: {
   if (settingsVariant) return (
     <section className="settings-page settings-restore-page restore-preview" aria-labelledby={`${props.idPrefix}-restore-title`}>
       <header className="settings-panel-header">
-        <button className="settings-button restore-back-button" type="button" disabled={props.phase !== "idle"} onClick={props.onCancel}>
+        <button ref={props.cancelButtonRef} className="settings-button restore-back-button" type="button" disabled={props.phase !== "idle"} onClick={props.onCancel}>
           {props.t("backup.backToVault")}
         </button>
         <h1 id={`${props.idPrefix}-restore-title`}>{props.t("backup.restorePageTitle")}</h1>
@@ -825,7 +831,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
 
   if (restore.restorePreview) return <RestorePreviewPanel idPrefix="vault-settings" variant="settings" locale={props.locale}
     preview={restore.restorePreview} mode={restore.restoreMode} phase={restore.restorePhase} errorKey={restore.restoreErrorKey}
-    applyButtonRef={restore.applyButtonRef} onModeChange={restore.selectRestoreMode} onApply={restore.applyRestore}
+    cancelButtonRef={restore.previewCancelButtonRef} applyButtonRef={restore.applyButtonRef} onModeChange={restore.selectRestoreMode} onApply={restore.applyRestore}
     onCancel={restore.cancelRestore} t={props.t} />;
 
   return <section className="settings-page settings-vault-page" aria-labelledby="settings-vault-title">

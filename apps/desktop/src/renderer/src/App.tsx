@@ -4624,6 +4624,7 @@ function FirstRunPanel(props: FirstRunPanelProps): React.JSX.Element {
               mode={restore.restoreMode}
               phase={restore.restorePhase}
               errorKey={restore.restoreErrorKey}
+              cancelButtonRef={restore.previewCancelButtonRef}
               applyButtonRef={restore.applyButtonRef}
               onModeChange={restore.selectRestoreMode}
               onApply={restore.applyRestore}
