@@ -7,10 +7,10 @@ import { toolchainRepairEligibility } from "./toolchain-repair-service";
 
 export interface ToolchainRecoveryDependencies {
   readonly hasActiveVault: () => boolean;
-  readonly requeueWaitingParses: () => { readonly requeued: number };
-  readonly requeueWaitingDatasetImports: () => { readonly requeued: number };
-  readonly requeueWaitingOcr: () => { readonly requeued: number };
-  readonly requeueWaitingAgentIngest: () => { readonly requeued: number };
+  readonly requeueWaitingParses: (targetJobId?: string) => { readonly requeued: number };
+  readonly requeueWaitingDatasetImports: (targetJobId?: string) => { readonly requeued: number };
+  readonly requeueWaitingOcr: (targetJobId?: string) => { readonly requeued: number };
+  readonly requeueWaitingAgentIngest: (targetJobId?: string) => { readonly requeued: number };
   readonly scheduleParseProcessing: () => void;
   readonly scheduleDatasetImportProcessing: () => void;
   readonly scheduleOcrProcessing: () => void;
@@ -59,27 +59,27 @@ export class ToolchainService {
     return repair ? { ...health, repair } : health;
   }
 
-  recheckAndRecover(dependencies: ToolchainRecoveryDependencies): ToolchainHealth {
+  recheckAndRecover(dependencies: ToolchainRecoveryDependencies, targetJobId?: string): ToolchainHealth {
     const health = this.health();
     if (health.status !== "ready" || !dependencies.hasActiveVault()) return health;
 
     try {
-      if (dependencies.requeueWaitingParses().requeued > 0) dependencies.scheduleParseProcessing();
+      if (dependencies.requeueWaitingParses(targetJobId).requeued > 0) dependencies.scheduleParseProcessing();
     } catch {
       dependencies.onRecoveryFailure("parse");
     }
     try {
-      if (dependencies.requeueWaitingDatasetImports().requeued > 0) dependencies.scheduleDatasetImportProcessing();
+      if (dependencies.requeueWaitingDatasetImports(targetJobId).requeued > 0) dependencies.scheduleDatasetImportProcessing();
     } catch {
       dependencies.onRecoveryFailure("dataset_import");
     }
     try {
-      if (dependencies.requeueWaitingOcr().requeued > 0) dependencies.scheduleOcrProcessing();
+      if (dependencies.requeueWaitingOcr(targetJobId).requeued > 0) dependencies.scheduleOcrProcessing();
     } catch {
       dependencies.onRecoveryFailure("ocr");
     }
     try {
-      if (dependencies.requeueWaitingAgentIngest().requeued > 0) dependencies.scheduleAgentIngestProcessing();
+      if (dependencies.requeueWaitingAgentIngest(targetJobId).requeued > 0) dependencies.scheduleAgentIngestProcessing();
     } catch {
       dependencies.onRecoveryFailure("ingest");
     }

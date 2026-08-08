@@ -24,6 +24,7 @@ import type {
   HighRiskConfirmationResolveRequest,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -101,6 +102,7 @@ import {
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
   JOB_CHANGED_EVENT_CHANNEL,
+  JOB_REPAIR_DEPENDENCY_CHANNEL,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
@@ -110,6 +112,8 @@ import {
   DeleteManualModelRequestSchema,
   JobCancelRequestSchema,
   JobCancelResultSchema,
+  JobDependencyRepairRequestSchema,
+  JobDependencyRepairResultSchema,
   RefreshProviderModelsRequestSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnRequestSchema,
@@ -451,6 +455,7 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { ToolchainRepairService } from "./services/toolchain-repair-service";
+import { JobDependencyRepairService } from "./services/job-dependency-repair-service";
 import { SpeechService } from "./services/speech-service";
 import { TaskProcessSessionService } from "./services/task-process-session-service";
 import {
@@ -524,6 +529,7 @@ let settingsProfileTransferService: SettingsProfileTransferService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let toolchainRepairService: ToolchainRepairService | undefined;
+let jobDependencyRepairService: JobDependencyRepairService | undefined;
 let captureService: CaptureService | undefined;
 let agentFileIngressRecoveryService: AgentFileIngressRecoveryService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
@@ -1248,22 +1254,27 @@ const getToolchainRepairService = (): ToolchainRepairService => {
   return toolchainRepairService;
 };
 
-const recoverReadyLocalCapabilities = (): ToolchainHealth =>
+const getJobDependencyRepairService = (): JobDependencyRepairService => {
+  jobDependencyRepairService ??= new JobDependencyRepairService();
+  return jobDependencyRepairService;
+};
+
+const recoverReadyLocalCapabilities = (targetJobId?: string): ToolchainHealth =>
   getToolchainService().recheckAndRecover({
     hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
     requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
     requeueWaitingDatasetImports: () => getJobsService().requeueWaitingDatasetImports(),
     requeueWaitingOcr: () => getJobsService().requeueWaitingOcr(),
     requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
-    scheduleParseProcessing,
-    scheduleDatasetImportProcessing,
-    scheduleOcrProcessing,
-    scheduleAgentIngestProcessing,
+    scheduleParseProcessing: () => scheduleParseProcessing(targetJobId),
+    scheduleDatasetImportProcessing: () => scheduleDatasetImportProcessing(targetJobId),
+    scheduleOcrProcessing: () => scheduleOcrProcessing(targetJobId),
+    scheduleAgentIngestProcessing: () => scheduleAgentIngestProcessing(targetJobId),
     onRecoveryFailure: (owner) => recordBackgroundFailure(
       `toolchain.${owner}.recovery_failed`,
       "Preserved work could not be resumed after the local toolchain became ready."
     )
-  });
+  }, targetJobId);
 
 const getSpeechService = (): SpeechService => {
   if (!speechService) {
@@ -2789,7 +2800,14 @@ const scheduleCaptureProcessing = (): void => {
   captureDrainer.schedule();
 };
 
-const scheduleParseProcessing = (): void => {
+const scheduleParseProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getDocumentParseJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "parser.document.background_failed",
+      "Background document parsing failed."
+    ));
+    return;
+  }
   parseDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getDocumentParseJobExecutor().process({ limit: 20 }),
     onBatch: (result) => {
@@ -2804,7 +2822,14 @@ const scheduleParseProcessing = (): void => {
   parseDrainer.schedule();
 };
 
-const scheduleDatasetImportProcessing = (): void => {
+const scheduleDatasetImportProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getDatasetImportJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "dataset.import.background_failed",
+      "Background Dataset materialization failed."
+    ));
+    return;
+  }
   datasetImportDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getDatasetImportJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
@@ -2815,7 +2840,14 @@ const scheduleDatasetImportProcessing = (): void => {
   datasetImportDrainer.schedule();
 };
 
-const scheduleOcrProcessing = (): void => {
+const scheduleOcrProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getOcrJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "ocr.image.background_failed",
+      "Background image OCR failed."
+    ));
+    return;
+  }
   ocrDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getOcrJobExecutor().process({ limit: 20 }),
     onBatch: (result) => {
@@ -2829,7 +2861,14 @@ const scheduleOcrProcessing = (): void => {
   ocrDrainer.schedule();
 };
 
-const scheduleAgentIngestProcessing = (): void => {
+const scheduleAgentIngestProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getLegacyAgentIngestJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "agent_" + "ingest.background_failed",
+      "Background Agent ingest failed."
+    ));
+    return;
+  }
   agentIngestDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getLegacyAgentIngestJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
@@ -3515,6 +3554,46 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
     getJobClassExecutorRegistry().require(result.job.class).schedule?.(result.job.id);
   }
   return result;
+});
+ipcMain.handle(JOB_REPAIR_DEPENDENCY_CHANNEL, async (_event, value: JobDependencyRepairRequest) => {
+  const request = JobDependencyRepairRequestSchema.parse(value);
+  const jobs = getJobsService();
+  const preparation = getJobDependencyRepairService().prepare(jobs.readJob(request.jobId), request);
+  const identity = {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    jobId: request.jobId
+  };
+  if (preparation.status !== "ready") {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: preparation.status });
+  }
+  if (preparation.dependencyKind !== "local_tool" && preparation.dependencyKind !== "runtime_capability") {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: "ineligible" });
+  }
+  try {
+    // Recheck the existing capability owner first; only that owner may clear
+    // waiting_dependency and schedule the durable Job again.
+    recoverReadyLocalCapabilities(request.jobId);
+    const resumed = jobs.readJob(request.jobId);
+    if (!resumed || resumed.activeVaultId !== request.activeVaultId || resumed.state === "waiting_dependency") {
+      return JobDependencyRepairResultSchema.parse({ ...identity, status: "failed" });
+    }
+    return JobDependencyRepairResultSchema.parse({
+      ...identity,
+      status: "repaired",
+      job: {
+        id: resumed.id,
+        state: resumed.state,
+        updatedAt: resumed.updatedAt,
+        dependencyKind: preparation.dependencyKind,
+        requiredAction: preparation.requiredAction,
+        messageKey: preparation.messageKey
+      }
+    });
+  } catch {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: "failed" });
+  }
 });
 registerSourceReconnectIpc({
   ipcMain,
@@ -4404,7 +4483,7 @@ ipcMain.handle("updates.openManualDownload", async (_event, request: UpdateManua
     await getManualUpdateDownloadService().open(UpdateManualDownloadRequestSchema.parse(request))
   )
 );
-ipcMain.handle("system.toolchainHealth", recoverReadyLocalCapabilities);
+ipcMain.handle("system.toolchainHealth", () => recoverReadyLocalCapabilities());
 
 app.whenReady().then(async () => {
   if (!ownsAppInstanceLock) return;

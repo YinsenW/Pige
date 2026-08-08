@@ -43,7 +43,7 @@ import { ConversationScrollRail } from "./components/ConversationScrollRail";
 import { ConversationMemoryContext } from "./components/ConversationMemoryContext";
 import { ConversationEarlierControl, projectCompletedConversation, useConversationPagination } from "./components/ConversationPagination";
 import { HomeVoicePanel, type HomeVoicePanelState } from "./components/HomeVoicePanel";
-import { HomeJobAction } from "./components/HomeJobAction";
+import { HomeJobAction } from "./components/HomeJobAction"; import { createDependencyRepairAction, createDependencyRepairHandler } from "./components/home-dependency-repair";
 import { useHomeJobEvents } from "./components/useHomeJobEvents";
 import {
   HomeCaptureDropZone,
@@ -2000,6 +2000,7 @@ export function App(): React.JSX.Element {
     return false;
   };
 
+  const repairDependencyJob = createDependencyRepairHandler({ activeVaultId: () => activeVaultIdRef.current, repair: (request) => window.pige.jobs.repairDependency(request), onRepaired: async (job) => { setCaptureToast({ kind: "success", message: t("home.jobRequeued"), queuedJobId: job.id }); await refreshVaultState(); } });
   const loadMoreActivityHistory = async (): Promise<boolean> => {
     const current = activityListRef.current;
     const vaultId = activeVaultIdRef.current;
@@ -3007,8 +3008,7 @@ export function App(): React.JSX.Element {
             }}
             onFilesSelected={(files, inputKind, text, clientTurnId) =>
               submitFiles(files, inputKind, text, clientTurnId, "home")}
-            onCancelJob={cancelJob}
-            onRetryJob={retryJob}
+            onCancelJob={cancelJob} onRetryJob={retryJob} onRepairDependency={repairDependencyJob}
             onHomeStateChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
             onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
@@ -4680,7 +4680,7 @@ function HomeComposer(props: {
     clientTurnId: string
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<unknown>;
-  readonly onRetryJob: (jobId: string) => Promise<unknown>;
+  readonly onRetryJob: (jobId: string) => Promise<unknown>; readonly onRepairDependency: (job: JobSummary) => Promise<unknown>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
@@ -6446,7 +6446,7 @@ function HomeComposer(props: {
               const currentJob = visibleRecentJobs[0];
               const sourceWaitingForModel = isSourceWaitingForModel(currentJob);
               const ownsSourceModelAction = sourceWaitingForModel && currentJob.id === sourceModelActionOwner?.id;
-              const repair = sourceRepairAction(currentJob);
+              const repair = sourceRepairAction(currentJob) ?? createDependencyRepairAction(currentJob, props.t("home.retryJob"), props.t("home.jobWaiting"), () => props.onRepairDependency(currentJob));
               return <HomeJobAction
                 compact
                 job={currentJob}
@@ -6476,7 +6476,7 @@ function HomeComposer(props: {
             {visibleRecentJobs.map((job) => {
               const sourceWaitingForModel = isSourceWaitingForModel(job);
               const ownsSourceModelAction = sourceWaitingForModel && job.id === sourceModelActionOwner?.id;
-              const repair = sourceRepairAction(job);
+              const repair = sourceRepairAction(job) ?? createDependencyRepairAction(job, props.t("home.retryJob"), props.t("home.jobWaiting"), () => props.onRepairDependency(job));
             const statusMessageKey = jobStateMessageKey(job);
             const sourceName = job.sourceDisplayName ?? props.t("home.processingItem");
             const totalUnits = job.progress?.totalUnits;

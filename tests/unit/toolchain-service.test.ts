@@ -148,11 +148,16 @@ describe("toolchain service", () => {
     expect(service.recheckAndRecover(dependencies).status).toBe("ready");
     first = false;
     expect(service.recheckAndRecover(dependencies).status).toBe("ready");
+    expect(service.recheckAndRecover(dependencies, "job_target").status).toBe("ready");
 
-    expect(dependencies.requeueWaitingParses).toHaveBeenCalledTimes(2);
-    expect(dependencies.requeueWaitingDatasetImports).toHaveBeenCalledTimes(2);
-    expect(dependencies.requeueWaitingOcr).toHaveBeenCalledTimes(2);
-    expect(dependencies.requeueWaitingAgentIngest).toHaveBeenCalledTimes(2);
+    expect(dependencies.requeueWaitingParses).toHaveBeenCalledTimes(3);
+    expect(dependencies.requeueWaitingDatasetImports).toHaveBeenCalledTimes(3);
+    expect(dependencies.requeueWaitingOcr).toHaveBeenCalledTimes(3);
+    expect(dependencies.requeueWaitingAgentIngest).toHaveBeenCalledTimes(3);
+    expect(dependencies.requeueWaitingParses).toHaveBeenLastCalledWith("job_target");
+    expect(dependencies.requeueWaitingDatasetImports).toHaveBeenLastCalledWith("job_target");
+    expect(dependencies.requeueWaitingOcr).toHaveBeenLastCalledWith("job_target");
+    expect(dependencies.requeueWaitingAgentIngest).toHaveBeenLastCalledWith("job_target");
     expect(scheduleParseProcessing).toHaveBeenCalledTimes(1);
     expect(scheduleDatasetImportProcessing).toHaveBeenCalledTimes(1);
     expect(scheduleOcrProcessing).toHaveBeenCalledTimes(1);

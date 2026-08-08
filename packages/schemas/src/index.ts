@@ -13140,6 +13140,34 @@ export const JobCancelResultSchema = z.discriminatedUnion("status", [
     status: z.enum(["not_found", "failed"])
   }).strict()
 ]);
+export const JOB_REPAIR_DEPENDENCY_CHANNEL = "jobs.repairDependency" as const;
+export const JobDependencyRepairRequestIdSchema = z.string().regex(/^jobrepairreq_[a-z0-9]{16,64}$/);
+const JobDependencyRepairIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: JobDependencyRepairRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  jobId: JobIdSchema,
+  expectedUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const JobDependencyRepairRequestSchema = JobDependencyRepairIdentitySchema;
+const JobDependencyRepairResultIdentitySchema = JobDependencyRepairIdentitySchema.omit({ expectedUpdatedAt: true });
+const JobDependencyRepairProjectionSchema = z.object({
+  id: JobIdSchema,
+  state: JobStateSchema,
+  updatedAt: z.string().datetime({ offset: true }),
+  dependencyKind: WaitingDependencySummarySchema.shape.dependencyKind,
+  requiredAction: WaitingDependencySummarySchema.shape.requiredAction,
+  messageKey: z.string().min(1)
+}).strict();
+export const JobDependencyRepairResultSchema = z.discriminatedUnion("status", [
+  JobDependencyRepairResultIdentitySchema.extend({
+    status: z.literal("repaired"),
+    job: JobDependencyRepairProjectionSchema
+  }).strict(),
+  JobDependencyRepairResultIdentitySchema.extend({
+    status: z.enum(["stale", "ineligible", "not_found", "failed"])
+  }).strict()
+]);
 export const JobChangedEventSchema = z.object({
   apiVersion: z.literal(1),
   sequence: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -14207,6 +14235,9 @@ export type JobChangedEvent = z.infer<typeof JobChangedEventSchema>;
 export type JobCancelRequestId = z.infer<typeof JobCancelRequestIdSchema>;
 export type JobCancelRequest = z.infer<typeof JobCancelRequestSchema>;
 export type JobCancelResult = z.infer<typeof JobCancelResultSchema>;
+export type JobDependencyRepairRequestId = z.infer<typeof JobDependencyRepairRequestIdSchema>;
+export type JobDependencyRepairRequest = z.infer<typeof JobDependencyRepairRequestSchema>;
+export type JobDependencyRepairResult = z.infer<typeof JobDependencyRepairResultSchema>;
 export type JobStage = z.infer<typeof JobStageSchema>;
 export type JobState = z.infer<typeof JobStateSchema>;
 export type BackupReconnectDependencyRequest = z.infer<typeof BackupReconnectDependencyRequestSchema>;

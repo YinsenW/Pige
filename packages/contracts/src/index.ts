@@ -316,6 +316,8 @@ import type {
   JobClass,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
+  JobDependencyRepairResult,
   JobChangedEvent as JobChangedEventSchemaType,
   JobRecord,
   JobStage,
@@ -652,6 +654,8 @@ export type {
   AgentAttachmentCandidate,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
+  JobDependencyRepairResult,
   AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
   AgentConversationHistoryQuery,
@@ -2574,7 +2578,8 @@ export interface PigeDesktopApi {
   };
   readonly jobs: {
     readonly list: (request?: JobsListRequest) => Promise<JobsListResult>;
-    readonly cancel: (request: JobCancelRequest) => Promise<JobCancelResult>;
+  readonly cancel: (request: JobCancelRequest) => Promise<JobCancelResult>;
+    readonly repairDependency: (request: JobDependencyRepairRequest) => Promise<JobDependencyRepairResult>;
     readonly retry: (request: JobActionRequest) => Promise<JobActionResult>;
     readonly onChanged: (listener: (event: JobChangedEvent) => void) => () => void;
     readonly reconnectOriginalSource: (

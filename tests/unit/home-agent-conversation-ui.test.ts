@@ -251,6 +251,66 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("offers dependency repair as one-flight action without exposing dependency identity", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const root = createRoot(container);
+    const fallback = dom.window.document.createElement("button");
+    dom.window.document.body.append(fallback);
+    const returnFocusRef = { current: fallback };
+    let calls = 0;
+    let rejectAttempt: ((reason: Error) => void) | undefined;
+    const onActivate = (): Promise<void> => {
+      calls += 1;
+      return new Promise<void>((_resolve, reject) => { rejectAttempt = reject; });
+    };
+    await act(async () => {
+      root.render(createElement(HomeJobAction, {
+        job: {
+          ...sourceWaitingForModelJob(),
+          waitingDependency: {
+            dependencyKind: "local_tool",
+            requiredAction: "repair_tool",
+            messageKey: "errors.agent_runtime.tool_dependency_waiting"
+          }
+        },
+        sourceWaitingForModel: false,
+        ownsSourceModelAction: false,
+        retryEligible: false,
+        dependencyRepair: {
+          label: "Repair dependency",
+          pendingLabel: "Repairing dependency...",
+          onActivate,
+          returnFocusRef
+        },
+        onOpenModels: () => undefined,
+        onOpenLocalCapabilities: () => undefined,
+        onCancelJob: () => undefined,
+        onRetryJob: () => undefined,
+        t: (key: string) => key
+      }));
+      await settle(dom);
+    });
+    const action = buttons(container, "Repair dependency")[0]!;
+    await act(async () => {
+      action.click();
+      action.click();
+      await settle(dom);
+    });
+    expect(calls).toBe(1);
+    expect(action.disabled).toBe(true);
+    await act(async () => {
+      rejectAttempt?.(new Error("body-free repair failure"));
+      await settle(dom);
+    });
+    expect(action.disabled).toBe(false);
+    await waitFor(dom, () => dom.window.document.activeElement === action);
+    expect(container.textContent).not.toContain("paddleocr");
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("routes a structured local-tool wait to Local Capabilities instead of blind retry", async () => {
     const dom = createDom();
     const { createRoot } = await import("react-dom/client");
