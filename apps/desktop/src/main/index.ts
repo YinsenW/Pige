@@ -192,6 +192,7 @@ import { registerSourceReconnectIpc } from "./register-source-reconnect-ipc";
 import { registerTaskExecutionIpc } from "./register-task-execution-ipc";
 import { registerManagedCollectionIpc } from "./register-managed-collection-ipc";
 import { registerManagedCollectionHistoryIpc } from "./register-managed-collection-history-ipc";
+import { registerAnalyticalSnapshotIpc } from "./register-analytical-snapshot-ipc";
 import { registerLocalSemanticRetrievalIpc } from "./register-local-semantic-retrieval-ipc";
 import { registerLocalRerankerIpc } from "./register-local-reranker-ipc";
 import { registerKnowledgeHealthIpc } from "./register-knowledge-health-ipc";
@@ -308,6 +309,7 @@ import { ManagedCollectionRevisionHistoryService } from "./services/managed-coll
 import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifecycle-service";
 import { ManagedDatasetPurgeService } from "./services/managed-dataset-purge-service";
 import { ManagedDatasetTitleService } from "./services/managed-dataset-title-service";
+import { AnalyticalSnapshotService } from "./services/analytical-snapshot-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
 import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
 import { AgentConversationExportService } from "./services/agent-conversation-export-service";
@@ -547,6 +549,7 @@ let managedCollectionRevisionHistoryService: ManagedCollectionRevisionHistorySer
 let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
 let managedDatasetPurgeService: ManagedDatasetPurgeService | undefined;
 let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
+let analyticalSnapshotService: AnalyticalSnapshotService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
 const homeConversationHistory = new AgentConversationHistory();
@@ -2502,6 +2505,11 @@ const getManagedDatasetTitleService = (): ManagedDatasetTitleService => {
   return managedDatasetTitleService;
 };
 
+const getAnalyticalSnapshotService = (): AnalyticalSnapshotService => {
+  if (!analyticalSnapshotService) analyticalSnapshotService = new AnalyticalSnapshotService(getVaultService());
+  return analyticalSnapshotService;
+};
+
 const getManagedCollectionCitationService = (): ManagedCollectionCitationService => {
   if (!managedCollectionCitationService) {
     managedCollectionCitationService = new ManagedCollectionCitationService(
@@ -3613,6 +3621,15 @@ registerManagedCollectionHistoryIpc({
   list: (request) => getManagedCollectionRevisionHistoryService().list(request),
   open: (request) => getManagedCollectionRevisionHistoryService().open(request),
   restore: (request) => getManagedCollectionRevisionHistoryService().restore(request)
+});
+registerAnalyticalSnapshotIpc({
+  ipcMain,
+  isTrustedSender: (sender) => {
+    const window = BrowserWindow.fromWebContents(sender);
+    return !!window && mainWindows.has(window);
+  },
+  getActiveVaultId: () => getVaultService().current()?.vaultId,
+  service: getAnalyticalSnapshotService()
 });
 registerKnowledgeHealthIpc({
   ipcMain,

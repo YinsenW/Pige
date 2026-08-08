@@ -8532,6 +8532,10 @@ export const COLLECTION_LIST_REVISION_HISTORY_CHANNEL = "collections.listRevisio
 export const COLLECTION_OPEN_REVISION_HISTORY_CHANNEL = "collections.openRevisionHistory" as const;
 export const COLLECTION_RESTORE_REVISION_HISTORY_CHANNEL = "collections.restoreRevisionHistory" as const;
 export const COLLECTION_OPEN_CITATION_CHANNEL = "collections.openCitation" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_LIST_CHANNEL = "collections.analyticalSnapshots.list" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_CREATE_CHANNEL = "collections.analyticalSnapshots.create" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_OPEN_CHANNEL = "collections.analyticalSnapshots.open" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_CITATION_CHANNEL = "collections.analyticalSnapshots.openCitation" as const;
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
@@ -9311,6 +9315,111 @@ export const CollectionOpenResultSchema = z.discriminatedUnion("status", [
     });
   }
 });
+
+export const CollectionAnalyticalSnapshotIdSchema = z.string()
+  .regex(/^snapshot_\d{8}_[a-z0-9]{12,}$/u);
+export const CollectionAnalyticalSnapshotSummarySchema = z.object({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  title: z.string().trim().min(1).max(240),
+  tableName: z.string().trim().min(1).max(512),
+  rowCount: DatasetQueryCountSchema,
+  columnCount: z.number().int().positive().max(32),
+  operationId: OperationIdSchema,
+  createdAt: z.string().datetime({ offset: true })
+}).strict();
+export const CollectionAnalyticalSnapshotPreviewSchema = z.object({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  revisionId: DatasetQueryRevisionIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  title: z.string().trim().min(1).max(240),
+  tableName: z.string().trim().min(1).max(512),
+  columns: CollectionSnapshotSchema.shape.columns,
+  rows: CollectionSnapshotSchema.shape.rows,
+  totalRowCount: DatasetQueryCountSchema,
+  returnedRowCount: DatasetQueryCountSchema,
+  truncated: z.boolean(),
+  snapshotHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u)
+}).strict().superRefine((preview, context) => {
+  if (preview.returnedRowCount !== preview.rows.length) {
+    context.addIssue({ code: "custom", path: ["returnedRowCount"], message: "Analytical Snapshot row count must match its bounded rows." });
+  }
+  if (preview.truncated !== (preview.returnedRowCount < preview.totalRowCount)) {
+    context.addIssue({ code: "custom", path: ["truncated"], message: "Analytical Snapshot truncation must match its bounded row projection." });
+  }
+  if (new TextEncoder().encode(JSON.stringify(preview)).byteLength > 64 * 1024) {
+    context.addIssue({ code: "custom", message: "Analytical Snapshot previews must not exceed 64 KiB." });
+  }
+});
+export const CollectionAnalyticalSnapshotCitationSchema = z.object({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema,
+  citationRef: z.string().regex(/^snapshot_citation_[a-f0-9]{16}$/u),
+  rowId: DatasetQueryRowIdSchema,
+  columnIds: z.array(DatasetQueryColumnIdSchema).min(1).max(32),
+  resultHash: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  preview: CollectionAnalyticalSnapshotPreviewSchema
+}).strict();
+
+const CollectionAnalyticalSnapshotListIdentitySchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const CollectionAnalyticalSnapshotListRequestSchema = CollectionAnalyticalSnapshotListIdentitySchema;
+export const CollectionAnalyticalSnapshotListResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotListIdentitySchema.extend({
+    status: z.literal("ready"),
+    snapshots: z.array(CollectionAnalyticalSnapshotSummarySchema).max(256)
+  }).strict(),
+  CollectionAnalyticalSnapshotListIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+
+const CollectionAnalyticalSnapshotCreateIdentitySchema = CollectionAnalyticalSnapshotListIdentitySchema.extend({
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+export const CollectionAnalyticalSnapshotCreateRequestSchema = CollectionAnalyticalSnapshotCreateIdentitySchema;
+export const CollectionAnalyticalSnapshotCreateResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotCreateIdentitySchema.extend({
+    status: z.enum(["committed", "already_committed"]),
+    snapshot: CollectionAnalyticalSnapshotSummarySchema
+  }).strict(),
+  CollectionAnalyticalSnapshotCreateIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "failed"])
+  }).strict()
+]);
+
+const CollectionAnalyticalSnapshotOpenIdentitySchema = CollectionAnalyticalSnapshotListIdentitySchema.extend({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema
+}).strict();
+export const CollectionAnalyticalSnapshotOpenRequestSchema = CollectionAnalyticalSnapshotOpenIdentitySchema;
+export const CollectionAnalyticalSnapshotOpenResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotOpenIdentitySchema.extend({
+    status: z.literal("ready"),
+    preview: CollectionAnalyticalSnapshotPreviewSchema
+  }).strict(),
+  CollectionAnalyticalSnapshotOpenIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "failed"])
+  }).strict()
+]);
+
+const CollectionAnalyticalSnapshotCitationIdentitySchema = CollectionAnalyticalSnapshotOpenIdentitySchema.extend({
+  rowId: DatasetQueryRowIdSchema
+}).strict();
+export const CollectionAnalyticalSnapshotCitationRequestSchema = CollectionAnalyticalSnapshotCitationIdentitySchema;
+export const CollectionAnalyticalSnapshotCitationResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotCitationIdentitySchema.extend({
+    status: z.literal("ready"),
+    citation: CollectionAnalyticalSnapshotCitationSchema
+  }).strict(),
+  CollectionAnalyticalSnapshotCitationIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "failed"])
+  }).strict()
+]);
 
 export const CollectionRevisionHistoryCategorySchema = z.enum(["import", "data", "schema", "restore", "undo"]);
 export const CollectionRevisionHistorySummarySchema = z.object({
@@ -13178,6 +13287,7 @@ export const OperationRecordSchema = z.object({
     "restore_source_asset",
     "create_artifact",
     "create_dataset_revision",
+    "create_dataset_snapshot",
     "update_collection_cell",
     "add_collection_row",
     "add_collection_column",
@@ -13889,6 +13999,18 @@ export type CollectionOpenCitationRequest = z.infer<typeof CollectionOpenCitatio
 export type CollectionOpenCitationResult = z.infer<typeof CollectionOpenCitationResultSchema>;
 export type CollectionOpenRequest = z.infer<typeof CollectionOpenRequestSchema>;
 export type CollectionOpenResult = z.infer<typeof CollectionOpenResultSchema>;
+export type CollectionAnalyticalSnapshotId = z.infer<typeof CollectionAnalyticalSnapshotIdSchema>;
+export type CollectionAnalyticalSnapshotSummary = z.infer<typeof CollectionAnalyticalSnapshotSummarySchema>;
+export type CollectionAnalyticalSnapshotPreview = z.infer<typeof CollectionAnalyticalSnapshotPreviewSchema>;
+export type CollectionAnalyticalSnapshotCitation = z.infer<typeof CollectionAnalyticalSnapshotCitationSchema>;
+export type CollectionAnalyticalSnapshotListRequest = z.infer<typeof CollectionAnalyticalSnapshotListRequestSchema>;
+export type CollectionAnalyticalSnapshotListResult = z.infer<typeof CollectionAnalyticalSnapshotListResultSchema>;
+export type CollectionAnalyticalSnapshotCreateRequest = z.infer<typeof CollectionAnalyticalSnapshotCreateRequestSchema>;
+export type CollectionAnalyticalSnapshotCreateResult = z.infer<typeof CollectionAnalyticalSnapshotCreateResultSchema>;
+export type CollectionAnalyticalSnapshotOpenRequest = z.infer<typeof CollectionAnalyticalSnapshotOpenRequestSchema>;
+export type CollectionAnalyticalSnapshotOpenResult = z.infer<typeof CollectionAnalyticalSnapshotOpenResultSchema>;
+export type CollectionAnalyticalSnapshotCitationRequest = z.infer<typeof CollectionAnalyticalSnapshotCitationRequestSchema>;
+export type CollectionAnalyticalSnapshotCitationResult = z.infer<typeof CollectionAnalyticalSnapshotCitationResultSchema>;
 export type CollectionRevealRequest = z.infer<typeof CollectionRevealRequestSchema>;
 export type CollectionRevealResult = z.infer<typeof CollectionRevealResultSchema>;
 export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;
