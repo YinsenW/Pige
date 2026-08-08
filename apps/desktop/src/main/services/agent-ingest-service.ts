@@ -421,6 +421,7 @@ const AgentIngestUpdateSchema = z.object({
   targetPageRef: z.string().regex(/^related_[0-9]{2}$/),
   summary: AgentIngestOutputSchema.shape.summary,
   keyPoints: AgentIngestOutputSchema.shape.keyPoints,
+  tagsToAdd: z.array(z.string().min(1).max(48)).min(1).max(6).optional(),
   warnings: AgentIngestOutputSchema.shape.warnings,
   confidence: AgentIngestOutputSchema.shape.confidence
 }).strict();
@@ -1933,17 +1934,15 @@ export class AgentIngestService {
           update: async (modelOutput, context) => withTerminalEffectFence(async () => {
             assertNoDurableProposal();
             assertNoDatasetEffect();
-            const inputHash = createAgentPayloadIntegrityHash(JSON.stringify(
-              AgentIngestUpdateSchema.parse(modelOutput)
-            ));
+            const parsed = AgentIngestUpdateSchema.parse(modelOutput);
+            const inputHash = createAgentPayloadIntegrityHash(JSON.stringify(parsed));
             const replay = replayPageEffect(UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash);
             if (replay) return replay;
             const prepared = await prepareExistingPageUpdate(modelOutput, context);
-            const effectBinding = {
-              pageId: prepared.target.page.pageId,
-              toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
-              canonicalInputHash: prepared.canonicalInputHash
-            };
+            const preparedTags = parsed.tagsToAdd ? await prepareExistingPageTags({ targetPageRef: parsed.targetPageRef, tagsToAdd: parsed.tagsToAdd, reason: parsed.summary, confidence: parsed.confidence }, context) : undefined;
+            if (preparedTags && (preparedTags.target.page.pageId !== prepared.target.page.pageId || preparedTags.target.page.contentHash !== prepared.target.page.contentHash)) throw new PigeDomainError("agent_runtime.tool_binding_invalid", "The selected note changed while its compound update was being validated.");
+            const canonicalInputHash = preparedTags ? createAgentPayloadIntegrityHash(JSON.stringify({ update: prepared.canonicalInputHash, tagsToAdd: preparedTags.tagsToAdd })) : prepared.canonicalInputHash;
+            const effectBinding = { pageId: prepared.target.page.pageId, toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, canonicalInputHash };
             assertPageEffectCompatible(effectBinding);
             const execute = async (): Promise<AgentIngestPublishToolResult> => {
               const committed = applyAgentPageUpdate({
@@ -1951,13 +1950,14 @@ export class AgentIngestService {
                 job,
                 sourceRecord: currentSourceRecord,
                 target: prepared.target,
+                ...(preparedTags ? { tagAdditions: preparedTags.tagsToAdd } : {}),
                 modelProfileId: runtimeConfig.model.id,
                 policyContextId: policy.policyContextId,
                 policyHash: policy.policyHash,
                 toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
                 toolVersion: UPDATE_KNOWLEDGE_NOTE_TOOL_VERSION,
                 catalogHash: toolCatalogHash,
-                canonicalInputHash: prepared.canonicalInputHash,
+                canonicalInputHash,
                 toolCallProvenanceHash: prepared.toolCallProvenanceHash,
                 artifactIds: currentEvidencePack.artifactIds,
                 summary: prepared.summary,
@@ -1989,11 +1989,8 @@ export class AgentIngestService {
                 operationIds: [committed.operation.id]
               };
               return {
-                modelText: JSON.stringify({
-                  status: committed.recovered ? "recovered" : "updated",
-                  pageId: committed.pageId
-                }),
-                details: { pageId: committed.pageId, operationIds: publication.operationIds }
+                modelText: JSON.stringify({ status: committed.recovered ? "recovered" : preparedTags ? "updated_and_tagged" : "updated", pageId: committed.pageId, ...(preparedTags ? { tagCount: preparedTags.tagsToAdd.length } : {}) }),
+                details: { pageId: committed.pageId, ...(preparedTags ? { tagCount: preparedTags.tagsToAdd.length } : {}), operationIds: publication.operationIds }
               };
             };
             pageEffectReplay = { toolId: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME, inputHash, execute };

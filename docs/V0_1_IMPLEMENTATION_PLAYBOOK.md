@@ -318,8 +318,9 @@ Build:
 
 Agent Spine Gate: Pi handles preserved input, selected parse/OCR/retrieval, cited create/
 append, bounded tags/link, and transitional review. B3.13/E3.08 remains partial: broader
-tools/routes, legacy ingest repair, durable mid-repair recovery, real production Broker
-callers, and broader exceptions remain; no deep/forked loop.
+tools/routes, legacy ingest repair, real production Broker callers, and broader exceptions
+remain; no deep/forked loop. A compatible cited existing-note append plus bounded tag
+additions is one recovered `update_page` Operation, not a second partial write.
 
 H2 makes `agent.submitTurn` the sole new semantic ingress, marks new sources
 `agent_turn`/`capture_only`, and normalizes old missing fields to `legacy_agent_ingest`.
@@ -373,7 +374,8 @@ Exit criteria:
   parser/OCR stays idle before its event, no-model preserves only, writes are tool-caused
   and retry-safe, typed validation rejection remains inside Pi until accepted/abstained,
   effects do not block model/inspect/search/parse/OCR continuation; exact owners reject
-  conflicting mutations and multi-effect recovery remains AR3. Active-vault eligible knowledge-
+  conflicting mutations, while one same-page cited update plus bounded tags shares one durable
+  checkpoint/Operation/Undo recovery; cross-page or mixed-target recovery remains AR3. Active-vault eligible knowledge-
   Markdown writes need no Permission prompt; Pi-requested Pige-owned or extension scopes
   outside standing authority remain Phase 8 Broker acceptance.
 - [E3.09] One real DeepSeek-first app path persists the user turn and `agent_turn`, keeps
