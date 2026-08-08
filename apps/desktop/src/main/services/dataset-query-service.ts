@@ -673,14 +673,15 @@ function createCatalogEnvelope(
       aggregateOperators: ["count", "sum", "min", "max", "avg"],
       orderDirections: ["asc", "desc"],
       aggregateRefs: "aggregate_N refers to the Nth aggregate in this query",
-      relationJoin: "join={relation,targetTable,next?} follows at most three declared Pige relations; projection/filter/group/aggregate/order may use columns from the bound tables",
+      relationJoin: "join={relation,targetTable,next?} follows at most four declared Pige relations; projection/filter/group/aggregate/order may use columns from the bound tables",
       limits: {
         selectedColumns: limits.maxSelectedColumns,
         filters: limits.maxFilters,
         groupByColumns: limits.maxGroupByColumns,
         aggregates: limits.maxAggregates,
         orderBy: limits.maxOrderBy,
-        rows: limits.maxResultRows
+        rows: limits.maxResultRows,
+        relationHops: limits.maxRelationHops
       }
     },
     omitted: {
@@ -746,8 +747,7 @@ function resolveQueryBinding(
   if (!dataset || !table) {
     throw new PigeDomainError("dataset.query.ref_invalid", "The Dataset query references an unavailable opaque catalog item.");
   }
-  const requestedHops = request.join ? [request.join, ...(request.join.next ? [request.join.next] : []),
-    ...(request.join.next?.next ? [request.join.next.next] : [])] : [];
+  const requestedHops = request.join ? [request.join, ...(request.join.next ? [request.join.next] : []), ...(request.join.next?.next ? [request.join.next.next] : []), ...(request.join.next?.next?.next ? [request.join.next.next.next] : [])] : [];
   const joins: Array<ResolvedQueryBinding["joins"][number]> = [];
   let sourceTable = table;
   for (const hop of requestedHops) {

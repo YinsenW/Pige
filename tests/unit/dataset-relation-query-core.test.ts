@@ -97,6 +97,23 @@ describe("Dataset relation query core", () => {
       limits: { ...request.limits, maxGroups: 1 }
     })).toThrowError(expect.objectContaining({ code: "dataset.query.limit.groups" }));
   });
+
+  it("rejects a relation path beyond the configured hop limit before reading joined rows", () => {
+    const fixture = createFixture();
+    const request: DatasetQueryWorkerRequest = {
+      ...createRequest(fixture),
+      joins: [
+        { relationColumnId: OWNER, targetTable: { id: TARGET_TABLE, name: "people", rowCount: 2, columnCount: 3 } },
+        { relationColumnId: REGION_RELATION, targetTable: { id: REGION_TABLE, name: "regions", rowCount: 2, columnCount: 2 } },
+        { relationColumnId: COUNTRY_RELATION, targetTable: { id: COUNTRY_TABLE, name: "countries", rowCount: 2, columnCount: 1 } }
+      ]
+    };
+    expect(() => executeDatasetQuery({
+      ...request,
+      requestId: "relation-hop-limit",
+      limits: { ...request.limits, maxRelationHops: 2 }
+    })).toThrowError(expect.objectContaining({ code: "dataset.query.limit.relation_hops" }));
+  });
 });
 
 interface Fixture { readonly payloadPath: string; readonly payloadChecksum: string }

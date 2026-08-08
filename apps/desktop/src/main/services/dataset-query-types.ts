@@ -33,6 +33,7 @@ export const DATASET_QUERY_DEFAULT_LIMITS = Object.freeze({
   maxScanCells: 500_000,
   maxScanBytes: 32 * 1_024 * 1_024,
   maxGroups: 1_000,
+  maxRelationHops: 4,
   timeoutMs: 30_000,
   workerOldGenerationMb: 256
 } satisfies DatasetQueryLimits);
@@ -61,6 +62,7 @@ export interface DatasetQueryLimits {
   readonly maxScanCells: number;
   readonly maxScanBytes: number;
   readonly maxGroups: number;
+  readonly maxRelationHops: number;
   readonly timeoutMs: number;
   readonly workerOldGenerationMb: number;
 }
@@ -123,8 +125,12 @@ const DatasetQuerySecondRelationHopSchema = DatasetQueryRelationHopSchema.extend
   next: DatasetQueryRelationHopSchema.optional()
 }).strict();
 
-const DatasetQueryRelationJoinSchema = DatasetQueryRelationHopSchema.extend({
+const DatasetQueryThirdRelationHopSchema = DatasetQueryRelationHopSchema.extend({
   next: DatasetQuerySecondRelationHopSchema.optional()
+}).strict();
+
+const DatasetQueryRelationJoinSchema = DatasetQueryRelationHopSchema.extend({
+  next: DatasetQueryThirdRelationHopSchema.optional()
 }).strict();
 
 const DatasetCatalogToolRequestSchema = z.object({
