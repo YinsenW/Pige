@@ -19,12 +19,23 @@ export function ReaderConceptParents(props: {
   const summary = props.note.conceptParents, context = props.note.renderContextId;
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${summary?.revision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
-  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null);
+  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), restoreFocusRef = useRef(false), sectionRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteConceptParentItem[]>([]);
   const [pending, setPending] = useState(false), [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
+    const wasBusy = busyRef.current;
+    const wasFocused = focusRef.current?.isConnected === true && document.activeElement === focusRef.current;
     setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false;
+    if (wasBusy || wasFocused) restoreFocusRef.current = true;
   }, [owner]);
+  useEffect(() => {
+    if (pending || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    requestAnimationFrame(() => {
+      const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [pending]);
   if (props.note.summary.pageType !== "concept" || !summary || !context) return null;
 
   const restoreFocus = (): void => { requestAnimationFrame(() => {
@@ -70,7 +81,7 @@ export function ReaderConceptParents(props: {
   return <section ref={sectionRef} tabIndex={-1} className="reader-concept-parents" aria-label={props.t("note.conceptParents.title")}>
     <strong>{props.t("note.conceptParents.title")}</strong>
     <p>{props.t("note.conceptParents.description")}</p>
-    {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button"
+    {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button" ref={(node) => { if (node) focusRef.current = node; }}
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; void change("remove", item); }}>
       {props.t("note.conceptParents.remove")}</button></span>)}
     <span><input value={query} maxLength={160} placeholder={props.t("note.conceptParents.searchPlaceholder")}
