@@ -185,6 +185,7 @@ export function LibraryTagsBrowser(
   const tagsLoadMoreRef = useRef<HTMLButtonElement>(null);
   const notesLoadMoreRef = useRef<HTMLButtonElement>(null);
   const tagsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const notesHeadingRef = useRef<HTMLHeadingElement>(null);
   const tagRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const renameTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const mergeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -206,7 +207,7 @@ export function LibraryTagsBrowser(
   const removeSequenceRef = useRef(0);
   const removePageDialogRef = useRef<LibraryPageTagRemoveDialogHandle>(null);
   const pendingTagFocusRef = useRef<string | null>(null);
-  const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | null>(null);
+  const pendingFocusRef = useRef<"tags-retry" | "notes-retry" | "tags-more" | "notes-more" | "notes-heading" | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
   selectedTagRef.current = selectedTag;
 
@@ -218,6 +219,7 @@ export function LibraryTagsBrowser(
     else if (pending === "notes-retry") notesRetryRef.current?.focus();
     else if (pending === "tags-more") tagsLoadMoreRef.current?.focus();
     else if (pending === "notes-more") notesLoadMoreRef.current?.focus();
+    else if (pending === "notes-heading") notesHeadingRef.current?.focus({ preventScroll: true });
   }, [focusRevision]);
 
   const restorePendingFocus = (): void => {
@@ -250,13 +252,15 @@ export function LibraryTagsBrowser(
     };
     try {
       const result = await props.api.tags(request);
-      if (
-        sequence !== tagsSequenceRef.current ||
-        activeVaultIdRef.current !== vaultId ||
-        result.requestId !== request.requestId ||
-        result.activeVaultId !== vaultId ||
-        result.mode !== "list_tags"
-      ) return;
+      if (sequence !== tagsSequenceRef.current || activeVaultIdRef.current !== vaultId) return;
+      if (result.requestId !== request.requestId || result.activeVaultId !== vaultId || result.mode !== "list_tags") {
+        if (append) setContinuationFailedOwner("tags");
+        else {
+          pendingFocusRef.current = "tags-retry";
+          setTagsState("failed");
+        }
+        return;
+      }
       if (result.status !== "ready" || (append && result.snapshotId !== continuation?.snapshotId)) {
         if (append) setContinuationFailedOwner("tags");
         else setTagsState("failed");
@@ -316,18 +320,21 @@ export function LibraryTagsBrowser(
     };
     try {
       const result = await props.api.tags(request);
-      if (
-        sequence !== notesSequenceRef.current ||
-        activeVaultIdRef.current !== vaultId ||
-        selectedTagRef.current !== tag ||
-        result.requestId !== request.requestId ||
-        result.activeVaultId !== vaultId ||
-        result.mode !== "list_pages_for_tag" ||
-        result.tag !== tag
-      ) return;
+      if (sequence !== notesSequenceRef.current || activeVaultIdRef.current !== vaultId || selectedTagRef.current !== tag) return;
+      if (result.requestId !== request.requestId || result.activeVaultId !== vaultId || result.mode !== "list_pages_for_tag" || result.tag !== tag) {
+        if (append) setContinuationFailedOwner("notes");
+        else {
+          pendingFocusRef.current = "notes-retry";
+          setNotesState("failed");
+        }
+        return;
+      }
       if (result.status !== "ready" || (append && result.snapshotId !== continuation?.snapshotId)) {
         if (append) setContinuationFailedOwner("notes");
-        else setNotesState("failed");
+        else {
+          pendingFocusRef.current = "notes-retry";
+          setNotesState("failed");
+        }
         return;
       }
       setNotes((current) => append ? mergePages(current, result.pages) : result.pages);
@@ -337,6 +344,7 @@ export function LibraryTagsBrowser(
       });
       setNotesState("ready");
       setContinuationFailedOwner(null);
+      if (!append) pendingFocusRef.current = "notes-heading";
     } catch {
       if (
         sequence !== notesSequenceRef.current ||
@@ -344,7 +352,10 @@ export function LibraryTagsBrowser(
         selectedTagRef.current !== tag
       ) return;
       if (append) setContinuationFailedOwner("notes");
-      else setNotesState("failed");
+      else {
+        pendingFocusRef.current = "notes-retry";
+        setNotesState("failed");
+      }
     } finally {
       if (
         sequence === notesSequenceRef.current &&
@@ -681,6 +692,8 @@ export function LibraryTagsBrowser(
                   type="button"
                   className="search-result"
                   aria-pressed={selectedTag === tag.tag}
+                  aria-controls={selectedTag === tag.tag ? "library-tagged-notes" : undefined}
+                  aria-expanded={selectedTag === tag.tag ? "true" : undefined}
                   onClick={() => selectTag(tag.tag)}
                 >
                   <span className="search-result-copy">
@@ -744,7 +757,8 @@ export function LibraryTagsBrowser(
       )}
 
       {selectedTag ? (
-        <section aria-live="polite">
+        <section id="library-tagged-notes" role="region" aria-labelledby="library-tagged-notes-heading">
+          <h3 ref={notesHeadingRef} id="library-tagged-notes-heading" tabIndex={-1}>{selectedTag}</h3>
           {notesState === "loading" ? (
             <p role="status" aria-busy="true">{props.labels.notesLoading}</p>
           ) : notesState === "failed" ? (
