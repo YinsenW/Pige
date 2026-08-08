@@ -1788,7 +1788,7 @@ export class JobsService {
     });
   }
 
-  requeueWaitingAgentIngest(): RequeueWaitingAgentIngestResult {
+  requeueWaitingAgentIngest(targetJobId?: string): RequeueWaitingAgentIngestResult {
     const vaultPath = this.#requireActiveVaultPath();
     const store = this.#jobRecordStore(vaultPath);
     if (!canRunAgentIngest(this.#agentIngest)) {
@@ -1797,7 +1797,7 @@ export class JobsService {
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(store, path.join(vaultPath, ".pige", "jobs"))) {
-      if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency") continue;
+      if (jobFile.job.class !== "agent_ingest" || jobFile.job.state !== "waiting_dependency" || (targetJobId && jobFile.job.id !== targetJobId)) continue;
       const sourceRecord = jobFile.job.sourceId ? readSourceRecord(vaultPath, jobFile.job.sourceId) : undefined;
       const agentSelectedOcr = Boolean(sourceRecord && supportsAgentSelectedOcr(sourceRecord.kind));
       const waitingAgentOcr = agentSelectedOcr &&
@@ -1843,14 +1843,14 @@ export class JobsService {
     return { requeued };
   }
 
-  requeueWaitingParses(): RequeueWaitingParsesResult {
+  requeueWaitingParses(targetJobId?: string): RequeueWaitingParsesResult {
     const vaultPath = this.#requireActiveVaultPath();
     const parser = this.#documentParser;
     if (!parser) return { requeued: 0 };
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
-      if (jobFile.job.class !== "parse" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
+      if (jobFile.job.class !== "parse" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId || (targetJobId && jobFile.job.id !== targetJobId)) continue;
       if (isAgentSelectedParseJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !parser.canParse(sourceRecord.kind)) continue;
@@ -1867,14 +1867,14 @@ export class JobsService {
     return { requeued };
   }
 
-  requeueWaitingDatasetImports(): RequeueWaitingDatasetImportsResult {
+  requeueWaitingDatasetImports(targetJobId?: string): RequeueWaitingDatasetImportsResult {
     const vaultPath = this.#requireActiveVaultPath();
     const datasets = this.#datasets;
     if (!datasets) return { requeued: 0 };
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
-      if (jobFile.job.class !== "dataset_import" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
+      if (jobFile.job.class !== "dataset_import" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId || (targetJobId && jobFile.job.id !== targetJobId)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !datasets.canMaterialize(sourceRecord.kind)) continue;
       const snapshot = this.#jobRecordStore(vaultPath).read(jobFile.path);
@@ -1890,14 +1890,14 @@ export class JobsService {
     return { requeued };
   }
 
-  requeueWaitingOcr(): RequeueWaitingOcrResult {
+  requeueWaitingOcr(targetJobId?: string): RequeueWaitingOcrResult {
     const vaultPath = this.#requireActiveVaultPath();
     const ocr = this.#ocr;
     if (!ocr) return { requeued: 0 };
 
     let requeued = 0;
     for (const jobFile of readJobRecordFiles(this.#jobRecordStore(vaultPath), path.join(vaultPath, ".pige", "jobs"))) {
-      if (jobFile.job.class !== "ocr" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId) continue;
+      if (jobFile.job.class !== "ocr" || jobFile.job.state !== "waiting_dependency" || !jobFile.job.sourceId || (targetJobId && jobFile.job.id !== targetJobId)) continue;
       if (isAgentSelectedOcrJob(jobFile.job)) continue;
       const sourceRecord = readSourceRecord(vaultPath, jobFile.job.sourceId);
       if (!sourceRecord || !inspectOcrSource(ocr, sourceRecord).ready) continue;

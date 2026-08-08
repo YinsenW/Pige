@@ -1259,7 +1259,7 @@ const getJobDependencyRepairService = (): JobDependencyRepairService => {
   return jobDependencyRepairService;
 };
 
-const recoverReadyLocalCapabilities = (): ToolchainHealth =>
+const recoverReadyLocalCapabilities = (targetJobId?: string): ToolchainHealth =>
   getToolchainService().recheckAndRecover({
     hasActiveVault: () => Boolean(getVaultService().activeVaultPath()),
     requeueWaitingParses: () => getJobsService().requeueWaitingParses(),
@@ -1274,7 +1274,7 @@ const recoverReadyLocalCapabilities = (): ToolchainHealth =>
       `toolchain.${owner}.recovery_failed`,
       "Preserved work could not be resumed after the local toolchain became ready."
     )
-  });
+  }, targetJobId);
 
 const getSpeechService = (): SpeechService => {
   if (!speechService) {
@@ -3546,7 +3546,7 @@ ipcMain.handle(JOB_REPAIR_DEPENDENCY_CHANNEL, async (_event, value: JobDependenc
   try {
     // Recheck the existing capability owner first; only that owner may clear
     // waiting_dependency and schedule the durable Job again.
-    recoverReadyLocalCapabilities();
+    recoverReadyLocalCapabilities(request.jobId);
     const resumed = jobs.readJob(request.jobId);
     if (!resumed || resumed.activeVaultId !== request.activeVaultId || resumed.state === "waiting_dependency") {
       return JobDependencyRepairResultSchema.parse({ ...identity, status: "failed" });
