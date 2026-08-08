@@ -19,6 +19,9 @@ Pige may store these on your machine:
 - Reference-based conversation history that avoids duplicating large source bodies or saved note bodies.
 - Vault-scoped Agent memory when enabled.
 - Jobs, proposals, operation records, and recovery summaries.
+- A live recoverable Provider-call checkpoint may hold private result/continuation data only until
+  exact assistant or bounded review publication; Main then clears it and completed Job/renderer
+  projections retain only safe output references.
 - Rebuildable local databases, search indexes, graph indexes, chunks, embeddings, thumbnails, and caches.
 - Machine-local settings, recent vaults, permission grants, local tool status, provider metadata, and diagnostics.
 - Local model/OCR files and Apple-managed speech resources after explicit user action;
