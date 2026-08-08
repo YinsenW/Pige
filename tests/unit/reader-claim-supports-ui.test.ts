@@ -34,6 +34,27 @@ describe("ReaderClaimSupports", () => {
     expect(harness.container.querySelector('[role="status"]')?.textContent).toBe("note.claimSupports.notice.stale");
     expect(harness.dom.window.document.activeElement).toBe(remove); await harness.unmount();
   });
+
+  it("does not show candidates after the search query drifts while a request is pending", async () => {
+    let resolveSearch: ((result: NoteSearchClaimSupportsResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchClaimSupportsRequest) => new Promise<NoteSearchClaimSupportsResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(render(), search, vi.fn(), vi.fn());
+    const input = harness.container.querySelector("input")!;
+    await act(async () => { setInput(harness.dom, input, "Support"); await settle(harness.dom); });
+    await act(async () => {
+      button(harness.container, "note.claimSupports.search").click();
+      await Promise.resolve();
+    });
+    await act(async () => { setInput(harness.dom, input, "Different"); await settle(harness.dom); });
+
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [item()] });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Supporting claim");
+    await harness.unmount();
+  });
 });
 
 async function mount(note: NoteRenderResult, search: Parameters<typeof ReaderClaimSupports>[0]["search"], change: Parameters<typeof ReaderClaimSupports>[0]["change"], onCommitted: Parameters<typeof ReaderClaimSupports>[0]["onCommitted"]) {
