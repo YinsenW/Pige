@@ -21,8 +21,10 @@ export function ReaderEntityTypeControl(props: {
   const selectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
+    const wasActive = activeRef.current;
     ownerRef.current = ownerIdentity; activeRef.current = false; setDraft(summary?.entityType ?? null);
     setPending(false); setNotice(null);
+    if (wasActive) restoreFocusRef.current = true;
   }, [ownerIdentity, summary?.entityType]);
   useEffect(() => {
     if (pending || !restoreFocusRef.current) return;

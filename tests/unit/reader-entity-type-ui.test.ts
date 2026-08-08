@@ -39,13 +39,27 @@ describe("ReaderEntityTypeControl", () => {
   it("fences a late response after the Reader identity changes", async () => {
     const pending = deferred<NoteSetEntityTypeResult>(), submit = vi.fn(async () => pending.promise), committed = vi.fn();
     const harness = await mount(entityRender(), submit, committed);
+    harness.dom.window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+      harness.dom.window.setTimeout(() => callback(0), 0);
+      return 1;
+    };
     await act(async () => { choose(harness.dom, harness.container.querySelector("select")!, "place"); await settle(harness.dom);
       harness.root.render(createElement(ReaderEntityTypeControl, props(entityRender("other", "c", "page_20260801_entity02"), submit, committed)));
-      await settle(harness.dom); });
+    });
+    for (let i = 0; i < 5; i += 1) {
+      await act(async () => { await settle(harness.dom); });
+    }
+    const replacementSelect = harness.container.querySelector("select")! as HTMLSelectElement;
+    expect(replacementSelect.value).toBe("other");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     const request = submit.mock.calls[0]![0];
     await act(async () => { pending.resolve({ ...request, status: "committed", operationId: "op_20260801_entitytype1",
       render: entityRender("place", "b") }); await pending.promise; await settle(harness.dom); });
-    expect(committed).not.toHaveBeenCalled(); expect((harness.container.querySelector("select") as HTMLSelectElement).value).toBe("other");
+    expect(committed).not.toHaveBeenCalled();
+    expect(replacementSelect.value).toBe("other");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     await harness.unmount();
   });
 });
