@@ -75,7 +75,7 @@ export function ReaderTopicParents(props: {
     {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button"
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; void change("remove", item); }}>
       {props.t("note.topicParents.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.topicParents.searchPlaceholder")}
+    <span><input type="search" aria-label={props.t("note.topicParents.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.topicParents.searchPlaceholder")}
       onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();

@@ -79,7 +79,7 @@ export function ReaderClaimContradictions(props: {
     {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button"
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>
       {props.t("note.claimContradictions.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.claimContradictions.searchPlaceholder")}
+    <span><input type="search" aria-label={props.t("note.claimContradictions.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.claimContradictions.searchPlaceholder")}
       onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();
@@ -87,7 +87,10 @@ export function ReaderClaimContradictions(props: {
     {candidates.map((candidate) => <button key={candidate.pageId} type="button" disabled={pending} onClick={(event) => {
       focusRef.current = event.currentTarget; setIntent({ action: "add", target: candidate });
     }}>{props.t("note.claimContradictions.add")} {candidate.title}</button>)}
-    {intent ? <div role="alertdialog" aria-label={props.t("note.claimContradictions.confirmTitle")}>
+    {intent ? <div role="alertdialog" aria-label={props.t("note.claimContradictions.confirmTitle")} onKeyDown={(event) => {
+      if (event.key !== "Escape" || pending) return;
+      event.preventDefault(); restoreIntentFocusRef.current = true; setIntent(null);
+    }}>
       <p>{props.t(intent.action === "add" ? "note.claimContradictions.confirmAdd" : "note.claimContradictions.confirmRemove")} {intent.target.title}</p>
       <button type="button" disabled={pending} onClick={() => { restoreIntentFocusRef.current = true; setIntent(null); }}>{props.t("note.claimContradictions.cancel")}</button>
       <button ref={confirmRef} type="button" disabled={pending} onClick={() => void commit()}>{props.t("note.claimContradictions.confirm")}</button>

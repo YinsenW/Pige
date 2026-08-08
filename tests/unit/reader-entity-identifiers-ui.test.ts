@@ -16,6 +16,7 @@ describe("ReaderEntityIdentifiers", () => {
     const committed = vi.fn(), harness = await mount(read, change, committed);
     await settle(harness.dom);
     const input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.entityIdentifiers.placeholder");
     await act(async () => { Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "orcid:0000-0002-1825-0097"); input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "orcid:0000-0002-1825-0097", inputType: "insertText" })); });
     const add = [...harness.container.querySelectorAll("button")].find((button) => button.textContent === "note.entityIdentifiers.add")!;
     await act(async () => { add.click(); add.click(); await settle(harness.dom); });

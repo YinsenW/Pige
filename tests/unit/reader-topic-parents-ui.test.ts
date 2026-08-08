@@ -19,6 +19,7 @@ describe("ReaderTopicParents", () => {
       operationId: "op_20260801_topicparent1", render: topicRender([parentItem()], "b") }));
     const committed = vi.fn(); const harness = await mount(topicRender(), search, change, committed);
     const input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.topicParents.searchPlaceholder");
     await act(async () => { Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")
       ?.set?.call(input, "Broader"); input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true,
         data: "Broader", inputType: "insertText" })); input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));

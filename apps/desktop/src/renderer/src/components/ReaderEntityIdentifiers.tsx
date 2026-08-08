@@ -25,7 +25,7 @@ export function ReaderEntityIdentifiers(props: { readonly activeVaultId: string;
   };
   return <section className="reader-entity-mentions" aria-label={props.t("note.entityIdentifiers.title")}><strong>{props.t("note.entityIdentifiers.title")}</strong>
     {identifiers.map((identifier) => <span key={identifier}>{identifier}<button type="button" disabled={state === "pending"} onClick={() => void change("remove", identifier)}>{props.t("note.entityIdentifiers.remove")}</button></span>)}
-    <span><input ref={inputRef} value={draft} maxLength={256} placeholder={props.t("note.entityIdentifiers.placeholder")} onChange={(event) => setDraft(event.currentTarget.value.normalize("NFKC").replace(/\s+/gu, " ").trim())} />
+    <span><input ref={inputRef} aria-label={props.t("note.entityIdentifiers.placeholder")} value={draft} maxLength={256} placeholder={props.t("note.entityIdentifiers.placeholder")} onChange={(event) => setDraft(event.currentTarget.value.normalize("NFKC").replace(/\s+/gu, " ").trim())} />
       <button type="button" disabled={state !== "ready" || !draft || identifiers.includes(draft)} onClick={() => void change("add", draft)}>{props.t("note.entityIdentifiers.add")}</button></span>
     {state === "loading" || state === "pending" ? <span role="status">{props.t("note.entityIdentifiers.saving")}</span> : null}{state === "failed" ? <span role="alert">{props.t("note.entityIdentifiers.failed")}</span> : null}
   </section>;
