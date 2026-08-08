@@ -183,6 +183,13 @@ type SourceRecord = {
 Planned structured import adds `csv_file`, `xlsx_file`, and `sqlite_file` only through a
 versioned shared-schema change; this document does not make those values executable.
 
+An `archive` Source Record is one selected ZIP asset and one Source Page, not a container for
+descendant Source Records or Pages. Its optional private `metadata` Artifact binds the Source
+Record revision and pre/post checksum to the ordered `archive:entry:<central-directory-ordinal>`
+inventory and exact parser/limit-profile identity. Archive member names never become renderer
+filesystem authority, and capture does not extract, recurse, execute, or otherwise import a
+member automatically.
+
 Rules:
 
 - `packages/schemas/src/index.ts` is the executable field/enum authority. New IDs use `src_`, `page_`, and `art_`; `artifact_` is not emitted.
@@ -282,7 +289,8 @@ Storage ownership rules:
   Operation. Matching Activity Redo re-proves the restored files and managed-copy eligibility before
   recording one deterministic forward trash Operation; both directions converge after restart without
   deleting evidence.
-- Do not follow symlinks during archive extraction or backup without explicit policy.
+- Do not follow symlinks during archive extraction or backup without explicit policy; generic
+  Archive Source inventory does not extract members at all.
 - Do not treat paths from source content as trusted.
 - Do not let renderer code access arbitrary original paths.
 - Reading a user-selected source is covered by the submitted turn. Writing outside an

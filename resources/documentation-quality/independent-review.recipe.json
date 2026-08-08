@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T13:33:58.793Z",
+  "reviewedAt": "2026-08-08T14:02:29Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review Main-owned referenced-original reconnect with changed-content preview, explicit confirmation or cancellation, source-refresh publication, post-commit same-Job resume, and private receipt recovery without renderer path or body authority.",
+    "scope": "Review the Main-owned local ZIP Archive Source boundary: one preserved source/page, bounded private yauzl central-directory inventory, source reproof, retry/restart, and no extraction, recursive import, execution, network, model, or renderer path authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "0d16b9a3e5f01a12c881b51c8b104fc1e6714c0b68e52470ffa0acd6abedd7f6"
+    "reviewedSha256": "d6653625a40a8cfede498b5fd321350e9d7da1b5726e05aea232b5a89c1065b9"
   },
   "reviewers": [
     {
-      "reviewerId": "source-reconnect-refresh-review",
-      "task": "Review changed referenced-original preview, refresh, and same-Job recovery",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "task": "Review the local ZIP Archive Source boundary and bounded inventory contract",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Main-owned selection, preview receipt identity, source-record and page currentness, durable refresh publication, exact waiting-Job resume, and body/path-free renderer projection separately from implementation authorship."
+      "independence": "Project review checks Main-owned source selection and reproof, bounded yauzl metadata handling, failure/restart semantics, and body/path-free renderer projection separately from future implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "source-reconnect-refresh-review",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "Main alone chooses the file, keeps the preview receipt private, and exposes only safe changed-source facts until an explicit confirmation publishes the refresh."
+      "summary": "One user-selected ZIP remains one preserved Archive Source and Source Page; member data and paths cannot become navigation or filesystem authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "source-reconnect-refresh-review",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "Reconnect, refresh, Job, Source Page, and IPC owners agree that changed bytes cannot alter durable truth or resume a wait before the confirmed refresh commits."
+      "summary": "Source, parser, security, dependency, and Job owners agree on exact limits, source reproof, a private metadata Artifact, and no extraction or recursive import."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "source-reconnect-refresh-review",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "Trace adds exact changed-source service, IPC, and Settings evidence without changing any requirement or exit status."
+      "summary": "Trace records the Archive Source branch under source preservation without claiming implementation evidence or changing a requirement or exit status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "source-reconnect-refresh-review",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "The refresh owner retains the existing Operation, Activity, Undo, and restart paths; reconnect adds no second mutation owner."
+      "summary": "The planned private inventory owner reuses the existing capture/source/Job lifecycle and does not create child source/page, operation, IPC, or renderer mutation owners."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "source-reconnect-refresh-review",
+      "reviewerId": "zip-archive-capture-prefreeze-review",
       "blockerCount": 0,
-      "summary": "The bind adds only trace, acceptance, review, and service-inventory facts; durable source rules remain in their existing owners."
+      "summary": "The freeze extends existing product, parser, source, security, dependency, quality, trace, and decision owners without a new dependency or a parallel design document."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/source-original-reconnect-service.test.ts tests/unit/register-source-reconnect-ipc.test.ts tests/unit/referenced-original-connections-ui.test.ts --maxWorkers=1",
-      "status": "passed",
-      "evidence": "Focused service, IPC, and Settings tests prove explicit changed-content confirmation, private receipt cleanup, restart/tamper failure, and post-publication same-Job resume."
-    },
-    {
-      "command": "npm run verify:traceability && npm run verify:boundaries",
-      "status": "passed",
-      "evidence": "Trace, canonical acceptance evidence, and the protected service inventory agree with the frozen product owner facts."
-    },
-    {
       "command": "npm run verify:docs",
       "status": "passed",
-      "evidence": "The focused trace wording remains mapped, linked, and structurally valid without changing source-owner contracts."
+      "evidence": "The owner documents and linked local references remain structurally valid after the Archive Source contract freeze."
+    },
+    {
+      "command": "npm run verify:decisions",
+      "status": "passed",
+      "evidence": "The accepted local ZIP inventory decision has complete owner references and does not create a vague phase or completion claim."
+    },
+    {
+      "command": "npm run verify:independent-documentation-review",
+      "status": "passed",
+      "evidence": "The independently keyed snapshot binds the affected contract owners and semantic lock without claiming unimplemented runtime evidence."
     }
   ],
   "coordination": {
-    "taskId": "source-reconnect-refresh-bind-20260808",
-    "taskTitle": "Changed referenced-original reconnect and refresh bind",
+    "taskId": "zip-archive-capture-prefreeze-20260808",
+    "taskTitle": "Local ZIP Archive Source capture prefreeze",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main re-proves the selected original and current source identity; changed content passes only through the existing refresh/Operation/recovery owner, and matching waiting Jobs resume only after that publication.",
-    "acknowledgement": "PIGE-VAULT-006, PIGE-JOB-004, and PIGE-INGEST-003 remain partial; this bind records only the added changed-reconnect evidence."
+    "compatibility": "Main re-proves one selected ZIP before inventory; only a bounded private metadata Artifact can adopt after exact source revision/checksum and limit-profile checks, while renderer projections remain aggregate and pathless.",
+    "acknowledgement": "PIGE-CAP-001 remains partial; this is an implementation prefreeze with no runtime evidence, status promotion, dependency addition, or public contract change."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

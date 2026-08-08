@@ -308,6 +308,10 @@ A source record is Pige's durable provenance record for an input. A source asset
 original evidence or Pige-managed copy used by parsers and citations. Extracted text,
 rendered pages, thumbnails, and OCR output are derived artifacts, not original evidence.
 
+A user-selected local `.zip` is one preserved Archive Source and one Source Page. Pige may
+show a bounded safe inventory, but never automatically extracts, recursively imports, or
+executes an archive member.
+
 v0.1 supports exactly two source-storage outcomes:
 
 - Pige makes a managed copy when the input has no independently owned durable original
