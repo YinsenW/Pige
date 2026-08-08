@@ -323,6 +323,10 @@ Restore rules:
   publishes fresh, then CAS-swaps the active binding; old folder remains unregistered.
 - `clone_as_new` mints vault/binding and omits secrets and external paths.
 - Restore Jobs/claims remain backup-excluded OS app-data, never staging/restored-vault state.
+- Vault & Note Storage shows **Restore previous state** only for the current authoritative
+  latest completed replacement Restore. It requests a pathless, one-time `replace_existing`
+  preview bound to that Restore Job/update time; unavailable, stale, missing and failed results
+  preserve settings. The existing Restore confirmation owns any actual replacement write.
 
 Settings export:
 

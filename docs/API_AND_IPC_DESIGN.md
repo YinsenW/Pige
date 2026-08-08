@@ -1120,6 +1120,8 @@ Commands:
 - `backup.setMemoryPreference`
 - `backup.create`
 - `backup.reconnectDependency`
+- `backup.rollbackRestoreStatus`
+- `backup.prepareRollbackRestore`
 - `restore.preview`
 - `restore.apply`
 - `restore.cancel`
@@ -1157,6 +1159,12 @@ Rules:
   legacy input and dependency counts without raw detail. Apply requires that ID plus
   `replace_existing` (preserve vault ID) or `clone_as_new` (mint ID/lineage), one replay-safe
   lease, descriptor reread and owned staging; a folder is not a mode.
+- `backup.rollbackRestoreStatus` exposes only the latest completed current-vault
+  `replace_existing` Restore candidate as active Vault ID, Restore Job ID and expected update
+  time, or body-free `unavailable`. `backup.prepareRollbackRestore` binds those facts plus
+  API/request identity; Main revalidates the private deterministic rollback archive and returns
+  one sender-local, pathless `replace_existing` preview or echoed `stale | not_found | failed`.
+  It never writes or restores directly.
 - Main owns picker/replace confirmation. Apply returns cancel or machine-local Restore Job ID;
   its `restore_applied` Operation links by ID. Cancel binds preview/mode/in-flight owner and
   returns `cancel_requested | cancelled | too_late | stale | not_found | failed`; committed

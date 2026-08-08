@@ -45,6 +45,10 @@ import type {
   KnowledgeLanguageMutationResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  RestoreRollbackCandidate,
+  RestoreRollbackStatus,
+  RestoreRollbackPrepareRequest,
+  RestoreRollbackPrepareResult,
   BackupConversationPreferenceSummary,
   BackupConversationPreferenceUpdateRequest,
   BackupConversationPreferenceUpdateResult,
@@ -644,6 +648,10 @@ export type {
   LibraryBrowseResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  RestoreRollbackCandidate,
+  RestoreRollbackStatus,
+  RestoreRollbackPrepareRequest,
+  RestoreRollbackPrepareResult,
   BackupReconnectDestinationRequest,
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
@@ -3069,6 +3077,10 @@ export interface PigeDesktopApi {
     readonly continueIncomplete: (
       request: BackupContinueIncompleteRequest
     ) => Promise<BackupContinueIncompleteResult>;
+    readonly rollbackRestoreStatus?: () => Promise<RestoreRollbackStatus>;
+    readonly prepareRollbackRestore?: (
+      request: RestoreRollbackPrepareRequest
+    ) => Promise<RestoreRollbackPrepareResult>;
     readonly previewRestore: () => Promise<RestorePreviewResult>;
     readonly applyRestore: (request: RestoreApplyRequest) => Promise<RestoreApplyResult>;
     readonly cancelRestore: (request: RestoreCancelRequest) => Promise<RestoreCancelResult>;

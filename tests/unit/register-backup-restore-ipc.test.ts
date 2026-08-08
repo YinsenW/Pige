@@ -21,8 +21,58 @@ const destinationRequest = {
   waitingJobId: request.waitingJobId,
   expectedJobUpdatedAt: "2026-07-26T00:00:00.000Z"
 } as const;
+const rollbackRestoreRequest = {
+  apiVersion: 1,
+  requestId: "restorerollbackreq_abcdefghijklmnop",
+  activeVaultId: "vault_20260731_ipccancel01",
+  restoreJobId: "job_20260731_ipccancel01",
+  expectedRestoreJobUpdatedAt: "2026-07-31T00:00:00.000Z"
+} as const;
 
 describe("registerBackupRestoreIpc", () => {
+  it("prepares only the current persisted replacement rollback as a pathless replace-only preview", async () => {
+    const handlers = new Map<string, (...args: any[]) => unknown>();
+    const rollbackRestoreCandidate = {
+      activeVaultId: rollbackRestoreRequest.activeVaultId,
+      restoreJobId: rollbackRestoreRequest.restoreJobId,
+      expectedRestoreJobUpdatedAt: rollbackRestoreRequest.expectedRestoreJobUpdatedAt
+    } as const;
+    const prepareRollbackRestore = vi.fn(async () => ({ status: "prepared" as const, preview: rollbackArchivePreview }));
+    register(handlers, {
+      reconnectDependency: vi.fn(),
+      showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      getActiveVault: () => ({ vaultId: rollbackRestoreRequest.activeVaultId }),
+      getRestoreRollbackRestoreService: () => ({
+        candidate: () => rollbackRestoreCandidate,
+        prepare: prepareRollbackRestore
+      })
+    });
+
+    expect(handlers.get("backup.rollbackRestoreStatus")?.({ sender: sender() })).toEqual({
+      apiVersion: 1,
+      status: "ready",
+      candidate: rollbackRestoreCandidate
+    });
+    await expect(handlers.get("backup.prepareRollbackRestore")?.(
+      { sender: sender() },
+      rollbackRestoreRequest
+    )).resolves.toMatchObject({
+      ...rollbackRestoreRequest,
+      status: "prepared",
+      preview: {
+        status: "ready",
+        permittedModes: ["replace_existing"],
+        defaultMode: "replace_existing"
+      }
+    });
+    expect(prepareRollbackRestore).toHaveBeenCalledWith(rollbackRestoreRequest);
+    expect(JSON.stringify(prepareRollbackRestore.mock.calls)).not.toContain("/private/");
+    await expect(handlers.get("backup.prepareRollbackRestore")?.(
+      { sender: sender() },
+      { ...rollbackRestoreRequest, archivePath: "/private/rollback.zip" }
+    )).rejects.toThrow();
+  });
+
   it("binds the strict pathless conversation backup preference identity", () => {
     const handlers = new Map<string, (...args: any[]) => unknown>();
     const summary = {
@@ -326,9 +376,11 @@ function register(
     readonly showMessageBox?: () => Promise<{ readonly response: number }>;
     readonly getBackupService?: () => unknown;
     readonly getRestoreCoordinator?: () => unknown;
+    readonly getRestoreRollbackRestoreService?: () => unknown;
     readonly getBackupConversationPreferenceService?: () => unknown;
     readonly getBackupMemoryPreferenceService?: () => unknown;
     readonly getBackupTrashPreferenceService?: () => unknown;
+    readonly getActiveVault?: () => unknown;
   }
 ): void {
   const candidate = {
@@ -344,7 +396,7 @@ function register(
     showSaveDialog: async () => ({ canceled: true }),
     showOpenDialog: overrides.showOpenDialog,
     showMessageBox: overrides.showMessageBox ?? (async () => ({ response: 0 })),
-    getActiveVault: () => undefined,
+    getActiveVault: (overrides.getActiveVault ?? (() => undefined)) as any,
     getLastBackupAt: () => undefined,
     getLocale: () => "en",
     getDocumentsPath: () => "/documents",
@@ -373,6 +425,10 @@ function register(
       continueIncomplete: overrides.continueIncomplete ?? vi.fn(async () => "continued" as const)
     }) as any,
     getRestoreCoordinator: (overrides.getRestoreCoordinator ?? (() => ({}))) as any,
+    getRestoreRollbackRestoreService: (overrides.getRestoreRollbackRestoreService ?? (() => ({
+      candidate: () => undefined,
+      prepare: async () => ({ status: "not_found" as const })
+    }))) as any,
     resumeBackgroundJobs: vi.fn()
   });
 }
@@ -405,5 +461,46 @@ const restoreArchivePreview = {
     },
     counts: { notes: 0, sources: 0, managedSourceCopies: 0, conversations: 0, memories: 0, trashEntries: 0 },
     files: []
+  }
+};
+
+const rollbackArchivePreview = {
+  backupPath: "/private/main-only-rollback.zip",
+  archivePreviewToken: `sha256:${"c".repeat(64)}`,
+  archiveDigest: `sha256:${"d".repeat(64)}`,
+  backupId: "backup_20260731_rollback01",
+  backupIdSource: "manifest" as const,
+  sourceVaultId: rollbackRestoreRequest.activeVaultId,
+  invalidFileCount: 0,
+  warnings: [],
+  manifest: {
+    formatVersion: 1 as const,
+    format: "pige-backup" as const,
+    appVersion: "0.1.0-test",
+    vaultId: rollbackRestoreRequest.activeVaultId,
+    vaultName: "Rollback fixture",
+    vaultSchemaVersion: 2,
+    createdAt: "2026-07-31T00:00:00.000Z",
+    fileCount: 1,
+    totalBytes: 1,
+    noteCount: 0,
+    sourceCount: 0,
+    conversationCount: 0,
+    memoryCount: 0,
+    externalDependencyCount: 0,
+    includedExternalDependencyCount: 0,
+    missingRequiredExternalDependencyCount: 0,
+    externalDependenciesComplete: true,
+    includesSecrets: false as const,
+    includes: {
+      markdownKnowledge: true,
+      sourceRecords: true,
+      managedSourceCopies: true,
+      conversations: true,
+      vaultMemory: true,
+      trash: true,
+      rebuildableDatabaseCache: false,
+      secrets: false as const
+    }
   }
 };

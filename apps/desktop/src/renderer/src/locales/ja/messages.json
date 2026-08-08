@@ -174,6 +174,8 @@
   "backup.continueIncompleteStale": "続行が完了する前にバックアップが変更されました。現在の状態を確認してください。",
   "backup.continueIncompleteFailed": "バックアップを続行できませんでした。現在の状態を確認して、もう一度お試しください。",
   "backup.restore": "バックアップを復元",
+  "backup.restorePrevious": "前の状態に復元",
+  "backup.restorePreviousDescription": "最後の置換復元前に作成された保護スナップショットを確認します。",
   "backup.restoreApply": "復元",
   "backup.restoreCancel": "キャンセル",
   "backup.restoreFailed": "Pige は復元を安全に続行できませんでした。もう一度お試しください。",

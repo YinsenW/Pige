@@ -20,11 +20,10 @@ import { RecentVaultLifecycleActions } from "./RecentVaultLifecycleActions";
 import { ReferencedOriginalConnections } from "./ReferencedOriginalConnections";
 import { BackupConversationPreferenceControl } from "./BackupConversationPreferenceControl";
 import { BackupTrashPreferenceControl } from "./BackupTrashPreferenceControl";
+import { BackupRestoreRollbackAction } from "./BackupRestoreRollbackAction";
 import { createJobCancelRequest } from "../job-cancel-request";
-
 type ReadyRestorePreview = Extract<RestorePreviewResult, { readonly status: "ready" }>;
 type RestorePhase = "idle" | "previewing" | "applying" | "cancelling" | "finishing";
-
 function restoreWarningMessageKey(code: RestorePreviewWarning["code"]): string {
   switch (code) {
     case "invalid_archive_entries": return "backup.warningInvalidArchiveEntries";
@@ -32,13 +31,11 @@ function restoreWarningMessageKey(code: RestorePreviewWarning["code"]): string {
     case "external_originals_not_included": return "backup.warningExternalOriginalsNotIncluded";
   }
 }
-
 function restoreDefaultMode(preview: ReadyRestorePreview): RestoreMode | null {
   if (preview.permittedModes.includes("clone_as_new")) return "clone_as_new";
   if (preview.permittedModes.includes(preview.defaultMode)) return preview.defaultMode;
   return preview.permittedModes[0] ?? null;
 }
-
 export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: () => void) {
   const [restorePreview, setRestorePreview] = useState<ReadyRestorePreview | null>(null);
   const [restoreMode, setRestoreMode] = useState<RestoreMode | null>(null);
@@ -50,7 +47,6 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
   const pendingRestoreFocus = useRef<RefObject<HTMLButtonElement | null> | null>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const applyButtonRef = useRef<HTMLButtonElement>(null);
-
   const commitRestoreFocus = (): void => {
     if (!pendingRestoreFocus.current) return;
     const control = pendingRestoreFocus.current;
@@ -59,12 +55,12 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
       window.requestAnimationFrame(() => control.current?.focus());
     });
   };
-
   const restoreFocus = (control: RefObject<HTMLButtonElement | null>): void => {
     pendingRestoreFocus.current = control;
   };
-
-  const previewRestore = async (): Promise<void> => {
+  const previewRestoreFrom = async (
+    loadPreview: () => Promise<RestorePreviewResult>
+  ): Promise<void> => {
     if (restoreInFlight.current) return;
     restoreInFlight.current = true;
     onRestoreStart();
@@ -73,7 +69,7 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
     setRestoreErrorKey(null);
     setRestorePhase("previewing");
     try {
-      const result = await window.pige.backup.previewRestore();
+      const result = await loadPreview();
       if (result.status === "canceled") {
         restoreFocus(previewButtonRef);
         return;
@@ -101,6 +97,9 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
     }
   };
 
+  const previewRestore = (): Promise<void> => previewRestoreFrom(
+    () => window.pige.backup.previewRestore()
+  );
   const applyRestore = async (): Promise<void> => {
     if (
       restoreInFlight.current || !restorePreview || !restoreMode ||
@@ -181,6 +180,7 @@ export function useRestoreFlow(onRestored: () => Promise<void>, onRestoreStart: 
     applyRestore,
     cancelRestore,
     previewButtonRef,
+    previewRestoreFrom,
     previewRestore,
     restoreErrorKey,
     restoreMode,
@@ -282,7 +282,6 @@ export function RestorePreviewPanel(props: {
       </>}
     </dl>
   );
-
   const modeOptions = (
     <fieldset className={settingsVariant ? "restore-mode-options settings-restore-modes" : "restore-mode-options"}>
       <legend className={settingsVariant ? "visually-hidden" : undefined}>{props.t("backup.restoreMode")}</legend>
@@ -411,7 +410,6 @@ export function BackupContinueIncompleteAction(props: {
     window.requestAnimationFrame(() => window.requestAnimationFrame(() =>
       (triggerRef.current ?? props.returnFocusRef.current)?.focus()));
   };
-
   useEffect(() => {
     const lostEligibility = previousEligibleRef.current && !props.eligible;
     previousEligibleRef.current = props.eligible;
@@ -435,7 +433,6 @@ export function BackupContinueIncompleteAction(props: {
     setNotice(null);
     restoreFocus();
   };
-
   const continueBackup = async (): Promise<void> => {
     if (!props.eligible || props.disabled || requestActiveRef.current) return;
     requestActiveRef.current = true;
@@ -469,7 +466,6 @@ export function BackupContinueIncompleteAction(props: {
       }
     }
   };
-
   if (!props.eligible) return null;
   return <div className="settings-row-control">
     {confirming ? <div role="group" aria-label={props.labels.confirmation} className="settings-row-control">
@@ -883,6 +879,11 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
         <BackupConversationPreferenceControl activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || relocationBusy || Boolean(activeBackupJob)} t={props.t} />
         <BackupTrashPreferenceControl activeVaultId={props.vault.vaultId} disabled={props.busy || backupBusy || relocationBusy || Boolean(activeBackupJob)} t={props.t} />
         <div className="settings-row"><div className="settings-row-copy"><strong>{props.t("backup.protectKnowledge")}</strong><span>{props.t("backup.protectKnowledgeDescription")}</span></div><div className="settings-row-control"><button className="settings-button primary" type="button" disabled={backupBusy || relocationBusy || !props.backupStatus?.createAvailable} onClick={() => void createBackup()}>{props.t("backup.create")}</button><button ref={restore.previewButtonRef} className="settings-button" type="button" disabled={backupBusy || relocationBusy || restore.restorePhase !== "idle" || !props.backupStatus?.restoreAvailable} onClick={() => void restore.previewRestore()}>{props.t(restore.restorePhase === "previewing" ? "backup.opening" : "backup.restore")}</button></div></div>
+        <BackupRestoreRollbackAction activeVaultId={props.vault.vaultId}
+          disabled={props.busy || backupBusy || relocationBusy}
+          restoreIdle={restore.restorePhase === "idle"}
+          onPreview={restore.previewRestoreFrom}
+          t={props.t} />
         {activeBackupJob ? <div className="settings-row tall backup-job-status" role="status" aria-live="polite"><div className="settings-row-copy"><strong>{props.t("backup.currentJob")}</strong><span>{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
           {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
             : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>

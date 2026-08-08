@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the bounded Reader Entity identifier correction and local audio/video evidence preservation; each reuses existing durable records without exposing bodies or paths.",
+    "scope": "Review the bounded Reader Entity identifier correction, local audio/video evidence preservation, and revalidated rollback replacement preview; each reuses existing durable records without exposing bodies or paths.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "90bc27f309ee740891131f5024608667cb2c96680175b0dbc85b1b4be9e3b87d"
+    "reviewedSha256": "9d4ee051492e14fae1c5aea6aaf1f67312c9846eaf22572ae9369e18542d1428"
   },
   "reviewers": [
     {
       "reviewerId": "entity-identifier-review",
-      "task": "Review Entity identifier current-page correction and recovery",
+      "task": "Review Entity identifier correction and rollback replacement preview",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,7 +70,7 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Entity frontmatter bounds, current-page CAS, Activity before-image recovery and renderer-safe identifier projection separately from implementation authorship."
+      "independence": "Project review checks Entity frontmatter bounds, current-page CAS, Activity recovery, and latest replacement/archive identity before a sender-local preview separately from implementation authorship."
     },
     {
       "reviewerId": "media-evidence-capture-review",
@@ -110,7 +110,7 @@
       "score": 9.8,
       "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "The dedicated identifier owner delegates only to established page-edit, Operation and recovery paths, keeping generic Notes and Reader owners within their frozen bounds."
+      "summary": "The rollback preview owner only revalidates private restore proof and delegates all writes, Operations and restart adoption to the established Restore owners."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -140,16 +140,21 @@
       "command": "npx vitest run tests/unit/home-agent-media-capture-service.test.ts tests/unit/capture-service.test.ts tests/unit/home-agent-attachment-service.test.ts --maxWorkers=1",
       "status": "passed",
       "evidence": "Focused capture tests prove typed local media preservation, deterministic Source Page projection, and a no-model/no-egress unavailable transcription wait."
+    },
+    {
+      "command": "npx vitest run tests/unit/restore-coordinator-service.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/restore-ui.test.ts --maxWorkers=1",
+      "status": "passed",
+      "evidence": "Focused Restore tests prove current replacement rollback proof, a pathless replace-only preview, and reuse of the ordinary confirmation path."
     }
   ],
   "coordination": {
-    "taskId": "entity-identifiers-and-local-media-capture-20260808",
-    "taskTitle": "Entity identifier correction and local media evidence capture",
+    "taskId": "entity-media-and-rollback-preview-20260808",
+    "taskTitle": "Entity identifier, local media, and rollback restore preview",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Entity, capture, parser/OCR, Agent, Source Page, and durable Job semantics remain unchanged; one canonical identifier update and local media preservation share established reversible or waiting boundaries.",
-    "acknowledgement": "PIGE-KNOW-003 and PIGE-CAP-001 gain bounded evidence while their broader requirements remain partial."
+    "compatibility": "Existing Entity, capture, parser/OCR, Agent, Source Page, Restore confirmation, and durable Job semantics remain unchanged; the rollback action only prepares an existing proof-bound replace preview.",
+    "acknowledgement": "PIGE-KNOW-003 and PIGE-CAP-001 gain bounded evidence while their broader requirements remain partial; verified PIGE-BACKUP-004 gains exact rollback-preview evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

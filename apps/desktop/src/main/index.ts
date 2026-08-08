@@ -421,6 +421,7 @@ import { SourceTrashService, sourceTrashCandidateEligible } from "./services/sou
 import { WebSourceRefreshService } from "./services/web-source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
+import { RestoreRollbackRestoreService } from "./services/restore-rollback-restore-service";
 import { VaultStorageRelocationService } from "./services/vault-storage-relocation-service";
 import { writeBackupCreatedOperation } from "./services/restore-job-store";
 import { handleRetrievalSearchIpc } from "./services/retrieval-search-ipc";
@@ -502,6 +503,7 @@ let pigePolicyService: PigePolicyService | undefined;
 let backupTrashPreferenceService: BackupTrashPreferenceService | undefined;
 let backupCoordinatorService: BackupCoordinatorService | undefined;
 let restoreCoordinatorService: RestoreCoordinatorService | undefined;
+let restoreRollbackRestoreService: RestoreRollbackRestoreService | undefined;
 let vaultStorageRelocationService: VaultStorageRelocationService | undefined;
 let agentRuntimeService: AgentRuntimeService | undefined;
 let agentIngestService: AgentIngestService | undefined;
@@ -1103,6 +1105,15 @@ const getRestoreCoordinatorService = (): RestoreCoordinatorService => {
     });
   }
   return restoreCoordinatorService;
+};
+
+const getRestoreRollbackRestoreService = (): RestoreRollbackRestoreService => {
+  restoreRollbackRestoreService ??= new RestoreRollbackRestoreService({
+    userDataPath: app.getPath("userData"),
+    backupService: getBackupRestoreService(),
+    vaultService: getVaultService()
+  });
+  return restoreRollbackRestoreService;
 };
 
 const getVaultStorageRelocationService = (): VaultStorageRelocationService => {
@@ -3928,6 +3939,7 @@ registerBackupRestoreIpc({
   getBackupMemoryPreferenceService,
   getBackupCoordinator: getBackupCoordinatorService,
   getRestoreCoordinator: getRestoreCoordinatorService,
+  getRestoreRollbackRestoreService,
   resumeBackgroundJobs
 });
 

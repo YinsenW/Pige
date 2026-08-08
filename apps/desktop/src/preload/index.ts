@@ -39,6 +39,9 @@ import type {
   BackupCreateResult,
   BackupContinueIncompleteRequest,
   BackupContinueIncompleteResult,
+  RestoreRollbackPrepareRequest,
+  RestoreRollbackPrepareResult,
+  RestoreRollbackStatus,
   BackupReconnectDestinationRequest,
   BackupReconnectDestinationResult,
   BackupReconnectDependencyRequest,
@@ -512,8 +515,13 @@ import {
   DiagnosticsWorkflowSummarySchema,
   SupportBundlePreviewSchema,
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
+  BACKUP_PREPARE_ROLLBACK_RESTORE_CHANNEL,
+  BACKUP_ROLLBACK_RESTORE_STATUS_CHANNEL,
   BackupContinueIncompleteRequestSchema,
   BackupContinueIncompleteResultSchema,
+  RestoreRollbackPrepareRequestSchema,
+  RestoreRollbackPrepareResultSchema,
+  RestoreRollbackStatusSchema,
   BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL,
   BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL,
   BackupConversationPreferenceSummarySchema,
@@ -3598,6 +3606,37 @@ const api: PigeDesktopApi = {
   backup: {
     status: async (): Promise<BackupRestoreStatus> =>
       ipcRenderer.invoke("backup.status") as Promise<BackupRestoreStatus>,
+    rollbackRestoreStatus: async (): Promise<RestoreRollbackStatus> =>
+      RestoreRollbackStatusSchema.parse(
+        await ipcRenderer.invoke(BACKUP_ROLLBACK_RESTORE_STATUS_CHANNEL)
+      ),
+    prepareRollbackRestore: async (
+      request: RestoreRollbackPrepareRequest
+    ): Promise<RestoreRollbackPrepareResult> => {
+      const parsedRequest = RestoreRollbackPrepareRequestSchema.parse(request);
+      const result = RestoreRollbackPrepareResultSchema.parse(
+        await ipcRenderer.invoke(BACKUP_PREPARE_ROLLBACK_RESTORE_CHANNEL, parsedRequest)
+      );
+      if (
+        result.requestId !== parsedRequest.requestId ||
+        result.activeVaultId !== parsedRequest.activeVaultId ||
+        result.restoreJobId !== parsedRequest.restoreJobId ||
+        result.expectedRestoreJobUpdatedAt !== parsedRequest.expectedRestoreJobUpdatedAt
+      ) {
+        throw new Error("Invalid Backup restore rollback response identity.");
+      }
+      if (result.status !== "prepared") return result;
+      const preview = projectRestorePreviewResult(result.preview);
+      if (
+        preview.status !== "ready" ||
+        preview.permittedModes.length !== 1 ||
+        preview.permittedModes[0] !== "replace_existing" ||
+        preview.defaultMode !== "replace_existing"
+      ) {
+        throw new Error("Invalid Backup restore rollback preview.");
+      }
+      return result;
+    },
     conversationPreferenceStatus: async (): Promise<BackupConversationPreferenceSummary> =>
       BackupConversationPreferenceSummarySchema.parse(
         await ipcRenderer.invoke(BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL)

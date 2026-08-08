@@ -6699,6 +6699,90 @@ export const BackupContinueIncompleteResultSchema = BackupContinueIncompleteRequ
   status: z.enum(["continued", "cancelled", "stale", "not_found", "ineligible", "failed"])
 }).strict();
 
+export const BACKUP_ROLLBACK_RESTORE_STATUS_CHANNEL = "backup.rollbackRestoreStatus" as const;
+export const BACKUP_PREPARE_ROLLBACK_RESTORE_CHANNEL = "backup.prepareRollbackRestore" as const;
+export const RestoreRollbackCandidateSchema = z.object({
+  activeVaultId: VaultIdSchema,
+  restoreJobId: JobIdSchema,
+  expectedRestoreJobUpdatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const RestoreRollbackStatusSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    status: z.literal("ready"),
+    candidate: RestoreRollbackCandidateSchema
+  }).strict(),
+  z.object({ apiVersion: z.literal(1), status: z.literal("unavailable") }).strict()
+]);
+export const RestoreRollbackPrepareRequestIdSchema = z.string()
+  .regex(/^restorerollbackreq_[a-z0-9]{16,64}$/u);
+export const RestoreRollbackPrepareRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: RestoreRollbackPrepareRequestIdSchema,
+  ...RestoreRollbackCandidateSchema.shape
+}).strict();
+const BackupManifestSummaryProjectionSchema = z.object({
+  formatVersion: z.literal(1),
+  format: z.literal("pige-backup"),
+  appVersion: z.string().min(1).max(160),
+  vaultId: VaultIdSchema,
+  vaultName: VaultDisplayNameSchema,
+  vaultSchemaVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+  createdAt: z.string().datetime({ offset: true }),
+  fileCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  totalBytes: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  noteCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  sourceCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  conversationCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  memoryCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  externalDependencyCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  includedExternalDependencyCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  missingRequiredExternalDependencyCount: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  externalDependenciesComplete: z.boolean(),
+  includesSecrets: z.literal(false),
+  includes: z.object({
+    markdownKnowledge: z.boolean(),
+    sourceRecords: z.boolean(),
+    managedSourceCopies: z.boolean(),
+    conversations: z.boolean(),
+    vaultMemory: z.boolean(),
+    trash: z.boolean(),
+    rebuildableDatabaseCache: z.boolean(),
+    secrets: z.literal(false)
+  }).strict()
+}).strict();
+const RestoreRollbackPreviewWarningSchema = z.object({
+  code: z.enum([
+    "invalid_archive_entries",
+    "excluded_rebuildable_roots",
+    "external_originals_not_included"
+  ]),
+  count: z.number().int().positive().max(100_000)
+}).strict();
+export const RestoreRollbackPreparedPreviewSchema = z.object({
+  status: z.literal("ready"),
+  previewId: z.string().regex(/^sha256:[a-f0-9]{64}$/u),
+  manifest: BackupManifestSummaryProjectionSchema,
+  invalidFileCount: z.number().int().nonnegative().max(100_000),
+  warnings: z.array(RestoreRollbackPreviewWarningSchema).max(3),
+  permittedModes: z.tuple([z.literal("replace_existing")]),
+  defaultMode: z.literal("replace_existing")
+}).strict();
+const RestoreRollbackPrepareIdentitySchema = RestoreRollbackPrepareRequestSchema.pick({
+  apiVersion: true,
+  requestId: true,
+  activeVaultId: true,
+  restoreJobId: true,
+  expectedRestoreJobUpdatedAt: true
+});
+export const RestoreRollbackPrepareResultSchema = z.discriminatedUnion("status", [
+  RestoreRollbackPrepareIdentitySchema.extend({
+    status: z.literal("prepared"),
+    preview: RestoreRollbackPreparedPreviewSchema
+  }).strict(),
+  RestoreRollbackPrepareIdentitySchema.extend({ status: z.enum(["stale", "not_found", "failed"]) }).strict()
+]);
+
 export const BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL = "backup.memoryPreferenceStatus" as const;
 export const BACKUP_SET_MEMORY_PREFERENCE_CHANNEL = "backup.setMemoryPreference" as const;
 export const BackupMemoryPreferenceRevisionSchema = z.string()
@@ -13616,6 +13700,12 @@ export type BackupReconnectDestinationResult = z.infer<typeof BackupReconnectDes
 export type BackupContinueIncompleteRequestId = z.infer<typeof BackupContinueIncompleteRequestIdSchema>;
 export type BackupContinueIncompleteRequest = z.infer<typeof BackupContinueIncompleteRequestSchema>;
 export type BackupContinueIncompleteResult = z.infer<typeof BackupContinueIncompleteResultSchema>;
+export type RestoreRollbackCandidate = z.infer<typeof RestoreRollbackCandidateSchema>;
+export type RestoreRollbackStatus = z.infer<typeof RestoreRollbackStatusSchema>;
+export type RestoreRollbackPrepareRequestId = z.infer<typeof RestoreRollbackPrepareRequestIdSchema>;
+export type RestoreRollbackPrepareRequest = z.infer<typeof RestoreRollbackPrepareRequestSchema>;
+export type RestoreRollbackPreparedPreview = z.infer<typeof RestoreRollbackPreparedPreviewSchema>;
+export type RestoreRollbackPrepareResult = z.infer<typeof RestoreRollbackPrepareResultSchema>;
 export type BackupMemoryPreferenceRevision = z.infer<typeof BackupMemoryPreferenceRevisionSchema>;
 export type BackupMemoryPreferenceSummary = z.infer<typeof BackupMemoryPreferenceSummarySchema>;
 export type BackupMemoryPreferenceUpdateRequest = z.infer<typeof BackupMemoryPreferenceUpdateRequestSchema>;
