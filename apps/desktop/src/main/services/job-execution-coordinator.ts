@@ -86,6 +86,7 @@ const FACT_KEYS = new Set([
   "operationIds",
   "childJobIds",
   "checkpoints",
+  "clearCheckpointIds",
   "progress",
   "warnings",
   "policyContextId",
@@ -106,6 +107,7 @@ export interface JobExecutionFactsPatch {
   readonly operationIds?: readonly string[];
   readonly childJobIds?: readonly string[];
   readonly checkpoints?: readonly JobCheckpoint[];
+  readonly clearCheckpointIds?: readonly string[];
   readonly progress?: JobProgress;
   readonly warnings?: readonly PigeWarning[];
   readonly policyContextId?: string;
@@ -1052,6 +1054,11 @@ export class JobExecutionCoordinator {
 function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
   if (!facts) return job;
   assertFacts(facts);
+  const checkpoints = facts.checkpoints
+    ? mergeCheckpoints(filterCheckpoints(job.checkpoints, facts.clearCheckpointIds), facts.checkpoints)
+    : facts.clearCheckpointIds
+      ? filterCheckpoints(job.checkpoints, facts.clearCheckpointIds)
+      : undefined;
   return {
     ...job,
     ...(facts.stage ? { stage: facts.stage } : {}),
@@ -1060,7 +1067,7 @@ function applyFacts(job: JobRecord, facts?: JobExecutionFactsPatch): JobRecord {
     ...(facts.proposalIds ? { proposalIds: mergeStrings(job.proposalIds, facts.proposalIds) } : {}),
     ...(facts.operationIds ? { operationIds: mergeStrings(job.operationIds, facts.operationIds) } : {}),
     ...(facts.childJobIds ? { childJobIds: mergeStrings(job.childJobIds, facts.childJobIds) } : {}),
-    ...(facts.checkpoints ? { checkpoints: mergeCheckpoints(job.checkpoints, facts.checkpoints) } : {}),
+    ...(checkpoints ? { checkpoints } : {}),
     ...(facts.progress ? { progress: { ...facts.progress } } : {}),
     ...(facts.warnings ? { warnings: mergeValues(job.warnings, facts.warnings) } : {}),
     ...(facts.policyContextId ? { policyContextId: facts.policyContextId } : {}),
@@ -1219,6 +1226,15 @@ function mergeCheckpoints(
   const merged = new Map((current ?? []).map((checkpoint) => [checkpoint.id, checkpoint]));
   for (const checkpoint of added) merged.set(checkpoint.id, checkpoint);
   return [...merged.values()];
+}
+
+function filterCheckpoints(
+  current: readonly JobCheckpoint[] | undefined,
+  ids: readonly string[] | undefined
+): JobCheckpoint[] {
+  if (!ids || ids.length === 0) return [...(current ?? [])];
+  const cleared = new Set(ids);
+  return (current ?? []).filter((checkpoint) => !cleared.has(checkpoint.id));
 }
 
 function mergePrivacy(current: JobRecord["privacy"], added: JobPrivacy): JobPrivacy {
