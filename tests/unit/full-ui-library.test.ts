@@ -2320,6 +2320,34 @@ describe("full UI Library", () => {
     dom.window.close();
   });
 
+  it("keeps optional Reader metadata controls on distinct React identities", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await act(async () => {
+      root.render(createElement(NoteReader, {
+        note: readerNote(),
+        activeVaultId: "vault_20260715_fullui01",
+        onSetQuestionState: async () => { throw new Error("question state action should not run"); },
+        onQuestionStateChanged: () => undefined,
+        onSetClaimConfidence: async () => { throw new Error("claim confidence action should not run"); },
+        onClaimConfidenceChanged: () => undefined,
+        onSetEntityType: async () => { throw new Error("entity type action should not run"); },
+        onEntityTypeChanged: () => undefined,
+        related: null,
+        relatedLoadingPageId: null,
+        onOpenRelated: async () => undefined,
+        onDevelopment: () => undefined,
+        t
+      }));
+      await settle(dom);
+    });
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+    consoleError.mockRestore();
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("keeps every saved-source closed result body-free in the current Reader", async () => {
     const dom = createDom();
     const root = createRoot(dom.window.document.querySelector("#root")!);

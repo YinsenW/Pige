@@ -910,7 +910,7 @@ export function NoteReader(props: {
           ) : null}
           {props.activeVaultId && props.onSetQuestionState && props.onQuestionStateChanged ? (
             <ReaderQuestionStateControl
-              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.questionState?.revision ?? ""}`}
+              key={`question-state:${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.questionState?.revision ?? ""}`}
               activeVaultId={props.activeVaultId}
               note={props.note}
               onSetState={props.onSetQuestionState}
@@ -920,7 +920,7 @@ export function NoteReader(props: {
           ) : null}
           {props.activeVaultId && props.onSetClaimConfidence && props.onClaimConfidenceChanged ? (
             <ReaderClaimConfidenceControl
-              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.claimConfidence?.revision ?? ""}`}
+              key={`claim-confidence:${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.claimConfidence?.revision ?? ""}`}
               activeVaultId={props.activeVaultId}
               note={props.note}
               onSetConfidence={props.onSetClaimConfidence}
@@ -930,7 +930,7 @@ export function NoteReader(props: {
           ) : null}
           {props.activeVaultId && props.onSetEntityType && props.onEntityTypeChanged ? (
             <ReaderEntityTypeControl
-              key={`${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.entityType?.revision ?? ""}`}
+              key={`entity-type:${summary.pageId}:${props.note.renderContextId ?? ""}:${props.note.entityType?.revision ?? ""}`}
               activeVaultId={props.activeVaultId}
               note={props.note}
               onSetType={props.onSetEntityType}
