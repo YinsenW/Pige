@@ -71,8 +71,10 @@ export function DiagnosticsEventExportComposer(props: {
   const [notice, setNotice] = useState<"system.diagnosticEventSelectionStale" | "system.previewFailed" | null>(null);
   const previewInFlightRef = useRef(false);
   const previewTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const workflowRef = useRef(props.workflow);
   const selection = props.workflow?.eventSelection;
   const disabled = props.disabled || previewBusy;
+  workflowRef.current = props.workflow;
 
   useEffect(() => {
     if (!restorePreviewFocus || previewBusy) return;
@@ -94,8 +96,10 @@ export function DiagnosticsEventExportComposer(props: {
 
   const preview = async (): Promise<void> => {
     if (disabled || previewInFlightRef.current) return;
-    if (!selection || selectedEventIds.length === 0 ||
-      selectedEventIds.some((eventId) => !selection.events.some((event) => event.eventId === eventId))) {
+    const workflowAtRequest = workflowRef.current;
+    const selectionAtRequest = workflowAtRequest?.eventSelection;
+    if (!workflowAtRequest || !selectionAtRequest || selectedEventIds.length === 0 ||
+      selectedEventIds.some((eventId) => !selectionAtRequest.events.some((event) => event.eventId === eventId))) {
       setNotice("system.diagnosticEventSelectionStale");
       setRestorePreviewFocus(true);
       return;
@@ -112,15 +116,31 @@ export function DiagnosticsEventExportComposer(props: {
       const preview = await window.pige.diagnostics.previewSupportBundle({
         apiVersion: 1,
         requestId,
-        eventSelectionRevision: selection.revision,
+        eventSelectionRevision: selectionAtRequest.revision,
         selectedDiagnosticEventIds: [...selectedEventIds],
         optionalCategories,
         ...(includePrivateExcerpt ? { privateExcerpt } : {})
       });
-      if (preview.requestId !== requestId || preview.eventSelectionRevision !== selection.revision ||
+      if (preview.requestId !== requestId || preview.eventSelectionRevision !== selectionAtRequest.revision ||
         !sameStringArray(preview.selectedDiagnosticEventIds, selectedEventIds) ||
         !sameStringArray(preview.selectedOptionalCategories, optionalCategories)) {
         throw new Error("diagnostics_preview_identity_mismatch");
+      }
+      const latestWorkflow = workflowRef.current;
+      if (
+        !latestWorkflow ||
+        latestWorkflow.revision !== workflowAtRequest.revision ||
+        latestWorkflow.scopeContextId !== workflowAtRequest.scopeContextId ||
+        latestWorkflow.activeVaultId !== workflowAtRequest.activeVaultId ||
+        latestWorkflow.eventSelection?.revision !== selectionAtRequest.revision ||
+        preview.expectedRevision !== workflowAtRequest.revision ||
+        preview.scopeContextId !== workflowAtRequest.scopeContextId ||
+        preview.activeVaultId !== workflowAtRequest.activeVaultId
+      ) {
+        props.onPreviewReady(null);
+        setNotice("system.diagnosticEventSelectionStale");
+        setRestorePreviewFocus(true);
+        return;
       }
       props.onPreviewReady(preview);
     } catch {

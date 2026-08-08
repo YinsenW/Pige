@@ -17,6 +17,7 @@ import {
   type SettingsSection
 } from "../../apps/desktop/src/renderer/src/App";
 import { GeneralSettingsPanel } from "../../apps/desktop/src/renderer/src/components/GeneralSettingsPanel";
+import { DiagnosticsEventExportComposer } from "../../apps/desktop/src/renderer/src/components/DiagnosticsEventSelection";
 import type { SettingsProfileTransferApi } from "../../apps/desktop/src/renderer/src/components/SettingsProfileTransferPanel";
 import {
   PermissionsPrivacySettingsPanel,
@@ -45,6 +46,7 @@ import type {
   LocalSemanticRetrievalRemoveResult,
   LocalSemanticRetrievalStatus,
   DiagnosticsClearLocalResult,
+  DiagnosticsWorkflowSummary,
   JobSummary,
   KnowledgeActivitySummary,
   PaddleOcrDisableRequest,
@@ -96,7 +98,8 @@ import type {
   NoteTrashPurgeRequest,
   NoteTrashPurgeResult,
   SpeechAssetInstallEvent,
-  SpeechAvailabilityResult
+  SpeechAvailabilityResult,
+  SupportBundlePreview
 } from "@pige/contracts";
 import {
   LocalSemanticRetrievalSettingsPanel,
@@ -4439,6 +4442,107 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).toContain("Pige could not prepare a safe support bundle preview.");
     expect(panel.textContent).not.toContain("Preview ready");
     expect(dom.window.document.activeElement).toBe(buttonNamed(panel, "Preview and export…"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("rejects a support preview when the diagnostics scope changes while it is pending", async () => {
+    const dom = createDom();
+    const event = {
+      eventId: `diagevent_${"d".repeat(32)}`,
+      recordedAt: "2026-08-08T00:00:00.000Z",
+      level: "warning" as const,
+      code: "jobs.resume_failed",
+      redactedDetailCount: 1
+    };
+    const first: DiagnosticsWorkflowSummary = {
+      apiVersion: 1,
+      revision: 7,
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      activeVaultId: "vault_20260808_diagnostics_a",
+      localOnly: true,
+      ownedArtifactCount: 0,
+      eventSelection: {
+        revision: `diagevents_${"c".repeat(64)}`,
+        events: [event]
+      }
+    };
+    const second: DiagnosticsWorkflowSummary = {
+      ...first,
+      revision: 8,
+      scopeContextId: `diagctx_${"b".repeat(48)}`,
+      activeVaultId: "vault_20260808_diagnostics_b",
+      eventSelection: {
+        revision: `diagevents_${"e".repeat(64)}`,
+        events: [event]
+      }
+    };
+    let resolvePreview!: (preview: SupportBundlePreview) => void;
+    let pendingRequestId = "";
+    const previewSupportBundle = vi.fn((request: { readonly requestId: string }) => new Promise<SupportBundlePreview>((resolve) => {
+      pendingRequestId = request.requestId;
+      resolvePreview = resolve;
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { diagnostics: { previewSupportBundle } }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+
+    function Harness(): React.JSX.Element {
+      const [workflow, setWorkflow] = useState<DiagnosticsWorkflowSummary>(first);
+      const [preview, setPreview] = useState<SupportBundlePreview | null>(null);
+      return createElement(
+        "div",
+        null,
+        createElement("button", { type: "button", onClick: () => setWorkflow(second) }, "Rotate diagnostics scope"),
+        createElement(DiagnosticsEventExportComposer, {
+          workflow,
+          disabled: false,
+          onPreviewReady: setPreview,
+          t
+        }),
+        preview ? createElement("span", { "data-preview-present": "true" }, "Preview ready") : null
+      );
+    }
+
+    await act(async () => {
+      root.render(createElement(Harness));
+      await settle(dom);
+    });
+    const checkbox = requireElement(dom.window.document.querySelector<HTMLInputElement>('input[type="checkbox"]'));
+    await act(async () => {
+      checkbox.click();
+      await settle(dom);
+      buttonNamed(dom.window.document.body, "Preview and export…").click();
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(dom.window.document.body, "Rotate diagnostics scope").click();
+      await settle(dom);
+    });
+    resolvePreview({
+      apiVersion: 1,
+      requestId: pendingRequestId,
+      previewId: `supportpreview_${"b".repeat(48)}`,
+      generatedAt: "2026-08-08T00:00:00.000Z",
+      localOnly: true,
+      estimatedBytes: 1024,
+      scopeContextId: first.scopeContextId,
+      expectedRevision: first.revision,
+      activeVaultId: first.activeVaultId,
+      eventSelectionRevision: first.eventSelection!.revision,
+      selectedDiagnosticEventIds: [event.eventId],
+      selectedDiagnosticEvents: [event],
+      selectedOptionalCategories: [],
+      includedCategories: [{ id: "app_runtime", label: "App runtime", included: true, reason: "safe metadata" }],
+      excludedCategories: [{ id: "content", label: "Private content", included: false, reason: "excluded" }],
+      privacyWarnings: ["The bundle is created locally and is not uploaded automatically."]
+    });
+    await act(async () => { await settle(dom); });
+    expect(dom.window.document.body.textContent).toContain("The diagnostic event selection changed. Choose from the latest local events.");
+    expect(dom.window.document.querySelector("[data-preview-present=\"true\"]")).toBeNull();
 
     await act(async () => root.unmount());
     dom.window.close();
