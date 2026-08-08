@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { NoteSearchClaimEvidenceRequest, NoteSearchClaimEvidenceResult } from "@pige/contracts";
 import { ReaderClaimEvidence } from "../../apps/desktop/src/renderer/src/components/ReaderClaimEvidence";
 
 const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent",
@@ -18,6 +19,23 @@ afterEach(() => {
 });
 
 describe("ReaderClaimEvidence", () => {
+  it("does not show evidence candidates after the search query drifts while pending", async () => {
+    let resolveSearch: ((result: NoteSearchClaimEvidenceResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchClaimEvidenceRequest) => new Promise<NoteSearchClaimEvidenceResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(search, vi.fn());
+    const field = input(harness, "searchPlaceholder");
+    await act(async () => { setInput(harness.dom, field, "Evidence"); await settle(); });
+    await act(async () => { button(harness, "search").click(); await Promise.resolve(); });
+    await act(async () => { setInput(harness.dom, field, "Different"); await settle(); });
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [candidate] });
+    await act(async () => { await settle(); });
+    expect(harness.container.textContent).not.toContain("Evidence source");
+    await harness.unmount();
+  });
+
   it("adds one chosen Source once and adopts only the authoritative Claim render", async () => {
     const change = vi.fn(async (request) => ({ ...request, status: "committed" as const,
       operationId: "op_20260802_claimevidence1", render: note([candidate]) }));

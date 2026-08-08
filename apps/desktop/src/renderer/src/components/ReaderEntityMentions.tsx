@@ -25,10 +25,13 @@ export function ReaderEntityMentions(props: {
   const sectionRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<readonly NoteEntityMentionItem[]>([]);
+  const [resultsQuery, setResultsQuery] = useState("");
+  const queryRef = useRef(query);
+  queryRef.current = query;
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
-    setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false;
+    setQuery(""); setResults([]); setResultsQuery(""); setPending(false); setNotice(null); busyRef.current = false;
   }, [owner]);
   if (props.note.summary.pageType !== "entity" || !summary || !context) return null;
 
@@ -40,19 +43,25 @@ export function ReaderEntityMentions(props: {
   };
   const search = async (): Promise<void> => {
     if (busyRef.current || !query.trim()) return;
+    const searchQuery = query.trim();
     busyRef.current = true; setPending(true); setNotice(null);
     const identity = owner;
     const request: NoteSearchEntityMentionsRequest = {
       apiVersion: 1, requestId: requestId(), activeVaultId: props.activeVaultId,
       currentPageId: props.note.summary.pageId, renderContextId: context,
-      expectedRevision: summary.revision, query: query.trim()
+      expectedRevision: summary.revision, query: searchQuery
     };
     try {
       const result = await props.search(request);
-      if (ownerRef.current !== identity) return;
-      if (result.status === "ready" && sameSearch(request, result)) setResults(result.candidates);
+      if (ownerRef.current !== identity || queryRef.current.trim() !== searchQuery) return;
+      if (result.status === "ready" && sameSearch(request, result)) {
+        setResults(result.candidates);
+        setResultsQuery(searchQuery);
+      }
       else setNotice(result.status);
-    } catch { if (ownerRef.current === identity) setNotice("failed"); }
+    } catch {
+      if (ownerRef.current === identity && queryRef.current.trim() === searchQuery) setNotice("failed");
+    }
     finally {
       if (ownerRef.current === identity) { busyRef.current = false; setPending(false); restoreFocus(); }
     }
@@ -88,7 +97,11 @@ export function ReaderEntityMentions(props: {
       {props.t("note.entityMentions.remove")}
     </button></span>)}
     <span><input value={query} maxLength={160} placeholder={props.t("note.entityMentions.searchPlaceholder")}
-      onChange={(event) => setQuery(event.currentTarget.value)} />
+      onChange={(event) => {
+        const nextQuery = event.currentTarget.value;
+        setQuery(nextQuery);
+        if (nextQuery.trim() !== resultsQuery) { setResults([]); setResultsQuery(""); }
+      }} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()}
         onClick={(event) => { focusRef.current = event.currentTarget; void search(); }}>
         {props.t("note.entityMentions.search")}

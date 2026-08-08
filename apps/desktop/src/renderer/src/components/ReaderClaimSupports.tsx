@@ -22,11 +22,12 @@ export function ReaderClaimSupports(props: {
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${summary?.revision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null), confirmRef = useRef<HTMLButtonElement>(null), restoreIntentFocusRef = useRef(false);
-  const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteClaimSupportItem[]>([]);
+  const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteClaimSupportItem[]>([]), [resultsQuery, setResultsQuery] = useState("");
+  const queryRef = useRef(query); queryRef.current = query;
   const [intent, setIntent] = useState<Intent | null>(null), [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
-    setQuery(""); setResults([]); setIntent(null); setPending(false); setNotice(null); busyRef.current = false;
+    setQuery(""); setResults([]); setResultsQuery(""); setIntent(null); setPending(false); setNotice(null); busyRef.current = false;
   }, [owner]);
   useEffect(() => {
     if (intent) confirmRef.current?.focus();
@@ -43,14 +44,20 @@ export function ReaderClaimSupports(props: {
   }, 0); };
   const search = async (): Promise<void> => {
     if (busyRef.current || !query.trim()) return;
+    const searchQuery = query.trim();
     busyRef.current = true; setPending(true); setNotice(null); const identity = owner;
-    const request = identityRequest(props, context, summary.revision, { query: query.trim() });
+    const request = identityRequest(props, context, summary.revision, { query: searchQuery });
     try {
       const result = await props.search(request);
-      if (ownerRef.current !== identity) return;
-      if (result.status === "ready" && sameSearch(request, result)) setResults(result.candidates);
+      if (ownerRef.current !== identity || queryRef.current.trim() !== searchQuery) return;
+      if (result.status === "ready" && sameSearch(request, result)) {
+        setResults(result.candidates);
+        setResultsQuery(searchQuery);
+      }
       else setNotice(result.status);
-    } catch { if (ownerRef.current === identity) setNotice("failed"); }
+    } catch {
+      if (ownerRef.current === identity && queryRef.current.trim() === searchQuery) setNotice("failed");
+    }
     finally { if (ownerRef.current === identity) { busyRef.current = false; setPending(false); restoreFocus(); } }
   };
   const commit = async (): Promise<void> => {
@@ -80,7 +87,11 @@ export function ReaderClaimSupports(props: {
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>
       {props.t("note.claimSupports.remove")}</button></span>)}
     <span><input value={query} maxLength={160} placeholder={props.t("note.claimSupports.searchPlaceholder")}
-      onChange={(event) => setQuery(event.currentTarget.value)} />
+      onChange={(event) => {
+        const nextQuery = event.currentTarget.value;
+        setQuery(nextQuery);
+        if (nextQuery.trim() !== resultsQuery) { setResults([]); setResultsQuery(""); }
+      }} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => {
         focusRef.current = event.currentTarget; void search();
       }}>{props.t("note.claimSupports.search")}</button></span>
