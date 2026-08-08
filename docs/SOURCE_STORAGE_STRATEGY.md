@@ -264,6 +264,14 @@ Storage ownership rules:
 ## 9. Safety Rules
 
 - Never delete or move an original referenced file unless the user explicitly requests it outside normal ingest.
+- Reader Source evidence trash removes only Pige-owned Source Record and Source Page truth for
+  `reference_original`; the external original never moves. For an in-vault managed copy, Main first
+  re-proves the exact Source revision, page ownership, no other durable page reference, no active Job
+  use, and the no-follow asset identity before moving the Source Record, Source Page, and managed copy
+  into one recoverable receipt. Any uncertain reference or external managed root fails closed.
+- Source evidence restore preserves the original Source and Page IDs, restores only the exact
+  receipt-bound files into vacant current destinations, and records a forward `restore_source_asset`
+  Operation. Activity Undo and startup recovery converge the same receipt without deleting evidence.
 - Do not follow symlinks during archive extraction or backup without explicit policy.
 - Do not treat paths from source content as trusted.
 - Do not let renderer code access arbitrary original paths.

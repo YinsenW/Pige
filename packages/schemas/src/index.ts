@@ -1792,6 +1792,77 @@ export const SourceReconnectResultSchema = z.discriminatedUnion("status", [
   )
 ]);
 
+export const SOURCE_TRASH_CHANNEL = "sources.trash" as const;
+export const SOURCE_TRASH_LIST_CHANNEL = "sources.listTrash" as const;
+export const SOURCE_TRASH_RESTORE_CHANNEL = "sources.restoreTrash" as const;
+export const SourceTrashRequestIdSchema = z.string().regex(/^sourcetrashreq_[a-z0-9]{16,64}$/);
+export const SourceTrashListRequestIdSchema = z.string().regex(/^sourcetrashlistreq_[a-z0-9]{16,64}$/);
+export const SourceTrashRestoreRequestIdSchema = z.string().regex(/^sourcetrashrestorereq_[a-z0-9]{16,64}$/);
+export const SourceTrashRevisionSchema = z.string().regex(/^sourcetrashrev_[a-f0-9]{64}$/);
+export const SourceTrashEligibilitySchema = z.object({
+  canTrash: z.literal(true),
+  sourceId: SourceIdSchema,
+  sourceRevision: SourceRecordRevisionSchema,
+  storage: z.enum(["managed_copy", "reference_original"])
+}).strict();
+export const SourceTrashRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceTrashRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema,
+  expectedSourceRevision: SourceRecordRevisionSchema,
+  confirmation: z.literal("move_to_trash")
+}).strict();
+const SourceTrashIdentitySchema = SourceTrashRequestSchema;
+export const SourceTrashResultSchema = z.discriminatedUnion("status", [
+  SourceTrashIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/)
+  }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    SourceTrashIdentitySchema.extend({ status: z.literal(status) }).strict())
+]);
+export const SourceTrashSummarySchema = z.object({
+  sourceId: SourceIdSchema,
+  pageId: PageIdSchema,
+  title: z.string().trim().min(1).max(160).refine((value) => !/[\\/\u0000-\u001f\u007f-\u009f]/u.test(value)),
+  storage: z.enum(["managed_copy", "reference_original"]),
+  trashedAt: z.string().datetime({ offset: true }),
+  trashOperationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/),
+  trashRevision: SourceTrashRevisionSchema
+}).strict();
+export const SourceTrashListRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceTrashListRequestIdSchema,
+  activeVaultId: VaultIdSchema
+}).strict();
+export const SourceTrashListResultSchema = z.discriminatedUnion("status", [
+  SourceTrashListRequestSchema.extend({
+    status: z.literal("ready"),
+    sources: z.array(SourceTrashSummarySchema).max(1_000)
+  }).strict(),
+  SourceTrashListRequestSchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const SourceTrashRestoreRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: SourceTrashRestoreRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  sourceId: SourceIdSchema,
+  pageId: PageIdSchema,
+  trashOperationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/),
+  expectedTrashRevision: SourceTrashRevisionSchema
+}).strict();
+export const SourceTrashRestoreResultSchema = z.discriminatedUnion("status", [
+  SourceTrashRestoreRequestSchema.extend({
+    status: z.literal("committed"),
+    operationId: z.string().regex(/^op_\d{8}_[a-z0-9]{8,}$/)
+  }).strict(),
+  ...(["stale", "not_found", "failed"] as const).map((status) =>
+    SourceTrashRestoreRequestSchema.extend({ status: z.literal(status) }).strict())
+]);
+
 export const MarkdownPageTypeSchema = z.enum(["source", "note", "concept", "entity", "topic", "claim", "question"]);
 
 export const MarkdownPageStatusSchema = z.enum([
@@ -2057,7 +2128,8 @@ export const NoteRenderResultSchema = z.object({
   topicParents: NoteTopicParentsSummarySchema.optional(),
   refreshableSourceIds: z.array(SourceIdSchema).max(1_000).optional(),
   reconnectOriginalSourceIds: z.array(SourceIdSchema).max(5).optional(),
-  reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional()
+  reconnectOriginalSources: z.array(ReferencedOriginalReconnectCandidateSchema).max(5).optional(),
+  sourceTrashEligibility: SourceTrashEligibilitySchema.optional()
 }).strict();
 export const NOTE_OPEN_SEARCH_MATCH_CHANNEL = "notes.openSearchMatch" as const;
 export const NoteOpenSearchMatchRequestSchema = z.object({
@@ -13667,6 +13739,14 @@ export type SourceReconnectListRequest = z.infer<typeof SourceReconnectListReque
 export type SourceReconnectListResult = z.infer<typeof SourceReconnectListResultSchema>;
 export type SourceReconnectRequest = z.infer<typeof SourceReconnectRequestSchema>;
 export type SourceReconnectResult = z.infer<typeof SourceReconnectResultSchema>;
+export type SourceTrashEligibility = z.infer<typeof SourceTrashEligibilitySchema>;
+export type SourceTrashRequest = z.infer<typeof SourceTrashRequestSchema>;
+export type SourceTrashResult = z.infer<typeof SourceTrashResultSchema>;
+export type SourceTrashSummary = z.infer<typeof SourceTrashSummarySchema>;
+export type SourceTrashListRequest = z.infer<typeof SourceTrashListRequestSchema>;
+export type SourceTrashListResult = z.infer<typeof SourceTrashListResultSchema>;
+export type SourceTrashRestoreRequest = z.infer<typeof SourceTrashRestoreRequestSchema>;
+export type SourceTrashRestoreResult = z.infer<typeof SourceTrashRestoreResultSchema>;
 export type SourceRecordRevision = z.infer<typeof SourceRecordRevisionSchema>;
 export type SourceFormatIdentity = z.infer<typeof SourceFormatIdentitySchema>;
 export type ReferencedOriginalReconnectProof = z.infer<typeof ReferencedOriginalReconnectProofSchema>;

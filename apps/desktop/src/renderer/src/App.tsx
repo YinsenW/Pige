@@ -13,7 +13,7 @@ import {
   type RefObject
 } from "react";
 import { PigeIcon, type PigeIconName } from "./components/PigeIcon";
-import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
+import { ReaderSourceTrashAction } from "./components/ReaderSourceTrashAction"; import { KnowledgeTreeMap } from "./components/KnowledgeTreeMap";
 import {
   LibraryTagsBrowser,
   type LibraryTagsApi,
@@ -3801,8 +3801,8 @@ export function LibraryPanel(props: {
               t={props.t}
               onCommitted={props.onCurrentNoteMerged}
             />
-            <ReaderGeneratedNoteRevealAction activeVaultId={props.activeVaultId} note={props.selectedNote}
-              onReveal={(request) => window.pige.notes.revealGenerated(request)} t={props.t} />
+            <ReaderGeneratedNoteRevealAction activeVaultId={props.activeVaultId} note={props.selectedNote} onReveal={(request) => window.pige.notes.revealGenerated(request)} t={props.t} />
+            <ReaderSourceTrashAction note={props.selectedNote} {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})} onTrash={(request) => window.pige.sources.trash(request)} onCommitted={() => props.onCurrentNoteTrashed?.()} t={props.t} />
             <ReaderTopicRenameDialog
               note={props.selectedNote}
               {...(props.activeVaultId ? { activeVaultId: props.activeVaultId } : {})}

@@ -287,7 +287,7 @@ import { LibraryTagsService } from "./services/library-tags-service";
 import { NoteMarkdownImportService } from "./services/note-markdown-import-service";
 import { NoteMarkdownEditorConflictService } from "./services/note-markdown-editor-conflict-service";
 import { AgentPageUpdateRedoService } from "./services/agent-page-update-redo-service";
-import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort } from "./services/knowledge-activity-service";
+import { KnowledgeActivityService, type KnowledgeActivityCollectionPort, type KnowledgeActivityPageLifecyclePort, type KnowledgeActivitySourcePort } from "./services/knowledge-activity-service";
 import { KnowledgeHealthService } from "./services/knowledge-health-service";
 import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-health-duplicate-topic-service";
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
@@ -411,6 +411,7 @@ import { SourceOriginalReconnectService } from "./services/source-original-recon
 import { ReaderSourceReconnectService } from "./services/reader-source-reconnect-service";
 import { SourceRefreshService } from "./services/source-refresh-service";
 import { SourceRefreshConflictService } from "./services/source-refresh-conflict-service";
+import { SourceTrashService, sourceTrashCandidateEligible } from "./services/source-trash-service";
 import { WebSourceRefreshService } from "./services/web-source-refresh-service";
 import { installRendererNavigationGuard } from "./services/renderer-navigation-guard";
 import { RestoreCoordinatorService } from "./services/restore-coordinator-service";
@@ -582,6 +583,7 @@ let localRerankerRuntime: LocalRerankerRuntime | undefined;
 let documentParserService: DocumentParserService | undefined;
 let sourceRefreshService: SourceRefreshService | undefined;
 let sourceRefreshConflictService: SourceRefreshConflictService | undefined;
+let sourceTrashService: SourceTrashService | undefined;
 let datasetQueryService: DatasetQueryService | undefined;
 let datasetService: DatasetService | undefined;
 let ocrService: OcrService | undefined;
@@ -1626,6 +1628,9 @@ const getSourceRefreshService = (): SourceRefreshService => {
 const getSourceRefreshConflictService = (): SourceRefreshConflictService =>
   sourceRefreshConflictService ??= new SourceRefreshConflictService(getVaultService(), getNoteMarkdownEditorService());
 
+const getSourceTrashService = (): SourceTrashService =>
+  sourceTrashService ??= new SourceTrashService(getVaultService(), getNotesService(), getJobsService());
+
 const getDatasetService = (): DatasetService => {
   if (!datasetService) datasetService = new DatasetService(new DatasetIngestWorkerService());
   return datasetService;
@@ -1993,7 +1998,8 @@ const getNotesService = (): NotesService => {
       getLocalDatabaseService(),
       undefined,
       getNoteMarkdownEditorService(),
-      getSourceRefreshService()
+      getSourceRefreshService(),
+      { canTrash: (vaultPath, record, pageId) => sourceTrashCandidateEligible(vaultPath, record, pageId, getJobsService()) }
     );
   }
   return notesService;
@@ -2214,6 +2220,21 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   };
 };
 
+const createSourceLifecycleActivityPort = (): KnowledgeActivitySourcePort => {
+  const refresh = getSourceRefreshService(), trash = getSourceTrashService();
+  return {
+    activitySummary: (operation, undo) => trash.activitySummary(operation, undo) ?? refresh.activitySummary(operation, undo),
+    findUndoOperation: (operation, operations) => trash.findUndoOperation(operation, operations) ??
+      refresh.findUndoOperation(operation, operations),
+    undo: (operation) => trash.activitySummary(operation) ? trash.undo(operation) : refresh.undo(operation),
+    recoverIncompleteOperations: () => {
+      const trashResult = trash.recoverIncompleteOperations(), refreshResult = refresh.recoverIncompleteOperations();
+      return { recovered: trashResult.recovered + refreshResult.recovered,
+        failed: trashResult.failed + refreshResult.failed };
+    }
+  };
+};
+
 const getReaderSourceRevealService = (): ReaderSourceRevealService =>
   new ReaderSourceRevealService(getNotesService(), {
     revealFile: (absolutePath) => {
@@ -2366,7 +2387,7 @@ const getKnowledgeActivityService = (): KnowledgeActivityService => {
       getNoteMarkdownEditorActivityAdapter(),
       getAgentMemoryService(),
       createNotePageLifecycleActivityPort(),
-      getSourceRefreshService(),
+      createSourceLifecycleActivityPort(),
       getAgentPageUpdateRedoService()
     );
   }
@@ -3773,6 +3794,7 @@ registerReaderIpc({
   getSourceRefreshService,
   getSourceRefreshConflictService,
   getNoteTrashService,
+  getSourceTrashService,
   getNoteTrashPurgeService,
   getNoteArchiveService,
   getQuestionStateService,
@@ -4413,6 +4435,7 @@ app.whenReady().then(async () => {
   documentParserService = new DocumentParserService();
   sourceRefreshService = undefined;
   sourceRefreshConflictService = undefined;
+  sourceTrashService = undefined;
   agentPageUpdateRedoService = new AgentPageUpdateRedoService();
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),
@@ -4420,7 +4443,7 @@ app.whenReady().then(async () => {
     noteMarkdownEditorActivityAdapter,
     getAgentMemoryService(),
     createNotePageLifecycleActivityPort(),
-    getSourceRefreshService(),
+    createSourceLifecycleActivityPort(),
     agentPageUpdateRedoService
   );
   agentIngestService = new AgentIngestService(getModelProviderRegistry(), undefined, {

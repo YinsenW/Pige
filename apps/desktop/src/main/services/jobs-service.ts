@@ -434,6 +434,17 @@ export class JobsService {
     };
   }
 
+  hasActiveSourceUse(sourceId: string): boolean {
+    const vaultPath = this.#requireActiveVaultPath();
+    return readJobRecords(path.join(vaultPath, ".pige", "jobs")).jobs.some(
+      (job) =>
+        !isTerminalJobState(job.state) &&
+        (job.sourceId === sourceId ||
+          (job.inputRefs ?? []).some((ref) => ref.kind === "source" && ref.id === sourceId) ||
+          (job.outputRefs ?? []).some((ref) => ref.kind === "source" && ref.id === sourceId))
+    );
+  }
+
   async approveProposal(
     proposals: ProposalService,
     request: ProposalDecisionRequest

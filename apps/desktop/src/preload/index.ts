@@ -268,6 +268,12 @@ import type {
   SourceReconnectListResult,
   SourceReconnectRequest,
   SourceReconnectResult,
+  SourceTrashRequest,
+  SourceTrashResult,
+  SourceTrashListRequest,
+  SourceTrashListResult,
+  SourceTrashRestoreRequest,
+  SourceTrashRestoreResult,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
   NoteRevealGeneratedRequest,
@@ -914,6 +920,15 @@ import {
   SourceReconnectListResultSchema,
   SourceReconnectRequestSchema,
   SourceReconnectResultSchema,
+  SOURCE_TRASH_CHANNEL,
+  SOURCE_TRASH_LIST_CHANNEL,
+  SOURCE_TRASH_RESTORE_CHANNEL,
+  SourceTrashRequestSchema,
+  SourceTrashResultSchema,
+  SourceTrashListRequestSchema,
+  SourceTrashListResultSchema,
+  SourceTrashRestoreRequestSchema,
+  SourceTrashRestoreResultSchema,
   NOTE_REVEAL_SOURCE_CHANNEL,
   NoteRevealSourceRequestSchema,
   NoteRevealSourceResultSchema,
@@ -2229,6 +2244,21 @@ const api: PigeDesktopApi = {
       SourceReconnectResultSchema.parse(await ipcRenderer.invoke(
         SOURCE_RECONNECT_ORIGINAL_CHANNEL,
         SourceReconnectRequestSchema.parse(request)
+      )),
+    trash: async (request: SourceTrashRequest): Promise<SourceTrashResult> =>
+      SourceTrashResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_TRASH_CHANNEL,
+        SourceTrashRequestSchema.parse(request)
+      )),
+    listTrash: async (request: SourceTrashListRequest): Promise<SourceTrashListResult> =>
+      SourceTrashListResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_TRASH_LIST_CHANNEL,
+        SourceTrashListRequestSchema.parse(request)
+      )),
+    restoreTrash: async (request: SourceTrashRestoreRequest): Promise<SourceTrashRestoreResult> =>
+      SourceTrashRestoreResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_TRASH_RESTORE_CHANNEL,
+        SourceTrashRestoreRequestSchema.parse(request)
       ))
   },
   confirmations: {
