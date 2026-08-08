@@ -77,21 +77,36 @@ describe("ConversationHistoryPanel durable export", () => {
 
   it("keeps history intact for stale results and keeps cancellation quiet", async () => {
     let outcome: "stale" | "cancelled" = "stale";
+    let resolveExport!: () => void;
     const opened = vi.fn(async () => true);
-    const { dom, container, root } = await mount(async (request) => outcome === "stale"
-      ? { ...identity(request), status: "stale", currentTailEventId: "evt_20260731_newtail01" }
-      : { ...identity(request), status: "cancelled", tailEventId: request.expectedTailEventId }, opened);
+    const { dom, container, root } = await mount((request) => new Promise((resolve) => {
+      resolveExport = () => resolve(outcome === "stale"
+        ? { ...identity(request), status: "stale", currentTailEventId: "evt_20260731_newtail01" }
+        : { ...identity(request), status: "cancelled", tailEventId: request.expectedTailEventId });
+    }), opened);
 
     await click(dom, button(container, enMessages["conversation.history"]));
-    await click(dom, button(container, enMessages["conversation.export"]));
+    const exportButton = button(container, enMessages["conversation.export"]);
+    await click(dom, exportButton);
+    const outside = dom.window.document.createElement("button");
+    outside.textContent = "Other control";
+    container.append(outside);
+    outside.focus();
+    await act(async () => { resolveExport(); await settle(dom); });
     expect(container.querySelector('[role="alert"]')?.textContent)
       .toBe(enMessages["conversation.export_stale"]);
     expect(container.textContent).toContain(conversation.safePreview);
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.requestAnimationFrame(() => resolve()));
+    });
+    expect(dom.window.document.activeElement).toBe(exportButton);
     await click(dom, buttonContaining(container, conversation.safePreview));
     expect(opened).toHaveBeenCalledTimes(1);
 
     outcome = "cancelled";
-    await click(dom, button(container, enMessages["conversation.export"]));
+    const cancelButton = button(container, enMessages["conversation.export"]);
+    await click(dom, cancelButton);
+    await act(async () => { resolveExport(); await settle(dom); });
     expect(container.querySelector('[role="alert"]')).toBeNull();
     expect(container.textContent).toContain(conversation.safePreview);
     await act(async () => root.unmount());

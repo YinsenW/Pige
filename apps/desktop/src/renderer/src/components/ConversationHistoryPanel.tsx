@@ -60,6 +60,7 @@ export function ConversationHistoryPanel(props: {
   const historyRef = useRef(history);
   const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
   const historyMoreTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const exportTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
   activeVaultIdRef.current = props.activeVaultId;
   historyRef.current = history;
 
@@ -80,6 +81,7 @@ export function ConversationHistoryPanel(props: {
     setTitleEditor(null);
     setQueryDraft("");
     setAppliedQuery(undefined);
+    exportTriggerRefs.current.clear();
   }, [props.activeVaultId]);
 
   const loadHistory = async (
@@ -228,6 +230,10 @@ export function ConversationHistoryPanel(props: {
       if (sequence === requestSequenceRef.current) {
         operationRef.current = false;
         setExportingId(null);
+        window.requestAnimationFrame(() => {
+          const trigger = exportTriggerRefs.current.get(request.conversationId);
+          (trigger?.isConnected ? trigger : historyTriggerRef.current)?.focus({ preventScroll: true });
+        });
       }
     }
   };
@@ -528,6 +534,10 @@ export function ConversationHistoryPanel(props: {
                   </button>
                 ) : null}
                 <button type="button" className="quiet-button"
+                  ref={(button) => {
+                    if (button) exportTriggerRefs.current.set(conversation.conversationId, button);
+                    else exportTriggerRefs.current.delete(conversation.conversationId);
+                  }}
                   disabled={props.disabled || loading || titleEditor?.saving || exportingId !== null}
                   onClick={() => void exportConversation(conversation)}>
                   {props.t(exportingId === conversation.conversationId ? "conversation.exporting" : "conversation.export")}
