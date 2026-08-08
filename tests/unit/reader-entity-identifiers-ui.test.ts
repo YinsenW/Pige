@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteChangeEntityIdentifierResult, NoteReadEntityIdentifiersResult, NoteRenderResult } from "@pige/contracts";
 import { ReaderEntityIdentifiers } from "../../apps/desktop/src/renderer/src/components/ReaderEntityIdentifiers";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame", "crypto"] as const;
@@ -36,6 +36,53 @@ describe("ReaderEntityIdentifiers", () => {
     expect(harness.container.textContent).toContain("wikidata:Q42");
     await harness.unmount();
   });
+
+  it("clears the old owner while loading and restores input focus after owner drift", async () => {
+    const firstRead = deferred<NoteReadEntityIdentifiersResult>();
+    const secondRead = deferred<NoteReadEntityIdentifiersResult>();
+    const changeResult = deferred<NoteChangeEntityIdentifierResult>();
+    let readCount = 0;
+    const read = vi.fn((request) => {
+      readCount += 1;
+      return readCount === 1 ? firstRead.promise : secondRead.promise;
+    });
+    const change = vi.fn(async () => changeResult.promise);
+    const harness = await mount(read, change, vi.fn());
+    const firstRequest = read.mock.calls[0]![0];
+    firstRead.resolve({ ...firstRequest, status: "ready", identifiers: ["wikidata:Q42"], canEdit: true,
+      revision: firstRequest.expectedRevision });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).toContain("wikidata:Q42");
+    const input = harness.container.querySelector("input")! as HTMLInputElement;
+    const remove = [...harness.container.querySelectorAll("button")].find((button) =>
+      button.textContent === "note.entityIdentifiers.remove")!;
+    await act(async () => { remove.click(); await settle(harness.dom); });
+    expect(change).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      harness.root.render(createElement(ReaderEntityIdentifiers, {
+        activeVaultId: "vault_20260801_entity", note: entityRender("b"), read, change,
+        onCommitted: vi.fn(), t: (key) => key
+      }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.textContent).not.toContain("wikidata:Q42");
+    expect(read).toHaveBeenCalledTimes(2);
+    const secondRequest = read.mock.calls[1]![0];
+    secondRead.resolve({ ...secondRequest, status: "ready", identifiers: ["orcid:0000-0002-1825-0097"], canEdit: true,
+      revision: secondRequest.expectedRevision });
+    for (let i = 0; i < 3; i += 1) {
+      await act(async () => { await settle(harness.dom); });
+    }
+    expect(harness.container.textContent).not.toContain("wikidata:Q42");
+    expect(harness.container.textContent).toContain("orcid:0000-0002-1825-0097");
+    expect(harness.dom.window.document.activeElement).toBe(input);
+    const changeRequest = change.mock.calls[0]![0];
+    changeResult.resolve({ ...changeRequest, status: "stale" });
+    await act(async () => { await changeResult.promise; await settle(harness.dom); });
+    expect(harness.container.textContent).toContain("orcid:0000-0002-1825-0097");
+    expect(harness.dom.window.document.activeElement).toBe(input);
+    await harness.unmount();
+  });
 });
 
 async function mount(read: Parameters<typeof ReaderEntityIdentifiers>[0]["read"], change: Parameters<typeof ReaderEntityIdentifiers>[0]["change"], onCommitted: Parameters<typeof ReaderEntityIdentifiers>[0]["onCommitted"]) {
@@ -48,4 +95,5 @@ async function mount(read: Parameters<typeof ReaderEntityIdentifiers>[0]["read"]
   return { dom, root, container: dom.window.document.querySelector("#root")!, unmount: async () => act(async () => root.unmount()) };
 }
 function entityRender(revision = "a"): NoteRenderResult { return { summary: { pageId: "page_20260801_entity01", title: "Entity", pageType: "entity", status: "active", pagePath: "entities/entity.md", createdAt: "2026-08-01T10:00:00.000Z", updatedAt: "2026-08-01T10:00:00.000Z", sourceIds: [] }, html: "<h1>Entity</h1>", byteSize: 64, renderContextId: `notectx_${revision.repeat(32)}`, entityType: { entityType: "other", canChange: true, revision: `noteeditrev_${revision.repeat(64)}` } }; }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }
 async function settle(dom: JSDOM): Promise<void> { await Promise.resolve(); await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0)); }
