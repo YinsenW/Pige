@@ -480,6 +480,53 @@ describe("Agent-selected ingest retrieval tool", () => {
     expect(readPageTagKeys(fixture.vaultPath, UPDATE_PAGE_ID)).toEqual(["existing"]);
   });
 
+  it("atomically commits one cited existing-note update and bounded tags from one Agent turn", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const targetPath = path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/"));
+    const before = fs.readFileSync(targetPath, "utf8");
+    const runtime = new RecordingPiRuntime([
+      toolCall("pige_inspect_source", "inspect_compound_update", {}),
+      toolCall("pige_search_knowledge", "search_compound_update", { query: "durable existing knowledge" }),
+      toolCall("pige_update_knowledge_note", "compound_update", {
+        ...existingNoteUpdateInput(),
+        tagsToAdd: ["research", "Research", "  Durable   Knowledge  "]
+      })
+    ]);
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeUpdateSearchResult(fixture, request.query));
+    const jobs = new JobsService(fixture.vaultPort, new AgentIngestService(
+      modelPort(), runtime, undefined, undefined, undefined, retrieval
+    ));
+    const capture = submitText(fixture, "One source can safely update the existing note and its durable tags together.");
+    expect(jobs.processQueuedCaptures({ jobIds: [capture.jobId] }).completed).toBe(1);
+    const parent = requireValue(jobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]);
+
+    expect((await jobs.processQueuedAgentIngest({ jobIds: [parent.id] })).completed).toBe(1);
+
+    const after = fs.readFileSync(targetPath, "utf8");
+    const operation = requireValue(readOperations(fixture.vaultPath).find(({ kind }) => kind === "update_page"));
+    const checkpoint = requireValue(readJob(fixture.vaultPath, parent.id).checkpoints?.find(
+      (candidate) => candidate.id === AGENT_PAGE_UPDATE_CHECKPOINT_ID
+    ));
+    expect(runtime.results[0]?.invokedTools).toEqual([
+      "pige_inspect_source", "pige_search_knowledge", "pige_update_knowledge_note"
+    ]);
+    expect(requireValue(parsePigeFrontmatter(after)).frontmatter.tags)
+      .toEqual(["existing", "Research", "Durable Knowledge"]);
+    expect(after).toContain("<!-- pige:managed:start agent-update");
+    expect(after).toContain(`[source:${capture.sourceId}#source]`);
+    expect(operation.summary).toContain("Updated existing Pige-managed note");
+    expect(operation.summary).toContain("added 2 bounded tags");
+    expect(readOperations(fixture.vaultPath).filter(({ kind }) => kind === "update_page")).toHaveLength(1);
+    expect(checkpoint.inputRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "update_tool_input", id: "pige_update_knowledge_note@1" }),
+      expect.objectContaining({ role: "tag_addition", id: "Research" }),
+      expect.objectContaining({ role: "tag_addition", id: "Durable Knowledge" })
+    ]));
+    expect(new KnowledgeActivityService(fixture.vaultPort).undo({ operationId: operation.id }).status).toBe("undone");
+    expect(fs.readFileSync(targetPath, "utf8")).toBe(before);
+  });
+
   it("recovers a page-first knowledge-tag change from its exact checkpoint without another model turn", () => {
     const fixture = makeVault();
     writeUpdateTargetPage(fixture.vaultPath);
@@ -551,6 +598,59 @@ describe("Agent-selected ingest retrieval tool", () => {
       .toBe("undone");
     expect(fs.readFileSync(path.join(fixture.vaultPath, ...binding.pagePath.split("/")), "utf8"))
       .toBe(before);
+  });
+
+  it("recovers the compound cited update and tags as one exact Operation without another model turn", () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "A crash-safe source updates one note and its bounded tags together.");
+    const target = readCurrentRetrievalPageForMutation(
+      fixture.vaultPath, requireValue(makeUpdateSearchResult(fixture, "compound recovery").results[0])
+    );
+    const before = fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8");
+    let durableBinding: AgentPageUpdatePublicationBinding | undefined;
+    const originalOpen = fs.openSync.bind(fs);
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      if (durableBinding && String(filePath).includes(`.${durableBinding.operationId}.`)) {
+        throw new Error("synthetic crash before compound Operation commit");
+      }
+      return originalOpen(filePath, flags, mode);
+    });
+    try {
+      expect(() => applyAgentPageUpdate({
+        ...directUpdateInput(fixture.vaultPath, prepared, target),
+        tagAdditions: ["Research", "Durable Knowledge"],
+        onPublicationStart: (binding) => { durableBinding = binding; }
+      })).toThrowError(PigeDomainError);
+    } finally {
+      openSpy.mockRestore();
+    }
+    const binding = requireValue(durableBinding);
+    const recoveringJob = JobRecordSchema.parse({
+      ...prepared.parent,
+      state: "running",
+      policyContextId: binding.policyContextId,
+      policyHash: binding.policyHash,
+      checkpoints: [createUpdateCheckpoint(binding)]
+    });
+    expect(() => recoverAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: recoveringJob,
+      sourceRecord: prepared.source,
+      allowedCatalogHashes: { update: [], relationship: [], tags: [] }
+    })).toThrowError(expect.objectContaining({ code: "agent_ingest.page_conflict" }));
+    const recovered = requireValue(recoverAgentPageUpdate({
+      vaultPath: fixture.vaultPath,
+      job: recoveringJob,
+      sourceRecord: prepared.source,
+      allowedCatalogHashes: { update: [binding.catalogHash], relationship: [], tags: [] }
+    }));
+    const after = fs.readFileSync(path.join(fixture.vaultPath, ...binding.pagePath.split("/")), "utf8");
+    expect(after).toContain("<!-- pige:managed:start agent-update");
+    expect(requireValue(parsePigeFrontmatter(after)).frontmatter.tags).toEqual(["existing", "Research", "Durable Knowledge"]);
+    expect(readOperations(fixture.vaultPath).filter(({ kind }) => kind === "update_page")).toHaveLength(1);
+    expect(new KnowledgeActivityService(fixture.vaultPort).undo({ operationId: recovered.operation.id }).status).toBe("undone");
+    expect(fs.readFileSync(path.join(fixture.vaultPath, ...binding.pagePath.split("/")), "utf8")).toBe(before);
   });
 
   it("lets real Pi link two current generated notes and rebuilds the exact link, backlink, Activity, and Undo", async () => {

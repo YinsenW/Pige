@@ -343,7 +343,11 @@ remain outside the current tools.
 
 Calls bind run/call, catalog/policy/source, tool/input hashes and typed provenance; large
 bodies remain Artifacts. Host validates before each effect, cancellation preserves no
-partial response, and accepted create/append/tag/link writes emit Activity/Undo.
+partial response, and accepted create/append/tag/link writes emit Activity/Undo. One
+existing-note update may carry up to six validated tag additions for that same current
+page; Host commits that compatible pair as one `update_page` binding, Operation,
+before-image, Activity entry and restart recovery. It never bundles links, creates,
+proposals, a second page, or a second independently selected effect.
 
 Inspect/parse/OCR/retrieval/write remain separate tools. Registration says what Pi may
 call, never what it must call; zero-tool answers and typed empty-result replanning remain

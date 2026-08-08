@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T08:04:08.633Z",
+  "reviewedAt": "2026-08-08T08:48:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review confirmed Source Refresh PDF parser-to-OCR fan-out, receipt-covered dynamic outputs, rollback/restart recovery, and parent Activity folding.",
+    "scope": "Review confirmed one Agent-selected current-note cited append plus bounded tags as one exact durable page update, Operation, Activity Undo and restart recovery.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "1d1590c55244a91759bb3db78b2b9783fa1caf80e6f9b6796446030590bf82e1"
+    "reviewedSha256": "07e57c2f39a75b72f0a376ebfa81b852f06e8e21ddb5330df7fc314acba81e14"
   },
   "reviewers": [
     {
-      "reviewerId": "source-evidence-lifecycle-review",
-      "task": "Review atomic Source Refresh parser-to-OCR recovery",
+      "reviewerId": "agent-compound-update-review",
+      "task": "Review atomic Agent current-note update and tag recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,71 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks stable Source/Page identity, reference-original protection, managed-copy guardrails and restart adoption separately from implementation authorship."
+      "independence": "Project review checks existing Agent tool authority, single-page CAS, Activity before-image recovery and rejection of incompatible effects separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "source-evidence-lifecycle-review",
+      "reviewerId": "agent-compound-update-review",
       "blockerCount": 0,
-      "summary": "Main keeps all Source paths and receipts private; Reader and Activity receive bounded pathless controls, while cancel, stale and failed results retain the current safe surface and focus."
+      "summary": "Pi receives only an opaque retrieval ref and bounded tags; Main keeps page bytes, hashes and receipts private while Activity exposes one existing reversible update."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "source-evidence-lifecycle-review",
+      "reviewerId": "agent-compound-update-review",
       "blockerCount": 0,
-      "summary": "Source and Job owners, schemas, IPC, renderer and direct tests agree on reference-original preservation, managed-copy reproof, stable identifiers and reversible Operations."
+      "summary": "Tool schema, source-quality checks, page CAS, checkpoint recovery and Activity Undo agree that update and tags are one compatible same-page effect."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "source-evidence-lifecycle-review",
+      "reviewerId": "agent-compound-update-review",
       "blockerCount": 0,
-      "summary": "PIGE-INGEST-003 and PIGE-VAULT-006 gain exact atomic fan-out, receipt, Undo, and restart evidence while remaining partial for broader ingest and cross-domain commit coverage."
+      "summary": "PIGE-PI-001 and PIGE-PI-005 gain exact one-turn compound write evidence while both remain partial for broader tool routes and cross-page transactions."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "source-evidence-lifecycle-review",
+      "reviewerId": "agent-compound-update-review",
       "blockerCount": 0,
-      "summary": "One private receipt-output owner keeps dynamic parser/render/OCR files within the existing Source Refresh, Job, Operation, and Activity boundaries."
+      "summary": "Existing Tool Registry and page-update owners retain the bounded one-page mutation while a stable checkpoint reuses the established Operation and recovery path."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "source-evidence-lifecycle-review",
+      "reviewerId": "agent-compound-update-review",
       "blockerCount": 0,
-      "summary": "Existing Source and Job owner documents and the trace manifest record the lifecycle without adding a design document or duplicating durable rules."
+      "summary": "Existing Pi, Playbook and trace documents record the compatible compound boundary without adding a design document or duplicating durable rules."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/source-refresh-service.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/agent-led-ingest-retrieval.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused Source Refresh tests prove atomic PDF parser-to-OCR publication, receipt-covered Undo, and restart rollback without retained partial output."
+      "evidence": "Focused Agent tests prove a single cited update-plus-tags Operation, exact Undo and recovery without another model turn."
     },
     {
       "command": "npm run verify:architecture-reset && npm run verify:change",
       "status": "passed",
-      "evidence": "The bounded private owner is inventoried and existing ownership budgets and change rules remain enforced."
+      "evidence": "Existing Agent owners stay within frozen budgets and the normal architecture and change rules remain enforced."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Source and Job contracts, acceptance evidence, semantic claims and review snapshot agree while requirements remain partial."
+      "evidence": "Pi and Job contracts, trace text and the review snapshot agree while requirements remain partial."
     }
   ],
   "coordination": {
-    "taskId": "source-refresh-atomic-fanout-20260808",
-    "taskTitle": "Atomic Source Refresh parser-to-OCR fan-out",
+    "taskId": "agent-compound-update-tags-20260808",
+    "taskTitle": "Atomic Agent existing-note update plus tags",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing capture, Agent-selected parser/OCR routing, source reconnect, backup, external roots and durable Job semantics remain unchanged; only confirmed Source Refresh atomically owns its PDF parser-to-OCR output tree.",
-    "acknowledgement": "PIGE-INGEST-003 and PIGE-VAULT-006 gain bounded Source Refresh fan-out and recovery proof while both remain partial for broader ingest and cross-domain commit coverage."
+    "compatibility": "Existing capture, Agent-selected retrieval, tag-only and link writes, review proposals and durable Job semantics remain unchanged; only one validated same-page cited update plus tags shares a single Operation.",
+    "acknowledgement": "PIGE-PI-001 and PIGE-PI-005 gain bounded compound update and recovery proof while both remain partial for broader tool routes and cross-page commit coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

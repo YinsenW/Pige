@@ -110,6 +110,7 @@ export interface AgentIngestUpdateToolInput {
   readonly targetPageRef: string;
   readonly summary: AgentIngestOutput["summary"];
   readonly keyPoints: AgentIngestOutput["keyPoints"];
+  readonly tagsToAdd?: readonly string[];
   readonly warnings: AgentIngestOutput["warnings"];
   readonly confidence: AgentIngestOutput["confidence"];
 }
@@ -466,7 +467,7 @@ export function createAgentIngestToolRegistry(input: {
     ...(input.host.update ? [{
       name: UPDATE_KNOWLEDGE_NOTE_TOOL_NAME,
       label: "Update related knowledge note",
-      description: "Append one evidence-cited Pige-managed update to an eligible existing note selected from the current related_NN retrieval results. Takes no path, page ID, base hash, or Operation authority.",
+      description: "Append one evidence-cited Pige-managed update, optionally with up to six bounded tag additions, to one eligible existing note selected from the current related_NN retrieval results. Pige commits the compatible effects as one reversible page update; no path, page ID, base hash, or Operation authority is accepted.",
       parameters: AGENT_NOTE_UPDATE_SCHEMA,
       version: UPDATE_KNOWLEDGE_NOTE_TOOL_VERSION,
       capability: "update_existing_note",
@@ -684,6 +685,12 @@ const AGENT_NOTE_UPDATE_SCHEMA = {
       type: "array",
       items: EVIDENCE_KEY_POINT_SCHEMA,
       maxItems: 8
+    },
+    tagsToAdd: {
+      type: "array",
+      items: { type: "string", minLength: 1, maxLength: 48 },
+      minItems: 1,
+      maxItems: 6
     },
     warnings: { type: "array", items: { type: "string", minLength: 1, maxLength: 240 }, maxItems: 8 },
     confidence: { type: "string", enum: ["low", "medium", "high"] }
