@@ -248,6 +248,43 @@ describe("Reader source actions", () => {
     expect(harness.container.querySelector('[role="dialog"]')).toBeNull();
     await harness.unmount();
   });
+
+  it("returns focus to the source-actions region when reconnect removes its trigger", async () => {
+    const sourceId = "src_20260730_reader001";
+    const render = {
+      summary: {
+        pageId: "page_20260730_reader001", title: "Source", pageType: "source" as const,
+        status: "active" as const, pagePath: "wiki/source.md", sourceIds: [sourceId],
+        createdAt: "2026-07-30T00:00:00.000Z", updatedAt: "2026-07-30T00:00:00.000Z"
+      },
+      html: "<p>Reconnected</p>", byteSize: 12,
+      renderContextId: `notectx_${"f".repeat(32)}`
+    } as const;
+    const pending = deferred<{ readonly outcome: "reconnected"; readonly render: typeof render }>();
+    let harness: Awaited<ReturnType<typeof mount>> | undefined;
+    const onReconnected = vi.fn(() => {
+      if (!harness) return;
+      harness.root.render(createElement(ReaderSourceActions, {
+        ownerIdentity: "vault_2:page_2:render_2",
+        sources: [{ sourceId: "source_2", label: "Saved source 2", canRevealOriginal: true, canReconnectOriginal: false }], labels,
+        onRevealOriginal: vi.fn(async () => "unavailable" as const)
+      }));
+    });
+    harness = await mount({
+      sources: [{ sourceId, label: "Saved source 1", canRevealOriginal: false, canReconnectOriginal: true }],
+      onRevealOriginal: vi.fn(async () => "unavailable"),
+      onReconnectOriginal: vi.fn(async () => pending.promise),
+      onReconnected
+    });
+    const reconnect = reconnectButton(harness.container, sourceId);
+    reconnect.focus();
+    await act(async () => { reconnect.click(); await settle(harness!.dom); });
+    pending.resolve({ outcome: "reconnected", render });
+    await act(async () => { await pending.promise; await settle(harness!.dom); await settle(harness!.dom); });
+    await waitFor(harness.dom, () => harness.dom.window.document.activeElement === harness!.container.firstElementChild);
+    expect(harness.container.firstElementChild?.getAttribute("role")).toBe("group");
+    await harness.unmount();
+  });
 });
 
 function eligibleSources() {
@@ -315,6 +352,14 @@ function deferred<T>() {
 
 async function settle(dom: JSDOM): Promise<void> {
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
+}
+
+async function waitFor(dom: JSDOM, predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error("Timed out waiting for UI state.");
+    await settle(dom);
+  }
 }
 
 function installDom(dom: JSDOM): void {
