@@ -1166,6 +1166,127 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("shows numeric index rebuild progress and keeps the current Job after a stale cancel", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    const cancel = vi.fn(async (request) => ({ ...request, status: "stale" as const }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        jobs: { cancel },
+        maintenance: {
+          rebuildLocalDatabase: vi.fn(),
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const job: JobSummary = {
+      id: "job_20260809_indexprogress01",
+      class: "index_rebuild",
+      state: "running",
+      progress: { completedUnits: 3, totalUnits: 5, unit: "page" },
+      canReconnectDependency: false,
+      canReconnectBackupDestination: false,
+      canContinueIncomplete: false,
+      canCancel: true,
+      canRetry: true,
+      message: "Rebuilding local index",
+      createdAt: "2026-08-09T08:00:00.000Z",
+      updatedAt: "2026-08-09T08:01:00.000Z"
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId: "vault_20260809_indexprogress",
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        jobs: [job],
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage: vi.fn(async () => false),
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    const progress = requireElement(page.querySelector<HTMLElement>("[role=progressbar]"));
+    expect(progress.getAttribute("aria-valuenow")).toBe("3");
+    expect(progress.getAttribute("aria-valuemax")).toBe("5");
+    expect(page.textContent).toContain("3/5");
+
+    await act(async () => {
+      buttonNamed(page, "Cancel rebuild").click();
+      await settle(dom);
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel.mock.calls[0]![0]).toMatchObject({
+      activeVaultId: "vault_20260809_indexprogress",
+      jobId: job.id,
+      expectedUpdatedAt: job.updatedAt
+    });
+    expect(page.textContent).toContain("Pige could not cancel this rebuild");
+    expect(page.querySelector(`[data-maintenance-index-job-id="${job.id}"]`)).not.toBeNull();
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("starts one index rebuild request while the Maintenance action is pending", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    let resolveRebuild!: (result: unknown) => void;
+    const rebuildLocalDatabase = vi.fn(() => new Promise((resolve) => { resolveRebuild = resolve; }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        jobs: { cancel: vi.fn() },
+        maintenance: {
+          rebuildLocalDatabase,
+          resetLocalDatabase: vi.fn()
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(MaintenanceSettingsPanel, {
+        activeVaultId: "vault_20260809_indexonce",
+        locale: "en",
+        error: null,
+        localDatabaseStatus: null,
+        jobs: [],
+        onRefresh: vi.fn(async () => undefined),
+        onRefreshDiagnostics: vi.fn(async () => undefined),
+        onOpenPage: vi.fn(async () => false),
+        onError: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const page = requireElement(dom.window.document.querySelector<HTMLElement>(".maintenance-settings-page"));
+    await act(async () => {
+      buttonNamed(page, "Rebuild").click();
+      buttonNamed(page, "Rebuild").click();
+      await settle(dom);
+    });
+    expect(rebuildLocalDatabase).toHaveBeenCalledOnce();
+    expect(buttonNamed(page, "Rebuilding…").disabled).toBe(true);
+
+    await act(async () => {
+      resolveRebuild({
+        rebuiltAt: "2026-08-09T08:02:00.000Z",
+        pageCount: 5,
+        invalidPageCount: 0,
+        jobId: "job_20260809_indexonce01",
+        state: "completed"
+      });
+      await settle(dom);
+    });
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fences stale Knowledge Health responses by vault and reports current failures body-free", async () => {
     const dom = createDom();
     let resolveStale!: (result: unknown) => void;
