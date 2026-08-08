@@ -218,6 +218,7 @@ export function assertSafeDiagnosticExportText(content: string): void {
     !isSupportBundleApp(parsed.app) ||
     !isDiagnosticsHealth(parsed.diagnosticsHealth) ||
     !isRecentEvents(parsed.recentEvents) ||
+    !recentEventsMatchSelection(parsed.preview, parsed.recentEvents) ||
     !providerMetadataMatchesPreview(parsed.preview, parsed.providerMetadata)
   ) {
     throw new DiagnosticsExportBlockedError("Support bundle content has an invalid envelope.");
@@ -580,12 +581,16 @@ function isSupportBundlePreview(value: unknown): boolean {
   const includesProviderMetadata = selected.includes("provider_metadata");
   const includesPrivateExcerpt = selected.includes("private_excerpt");
   if (!hasExactKeys(value, [
-    "previewId", "generatedAt", "selectedOptionalCategories", "includedCategories", "excludedCategories", "privacyWarnings",
+    "previewId", "generatedAt", "eventSelectionRevision", "selectedDiagnosticEventIds", "selectedOptionalCategories", "includedCategories", "excludedCategories", "privacyWarnings",
     ...(includesPrivateExcerpt ? ["reviewedPrivateExcerpt"] : [])
   ])) return false;
   return typeof value.previewId === "string" &&
     /^(?:support_[0-9]{14}|supportpreview_[a-f0-9]{48})$/u.test(value.previewId) &&
     isIsoDate(value.generatedAt) &&
+    typeof value.eventSelectionRevision === "string" && /^diagevents_[a-f0-9]{64}$/u.test(value.eventSelectionRevision) &&
+    Array.isArray(value.selectedDiagnosticEventIds) && value.selectedDiagnosticEventIds.length > 0 &&
+    value.selectedDiagnosticEventIds.length <= 32 && new Set(value.selectedDiagnosticEventIds).size === value.selectedDiagnosticEventIds.length &&
+    value.selectedDiagnosticEventIds.every((eventId) => typeof eventId === "string" && /^diagevent_[a-f0-9]{32}$/u.test(eventId)) &&
     matchesExactRecords(value.includedCategories, [
       ...INCLUDED_CATEGORIES,
       ...(includesProviderMetadata ? [PROVIDER_METADATA_CATEGORY] : []),
@@ -706,13 +711,22 @@ function isRecentEvents(value: unknown): boolean {
   return value.every((event) => {
     if (!isRecord(event)) return false;
     const keys = event.redactedDetails === undefined
-      ? ["recordedAt", "level", "code", "message"]
-      : ["recordedAt", "level", "code", "message", "redactedDetails"];
+      ? ["eventId", "recordedAt", "level", "code", "message"]
+      : ["eventId", "recordedAt", "level", "code", "message", "redactedDetails"];
     return hasExactKeys(event, keys) && isIsoDate(event.recordedAt) &&
+      /^diagevent_[a-f0-9]{32}$/u.test(String(event.eventId)) &&
       (event.level === "info" || event.level === "warning" || event.level === "error") &&
       isSafeToken(event.code) && DIAGNOSTIC_MESSAGES.has(String(event.message)) &&
       (event.redactedDetails === undefined || isSafeDetails(event.redactedDetails));
   });
+}
+
+function recentEventsMatchSelection(preview: unknown, events: unknown): boolean {
+  if (!isRecord(preview) || !Array.isArray(preview.selectedDiagnosticEventIds) || !Array.isArray(events)) return false;
+  const selected = preview.selectedDiagnosticEventIds;
+  return selected.length === events.length && selected.every((eventId, index) =>
+    isRecord(events[index]) && events[index].eventId === eventId
+  );
 }
 
 function isSafeDetails(value: unknown): boolean {

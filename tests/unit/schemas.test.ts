@@ -387,6 +387,8 @@ describe("schemas", () => {
     const request = {
       apiVersion: 1,
       requestId: "diagpreviewreq_providermetadata0",
+      eventSelectionRevision: `diagevents_${"c".repeat(64)}`,
+      selectedDiagnosticEventIds: [`diagevent_${"d".repeat(32)}`],
       optionalCategories: ["provider_metadata"]
     } as const;
     expect(DiagnosticsPreviewSupportBundleRequestSchema.parse(request)).toEqual(request);
@@ -409,6 +411,15 @@ describe("schemas", () => {
       scopeContextId: `diagctx_${"b".repeat(48)}`,
       expectedRevision: 2,
       activeVaultId: null,
+      eventSelectionRevision: request.eventSelectionRevision,
+      selectedDiagnosticEventIds: request.selectedDiagnosticEventIds,
+      selectedDiagnosticEvents: [{
+        eventId: request.selectedDiagnosticEventIds[0],
+        recordedAt: "2026-08-01T00:00:00.000Z",
+        level: "warning",
+        code: "jobs.resume_failed",
+        redactedDetailCount: 0
+      }],
       selectedOptionalCategories: request.optionalCategories,
       includedCategories: [{
         id: "provider_metadata",
@@ -435,6 +446,8 @@ describe("schemas", () => {
     const excerptRequest = {
       apiVersion: 1,
       requestId: "diagpreviewreq_privateexcerpt000",
+      eventSelectionRevision: request.eventSelectionRevision,
+      selectedDiagnosticEventIds: request.selectedDiagnosticEventIds,
       optionalCategories: ["provider_metadata", "private_excerpt"],
       privateExcerpt: "A short support passage"
     } as const;
@@ -446,6 +459,10 @@ describe("schemas", () => {
     expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
       ...excerptRequest,
       optionalCategories: ["private_excerpt", "private_excerpt"]
+    })).toThrow();
+    expect(() => DiagnosticsPreviewSupportBundleRequestSchema.parse({
+      ...excerptRequest,
+      selectedDiagnosticEventIds: [excerptRequest.selectedDiagnosticEventIds[0], excerptRequest.selectedDiagnosticEventIds[0]]
     })).toThrow();
     expect(SupportBundlePreviewSchema.parse({
       ...preview,

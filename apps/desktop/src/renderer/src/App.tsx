@@ -68,8 +68,8 @@ import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
-import { DiagnosticsJobCard, PrivateExcerptSupportOption, ProviderMetadataSupportOption, SupportBundlePreviewCard,
-  SupportBundlePreviewTrigger, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
+import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
+import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -8246,8 +8246,7 @@ export function SystemSettingsPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
-  const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false), [includeProviderMetadata, setIncludeProviderMetadata] = useState(false),
-    [includePrivateExcerpt, setIncludePrivateExcerpt] = useState(false), [privateExcerpt, setPrivateExcerpt] = useState("");
+  const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
@@ -8255,6 +8254,7 @@ export function SystemSettingsPanel(props: {
   const clearInFlightRef = useRef(false);
   const clearTriggerRef = useRef<HTMLButtonElement | null>(null);
   const clearCancelRef = useRef<HTMLButtonElement | null>(null);
+  const previewSupportBundleRef = useRef<(() => Promise<void>) | null>(null);
   const restoreClearFocusRef = useRef(false);
   const updateSummaryRevisionRef = useRef(-1);
   const updateEventSequenceRef = useRef(0);
@@ -8376,25 +8376,6 @@ export function SystemSettingsPanel(props: {
     }
   };
 
-  const previewSupportBundle = async (): Promise<void> => {
-    if (diagnosticsBusy) return;
-    setDiagnosticsBusy("preview");
-    setNotice(null);
-    try {
-      const requestId = `diagpreviewreq_${crypto.randomUUID().replaceAll("-", "")}`;
-      const optionalCategories = [...(includeProviderMetadata ? ["provider_metadata" as const] : []), ...(includePrivateExcerpt ? ["private_excerpt" as const] : [])];
-      const preview = await window.pige.diagnostics.previewSupportBundle({ apiVersion: 1, requestId, optionalCategories,
-        ...(includePrivateExcerpt ? { privateExcerpt } : {}) });
-      if (preview.requestId !== requestId || JSON.stringify(preview.selectedOptionalCategories) !==
-        JSON.stringify(optionalCategories)) throw new Error("diagnostics_preview_identity_mismatch");
-      props.onSupportBundlePreviewChange(preview);
-    } catch {
-      setNotice({ kind: "error", key: "system.previewFailed" });
-    } finally {
-      setDiagnosticsBusy(null);
-    }
-  };
-
   const exportSupportBundle = async (): Promise<void> => {
     if (
       !props.supportBundlePreview ||
@@ -8418,7 +8399,6 @@ export function SystemSettingsPanel(props: {
       }
       if (result.status === "started") {
         props.onSupportBundlePreviewChange(null);
-        setIncludePrivateExcerpt(false); setPrivateExcerpt("");
         setNotice({ kind: "success", key: "system.exportStarted" });
       } else if (result.status === "stale") {
         setNotice({ kind: "error", key: "system.diagnosticsStale" });
@@ -8732,19 +8712,13 @@ export function SystemSettingsPanel(props: {
             onRepairSources={props.onRepairRecoverySources}
             t={props.t}
           />
-          <SupportBundlePreviewTrigger disabled={Boolean(diagnosticsBusy) || (includePrivateExcerpt && privateExcerpt.trim().length === 0)}
-            onPreview={() => void previewSupportBundle()} t={props.t} />
-          <ProviderMetadataSupportOption checked={includeProviderMetadata}
-            disabled={Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
-            onChange={(checked) => {
-              setIncludeProviderMetadata(checked);
-              props.onSupportBundlePreviewChange(null);
-              setNotice(null);
-            }} t={props.t} />
-          <PrivateExcerptSupportOption checked={includePrivateExcerpt} value={privateExcerpt}
-            disabled={Boolean(diagnosticsBusy) || diagnosticsWorkflow?.job?.canCancel === true}
-            onCheckedChange={(checked) => { setIncludePrivateExcerpt(checked); props.onSupportBundlePreviewChange(null); setNotice(null); }}
-            onValueChange={(value) => { setPrivateExcerpt(value); props.onSupportBundlePreviewChange(null); setNotice(null); }} t={props.t} />
+          <DiagnosticsEventExportComposer
+            workflow={diagnosticsWorkflow}
+            disabled={Boolean(diagnosticsBusy)}
+            onPreviewReady={props.onSupportBundlePreviewChange}
+            previewRequestRef={previewSupportBundleRef}
+            t={props.t}
+          />
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("system.clearDiagnostics")}</strong>
@@ -8800,7 +8774,7 @@ export function SystemSettingsPanel(props: {
             busy={Boolean(diagnosticsBusy)}
             onCancel={() => void cancelSupportBundleExport()}
             onRetry={() => void retrySupportBundleExport()}
-            onChooseDestination={() => void previewSupportBundle()}
+            onChooseDestination={() => void previewSupportBundleRef.current?.()}
             t={props.t}
           />
         ) : null}

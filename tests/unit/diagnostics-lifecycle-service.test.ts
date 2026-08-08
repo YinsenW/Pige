@@ -25,9 +25,15 @@ function lifecycle(
   exporter: DiagnosticsExportPort,
   providerMetadata?: () => DiagnosticsProviderMetadata
 ): DiagnosticsLifecycleService {
+  const diagnostics = new DiagnosticsService(userDataPath, { exporter });
+  diagnostics.recordEvent({
+    level: "warning",
+    code: "jobs.resume_failed",
+    message: "Durable background job recovery failed."
+  });
   return new DiagnosticsLifecycleService({
     userDataPath,
-    diagnostics: new DiagnosticsService(userDataPath, { exporter }),
+    diagnostics,
     getActiveVaultId: () => VAULT_ID,
     providerMetadata,
     now: () => new Date("2026-07-30T12:34:56.000Z")
@@ -63,7 +69,7 @@ function writeExporter(onWrite?: () => void): DiagnosticsExportPort {
 
 function startExport(service: DiagnosticsLifecycleService, destinationPath: string, suffix: string) {
   const initial = service.summary();
-  const preview = service.preview({ apiVersion: 1, requestId: ids("diagpreviewreq", suffix) });
+  const preview = service.preview(previewRequest(service, suffix));
   return service.start({
     apiVersion: 1,
     requestId: ids("diagexportreq", suffix),
@@ -71,6 +77,18 @@ function startExport(service: DiagnosticsLifecycleService, destinationPath: stri
     scopeContextId: initial.scopeContextId,
     expectedRevision: initial.revision
   }, destinationPath);
+}
+
+function previewRequest(service: DiagnosticsLifecycleService, suffix: string) {
+  const selection = service.summary().eventSelection;
+  const event = selection?.events[0];
+  if (!selection || !event) throw new Error("Expected a selectable diagnostics event.");
+  return {
+    apiVersion: 1 as const,
+    requestId: ids("diagpreviewreq", suffix),
+    eventSelectionRevision: selection.revision,
+    selectedDiagnosticEventIds: [event.eventId]
+  };
 }
 
 describe("durable diagnostics lifecycle", () => {
@@ -99,8 +117,7 @@ describe("durable diagnostics lifecycle", () => {
     const service = lifecycle(path.join(root, "user-data"), writeExporter(), providerMetadata);
     const initial = service.summary();
     const preview = service.preview({
-      apiVersion: 1,
-      requestId: ids("diagpreviewreq", "provider"),
+      ...previewRequest(service, "provider"),
       optionalCategories: ["provider_metadata"]
     });
     generation = "failed";
@@ -128,8 +145,7 @@ describe("durable diagnostics lifecycle", () => {
 
     try {
       service.preview({
-        apiVersion: 1,
-        requestId: ids("diagpreviewreq", "missing"),
+        ...previewRequest(service, "missing"),
         optionalCategories: ["provider_metadata"]
       });
       throw new Error("Expected selected provider metadata to fail closed.");
@@ -147,8 +163,7 @@ describe("durable diagnostics lifecycle", () => {
     const initial = service.summary();
     const raw = "Contact alice@example.test with Bearer sk-proj-abcdefghijklmnop at /Users/alice/private.md";
     const preview = service.preview({
-      apiVersion: 1,
-      requestId: ids("diagpreviewreq", "excerpt"),
+      ...previewRequest(service, "excerpt"),
       optionalCategories: ["private_excerpt"],
       privateExcerpt: raw
     });
@@ -191,6 +206,34 @@ describe("durable diagnostics lifecycle", () => {
     expect(completed.job?.jobId).toMatch(/^job_20260730_/u);
     expect(fs.readFileSync(destination, "utf8")).toContain('"localOnly": true');
     expect(JSON.stringify(completed)).not.toContain(destination);
+    service.close();
+  });
+
+  it("revalidates the exact selected redacted events before creating a durable export Job", () => {
+    const root = tempRoot();
+    const userDataPath = path.join(root, "user-data");
+    const diagnostics = new DiagnosticsService(userDataPath, { exporter: writeExporter() });
+    diagnostics.recordEvent({ level: "warning", code: "jobs.resume_failed", message: "Durable background job recovery failed." });
+    const service = new DiagnosticsLifecycleService({
+      userDataPath,
+      diagnostics,
+      getActiveVaultId: () => VAULT_ID,
+      now: () => new Date("2026-07-30T12:34:56.000Z")
+    });
+    const initial = service.summary();
+    const preview = service.preview(previewRequest(service, "selection"));
+    diagnostics.recordEvent({ level: "error", code: "provider.failure", message: "Provider failed." });
+
+    const stale = service.start({
+      apiVersion: 1,
+      requestId: ids("diagexportreq", "selection"),
+      previewId: preview.previewId,
+      scopeContextId: initial.scopeContextId,
+      expectedRevision: initial.revision
+    }, path.join(root, "must-not-exist.json"));
+
+    expect(stale.status).toBe("stale");
+    expect(stale.status === "stale" ? stale.workflow.job : undefined).toBeUndefined();
     service.close();
   });
 

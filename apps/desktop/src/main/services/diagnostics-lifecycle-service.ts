@@ -57,6 +57,8 @@ interface SupportBundleBinding {
   readonly scopeContextId: string;
   readonly activeVaultId: string | null;
   readonly expectedRevision: number;
+  readonly eventSelectionRevision?: string;
+  readonly selectedDiagnosticEventIds?: readonly string[];
   readonly destinationPath: string;
   readonly contentSha256: string;
   readonly contentBytes: number;
@@ -149,6 +151,8 @@ export class DiagnosticsLifecycleService {
       scopeContextId: scopeContextId(registry.machineScopeId, activeVaultId),
       expectedRevision: registry.revision,
       activeVaultId,
+      eventSelectionRevision: request.eventSelectionRevision,
+      selectedDiagnosticEventIds: request.selectedDiagnosticEventIds,
       selectedOptionalCategories,
       ...(reviewedPrivateExcerpt ? { reviewedPrivateExcerpt } : {})
     }));
@@ -200,6 +204,22 @@ export class DiagnosticsLifecycleService {
         preview.scopeContextId !== request.scopeContextId || preview.activeVaultId !== currentContext.activeVaultId) {
         return DiagnosticsExportSupportBundleResultSchema.parse({ ...identity, status: "failed" });
       }
+      if (!this.#diagnostics.isCurrentEventSelection(preview)) {
+        return DiagnosticsExportSupportBundleResultSchema.parse({
+          ...identity, status: "stale", workflow: this.#project(registry)
+        });
+      }
+      let content: string;
+      try {
+        const providerMetadata = this.#previewProviderMetadata.get(preview.previewId);
+        if (preview.selectedOptionalCategories.includes("provider_metadata") && !providerMetadata) {
+          throw lifecycleError("diagnostics.provider_metadata_unavailable");
+        }
+        content = this.#diagnostics.createSupportBundlePayload(preview, { ...(providerMetadata ? { providerMetadata } : {}) });
+        if (Buffer.byteLength(content, "utf8") > MAX_PAYLOAD_BYTES) throw lifecycleError("diagnostics.export_blocked");
+      } catch {
+        return DiagnosticsExportSupportBundleResultSchema.parse({ ...identity, status: "failed" });
+      }
       const createdAt = this.#nowIso();
       const jobId = createJobId(createdAt);
       const job = JobRecordSchema.parse({
@@ -223,20 +243,6 @@ export class DiagnosticsLifecycleService {
       });
       const snapshot = this.#jobs.createIfAbsent(this.#jobPath(jobId), job);
       registry = this.#writeRegistry({ ...registry, revision: nextRevision(registry.revision), jobIds: [...registry.jobIds, jobId] });
-      let content: string;
-      try {
-        const providerMetadata = this.#previewProviderMetadata.get(preview.previewId);
-        if (preview.selectedOptionalCategories.includes("provider_metadata") && !providerMetadata) {
-          throw lifecycleError("diagnostics.provider_metadata_unavailable");
-        }
-        content = this.#diagnostics.createSupportBundlePayload(preview, { ...(providerMetadata ? { providerMetadata } : {}) });
-        if (Buffer.byteLength(content, "utf8") > MAX_PAYLOAD_BYTES) throw lifecycleError("diagnostics.export_blocked");
-      }
-      catch (caught) {
-        failFinal(this.#jobs, snapshot, this.#nowIso(), "diagnostics.export_blocked", "choose_path");
-        registry = this.#bumpRegistry(registry);
-        throw caught;
-      }
       const contentBytes = Buffer.byteLength(content, "utf8");
       const binding: SupportBundleBinding = {
         schemaVersion: 1,
@@ -246,6 +252,8 @@ export class DiagnosticsLifecycleService {
         scopeContextId: request.scopeContextId,
         activeVaultId: currentContext.activeVaultId,
         expectedRevision: request.expectedRevision,
+        eventSelectionRevision: preview.eventSelectionRevision,
+        selectedDiagnosticEventIds: preview.selectedDiagnosticEventIds,
         destinationPath: path.resolve(destinationPath),
         contentSha256: sha256(content),
         contentBytes,
@@ -538,6 +546,7 @@ export class DiagnosticsLifecycleService {
       activeVaultId: context.activeVaultId,
       localOnly: true,
       ownedArtifactCount: this.#ownedArtifactCount(registry),
+      eventSelection: this.#diagnostics.eventSelection(),
       ...(latest ? { job: projectJob(latest.job) } : {})
     });
   }
@@ -770,15 +779,26 @@ function parseRegistry(value: unknown): DiagnosticsRegistry {
 function parseBinding(value: unknown, jobId: string): SupportBundleBinding {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError("diagnostics.binding_invalid");
   const candidate = value as Partial<SupportBundleBinding>;
+  const includesSelection = Object.hasOwn(candidate, "eventSelectionRevision") ||
+    Object.hasOwn(candidate, "selectedDiagnosticEventIds");
   const keys = candidate.state === "published"
-    ? "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,expectedRevision,jobId,previewId,publishedAt,requestId,schemaVersion,scopeContextId,state"
-    : "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,expectedRevision,jobId,previewId,requestId,schemaVersion,scopeContextId,state";
+    ? includesSelection
+      ? "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,eventSelectionRevision,expectedRevision,jobId,previewId,publishedAt,requestId,schemaVersion,scopeContextId,selectedDiagnosticEventIds,state"
+      : "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,expectedRevision,jobId,previewId,publishedAt,requestId,schemaVersion,scopeContextId,state"
+    : includesSelection
+      ? "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,eventSelectionRevision,expectedRevision,jobId,previewId,requestId,schemaVersion,scopeContextId,selectedDiagnosticEventIds,state"
+      : "activeVaultId,contentBytes,contentSha256,createdAt,destinationPath,expectedRevision,jobId,previewId,requestId,schemaVersion,scopeContextId,state";
   if (Object.keys(value).sort().join(",") !== keys || candidate.schemaVersion !== 1 || candidate.jobId !== jobId ||
     typeof candidate.requestId !== "string" || !/^diagexportreq_[a-z0-9]{16,64}$/u.test(candidate.requestId) ||
     typeof candidate.previewId !== "string" || !/^supportpreview_[a-f0-9]{32,64}$/u.test(candidate.previewId) ||
     typeof candidate.scopeContextId !== "string" || !/^diagctx_[a-f0-9]{32,64}$/u.test(candidate.scopeContextId) ||
     (candidate.activeVaultId !== null && (typeof candidate.activeVaultId !== "string" || !/^vault_\d{8}_[a-z0-9]{8,}$/u.test(candidate.activeVaultId))) ||
     !Number.isSafeInteger(candidate.expectedRevision) || candidate.expectedRevision! < 0 || typeof candidate.destinationPath !== "string" ||
+    (includesSelection && (typeof candidate.eventSelectionRevision !== "string" ||
+      !/^diagevents_[a-f0-9]{64}$/u.test(candidate.eventSelectionRevision) ||
+      !Array.isArray(candidate.selectedDiagnosticEventIds) || candidate.selectedDiagnosticEventIds.length < 1 || candidate.selectedDiagnosticEventIds.length > 32 ||
+      candidate.selectedDiagnosticEventIds.some((eventId) => typeof eventId !== "string" || !/^diagevent_[a-f0-9]{32}$/u.test(eventId)) ||
+      new Set(candidate.selectedDiagnosticEventIds).size !== candidate.selectedDiagnosticEventIds.length)) ||
     !path.isAbsolute(candidate.destinationPath) || typeof candidate.contentSha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(candidate.contentSha256) ||
     !Number.isSafeInteger(candidate.contentBytes) || candidate.contentBytes! < 1 || candidate.contentBytes! > MAX_PAYLOAD_BYTES ||
     typeof candidate.createdAt !== "string" || Number.isNaN(Date.parse(candidate.createdAt)) ||

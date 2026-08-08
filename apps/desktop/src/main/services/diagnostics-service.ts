@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import type { DiagnosticsHealth, SupportBundlePreview } from "@pige/contracts";
+import type {
+  DiagnosticEventSummary,
+  DiagnosticsEventSelection,
+  DiagnosticsHealth,
+  SupportBundlePreview
+} from "@pige/contracts";
 import {
   redactDiagnosticText,
   redactPaths
@@ -24,7 +29,8 @@ const NON_ERROR_RETENTION_MS = 14 * DAY_MS;
 const ERROR_RETENTION_MS = 30 * DAY_MS;
 const TRUNCATED_MARKER = "[TRUNCATED]";
 const REDACTED_CONTENT_MARKER = "[REDACTED_CONTENT]";
-const maxExportedEvents = 200;
+const MAX_SELECTABLE_EVENTS = 64;
+const MAX_EXPORTED_EVENTS = 32;
 
 const DIAGNOSTIC_MESSAGE_CATALOG: Readonly<Record<string, string>> = {
   "agent_ingest.background_failed": "Background Agent ingest failed.",
@@ -138,7 +144,14 @@ interface DiagnosticsServiceOptions {
 }
 
 interface PersistedDiagnosticEvent extends DiagnosticEvent {
+  readonly eventId: string;
   readonly recordedAt: string;
+}
+
+interface DiagnosticsEventEntry {
+  readonly event: PersistedDiagnosticEvent;
+  readonly summary: DiagnosticEventSummary;
+  readonly digest: string;
 }
 
 interface SerializedEvent {
@@ -222,23 +235,48 @@ export class DiagnosticsService {
     };
   }
 
-  previewSupportBundle(context?: Pick<SupportBundlePreview,
+  eventSelection(): DiagnosticsEventSelection {
+    const entries = this.#readSelectableEventEntries();
+    return {
+      revision: eventSelectionRevision(entries),
+      events: entries.map(({ summary }) => summary)
+    };
+  }
+
+  isCurrentEventSelection(preview: Pick<SupportBundlePreview,
+    "eventSelectionRevision" | "selectedDiagnosticEventIds" | "selectedDiagnosticEvents"
+  >): boolean {
+    try {
+      this.#resolveSelectedEventEntries(
+        preview.eventSelectionRevision,
+        preview.selectedDiagnosticEventIds,
+        preview.selectedDiagnosticEvents
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  previewSupportBundle(context: Pick<SupportBundlePreview,
     "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId"
+  > & Pick<SupportBundlePreview,
+    "eventSelectionRevision" | "selectedDiagnosticEventIds"
   > & Partial<Pick<SupportBundlePreview, "selectedOptionalCategories" | "reviewedPrivateExcerpt">>): SupportBundlePreview {
-    const recentEvents = this.#readRecentEvents();
+    const selectedEntries = this.#resolveSelectedEventEntries(
+      context.eventSelectionRevision,
+      context.selectedDiagnosticEventIds
+    );
     const generatedAt = this.#nowIso();
-    const preview = buildSupportBundlePreview(estimateSupportBundleBytes(recentEvents), generatedAt, context ? {
+    const preview = buildSupportBundlePreview(
+      estimateSupportBundleBytes(selectedEntries.map(({ event }) => redactDiagnosticValue(event))),
+      generatedAt,
+      {
       ...context,
+      selectedDiagnosticEvents: selectedEntries.map(({ summary }) => summary),
       selectedOptionalCategories: context.selectedOptionalCategories ?? []
-    } : {
-      apiVersion: 1,
-      requestId: `diagpreviewreq_${randomUUID().replaceAll("-", "")}`,
-      scopeContextId: `diagctx_${createHash("sha256").update("legacy-diagnostics-preview").digest("hex").slice(0, 48)}`,
-      expectedRevision: 0,
-      activeVaultId: null,
-      selectedOptionalCategories: [],
-      reviewedPrivateExcerpt: undefined
-    });
+    }
+    );
     this.recordEvent({
       level: "info",
       code: "diagnostics.previewSupportBundle",
@@ -277,6 +315,8 @@ export class DiagnosticsService {
       preview: {
         previewId: preview.previewId,
         generatedAt: preview.generatedAt,
+        eventSelectionRevision: preview.eventSelectionRevision,
+        selectedDiagnosticEventIds: preview.selectedDiagnosticEventIds,
         selectedOptionalCategories: preview.selectedOptionalCategories,
         includedCategories: preview.includedCategories,
         excludedCategories: preview.excludedCategories,
@@ -298,7 +338,11 @@ export class DiagnosticsService {
         crashRecoveryHistory: health.crashRecoveryHistory,
         ...(health.crashRecovery ? { crashRecovery: health.crashRecovery } : {})
       },
-      recentEvents: this.#readRecentEvents(),
+      recentEvents: this.#resolveSelectedEventEntries(
+        preview.eventSelectionRevision,
+        preview.selectedDiagnosticEventIds,
+        preview.selectedDiagnosticEvents
+      ).map(({ event }) => redactDiagnosticValue(event)),
       ...(preview.selectedOptionalCategories.includes("provider_metadata") && optional.providerMetadata
         ? { providerMetadata: optional.providerMetadata }
         : {})
@@ -319,7 +363,7 @@ export class DiagnosticsService {
     const record = buildPersistedEvent(event, this.#nowIso(), {
       maxEventBytes: this.#maxEventBytes,
       maxStringBytes: this.#maxStringBytes
-    });
+    }, createDiagnosticEventId());
     this.#appendEvent(record);
   }
 
@@ -354,10 +398,46 @@ export class DiagnosticsService {
     return moved;
   }
 
-  #readRecentEvents(): unknown[] {
-    return this.#maintainEventStore()
-      .slice(-maxExportedEvents)
-      .map((event) => redactDiagnosticValue(event));
+  #readSelectableEventEntries(maintain = false): readonly DiagnosticsEventEntry[] {
+    const nowMs = this.#now().getTime();
+    const events = (maintain ? this.#maintainEventStore() : this.#readStoredEvents())
+      .filter((event) => isWithinRetention(event, nowMs) && isSelectableDiagnosticEvent(event));
+    return events
+      .slice(-MAX_SELECTABLE_EVENTS)
+      .map((event) => ({
+        event,
+        summary: {
+          eventId: event.eventId,
+          recordedAt: event.recordedAt,
+          level: event.level,
+          code: event.code,
+          redactedDetailCount: Object.keys(event.redactedDetails ?? {}).length
+        },
+        digest: sha256StableValue(event)
+      }));
+  }
+
+  #resolveSelectedEventEntries(
+    revision: string | undefined,
+    eventIds: readonly string[] | undefined,
+    expectedSummaries?: readonly DiagnosticEventSummary[]
+  ): readonly DiagnosticsEventEntry[] {
+    const entries = this.#readSelectableEventEntries(true);
+    if (!revision || !eventIds || eventIds.length === 0 || eventIds.length > MAX_EXPORTED_EVENTS ||
+      new Set(eventIds).size !== eventIds.length || revision !== eventSelectionRevision(entries)) {
+      throw new Error("Diagnostics event selection is stale.");
+    }
+    const byId = new Map(entries.map((entry) => [entry.summary.eventId, entry]));
+    const selected = eventIds.map((eventId) => byId.get(eventId));
+    if (selected.some((entry) => !entry)) throw new Error("Selected diagnostics event is unavailable.");
+    const resolved = selected as readonly DiagnosticsEventEntry[];
+    if (expectedSummaries && (
+      expectedSummaries.length !== resolved.length ||
+      expectedSummaries.some((summary, index) => !sameDiagnosticEventSummary(summary, resolved[index]?.summary))
+    )) {
+      throw new Error("Selected diagnostics event changed.");
+    }
+    return resolved;
   }
 
   #maintainEventStore(newEvent?: PersistedDiagnosticEvent): PersistedDiagnosticEvent[] {
@@ -545,11 +625,19 @@ export class DiagnosticsService {
 function buildPersistedEvent(
   event: DiagnosticEvent,
   recordedAt: string,
-  limits: { maxEventBytes: number; maxStringBytes: number }
+  limits: { maxEventBytes: number; maxStringBytes: number },
+  persistedEventId?: unknown
 ): PersistedDiagnosticEvent {
   const redactedDetails = sanitizeDetails(event.redactedDetails, limits.maxStringBytes);
   const code = sanitizeToken(sanitizeStoredString(event.code, 80));
+  const eventId = parseDiagnosticEventId(persistedEventId) ?? legacyDiagnosticEventId({
+    recordedAt,
+    level: normalizeLevel(event.level),
+    code,
+    ...(redactedDetails ? { redactedDetails } : {})
+  });
   let record: PersistedDiagnosticEvent = {
+    eventId,
     recordedAt,
     level: normalizeLevel(event.level),
     code,
@@ -564,6 +652,7 @@ function buildPersistedEvent(
   };
   if (serializeEvent(record).bytes <= limits.maxEventBytes) return record;
   record = {
+    eventId,
     recordedAt,
     level: record.level,
     code: record.code,
@@ -594,8 +683,43 @@ function normalizeStoredEvent(
         : {})
     },
     new Date(value.recordedAt).toISOString(),
-    limits
+    limits,
+    value.eventId
   );
+}
+
+function createDiagnosticEventId(): string {
+  return `diagevent_${randomUUID().replaceAll("-", "")}`;
+}
+
+function legacyDiagnosticEventId(value: unknown): string {
+  return `diagevent_${sha256StableValue(value).slice(0, 32)}`;
+}
+
+function parseDiagnosticEventId(value: unknown): string | undefined {
+  return typeof value === "string" && /^diagevent_[a-f0-9]{32}$/u.test(value) ? value : undefined;
+}
+
+function eventSelectionRevision(entries: readonly DiagnosticsEventEntry[]): string {
+  const stable = entries.map(({ summary, digest }) => ({ eventId: summary.eventId, digest }));
+  return `diagevents_${sha256StableValue(stable)}`;
+}
+
+function sha256StableValue(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function sameDiagnosticEventSummary(
+  left: DiagnosticEventSummary,
+  right: DiagnosticEventSummary | undefined
+): boolean {
+  return !!right && left.eventId === right.eventId && left.recordedAt === right.recordedAt &&
+    left.level === right.level && left.code === right.code &&
+    left.redactedDetailCount === right.redactedDetailCount;
+}
+
+function isSelectableDiagnosticEvent(event: PersistedDiagnosticEvent): boolean {
+  return event.code !== "diagnostics.previewSupportBundle" && event.code !== "diagnostics.exportSupportBundle";
 }
 
 function sanitizeDetails(

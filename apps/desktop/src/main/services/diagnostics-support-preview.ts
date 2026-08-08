@@ -24,6 +24,7 @@ export function buildSupportBundlePreview(
   generatedAt: string,
   context: Pick<SupportBundlePreview,
     "apiVersion" | "requestId" | "scopeContextId" | "expectedRevision" | "activeVaultId" |
+    "eventSelectionRevision" | "selectedDiagnosticEventIds" | "selectedDiagnosticEvents" |
     "selectedOptionalCategories" | "reviewedPrivateExcerpt"
   >
 ): SupportBundlePreview {
