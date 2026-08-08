@@ -123,4 +123,35 @@ describe("PigePolicySettingsPanel", () => {
     expect(document.querySelector("textarea")?.value).toBe(draft);
     expect(document.body.textContent).toContain("required sections are missing");
   });
+
+  it("fails closed on a mismatched save identity while retaining the draft", async () => {
+    const mismatched = {
+      ...updatedResult(),
+      requestId: "pigepolicyreq_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    };
+    const pending = deferred<typeof mismatched>();
+    const value = {
+      pigePolicy: vi.fn(async () => summary),
+      updatePigePolicy: vi.fn(async () => pending.promise)
+    } as unknown as PigeDesktopApi["settings"];
+    const root = createRoot(document.getElementById("root")!);
+    await act(async () => { root.render(createElement(PigePolicySettingsPanel, { activeVaultId: summary.activeVaultId, api: value, t })); });
+    await flush();
+    await act(async () => { ([...document.querySelectorAll("button")].find((button) => button.textContent === "Edit policy")!).click(); });
+    const textarea = document.querySelector("textarea")!;
+    const draft = `${markdown}\n- keep this draft\n`;
+    await inputText(textarea, draft);
+    await act(async () => { ([...document.querySelectorAll("button")].find((button) => button.textContent === "Review and save")!).click(); });
+    pending.resolve(mismatched);
+    await flush();
+    expect(document.querySelector("textarea")?.value).toBe(draft);
+    expect(document.body.textContent).toContain("Pige could not update PIGE.md. Nothing was changed.");
+    expect(document.body.textContent).not.toContain("can undo it from Activity");
+  });
 });
+
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
