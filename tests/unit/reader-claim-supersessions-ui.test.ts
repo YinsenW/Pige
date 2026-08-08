@@ -9,6 +9,7 @@ afterEach(() => { for (const key of keys) { const value = originals.get(key); if
 describe("ReaderClaimSupersessions", () => {
   it("requires confirmation before it adopts an authoritative directed supersession render", async () => {
     const search = vi.fn(async (request) => ({ ...request, status: "ready" as const, candidates: [item()] })), change = vi.fn(async (request) => ({ ...request, status: "committed" as const, operationId: "op_20260808_supersession1", render: render([item()], "b") })), committed = vi.fn(), harness = await mount(render(), search, change, committed), input = harness.container.querySelector("input")!;
+    expect(input.getAttribute("aria-label")).toBe("note.claimSupersessions.searchPlaceholder");
     await act(async () => { setInput(harness.dom, input, "Prior"); await settle(harness.dom); }); await act(async () => { button(harness.container, "note.claimSupersessions.search").click(); await settle(harness.dom); });
     const add = [...harness.container.querySelectorAll("button")].find((node) => node.textContent?.includes("Prior claim"))!; await act(async () => { add.click(); await settle(harness.dom); }); expect(change).not.toHaveBeenCalled();
     await act(async () => { button(harness.container, "note.claimSupersessions.confirm").click(); await settle(harness.dom); });
@@ -18,6 +19,20 @@ describe("ReaderClaimSupersessions", () => {
     const change = vi.fn(async (request) => ({ ...request, status: "stale" as const })), harness = await mount(render([item()]), vi.fn(), change, vi.fn()), remove = button(harness.container, "note.claimSupersessions.remove"); remove.focus();
     await act(async () => { remove.click(); await settle(harness.dom); }); await act(async () => { button(harness.container, "note.claimSupersessions.confirm").click(); await settle(harness.dom); });
     expect(harness.container.textContent).toContain("Prior claim"); expect(harness.container.querySelector('[role="status"]')?.textContent).toBe("note.claimSupersessions.notice.stale"); expect(harness.dom.window.document.activeElement).toBe(remove); await harness.unmount();
+  });
+  it("closes an unchanged confirmation with Escape and returns focus to its trigger", async () => {
+    const harness = await mount(render([item()]), vi.fn(), vi.fn(), vi.fn()), remove = button(harness.container, "note.claimSupersessions.remove");
+    remove.focus();
+    await act(async () => { remove.click(); await settle(harness.dom); });
+    const dialog = harness.container.querySelector<HTMLElement>('[role="alertdialog"]')!;
+    expect(harness.dom.window.document.activeElement).toBe(button(harness.container, "note.claimSupersessions.confirm"));
+    await act(async () => {
+      dialog.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(remove);
+    await harness.unmount();
   });
 });
 async function mount(note: NoteRenderResult, search: Parameters<typeof ReaderClaimSupersessions>[0]["search"], change: Parameters<typeof ReaderClaimSupersessions>[0]["change"], onCommitted: Parameters<typeof ReaderClaimSupersessions>[0]["onCommitted"]) { const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" }); for (const key of keys) { originals.set(key, Object.getOwnPropertyDescriptor(globalThis, key)); Object.defineProperty(globalThis, key, { configurable: true, value: key === "requestAnimationFrame" ? (callback: FrameRequestCallback) => { callback(0); return 1; } : dom.window[key as keyof Window] }); } Object.defineProperty(dom.window, "crypto", { value: { randomUUID: () => "01234567-89ab-cdef-0123-456789abcdef" } }); Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true }); const { createRoot } = await import("react-dom/client"), root = createRoot(dom.window.document.querySelector("#root")!); await act(async () => root.render(createElement(ReaderClaimSupersessions, { activeVaultId: "vault_20260808_claims", note, search, change, onCommitted, t: (key) => key }))); return { dom, root, container: dom.window.document.querySelector("#root")!, unmount: async () => act(async () => root.unmount()) }; }

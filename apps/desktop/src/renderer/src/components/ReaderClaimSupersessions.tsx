@@ -54,10 +54,13 @@ export function ReaderClaimSupersessions(props: {
   return <section ref={sectionRef} tabIndex={-1} aria-label={props.t("note.claimSupersessions.title")}>
     <strong>{props.t("note.claimSupersessions.title")}</strong><p>{props.t("note.claimSupersessions.description")}</p>
     {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button" disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>{props.t("note.claimSupersessions.remove")}</button></span>)}
-    <span><input value={query} maxLength={160} placeholder={props.t("note.claimSupersessions.searchPlaceholder")} onChange={(event) => setQuery(event.currentTarget.value)} />
+    <span><input type="search" aria-label={props.t("note.claimSupersessions.searchPlaceholder")} value={query} maxLength={160} placeholder={props.t("note.claimSupersessions.searchPlaceholder")} onChange={(event) => setQuery(event.currentTarget.value)} />
       <button type="button" disabled={!summary.canEdit || pending || !query.trim()} onClick={(event) => { focusRef.current = event.currentTarget; void search(); }}>{props.t("note.claimSupersessions.search")}</button></span>
     {candidates.map((candidate) => <button key={candidate.pageId} type="button" disabled={pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "add", target: candidate }); }}>{props.t("note.claimSupersessions.add")} {candidate.title}</button>)}
-    {intent ? <div role="alertdialog" aria-label={props.t("note.claimSupersessions.confirmTitle")}><p>{props.t(intent.action === "add" ? "note.claimSupersessions.confirmAdd" : "note.claimSupersessions.confirmRemove")} {intent.target.title}</p>
+    {intent ? <div role="alertdialog" aria-label={props.t("note.claimSupersessions.confirmTitle")} onKeyDown={(event) => {
+      if (event.key !== "Escape" || pending) return;
+      event.preventDefault(); restoreIntentFocusRef.current = true; setIntent(null);
+    }}><p>{props.t(intent.action === "add" ? "note.claimSupersessions.confirmAdd" : "note.claimSupersessions.confirmRemove")} {intent.target.title}</p>
       <button type="button" disabled={pending} onClick={() => { restoreIntentFocusRef.current = true; setIntent(null); }}>{props.t("note.claimSupersessions.cancel")}</button><button ref={confirmRef} type="button" disabled={pending} onClick={() => void commit()}>{props.t("note.claimSupersessions.confirm")}</button></div> : null}
     {pending ? <span role="status">{props.t("note.claimSupersessions.saving")}</span> : null}{notice ? <span role={notice === "failed" ? "alert" : "status"}>{props.t(`note.claimSupersessions.notice.${notice}`)}</span> : null}
   </section>;
