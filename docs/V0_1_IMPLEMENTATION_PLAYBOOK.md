@@ -527,9 +527,10 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed packaged proof, Windows/Paddle,
-full-slide/vector/chart OCR, unsupported/oversized PPTX targets,
-progress/cancel UI, other Job classes, and strict cross-process CAS.
+Still open before P5 completion: signed packaged proof, Windows/Paddle, implementation and
+evidence of the frozen bounded local PPTX full-slide/vector/chart OCR materializer,
+unsupported/oversized PPTX targets, progress/cancel UI, other Job classes, and strict
+cross-process CAS.
 
 Deferred from this phase:
 

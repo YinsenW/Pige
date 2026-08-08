@@ -1022,7 +1022,7 @@ Minimum output:
 - Managed file copy or original-path reference according to source storage strategy.
 - Extracted text.
 - Extracted images when the source format exposes embedded image assets or a page/slide render path is available.
-- OCR output from embedded or rendered images when ordinary text extraction misses important visible text.
+- OCR output from parser-selected embedded media or a bounded local full-slide render when ordinary text extraction misses important visible text; unsupported slide primitives remain an explicit partial-coverage warning.
 - Source summary Markdown page.
 - Wiki updates.
 
@@ -1034,7 +1034,7 @@ OCR should also act as a fallback inside document parsing:
 
 - If a PDF page has no embedded text, render the page and OCR it.
 - If a PDF page has very little embedded text but substantial visible text, add OCR as a second pass.
-- If a PowerPoint slide contains screenshots or image-only text, OCR those regions or rendered slide images.
+- If a PowerPoint slide contains screenshots, vector/chart labels, or image-only text, OCR parser-selected embedded regions or a bounded local full-slide render. Unsupported slide primitives remain visible as partial coverage rather than fabricated text.
 - If OCR confidence is low, keep partial text but attach a warning to the source page.
 
 Engine priority:

@@ -5804,6 +5804,43 @@ References:
 - `docs/UI_PROTOTYPE.md`
 - `docs/V0_1_IMPLEMENTATION_PLAYBOOK.md`
 
+### D-20260808-Bounded-Local-PPTX-Slide-OCR
+
+Status: Accepted
+Date: 2026-08-08
+
+Decision:
+
+Pige will add PPTX full-slide/vector/chart OCR only through the replaceable local
+`pige_openxml_canvas@1` port using the reviewed OpenXML bridge and
+`@napi-rs/canvas@1.0.2`. It never invokes LibreOffice, PowerPoint, Keynote, a shell,
+a hosted converter, or a network service; existing Pi-selected OCR Job and
+Artifact/Operation/recovery owners remain authoritative, with no new renderer DTO.
+
+Rationale:
+
+Visible PPTX text can occur in vectors and charts that semantic conversion and embedded-media OCR
+cannot prove. This format-driven worker retains private snapshots, resource limits, retry, and
+replaceability without an Office application or task-time dependency installation.
+
+Consequences:
+
+- Only current parser-issued `slide:N` inputs may render; source/sidecar/checksum/limit drift
+  fails before publication. The in-memory worker caps slides, pixels, PNG, memory, and time.
+- It loads no external link, font path, macro, OLE/add-in, media, animation, SmartArt, 3D/effect,
+  or unknown primitive; omitted content is partial coverage, never invented text.
+- Missing Canvas waits body-free; unsafe input fails, interrupted work re-proves, and restart
+  adopts only a matching output. P5/PIGE-INGEST-003/PIGE-INGEST-004 remain partial pending
+  implementation, fixtures, packaged-platform, and cross-platform evidence.
+
+References:
+
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/JOB_OPERATION_AND_RECOVERY.md`
+- `docs/QUALITY_AND_TEST_STRATEGY.md`
+
 ## 4. Deferred Decisions
 
 ### D-20260709-Sync-Implementation

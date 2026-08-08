@@ -166,6 +166,11 @@ Jobs may have parent-child structure:
   normalize to `legacy_agent_ingest`, the sole compatibility parent; unknown values fail.
 - Pi-selected parse/OCR/Dataset children bind parent plus Pi run/call provenance and
   return one deterministic outcome; they never choose a successor tool.
+- The frozen PPTX full-slide/vector/chart path is one existing Pi-selected `ocr` child, not
+  a new class or public contract. Its checkpoint binds source/sidecar checksum, ordered
+  `slide:N`, materializer limits, and OCR engine; missing Canvas waits on
+  `runtime_capability:pptx_slide_renderer`, unsafe input stops, retry re-proves, and restart
+  adopts only a matching sidecar without duplicate Artifact Operation.
 - A preserved audio/video source creates no parser/OCR child in v0.1. Its same
   `agent_turn` remains `waiting_dependency` / `waiting_for_tool` on
   `runtime_capability:media_transcription` with no model or network use; restart restores

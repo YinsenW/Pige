@@ -202,6 +202,11 @@ Mitigations:
 - OpenXML preflight rejects unsafe or overlong entry names, duplicate parts, encrypted/unsupported entries, invalid sizes, excessive counts, oversized expansion, suspicious compression ratios, oversized selected XML, missing required parts, and DOCTYPE declarations before semantic conversion. DOCX preflight covers every XML/relationship part that Pige's locator bridge can reach.
 - AnyDoc Markdown and Document assets are untrusted intermediate data, normalized to text and verified local media locators, redacted where needed, and never rendered in the product UI.
 - PPTX parsing disables entity processing and value coercion, validates XML with a nesting cap, resolves internal relationships relative to their owning package part, rejects traversal and duplicate IDs, and records but never opens external targets.
+- The frozen `pige_openxml_canvas@1` PPTX materializer accepts only a revalidated
+  parser-issued `slide:N`, has no shell, Office, arbitrary font/file-path, execution, or
+  network authority, and keeps buffers in memory under the parser's slide/pixel/PNG/memory/
+  time caps. Malformed, encrypted, linked, special, unsupported, or over-limit input fails
+  before OCR; unknown shapes/charts are warning-only partial coverage, not trusted text.
 - CSV/XLSX/database adapters treat names, cells, formulas, comments, schemas, and metadata
   as untrusted data. They never execute workbook macros/formulas, external links, database
   extensions, triggers, user code, or model-authored SQL. Database snapshots open

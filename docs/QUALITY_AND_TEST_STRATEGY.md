@@ -136,6 +136,8 @@ Document fixtures:
 - PDF with sparse embedded text and visible text in images.
 - DOCX with headings, lists, links, and tables.
 - PPTX with text boxes and selected embedded-raster OCR.
+- PPTX full-slide vector/chart fixture for `slide:N` order, resource limits, partial
+  coverage, no temp/network/execution, capability wait/retry, and restart reuse.
 - Corrupt or unsupported file.
 
 Structured-data fixtures:

@@ -1331,7 +1331,7 @@
       "name": "NAPI-RS Canvas",
       "category": "parser-runtime",
       "status": "required",
-      "usage": "Provide PDF.js 6 Node runtime primitives plus bounded native Canvas and PNG encoding for the explicit local PDF page OCR materializer.",
+      "usage": "Provide PDF.js 6 Node runtime primitives plus bounded native Canvas and PNG encoding for the explicit local PDF-page and PPTX full-slide OCR materializer ports.",
       "packageManager": "npm",
       "packageId": "@napi-rs/canvas",
       "version": "1.0.2",
@@ -1346,10 +1346,10 @@
       "platforms": ["macos-arm64", "macos-x64", "windows-x64"],
       "sizeClass": "medium",
       "updatePolicy": "release-train",
-      "replacementPath": "Replace behind the PDF parser/page-renderer ports if PDF.js no longer needs these primitives or another reviewed pixel materializer is adopted.",
-      "lastReviewedAt": "2026-07-10",
+      "replacementPath": "Replace behind the PDF parser/page-renderer and PPTX slide-materializer ports if PDF.js no longer needs these primitives or another reviewed local pixel materializer is adopted.",
+      "lastReviewedAt": "2026-08-08",
       "reviewedBy": "Codex",
-      "notes": "Pinned explicitly instead of relying on PDF.js optional dependency resolution. The separate bounded page-renderer worker uses Canvas only for selected OCR pages; platform native packages require macOS arm64/x64 and Windows x64 packaged-worker smoke."
+      "notes": "Pinned explicitly instead of relying on PDF.js optional dependency resolution. The separate bounded renderer worker uses Canvas only for parser-selected OCR pages or frozen `slide:N` inputs; it is not an Office converter. Platform native packages require macOS arm64/x64 and Windows x64 packaged-worker smoke."
     },
     {
       "registryRef": "parser.pdfjs-dist",

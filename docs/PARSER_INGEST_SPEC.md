@@ -218,7 +218,26 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Source checksum is verified before and after recognition. Valid deterministic Artifacts are reused after restart; stale derived output is regenerated; changed or path-escaping source evidence fails without invoking the adapter.
 - OCR text is stored once in `artifacts/ocr/`. A separate checksummed metadata sidecar stores engine/version, confidence, language hints, image dimensions, normalized bounding boxes, character spans, and warnings without copying the recognized body.
 - Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR completes its child with warnings and leaves the Agent parent waiting without a note.
-- PDF pages use their reviewed materializer. DOCX and PPTX use the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `image:N/ocr:block:K` or `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, and unsupported or oversized targets remain waiting.
+- PDF pages use their reviewed materializer. DOCX and PPTX use the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `image:N/ocr:block:K` or `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff.
+- The frozen PPTX full-slide port is `PptxSlideMaterializerService`/
+  `pige_openxml_canvas@1`, a replaceable Pige OpenXML-to-pixel worker using only reviewed
+  `yauzl`, `fast-xml-parser`, and `@napi-rs/canvas`. It accepts only a current
+  parser-issued `slide:N` and rechecks source/sidecar checksums, selected order, engine,
+  and limits before render and publication; it never invokes AnyDoc, Office/LibreOffice,
+  a shell, or a network service.
+- One child permits at most 12 selected slides, each at most 2,048 by 2,048 and 4,194,304
+  pixels, 12 MiB PNG/slide, 48 MiB aggregate PNG, 512 MiB old-generation, and 60 seconds.
+  It writes no temporary files and releases in-memory buffers after OCR. Only basic text,
+  group transforms, rect/ellipse/line, raster media, and bar/line/pie/doughnut labels
+  render; no embedded/arbitrary font path, external link, OLE/add-in, macro, media,
+  animation, SmartArt, 3D/effect, or unknown primitive. Omission is `render_incomplete`,
+  never a complete-coverage claim.
+- It reuses existing Pi-selected `ocr` Job, Artifact/sidecar, `create_artifact` Operation,
+  Source Page, retry/recovery owners and `slide:N/render/ocr:block:K` locators; no DTO.
+  Missing Canvas waits on `runtime_capability:pptx_slide_renderer`; unsafe/over-limit input
+  stops before render; timeout, cancellation, and interrupted I/O retry only after reproof;
+  restart adopts a matching sidecar without duplicate effect. It cannot recursively capture,
+  execute, access a network, or send a model request.
 
 ### 8.7 CSV, XLSX, And Database Files
 
