@@ -68,15 +68,25 @@ describe("ReaderClaimConfidenceControl", () => {
     const submit = vi.fn(async () => pending.promise);
     const committed = vi.fn();
     const harness = await mount(claimRender(), submit, committed);
+    harness.dom.window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+      return harness.dom.window.setTimeout(() => callback(0), 0);
+    };
     await act(async () => {
       choose(harness.dom, harness.container.querySelector("select")!, "high");
       await settle(harness.dom);
       harness.root.render(createElement(ReaderClaimConfidenceControl, props(
         claimRender("medium", "c", "page_20260801_claim0002"), submit, committed
       )));
-      await settle(harness.dom);
     });
+    for (let i = 0; i < 5; i += 1) {
+      await act(async () => { await settle(harness.dom); });
+    }
     const request = submit.mock.calls[0]![0];
+    const replacementSelect = harness.container.querySelector<HTMLSelectElement>("select")!;
+    expect(replacementSelect.value).toBe("medium");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.container.querySelector('[role="status"], [role="alert"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     await act(async () => {
       pending.resolve({ ...request, status: "committed", operationId: "op_20260801_claimconfidence1",
         render: claimRender("high", "b") });
@@ -84,7 +94,10 @@ describe("ReaderClaimConfidenceControl", () => {
       await settle(harness.dom);
     });
     expect(committed).not.toHaveBeenCalled();
-    expect((harness.container.querySelector("select") as HTMLSelectElement).value).toBe("medium");
+    expect(replacementSelect.value).toBe("medium");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.container.querySelector('[role="status"], [role="alert"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     await harness.unmount();
   });
 });

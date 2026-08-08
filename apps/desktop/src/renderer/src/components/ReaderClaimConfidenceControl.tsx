@@ -29,11 +29,13 @@ export function ReaderClaimConfidenceControl(props: {
   const selectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
+    const wasActive = activeRef.current;
     ownerIdentityRef.current = ownerIdentity;
     activeRef.current = false;
     setDraft(summary?.confidence ?? null);
     setPending(false);
     setNotice(null);
+    if (wasActive) restoreFocusRef.current = true;
   }, [ownerIdentity, summary?.confidence]);
 
   useEffect(() => {
