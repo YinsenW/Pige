@@ -528,6 +528,7 @@ export function App(): React.JSX.Element {
   const activityHistoryLoadInFlightRef = useRef(false);
   const activityHistoryFilterRef = useRef<{ query?: string; status?: "applied" | "undone" }>({});
   const activityJobsRefreshSequence = useRef(0);
+  const jobCancellationInFlightIdsRef = useRef(new Set<string>());
   const activityListRef = useRef<KnowledgeActivityListResult | null>(activityList);
   const readerSelectionProposalSequence = useRef(0);
   const readerSelectionProposalDecisionInFlight = useRef(false);
@@ -1973,17 +1974,24 @@ export function App(): React.JSX.Element {
   };
 
   const cancelJob = async (jobId: string): Promise<boolean> => {
-    const result = await cancelKnownJob(activeVaultIdRef.current, jobId, recentJobs, backupJobs, activityJobs);
-    if (result.status === "cancelled" || result.status === "cancel_requested") {
-      setCaptureToast({
-        kind: "success",
-        message: t(result.status === "cancel_requested" ? "home.jobCancelRequested" : "home.jobCancelled")
-      });
-      await refreshVaultState();
-      return true;
+    if (jobCancellationInFlightIdsRef.current.has(jobId)) return false;
+    jobCancellationInFlightIdsRef.current.add(jobId);
+    try {
+      const result = await cancelKnownJob(activeVaultIdRef.current, jobId, recentJobs, backupJobs, activityJobs);
+      if (result.status === "cancelled" || result.status === "cancel_requested") {
+        setCaptureToast({
+          kind: "success",
+          message: t(result.status === "cancel_requested" ? "home.jobCancelRequested" : "home.jobCancelled")
+        });
+        await refreshVaultState();
+        return true;
+      }
+      if (result.status === "stale") await refreshVaultState();
+      setCaptureToast({ kind: "error", message: t("error.generic") });
+      return false;
+    } finally {
+      jobCancellationInFlightIdsRef.current.delete(jobId);
     }
-    if (result.status === "stale") await refreshVaultState(); setCaptureToast({ kind: "error", message: t("error.generic") });
-    return false;
   };
 
   const retryJob = async (jobId: string): Promise<boolean> => {

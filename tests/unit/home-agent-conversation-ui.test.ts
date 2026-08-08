@@ -6342,6 +6342,29 @@ describe("Home durable Agent conversation UI", () => {
     dom.window.close();
   });
 
+  it("sends one cancellation request for repeated Home activation", async () => {
+    const dom = createDom();
+    const harness = createHarness(undefined);
+    harness.jobs = [runningAgentJob()];
+    let resolveCancel: (() => void) | undefined;
+    harness.cancelDeferred = new Promise<void>((resolve) => { resolveCancel = resolve; });
+    const { container, root } = await mountHome(dom, makePigeApi(harness));
+
+    await waitFor(dom, () => buttonsByAriaLabel(container, "Cancel").length === 1);
+    const cancel = buttonsByAriaLabel(container, "Cancel")[0]!;
+    await act(async () => {
+      cancel.click();
+      cancel.click();
+      await settle(dom);
+    });
+    expect(harness.cancelJobIds).toEqual(["job_20260712_runningfixture"]);
+
+    resolveCancel?.();
+    await waitFor(dom, () => container.textContent?.includes("Cancellation requested") === true);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("adopts pushed numeric progress and cancellation for a running non-Agent Job", async () => {
     const dom = createDom();
     const harness = createHarness(undefined);
@@ -6776,6 +6799,7 @@ interface ConversationHarness {
   readonly retryJobIds: string[];
   retryMode: "queued" | "immediate_refail";
   readonly cancelJobIds: string[];
+  cancelDeferred?: Promise<void>;
   readonly jobChangedListeners: Set<(event: JobChangedEvent) => void>;
   readonly reconnectOriginalSourceRequests: ReferencedOriginalReconnectRequest[];
   reconnectOriginalSource: (request: ReferencedOriginalReconnectRequest) => Promise<ReferencedOriginalReconnectResult>;
@@ -7483,6 +7507,7 @@ function makePigeApi(harness: ConversationHarness): object {
       },
       cancel: async ({ jobId }: { readonly jobId: string }) => {
         harness.cancelJobIds.push(jobId);
+        await harness.cancelDeferred;
         harness.jobs = harness.jobs.map((job) => job.id === jobId
           ? { ...job, state: "cancel_requested", updatedAt: "2026-07-12T10:00:01.000Z" }
           : job);
