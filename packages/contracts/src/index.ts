@@ -654,6 +654,8 @@ export type {
   AgentAttachmentCandidate,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
+  JobDependencyRepairResult,
   AgentRuntimePolicyContext,
   AgentConversationHistoryCursor,
   AgentConversationHistoryQuery,
