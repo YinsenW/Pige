@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteRenderResult, NoteSearchQuestionAnswersResult } from "@pige/contracts";
 import { ReaderQuestionAnswers } from "../../apps/desktop/src/renderer/src/components/ReaderQuestionAnswers";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -63,6 +63,40 @@ describe("ReaderQuestionAnswers", () => {
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });
+
+  it("fences a pending search on owner drift and restores the search trigger focus", async () => {
+    const pending = deferred<NoteSearchQuestionAnswersResult>();
+    const search = vi.fn(async () => pending.promise);
+    const harness = await mount(questionRender(), search, vi.fn(), vi.fn());
+    const focusSpy = vi.spyOn(harness.dom.window.HTMLElement.prototype, "focus");
+    const input = harness.container.querySelector<HTMLInputElement>("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Answer");
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Answer", inputType: "insertText" }));
+      await settle(harness.dom);
+    });
+    const searchButton = [...harness.container.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "note.questionAnswers.search")!;
+    await act(async () => { searchButton.click(); await settle(harness.dom); });
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(searchButton.disabled).toBe(true);
+    const focusCallsBeforeOwnerDrift = focusSpy.mock.calls.length;
+
+    await act(async () => {
+      harness.root.render(createElement(ReaderQuestionAnswers, { activeVaultId: "vault_20260801_question",
+        note: questionRender([], "b"), search, change: vi.fn(), onCommitted: vi.fn(), t: (key) => key }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector<HTMLInputElement>("input")?.value).toBe("");
+    expect(focusSpy.mock.calls.length).toBeGreaterThan(focusCallsBeforeOwnerDrift);
+    pending.resolve({ requestId: "questionanswerreq_stale", activeVaultId: "vault_20260801_question",
+      currentPageId: "page_20260801_question1", renderContextId: "notectx_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}`, query: "Answer", status: "ready", candidates: [answerItem()] });
+    await act(async () => { await pending.promise; await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Answer note");
+    focusSpy.mockRestore();
+    await harness.unmount();
+  });
 });
 
 async function mount(note: NoteRenderResult, search: Parameters<typeof ReaderQuestionAnswers>[0]["search"],
@@ -92,6 +126,11 @@ function questionRender(items: readonly ReturnType<typeof answerItem>[] = [], re
 }
 function answerItem() { return { pageId: "page_20260801_answer001", title: "Answer note", pageType: "note" as const,
   updatedAt: "2026-08-01T11:00:00.000Z" }; }
+function deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => { resolve = settle; });
+  return { promise, resolve };
+}
 async function settle(dom: JSDOM): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));

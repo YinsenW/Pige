@@ -12,7 +12,14 @@ export function ReaderQuestionAnswers(props: { activeVaultId: string; note: Note
   const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteQuestionAnswerItem[]>([]);
   const [pending, setPending] = useState(false), [notice, setNotice] = useState<string | null>(null);
-  useEffect(() => { setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false; }, [owner]);
+  useEffect(() => {
+    const wasBusy = busyRef.current;
+    setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false;
+    if (wasBusy) requestAnimationFrame(() => {
+      const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [owner]);
   if (props.note.summary.pageType !== "question" || !summary || !context) return null;
   const restoreFocus = (): void => { requestAnimationFrame(() => {
     const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
