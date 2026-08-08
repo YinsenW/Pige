@@ -605,6 +605,7 @@ describe("Restore identity UI", () => {
     await openVaultSettings(dom, container);
     await click(dom, button(container, "Restore Backup"));
     await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "← Back to Vault & Note Storage"));
 
     expect(container.querySelector(".settings-restore-page.restore-preview")).not.toBeNull();
     expect(container.querySelector(".settings-vault-page")).toBeNull();
