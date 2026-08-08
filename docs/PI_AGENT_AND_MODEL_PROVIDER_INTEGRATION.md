@@ -500,6 +500,10 @@ Rules:
 - Renderer never receives API keys.
 - Agent jobs refer to provider/model profiles by ID.
 - Model provider calls emit job events and diagnostics metadata without storing raw prompts/responses by default.
+- Before assistant publication, a provider call is durably bound to its exact Job, conversation
+  event, input, context, tool catalog, Provider, and model. Restart adopts only a matching
+  completed result/continuation once; a started, duplicate, tampered, or drifted checkpoint fails
+  closed without Pi/runtime replay. Existing Job projection remains the renderer authority.
 
 ## 15. Tests
 
