@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteChangeClaimContradictionResult, NoteRenderResult } from "@pige/contracts";
 import { ReaderClaimContradictions } from "../../apps/desktop/src/renderer/src/components/ReaderClaimContradictions";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -45,6 +45,32 @@ describe("ReaderClaimContradictions", () => {
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });
+
+  it("restores the current contradiction action focus after owner drift", async () => {
+    const changeResult = deferred<NoteChangeClaimContradictionResult>();
+    const change = vi.fn(async () => changeResult.promise);
+    const harness = await mount(render([item()]), vi.fn(), change, vi.fn());
+    const oldRemove = button(harness.container, "note.claimContradictions.remove");
+    oldRemove.focus();
+    await act(async () => { oldRemove.click(); await settle(harness.dom); });
+    await act(async () => { button(harness.container, "note.claimContradictions.confirm").click(); await settle(harness.dom); });
+    expect(change).toHaveBeenCalledTimes(1);
+    Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true,
+      value: (callback: FrameRequestCallback) => { harness.dom.window.setTimeout(() => callback(0), 0); return 1; } });
+    await act(async () => { harness.root.render(createElement(ReaderClaimContradictions, { activeVaultId: "vault_20260801_claims",
+      note: render([{ ...item(), pageId: "page_20260801_claim0003", title: "New conflicting claim" }], "b"), search: vi.fn(), change,
+      onCommitted: vi.fn(), t: (key) => key })); await settle(harness.dom); });
+    for (let i = 0; i < 4; i += 1) await act(async () => { await settle(harness.dom); });
+    const replacement = button(harness.container, "note.claimContradictions.remove");
+    expect(harness.container.textContent).not.toContain("Conflicting claim");
+    expect(harness.container.textContent).toContain("New conflicting claim");
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
+    const request = change.mock.calls[0]![0];
+    changeResult.resolve({ ...request, status: "stale" });
+    await act(async () => { await changeResult.promise; await settle(harness.dom); });
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
+    await harness.unmount();
+  });
 });
 
 async function mount(note: NoteRenderResult, search: Parameters<typeof ReaderClaimContradictions>[0]["search"],
@@ -78,3 +104,4 @@ function setInput(dom: JSDOM, input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new dom.window.Event("change", { bubbles: true }));
 }
 async function settle(dom: JSDOM): Promise<void> { await Promise.resolve(); await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0)); }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }

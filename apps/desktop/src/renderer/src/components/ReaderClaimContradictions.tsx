@@ -21,13 +21,24 @@ export function ReaderClaimContradictions(props: {
   const summary = props.note.claimContradictions, context = props.note.renderContextId;
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${summary?.revision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
-  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null), confirmRef = useRef<HTMLButtonElement>(null), restoreIntentFocusRef = useRef(false);
+  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), restoreOwnerFocusRef = useRef(false), sectionRef = useRef<HTMLElement>(null), confirmRef = useRef<HTMLButtonElement>(null), restoreIntentFocusRef = useRef(false);
   const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteClaimContradictionItem[]>([]);
   const [intent, setIntent] = useState<Intent | null>(null), [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
+    const wasBusy = busyRef.current;
+    const wasFocused = focusRef.current?.isConnected === true && document.activeElement === focusRef.current;
     setQuery(""); setResults([]); setIntent(null); setPending(false); setNotice(null); busyRef.current = false;
+    if (wasBusy || wasFocused) restoreOwnerFocusRef.current = true;
   }, [owner]);
+  useEffect(() => {
+    if (pending || !restoreOwnerFocusRef.current) return;
+    restoreOwnerFocusRef.current = false;
+    requestAnimationFrame(() => {
+      const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [pending]);
   useEffect(() => {
     if (intent) confirmRef.current?.focus();
     else if (restoreIntentFocusRef.current) {
@@ -76,7 +87,7 @@ export function ReaderClaimContradictions(props: {
   return <section ref={sectionRef} tabIndex={-1} aria-label={props.t("note.claimContradictions.title")}>
     <strong>{props.t("note.claimContradictions.title")}</strong>
     <p>{props.t("note.claimContradictions.description")}</p>
-    {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button"
+    {summary.items.map((item) => <span key={item.pageId}>{item.title}<button type="button" ref={(node) => { if (node) focusRef.current = node; }}
       disabled={!summary.canEdit || pending} onClick={(event) => { focusRef.current = event.currentTarget; setIntent({ action: "remove", target: item }); }}>
       {props.t("note.claimContradictions.remove")}</button></span>)}
     <span><input value={query} maxLength={160} placeholder={props.t("note.claimContradictions.searchPlaceholder")}
