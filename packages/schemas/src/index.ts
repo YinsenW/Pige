@@ -5295,6 +5295,7 @@ export const DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL = "diagnostics.previewSu
 export const DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL = "diagnostics.exportSupportBundle" as const;
 export const DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.cancelSupportBundleExport" as const;
 export const DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL = "diagnostics.retrySupportBundleExport" as const;
+export const DIAGNOSTICS_RECONNECT_SUPPORT_BUNDLE_CHANNEL = "diagnostics.reconnectSupportBundleDestination" as const;
 export const DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.revealSupportBundle" as const;
 export const DIAGNOSTICS_RECENT_ERRORS_CHANNEL = "diagnostics.recentErrors" as const;
 export const DiagnosticsClearRequestIdSchema = z.string()
@@ -5307,6 +5308,8 @@ export const DiagnosticsExportRequestIdSchema = z.string()
   .regex(/^diagexportreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsMutationRequestIdSchema = z.string()
   .regex(/^diag(?:cancel|retry)req_[a-z0-9]{16,64}$/u);
+export const DiagnosticsDestinationRepairRequestIdSchema = z.string()
+  .regex(/^diagrepairreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsRevealRequestIdSchema = z.string()
   .regex(/^diagrevealsupportreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsRecentErrorsRequestIdSchema = z.string()
@@ -5513,6 +5516,23 @@ export const DiagnosticsSupportBundleMutationResultSchema = z.discriminatedUnion
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("not_found"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("ineligible"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const DiagnosticsSupportBundleDestinationRepairRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsDestinationRepairRequestIdSchema,
+  activeVaultId: VaultIdSchema.nullable(),
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  jobId: JobIdSchema
+}).strict();
+const DiagnosticsSupportBundleDestinationRepairIdentitySchema = DiagnosticsSupportBundleDestinationRepairRequestSchema;
+export const DiagnosticsSupportBundleDestinationRepairResultSchema = z.discriminatedUnion("status", [
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("resumed"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("cancelled"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("stale"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("not_found"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("ineligible"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsSupportBundleDestinationRepairIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 export const DiagnosticsRevealSupportBundleRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -14059,6 +14079,8 @@ export type DiagnosticsExportSupportBundleRequest = z.infer<typeof DiagnosticsEx
 export type DiagnosticsExportSupportBundleResult = z.infer<typeof DiagnosticsExportSupportBundleResultSchema>;
 export type DiagnosticsSupportBundleMutationRequest = z.infer<typeof DiagnosticsSupportBundleMutationRequestSchema>;
 export type DiagnosticsSupportBundleMutationResult = z.infer<typeof DiagnosticsSupportBundleMutationResultSchema>;
+export type DiagnosticsSupportBundleDestinationRepairRequest = z.infer<typeof DiagnosticsSupportBundleDestinationRepairRequestSchema>;
+export type DiagnosticsSupportBundleDestinationRepairResult = z.infer<typeof DiagnosticsSupportBundleDestinationRepairResultSchema>;
 export type DiagnosticsRevealSupportBundleRequest = z.infer<typeof DiagnosticsRevealSupportBundleRequestSchema>;
 export type DiagnosticsRevealSupportBundleResult = z.infer<typeof DiagnosticsRevealSupportBundleResultSchema>;
 export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;

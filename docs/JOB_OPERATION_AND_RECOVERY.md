@@ -793,7 +793,10 @@ Settings:
   typed redacted failure; rollback children stay hidden.
 - Diagnostics can export redacted job/operation summaries.
 - Diagnostics owns one pathless support-export Job card with exact Cancel/Retry and clear-local
-  fences; a failed/restarted card preserves safe repair action without exposing its destination.
+  fences. Only an exact `failed_retryable` Job with a missing or changed private destination may
+  accept a Main-owned replacement destination; reproof persists only that binding and resumes the
+  same Job. A failed/restarted card preserves the safe repair action without exposing its
+  destination, and startup adopts the exact repair/retry state once.
 
 Rules:
 

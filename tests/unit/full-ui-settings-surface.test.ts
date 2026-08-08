@@ -4486,6 +4486,93 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("reconnects a failed support Job through the Main picker and retains the action on stale", async () => {
+    const dom = createDom();
+    const workflow = {
+      apiVersion: 1 as const,
+      revision: 7,
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      activeVaultId: "vault_20260730_diagnostics",
+      localOnly: true as const,
+      ownedArtifactCount: 0,
+      job: {
+        jobId: "job_20260808_supportrepair01",
+        state: "failed_retryable" as const,
+        progress: { completedUnits: 1, totalUnits: 3, percent: 33, messageKey: "diagnostics.support.failed" },
+        createdAt: "2026-08-08T00:00:00.000Z",
+        updatedAt: "2026-08-08T00:00:01.000Z",
+        canCancel: false,
+        canRetry: false,
+        canReveal: false,
+        repairAction: "choose_destination" as const
+      }
+    };
+    let release!: (result: unknown) => void;
+    const reconnectSupportBundleDestination = vi.fn((request: { requestId: string }) => new Promise((resolve) => {
+      release = () => resolve({ ...request, status: "stale" as const, workflow });
+    }));
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: {
+        diagnostics: {
+          workflowSummary: vi.fn(async () => workflow),
+          recentErrors: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            requestId: "diagrecentreq_abcdefghijklmnop",
+            checkedAt: "2026-08-08T00:00:00.000Z",
+            localOnly: true as const,
+            errors: []
+          })),
+          previewSupportBundle: vi.fn(),
+          exportSupportBundle: vi.fn(),
+          cancelSupportBundleExport: vi.fn(),
+          retrySupportBundleExport: vi.fn(),
+          revealSupportBundle: vi.fn(),
+          reconnectSupportBundleDestination
+        }
+      }
+    });
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(SystemSettingsPanel, {
+        surface: "diagnostics",
+        locale: "en",
+        diagnosticsHealth: { status: "ok", checkedAt: "2026-08-08T00:00:00.000Z", localOnly: true, recentErrorCount: 0, checks: [] },
+        supportBundlePreview: null,
+        onRefreshDiagnostics: async () => undefined,
+        onSupportBundlePreviewChange: vi.fn(),
+        t
+      }));
+      await settle(dom);
+    });
+    const panel = requireElement(dom.window.document.querySelector<HTMLElement>(".settings-system-page"));
+    const repair = buttonNamed(panel, "Choose a new destination");
+    repair.focus();
+    await act(async () => {
+      repair.click();
+      repair.click();
+      await settle(dom);
+    });
+    expect(reconnectSupportBundleDestination).toHaveBeenCalledOnce();
+    expect(reconnectSupportBundleDestination).toHaveBeenCalledWith(expect.objectContaining({
+      activeVaultId: workflow.activeVaultId,
+      jobId: workflow.job!.jobId,
+      scopeContextId: workflow.scopeContextId,
+      expectedRevision: workflow.revision
+    }));
+    expect(repair.disabled).toBe(true);
+    await act(async () => {
+      release({});
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(panel.textContent).toContain("Diagnostics changed. The latest local status is shown.");
+    expect(buttonNamed(panel, "Choose a new destination")).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(panel, "Choose a new destination"));
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("confirms diagnostics clearing once, preserves state on cancel or failure, and refreshes authoritative health on success", async () => {
     const dom = createDom();
     const refreshDiagnostics = vi.fn(async () => undefined);

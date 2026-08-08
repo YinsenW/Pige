@@ -40,7 +40,7 @@ function lifecycle(
   });
 }
 
-function ids(prefix: "diagpreviewreq" | "diagexportreq" | "diagcancelreq" | "diagretryreq" | "diagrevealsupportreq" | "diagclearreq", suffix: string) {
+function ids(prefix: "diagpreviewreq" | "diagexportreq" | "diagcancelreq" | "diagretryreq" | "diagrepairreq" | "diagrevealsupportreq" | "diagclearreq", suffix: string) {
   return `${prefix}_${suffix.padEnd(16, "0")}`;
 }
 
@@ -399,9 +399,47 @@ describe("durable diagnostics lifecycle", () => {
       scopeContextId: failed.scopeContextId, expectedRevision: failed.revision
     });
     expect(result.status).toBe("ineligible");
-    expect(result.status === "ineligible" ? result.workflow.job?.state : undefined).toBe("failed_final");
+    expect(result.status === "ineligible" ? result.workflow.job?.state : undefined).toBe("failed_retryable");
     expect(result.status === "ineligible" ? result.workflow.job?.repairAction : undefined).toBe("choose_destination");
     expect(fs.readFileSync(destination, "utf8")).toBe("user-owned replacement");
+    service.close();
+  });
+
+  it("repairs a changed destination and resumes the same failed Job", async () => {
+    const root = tempRoot();
+    const oldDestination = path.join(root, "old-support.json");
+    const newDestination = path.join(root, "new-support.json");
+    let writes = 0;
+    const exporter: DiagnosticsExportPort = {
+      async write({ outputPath, content }) {
+        writes += 1;
+        if (writes === 1) throw Object.assign(new Error("failed"), { code: "EIO" });
+        fs.writeFileSync(outputPath, content, { encoding: "utf8", mode: 0o600 });
+        return { bytesWritten: Buffer.byteLength(content, "utf8") };
+      }
+    };
+    const service = lifecycle(path.join(root, "user-data"), exporter);
+    startExport(service, oldDestination, "repair");
+    const failed = await waitFor(service, "failed_retryable");
+    fs.writeFileSync(oldDestination, "user-owned replacement", "utf8");
+
+    const resumed = service.reconnectDestination({
+      apiVersion: 1,
+      requestId: ids("diagrepairreq", "repair"),
+      activeVaultId: failed.activeVaultId,
+      jobId: failed.job!.jobId,
+      scopeContextId: failed.scopeContextId,
+      expectedRevision: failed.revision
+    }, newDestination);
+    expect(resumed.status).toBe("resumed");
+    expect(resumed.workflow?.job?.jobId).toBe(failed.job?.jobId);
+    expect(JSON.stringify(resumed)).not.toContain(newDestination);
+
+    const completed = await waitFor(service, "completed");
+    expect(completed.job?.jobId).toBe(failed.job?.jobId);
+    expect(writes).toBe(2);
+    expect(fs.existsSync(newDestination)).toBe(true);
+    expect(fs.readFileSync(oldDestination, "utf8")).toBe("user-owned replacement");
     service.close();
   });
 });
