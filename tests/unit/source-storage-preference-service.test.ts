@@ -93,6 +93,34 @@ describe("SourceStoragePreferenceService", () => {
     expect(fs.readFileSync(value.sentinel, "utf8")).toBe("existing source bytes");
   });
 
+  it("redoes an undone future-capture strategy exactly once and adopts an interrupted Redo after restart", () => {
+    const value = fixture(), before = value.vault();
+    value.service().update({ apiVersion: 1, requestId: "sourcepolicyreq_redoabcdefghijkl",
+      activeVaultId: before.vaultId, expectedRevision: before.managedCopyRoot.sourceStorageRevision,
+      defaultStrategy: "reference_original" });
+    const forward = operations(value)[0]!;
+    expect(value.service().undo(forward)).toMatchObject({ status: "undone" });
+    const undo = value.service().findUndoOperation(forward, operations(value));
+    expect(undo).toBeDefined();
+    expect(value.service().activityState(forward, undo)).toEqual({ canRedo: true });
+    expect(value.service().redo({ operationId: forward.id })).toMatchObject({
+      status: "redone", operationId: forward.id, undoOperationId: undo!.id
+    });
+    const redo = operations(value).find((operation) => operation.sourceRefs.length === 2 &&
+      operation.sourceRefs.some((reference) => reference.id === forward.id) &&
+      operation.sourceRefs.some((reference) => reference.id === undo!.id));
+    expect(redo).toBeDefined();
+    expect(readVaultConfig(value.vaultPath).sourceStorage.defaultStrategy).toBe("reference_original");
+    expect(value.service().activityState(forward, undo)).toEqual({ canRedo: false, redoUnavailableReason: "already_redone" });
+    expect(value.service().redo({ operationId: forward.id })).toMatchObject({ status: "already_redone", redoOperationId: redo!.id });
+    fs.rmSync(path.join(value.vaultPath, ".pige", "operations", "2026", "08", `${redo!.id}.json`));
+    expect(value.service().redo({ operationId: forward.id })).toMatchObject({ status: "redone", redoOperationId: redo!.id });
+    fs.rmSync(path.join(value.vaultPath, ".pige", "operations", "2026", "08", `${redo!.id}.json`));
+    expect(value.service().recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(operations(value).map(({ id }) => id)).toContain(redo!.id);
+    expect(fs.readFileSync(value.sentinel, "utf8")).toBe("existing source bytes");
+  });
+
   it("fails stale and cross-vault requests before changing config", () => {
     const value = fixture(), before = value.vault();
     expect(value.service().update({ apiVersion: 1, requestId: "sourcepolicyreq_staleabcdefghijk",
