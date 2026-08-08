@@ -7,7 +7,8 @@ import { KnowledgeHealthUnsourcedClaimService } from
   "../../apps/desktop/src/main/services/knowledge-health-unsourced-claim-service";
 import {
   NoteMarkdownEditorActivityAdapter,
-  NoteMarkdownEditorService
+  NoteMarkdownEditorService,
+  readUserPageUpdateOperations
 } from "../../apps/desktop/src/main/services/note-markdown-editor-service";
 
 const roots: string[] = [];
@@ -38,6 +39,7 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
       apiVersion: 1 as const,
       activeVaultId: vaultId,
       reportRequestId: report.requestId,
+      reportEpoch: report.reportEpoch,
       indexGeneration,
       issueKind: "unsourced_claim" as const,
       pageId: claimPageId,
@@ -89,7 +91,7 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
     if (issue?.kind !== "unsourced_claim" || !issue.repairContextId ||
       !issue.claimRevision || !issue.claimRenderProof) throw new Error("Expected repair proof.");
     const proof = { apiVersion: 1 as const, activeVaultId: vaultId, reportRequestId: report.requestId,
-      indexGeneration, issueKind: "unsourced_claim" as const, pageId: claimPageId,
+      reportEpoch: report.reportEpoch, indexGeneration, issueKind: "unsourced_claim" as const, pageId: claimPageId,
       repairContextId: issue.repairContextId, claimRevision: issue.claimRevision,
       claimRenderProof: issue.claimRenderProof };
     const search = fixture.service.search(fixture.vaultPath, { ...proof,
@@ -103,6 +105,88 @@ describe("KnowledgeHealthUnsourcedClaimService", () => {
       sourceContextId: search.sources[0]!.sourceContextId })).toMatchObject({ status: "stale" });
     expect(fs.readFileSync(fixture.claimPath, "utf8")).toBe(before);
     expect(fs.existsSync(path.join(fixture.vaultPath, ".pige", "operations"))).toBe(false);
+  });
+
+  it("rejects a claim-source proof from a different report epoch", () => {
+    const fixture = createFixture();
+    const report = fixture.service.project(fixture.vaultPath, runRequest, readyReport(1));
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues[0];
+    if (issue?.kind !== "unsourced_claim" || !issue.repairContextId || !issue.claimRevision || !issue.claimRenderProof) {
+      throw new Error("Expected repair proof.");
+    }
+    expect(fixture.service.search(fixture.vaultPath, {
+      apiVersion: 1, activeVaultId: vaultId, reportRequestId: report.requestId, reportEpoch: 2,
+      indexGeneration, issueKind: "unsourced_claim", pageId: claimPageId, repairContextId: issue.repairContextId,
+      claimRevision: issue.claimRevision, claimRenderProof: issue.claimRenderProof,
+      requestId: "knowledge_health_claim_source_search_epochabcdefghijklmnop", query: ""
+    })).toMatchObject({ status: "stale" });
+  });
+
+  it("fails closed when the selected Source Page bytes drift", () => {
+    const fixture = createFixture();
+    const report = fixture.service.project(fixture.vaultPath, runRequest, readyReport());
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues[0];
+    if (issue?.kind !== "unsourced_claim" || !issue.repairContextId || !issue.claimRevision || !issue.claimRenderProof) {
+      throw new Error("Expected repair proof.");
+    }
+    const proof = { apiVersion: 1 as const, activeVaultId: vaultId, reportRequestId: report.requestId,
+      reportEpoch: report.reportEpoch, indexGeneration, issueKind: "unsourced_claim" as const, pageId: claimPageId,
+      repairContextId: issue.repairContextId, claimRevision: issue.claimRevision, claimRenderProof: issue.claimRenderProof };
+    const search = fixture.service.search(fixture.vaultPath, { ...proof,
+      requestId: "knowledge_health_claim_source_search_sourcedriftabcdefghijkl", query: "Evidence" });
+    if (search.status !== "ready") throw new Error("Expected source choices.");
+    fs.appendFileSync(fixture.sourcePath, "\nSource changed before confirmation.\n", "utf8");
+    expect(fixture.service.repair(fixture.vaultPath, { ...proof,
+      requestId: "knowledge_health_claim_source_repair_sourcedriftabcdefghijkl", action: "bind_claim_source",
+      sourceContextId: search.sources[0]!.sourceContextId })).toMatchObject({ status: "stale" });
+  });
+
+  it("adopts a committed page after a restart when Activity publication is interrupted", () => {
+    const fixture = createFixture();
+    const durableActivity = fixture.activity;
+    const interruptedActivity = {
+      preparePageUpdate: durableActivity.preparePageUpdate.bind(durableActivity),
+      recordPageUpdate: () => { throw new Error("simulated restart"); },
+      abortPageUpdate: durableActivity.abortPageUpdate.bind(durableActivity)
+    };
+    const interruptedEditor = new NoteMarkdownEditorService(
+      { current: () => ({ vaultId } as never), activeVaultPath: () => fixture.vaultPath },
+      interruptedActivity,
+      { now: () => new Date("2026-07-31T12:30:00.000Z"), randomId: () => "claim-source-operation", allowClaim: true }
+    );
+    const service = new KnowledgeHealthUnsourcedClaimService(snapshotPort(() => readySnapshot()), interruptedEditor,
+      () => "2026-07-31T12:30:00.000Z", () => "claim-source-context");
+    const report = service.project(fixture.vaultPath, runRequest, readyReport());
+    if (report.status !== "ready") throw new Error("Expected a ready report.");
+    const issue = report.issues[0];
+    if (issue?.kind !== "unsourced_claim" || !issue.repairContextId || !issue.claimRevision || !issue.claimRenderProof) {
+      throw new Error("Expected repair proof.");
+    }
+    const proof = { apiVersion: 1 as const, activeVaultId: vaultId, reportRequestId: report.requestId,
+      reportEpoch: report.reportEpoch, indexGeneration, issueKind: "unsourced_claim" as const, pageId: claimPageId,
+      repairContextId: issue.repairContextId, claimRevision: issue.claimRevision, claimRenderProof: issue.claimRenderProof };
+    const search = service.search(fixture.vaultPath, { ...proof,
+      requestId: "knowledge_health_claim_source_search_restartabcdefghijklmnop", query: "Evidence" });
+    if (search.status !== "ready") throw new Error("Expected source choices.");
+    const result = service.repair(fixture.vaultPath, { ...proof,
+      requestId: "knowledge_health_claim_source_repair_restartabcdefghijklmnop", action: "bind_claim_source",
+      sourceContextId: search.sources[0]!.sourceContextId });
+    expect(result).toMatchObject({ status: "committed" });
+    expect(fs.readFileSync(fixture.claimPath, "utf8")).toContain(`source_ids: ["${sourceId}"]`);
+    const pending = path.join(fixture.vaultPath, ".pige", "operations", "2026", "07");
+    expect(fs.readdirSync(pending).some((entry) => entry.endsWith(".pending.json"))).toBe(true);
+    const restarted = new NoteMarkdownEditorActivityAdapter({
+      current: () => ({ vaultId } as never), activeVaultPath: () => fixture.vaultPath
+    });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const operations = readUserPageUpdateOperations(fixture.vaultPath);
+    expect(operations).toHaveLength(1);
+    expect(restarted.activitySummary(operations[0]!)).toMatchObject({ canUndo: true });
+    expect(restarted.undo(operations[0]!, operations[0]!.after?.id)).toMatchObject({ status: "undone" });
+    expect(fs.readFileSync(fixture.claimPath, "utf8")).toContain("source_ids: []");
+    expect(fs.readdirSync(pending).some((entry) => entry.endsWith(".pending.json"))).toBe(false);
   });
 });
 
@@ -129,7 +213,7 @@ function createFixture() {
     allowClaim: true
   });
   const snapshot = () => readySnapshot();
-  return { vaultPath, claimPath, recordPath, activity,
+  return { vaultPath, claimPath, sourcePath, recordPath, activity,
     service: new KnowledgeHealthUnsourcedClaimService(snapshotPort(snapshot), editor,
       () => "2026-07-31T12:30:00.000Z", () => "claim-source-context") };
 }
@@ -153,8 +237,8 @@ function readySnapshot() {
     page: { pageId: claimPageId, title: "Unsupported claim" } }], truncated: false };
 }
 
-function readyReport() {
-  return { ...runRequest, status: "ready" as const, checkedAt: "2026-07-31T12:00:00.000Z",
+function readyReport(reportEpoch = 1) {
+  return { ...runRequest, status: "ready" as const, checkedAt: "2026-07-31T12:00:00.000Z", reportEpoch,
     indexGeneration, coverage: "complete" as const, invalidPageCount: 0, counts: readySnapshot().counts,
     issues: readySnapshot().issues, truncated: false };
 }

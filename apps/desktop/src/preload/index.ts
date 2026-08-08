@@ -1330,6 +1330,33 @@ function sameCollectionHistoryIdentity(
     result.datasetId === request.datasetId && result.expectedCurrentRevisionId === request.expectedCurrentRevisionId;
 }
 
+function sameKnowledgeHealthClaimSourceBase(
+  request: KnowledgeHealthClaimSourceSearchRequest | KnowledgeHealthClaimSourceRepairRequest,
+  result: KnowledgeHealthClaimSourceSearchResult | KnowledgeHealthClaimSourceRepairResult
+): boolean {
+  return result.apiVersion === request.apiVersion && result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId && result.reportRequestId === request.reportRequestId &&
+    result.reportEpoch === request.reportEpoch && result.indexGeneration === request.indexGeneration &&
+    result.issueKind === request.issueKind && result.pageId === request.pageId &&
+    result.repairContextId === request.repairContextId && result.claimRevision === request.claimRevision &&
+    result.claimRenderProof === request.claimRenderProof;
+}
+
+function sameKnowledgeHealthClaimSourceSearchIdentity(
+  request: KnowledgeHealthClaimSourceSearchRequest,
+  result: KnowledgeHealthClaimSourceSearchResult
+): boolean {
+  return sameKnowledgeHealthClaimSourceBase(request, result) && result.query === request.query;
+}
+
+function sameKnowledgeHealthClaimSourceRepairIdentity(
+  request: KnowledgeHealthClaimSourceRepairRequest,
+  result: KnowledgeHealthClaimSourceRepairResult
+): boolean {
+  return sameKnowledgeHealthClaimSourceBase(request, result) && result.action === request.action &&
+    result.sourceContextId === request.sourceContextId;
+}
+
 async function invokeCollectionListRevisionHistory(
   request: CollectionListRevisionHistoryRequest
 ): Promise<CollectionListRevisionHistoryResult> {
@@ -3486,17 +3513,25 @@ const api: PigeDesktopApi = {
       request: KnowledgeHealthClaimSourceSearchRequest
     ): Promise<KnowledgeHealthClaimSourceSearchResult> => {
       const parsedRequest = KnowledgeHealthClaimSourceSearchRequestSchema.parse(request);
-      return KnowledgeHealthClaimSourceSearchResultSchema.parse(
+      const result = KnowledgeHealthClaimSourceSearchResultSchema.parse(
         await ipcRenderer.invoke("maintenance.searchKnowledgeHealthClaimSources", parsedRequest)
       );
+      if (!sameKnowledgeHealthClaimSourceSearchIdentity(parsedRequest, result)) {
+        throw new Error("Invalid Knowledge Health claim-source search response identity.");
+      }
+      return result;
     },
     repairKnowledgeHealthUnsourcedClaim: async (
       request: KnowledgeHealthClaimSourceRepairRequest
     ): Promise<KnowledgeHealthClaimSourceRepairResult> => {
       const parsedRequest = KnowledgeHealthClaimSourceRepairRequestSchema.parse(request);
-      return KnowledgeHealthClaimSourceRepairResultSchema.parse(
+      const result = KnowledgeHealthClaimSourceRepairResultSchema.parse(
         await ipcRenderer.invoke("maintenance.repairKnowledgeHealthUnsourcedClaim", parsedRequest)
       );
+      if (!sameKnowledgeHealthClaimSourceRepairIdentity(parsedRequest, result)) {
+        throw new Error("Invalid Knowledge Health claim-source repair response identity.");
+      }
+      return result;
     }
   },
   diagnostics: {

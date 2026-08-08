@@ -34,6 +34,7 @@ export type RepairableUnsourcedClaim = Extract<KnowledgeHealthIssueSummary, { re
   readonly claimRevision: string;
   readonly claimRenderProof: string;
   readonly reportRequestId: string;
+  readonly reportEpoch: number;
   readonly indexGeneration: string;
 };
 
@@ -110,8 +111,10 @@ export function KnowledgeHealthReadyResult(props: {
                 onChooseClaimSource={(issue, trigger) => props.onChooseClaimSource({
                   ...issue,
                   reportRequestId: props.result.requestId,
+                  reportEpoch: props.result.reportEpoch,
                   indexGeneration: props.result.indexGeneration
                 }, trigger)}
+                reportEpoch={props.result.reportEpoch}
                 repairState={props.repairState}
                 t={props.t}
               />
@@ -133,8 +136,10 @@ function KnowledgeHealthIssueRow(props: {
   readonly onChooseClaimSource: (
     issue: Extract<KnowledgeHealthIssueSummary, { readonly kind: "unsourced_claim" }> & {
       readonly repairContextId: string; readonly claimRevision: string; readonly claimRenderProof: string;
+      readonly reportEpoch: number;
     }, trigger: HTMLButtonElement
   ) => void;
+  readonly reportEpoch: number;
   readonly repairState: KnowledgeHealthRepairState;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
@@ -191,7 +196,9 @@ function KnowledgeHealthIssueRow(props: {
     props.issue.claimRevision && props.issue.claimRenderProof ? props.issue as Extract<KnowledgeHealthIssueSummary,
       { readonly kind: "unsourced_claim" }> & {
         readonly repairContextId: string; readonly claimRevision: string; readonly claimRenderProof: string;
+        readonly reportEpoch: number;
       } : null;
+  const repairableClaimWithEpoch = repairableClaim ? { ...repairableClaim, reportEpoch: props.reportEpoch } : null;
   return (
     <span>
       <button className="settings-button" type="button" onClick={() => void props.onOpenPage(page.pageId)}>
@@ -226,11 +233,11 @@ function KnowledgeHealthIssueRow(props: {
           </button>
         </>
       ) : null}
-      {repairableClaim ? (
+      {repairableClaimWithEpoch ? (
         <>
           {" · "}
           <button className="settings-button" type="button" disabled={props.repairState?.kind === "repairing"}
-            onClick={(event) => props.onChooseClaimSource(repairableClaim, event.currentTarget)}>
+            onClick={(event) => props.onChooseClaimSource(repairableClaimWithEpoch, event.currentTarget)}>
             {props.t("maintenance.knowledgeHealth.chooseClaimSource")}
           </button>
         </>

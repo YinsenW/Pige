@@ -70,7 +70,8 @@ export class ClaimEvidenceService {
     const saved = this.editor.save({
       requestId: internalRequestId(request), activeVaultId: request.activeVaultId,
       pageId: request.currentPageId, expectedRevisionId: opened.revisionId,
-      renderIdentity: opened.renderIdentity, markdown
+      renderIdentity: opened.renderIdentity, markdown,
+      ...(request.action === "add" ? { recoveryKind: "claim_source" as const } : {})
     });
     if (saved.status !== "committed") {
       return closed(request, saved.status === "invalid" ? "ineligible" : saved.status);

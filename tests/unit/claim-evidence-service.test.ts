@@ -40,6 +40,7 @@ describe("ClaimEvidenceService", () => {
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ markdown: expect.stringContaining(
       `evidence: ["src_20260802_claimbase#source","${sourceId}#source"]`
     ) }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ recoveryKind: "claim_source" }));
   });
 
   it("fails before mutation on SourceRecord drift and refuses removal of the final evidence", async () => {

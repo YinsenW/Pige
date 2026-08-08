@@ -1493,6 +1493,10 @@ export const KnowledgeHealthRenderProofSchema = z.string()
   .regex(/^knowledge_health_render_[a-f0-9]{64}$/);
 export const KnowledgeHealthPageRevisionSchema = z.string()
   .regex(/^noteeditrev_[a-f0-9]{64}$/);
+export const KnowledgeHealthReportEpochSchema = z.number()
+  .int()
+  .min(1)
+  .max(Number.MAX_SAFE_INTEGER);
 export const KnowledgeHealthRepairActionSchema = z.enum([
   "unlink_broken_reference",
   "retarget_broken_reference"
@@ -1655,6 +1659,7 @@ const KnowledgeHealthResultIdentitySchema = KnowledgeHealthRunRequestSchema;
 const KnowledgeHealthReadyResultSchema = KnowledgeHealthResultIdentitySchema.extend({
   status: z.literal("ready"),
   checkedAt: z.string().datetime({ offset: true }),
+  reportEpoch: KnowledgeHealthReportEpochSchema,
   indexGeneration: KnowledgeHealthIndexGenerationSchema,
   coverage: z.enum(["complete", "partial"]),
   invalidPageCount: KnowledgeHealthCountSchema,
@@ -3416,6 +3421,7 @@ const KnowledgeHealthClaimProofFields = {
   apiVersion: z.literal(1),
   activeVaultId: VaultIdSchema,
   reportRequestId: KnowledgeHealthRequestIdSchema,
+  reportEpoch: KnowledgeHealthReportEpochSchema,
   indexGeneration: KnowledgeHealthIndexGenerationSchema,
   issueKind: z.literal("unsourced_claim"),
   pageId: PageIdSchema,
