@@ -384,6 +384,7 @@ import { EntityMentionService } from "./services/entity-mention-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
 import { ClaimSupportService } from "./services/claim-support-service";
+import { ClaimSupersessionService } from "./services/claim-supersession-service";
 import { ClaimEvidenceService } from "./services/claim-evidence-service";
 import { ConceptParentService } from "./services/concept-parent-service";
 import { TopicParentService } from "./services/topic-parent-service";
@@ -567,6 +568,7 @@ let entityMentionService: EntityMentionService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
 let claimSupportService: ClaimSupportService | undefined;
+let claimSupersessionService: ClaimSupersessionService | undefined;
 let claimEvidenceService: ClaimEvidenceService | undefined;
 let conceptParentService: ConceptParentService | undefined;
 let topicParentService: TopicParentService | undefined;
@@ -2134,6 +2136,12 @@ const getClaimSupportService = (): ClaimSupportService => {
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true }),
     () => getVaultService().activeVaultPath());
   return claimSupportService;
+};
+const getClaimSupersessionService = (): ClaimSupersessionService => {
+  claimSupersessionService ??= new ClaimSupersessionService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true }),
+    () => getVaultService().activeVaultPath());
+  return claimSupersessionService;
 };
 const getClaimEvidenceService = (): ClaimEvidenceService => {
   claimEvidenceService ??= new ClaimEvidenceService(
@@ -3911,6 +3919,7 @@ registerReaderIpc({
   getQuestionAnswerService,
   getClaimContradictionService,
   getClaimSupportService,
+  getClaimSupersessionService,
   getClaimEvidenceService,
   getConceptParentService,
   getTopicParentService,
@@ -4520,6 +4529,9 @@ app.whenReady().then(async () => {
     () => getVaultService().activeVaultPath()
   );
   claimSupportService = new ClaimSupportService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true }),
+    () => getVaultService().activeVaultPath());
+  claimSupersessionService = new ClaimSupersessionService(getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true }),
     () => getVaultService().activeVaultPath());
   claimEvidenceService = new ClaimEvidenceService(

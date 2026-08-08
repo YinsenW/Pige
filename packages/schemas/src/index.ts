@@ -1950,6 +1950,7 @@ export const NoteEntityMentionRequestIdSchema = z.string().regex(/^entitymention
 export const NoteQuestionAnswerRequestIdSchema = z.string().regex(/^questionanswerreq_[a-z0-9]{16,64}$/);
 export const NoteClaimContradictionRequestIdSchema = z.string().regex(/^claimcontradictionreq_[a-z0-9]{16,64}$/);
 export const NoteClaimSupportRequestIdSchema = z.string().regex(/^claimsupportreq_[a-z0-9]{16,64}$/);
+export const NoteClaimSupersessionRequestIdSchema = z.string().regex(/^claimsupersessionreq_[a-z0-9]{16,64}$/);
 export const NoteClaimEvidenceRequestIdSchema = z.string().regex(/^claimevidencereq_[a-z0-9]{16,64}$/);
 export const NoteConceptParentRequestIdSchema = z.string().regex(/^conceptparentreq_[a-z0-9]{16,64}$/);
 export const NoteTopicParentRequestIdSchema = z.string().regex(/^topicparentreq_[a-z0-9]{16,64}$/);
@@ -2118,6 +2119,12 @@ export const NoteClaimSupportsSummarySchema = z.object({
   canEdit: z.boolean(),
   revision: NoteEditorRevisionSchema
 }).strict();
+export const NoteClaimSupersessionItemSchema = NoteClaimContradictionItemSchema;
+export const NoteClaimSupersessionsSummarySchema = z.object({
+  items: z.array(NoteClaimSupersessionItemSchema).max(32),
+  canEdit: z.boolean(),
+  revision: NoteEditorRevisionSchema
+}).strict();
 export const NoteClaimEvidenceItemSchema = z.object({
   sourcePageId: PageIdSchema,
   sourceId: SourceIdSchema,
@@ -2171,6 +2178,7 @@ export const NoteRenderResultSchema = z.object({
   questionAnswers: NoteQuestionAnswersSummarySchema.optional(),
   claimContradictions: NoteClaimContradictionsSummarySchema.optional(),
   claimSupports: NoteClaimSupportsSummarySchema.optional(),
+  claimSupersessions: NoteClaimSupersessionsSummarySchema.optional(),
   claimEvidence: NoteClaimEvidenceSummarySchema.optional(),
   conceptParents: NoteConceptParentsSummarySchema.optional(),
   topicParents: NoteTopicParentsSummarySchema.optional(),
@@ -2313,6 +2321,8 @@ export const NOTE_SEARCH_CLAIM_CONTRADICTIONS_CHANNEL = "notes.searchClaimContra
 export const NOTE_CHANGE_CLAIM_CONTRADICTION_CHANNEL = "notes.changeClaimContradiction" as const;
 export const NOTE_SEARCH_CLAIM_SUPPORTS_CHANNEL = "notes.searchClaimSupports" as const;
 export const NOTE_CHANGE_CLAIM_SUPPORT_CHANNEL = "notes.changeClaimSupport" as const;
+export const NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL = "notes.searchClaimSupersessions" as const;
+export const NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL = "notes.changeClaimSupersession" as const;
 export const NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL = "notes.searchClaimEvidence" as const;
 export const NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL = "notes.changeClaimEvidence" as const;
 export const NOTE_SEARCH_CONCEPT_PARENTS_CHANNEL = "notes.searchConceptParents" as const;
@@ -2637,6 +2647,40 @@ export const NoteChangeClaimSupportResultSchema = z.discriminatedUnion("status",
     render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict() }).strict(),
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteChangeClaimSupportResultIdentitySchema.extend({ status: z.literal(status) }).strict())
+]);
+const NoteClaimSupersessionIdentitySchema = z.object({
+  apiVersion: z.literal(1), requestId: NoteClaimSupersessionRequestIdSchema, activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema, expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteSearchClaimSupersessionsRequestSchema = NoteClaimSupersessionIdentitySchema.extend({
+  query: z.string().trim().min(1).max(160)
+}).strict();
+export const NoteSearchClaimSupersessionsResultSchema = z.discriminatedUnion("status", [
+  NoteSearchClaimSupersessionsRequestSchema.extend({ status: z.literal("ready"), candidates: z.array(NoteClaimSupersessionItemSchema).max(20) }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteSearchClaimSupersessionsRequestSchema.extend({ status: z.literal(status) }).strict())
+]);
+export const NoteChangeClaimSupersessionRequestSchema = NoteClaimSupersessionIdentitySchema.extend({
+  action: z.enum(["add", "remove"]), targetPageId: PageIdSchema,
+  expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).strict().superRefine((value, context) => {
+  if (value.action === "add" && (!value.expectedTargetUpdatedAt || value.targetPageId === value.currentPageId)) {
+    context.addIssue({ code: "custom", path: ["expectedTargetUpdatedAt"], message: "Adding a supersession requires one current distinct Claim target." });
+  }
+  if (value.action === "remove" && value.expectedTargetUpdatedAt !== undefined) {
+    context.addIssue({ code: "custom", path: ["expectedTargetUpdatedAt"], message: "Removing a supersession must not accept renderer target authority." });
+  }
+});
+const NoteChangeClaimSupersessionResultIdentitySchema = z.object({
+  apiVersion: z.literal(1), requestId: NoteClaimSupersessionRequestIdSchema, activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema, expectedRevision: NoteEditorRevisionSchema,
+  action: z.enum(["add", "remove"]), targetPageId: PageIdSchema, expectedTargetUpdatedAt: z.string().datetime({ offset: true }).optional()
+}).strict();
+export const NoteChangeClaimSupersessionResultSchema = z.discriminatedUnion("status", [
+  NoteChangeClaimSupersessionResultIdentitySchema.extend({ status: z.literal("committed"), operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict() }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
+    NoteChangeClaimSupersessionResultIdentitySchema.extend({ status: z.literal(status) }).strict())
 ]);
 const NoteClaimEvidenceIdentitySchema = z.object({
   apiVersion: z.literal(1),
@@ -5564,7 +5608,8 @@ const MarkdownClaimFieldsSchema = z.object({
   confidence: z.enum(["low", "medium", "high"]),
   evidence: z.array(z.string().min(1).max(768).regex(/^src_\d{8}_[a-z0-9]{8,}#[^\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]{1,512}$/u)).max(64),
   contradicts: MarkdownStableIdArraySchema(PageIdSchema, 32),
-  supports: MarkdownStableIdArraySchema(PageIdSchema, 32).optional()
+  supports: MarkdownStableIdArraySchema(PageIdSchema, 32).optional(),
+  supersedes: MarkdownStableIdArraySchema(PageIdSchema, 32).optional()
 }).passthrough();
 const MarkdownQuestionFieldsSchema = z.object({
   state: z.enum(["open", "partially_answered", "answered", "stale"]),
@@ -13897,6 +13942,8 @@ export type NoteClaimContradictionItem = z.infer<typeof NoteClaimContradictionIt
 export type NoteClaimContradictionsSummary = z.infer<typeof NoteClaimContradictionsSummarySchema>;
 export type NoteClaimSupportItem = z.infer<typeof NoteClaimSupportItemSchema>;
 export type NoteClaimSupportsSummary = z.infer<typeof NoteClaimSupportsSummarySchema>;
+export type NoteClaimSupersessionItem = z.infer<typeof NoteClaimSupersessionItemSchema>;
+export type NoteClaimSupersessionsSummary = z.infer<typeof NoteClaimSupersessionsSummarySchema>;
 export type NoteClaimEvidenceItem = z.infer<typeof NoteClaimEvidenceItemSchema>;
 export type NoteClaimEvidenceSummary = z.infer<typeof NoteClaimEvidenceSummarySchema>;
 export type NoteConceptParentItem = z.infer<typeof NoteConceptParentItemSchema>;
@@ -13962,6 +14009,10 @@ export type NoteSearchClaimSupportsRequest = z.infer<typeof NoteSearchClaimSuppo
 export type NoteSearchClaimSupportsResult = z.infer<typeof NoteSearchClaimSupportsResultSchema>;
 export type NoteChangeClaimSupportRequest = z.infer<typeof NoteChangeClaimSupportRequestSchema>;
 export type NoteChangeClaimSupportResult = z.infer<typeof NoteChangeClaimSupportResultSchema>;
+export type NoteSearchClaimSupersessionsRequest = z.infer<typeof NoteSearchClaimSupersessionsRequestSchema>;
+export type NoteSearchClaimSupersessionsResult = z.infer<typeof NoteSearchClaimSupersessionsResultSchema>;
+export type NoteChangeClaimSupersessionRequest = z.infer<typeof NoteChangeClaimSupersessionRequestSchema>;
+export type NoteChangeClaimSupersessionResult = z.infer<typeof NoteChangeClaimSupersessionResultSchema>;
 export type NoteSearchClaimEvidenceRequest = z.infer<typeof NoteSearchClaimEvidenceRequestSchema>;
 export type NoteSearchClaimEvidenceResult = z.infer<typeof NoteSearchClaimEvidenceResultSchema>;
 export type NoteChangeClaimEvidenceRequest = z.infer<typeof NoteChangeClaimEvidenceRequestSchema>;

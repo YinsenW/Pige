@@ -32,6 +32,7 @@ export interface MarkdownPageKnowledgeFields {
   readonly relatedPageIds: readonly string[];
   readonly claimContradicts: readonly string[];
   readonly claimSupports: readonly string[];
+  readonly claimSupersedes: readonly string[];
   readonly questionAnswers: readonly string[];
   readonly conceptParents: readonly string[];
 }
@@ -314,6 +315,9 @@ function readMarkdownPageRecord(
         : [],
       claimSupports: summary.pageType === "claim"
         ? [...(parsed.frontmatter.claim?.supports ?? [])]
+        : [],
+      claimSupersedes: summary.pageType === "claim"
+        ? [...(parsed.frontmatter.claim?.supersedes ?? [])]
         : [],
       questionAnswers: summary.pageType === "question"
         ? [...(parsed.frontmatter.question?.answered_by ?? [])]

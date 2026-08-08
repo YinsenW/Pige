@@ -380,6 +380,12 @@ import type {
   NoteSearchClaimSupportsResult,
   NoteChangeClaimSupportRequest,
   NoteChangeClaimSupportResult,
+  NoteClaimSupersessionItem,
+  NoteClaimSupersessionsSummary,
+  NoteSearchClaimSupersessionsRequest,
+  NoteSearchClaimSupersessionsResult,
+  NoteChangeClaimSupersessionRequest,
+  NoteChangeClaimSupersessionResult,
   NoteClaimEvidenceItem,
   NoteClaimEvidenceSummary,
   NoteSearchClaimEvidenceRequest,
@@ -917,6 +923,12 @@ export type {
   NoteSearchClaimSupportsResult,
   NoteChangeClaimSupportRequest,
   NoteChangeClaimSupportResult,
+  NoteClaimSupersessionItem,
+  NoteClaimSupersessionsSummary,
+  NoteSearchClaimSupersessionsRequest,
+  NoteSearchClaimSupersessionsResult,
+  NoteChangeClaimSupersessionRequest,
+  NoteChangeClaimSupersessionResult,
   NoteClaimEvidenceItem,
   NoteClaimEvidenceSummary,
   NoteSearchClaimEvidenceRequest,
@@ -1970,7 +1982,7 @@ export interface LibraryRelatedPageSummary {
 export interface LibraryRelatedPage {
   readonly summary: LibraryRelatedPageSummary;
   readonly relation: "outgoing" | "backlink";
-  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "supports" | "answers" | "broader_than";
+  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "supports" | "supersedes" | "answers" | "broader_than";
 }
 
 export interface LibraryRelatedResult {
@@ -2827,6 +2839,12 @@ export interface PigeDesktopApi {
     readonly changeClaimSupport: (
       request: NoteChangeClaimSupportRequest
     ) => Promise<NoteChangeClaimSupportResult>;
+    readonly searchClaimSupersessions: (
+      request: NoteSearchClaimSupersessionsRequest
+    ) => Promise<NoteSearchClaimSupersessionsResult>;
+    readonly changeClaimSupersession: (
+      request: NoteChangeClaimSupersessionRequest
+    ) => Promise<NoteChangeClaimSupersessionResult>;
     readonly searchClaimEvidence: (
       request: NoteSearchClaimEvidenceRequest
     ) => Promise<NoteSearchClaimEvidenceResult>;

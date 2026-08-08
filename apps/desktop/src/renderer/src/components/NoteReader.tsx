@@ -13,7 +13,7 @@ import type {
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
   NoteSearchClaimContradictionsRequest, NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest, NoteChangeClaimContradictionResult,
-  NoteSearchClaimSupportsRequest, NoteSearchClaimSupportsResult, NoteChangeClaimSupportRequest, NoteChangeClaimSupportResult,
+  NoteSearchClaimSupportsRequest, NoteSearchClaimSupportsResult, NoteChangeClaimSupportRequest, NoteChangeClaimSupportResult, NoteSearchClaimSupersessionsRequest, NoteSearchClaimSupersessionsResult, NoteChangeClaimSupersessionRequest, NoteChangeClaimSupersessionResult,
   NoteSearchClaimEvidenceRequest, NoteSearchClaimEvidenceResult, NoteChangeClaimEvidenceRequest, NoteChangeClaimEvidenceResult,
   NoteSearchConceptParentsRequest, NoteSearchConceptParentsResult,
   NoteChangeConceptParentRequest, NoteChangeConceptParentResult,
@@ -40,7 +40,7 @@ import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelat
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
 import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl"; import { ReaderEntityMentions } from "./ReaderEntityMentions"; import { ReaderEntityIdentifiers } from "./ReaderEntityIdentifiers";
-import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers"; import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimSupports } from "./ReaderClaimSupports"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence"; import { ReaderConceptParents } from "./ReaderConceptParents"; import { ReaderTopicParents } from "./ReaderTopicParents";
+import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers"; import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimSupports } from "./ReaderClaimSupports"; import { ReaderClaimSupersessions } from "./ReaderClaimSupersessions"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence"; import { ReaderConceptParents } from "./ReaderConceptParents"; import { ReaderTopicParents } from "./ReaderTopicParents";
 import { createReaderQuoteIntoCapture, type ReaderQuoteIntoCapture } from "../reader-quote-into-capture";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 function readerSelectionEndpoint(
@@ -112,7 +112,7 @@ export function NoteReader(props: {
   readonly onChangeClaimContradiction?: (
     request: NoteChangeClaimContradictionRequest
   ) => Promise<NoteChangeClaimContradictionResult>;
-  readonly onSearchClaimSupports?: (request: NoteSearchClaimSupportsRequest) => Promise<NoteSearchClaimSupportsResult>; readonly onChangeClaimSupport?: (request: NoteChangeClaimSupportRequest) => Promise<NoteChangeClaimSupportResult>;
+  readonly onSearchClaimSupports?: (request: NoteSearchClaimSupportsRequest) => Promise<NoteSearchClaimSupportsResult>; readonly onChangeClaimSupport?: (request: NoteChangeClaimSupportRequest) => Promise<NoteChangeClaimSupportResult>; readonly onSearchClaimSupersessions?: (request: NoteSearchClaimSupersessionsRequest) => Promise<NoteSearchClaimSupersessionsResult>; readonly onChangeClaimSupersession?: (request: NoteChangeClaimSupersessionRequest) => Promise<NoteChangeClaimSupersessionResult>;
   readonly onSearchClaimEvidence?: (request: NoteSearchClaimEvidenceRequest) => Promise<NoteSearchClaimEvidenceResult>; readonly onChangeClaimEvidence?: (request: NoteChangeClaimEvidenceRequest) => Promise<NoteChangeClaimEvidenceResult>;
   readonly onSearchConceptParents?: (
     request: NoteSearchConceptParentsRequest
@@ -949,7 +949,7 @@ export function NoteReader(props: {
         ? <ReaderEntityMentions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchEntityMentions} change={props.onChangeEntityMention} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onReadEntityIdentifiers && props.onChangeEntityIdentifier && props.onEntityTypeChanged ? <ReaderEntityIdentifiers activeVaultId={props.activeVaultId} note={props.note} read={props.onReadEntityIdentifiers} change={props.onChangeEntityIdentifier} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onSearchClaimContradictions && props.onChangeClaimContradiction && props.onQuestionStateChanged ? <ReaderClaimContradictions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimContradictions} change={props.onChangeClaimContradiction} onCommitted={props.onQuestionStateChanged} t={props.t} /> : null}
-      {props.activeVaultId && props.onSearchClaimSupports && props.onChangeClaimSupport && props.onQuestionStateChanged ? <ReaderClaimSupports activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimSupports} change={props.onChangeClaimSupport} onCommitted={props.onQuestionStateChanged} t={props.t} /> : null}
+      {props.activeVaultId && props.onSearchClaimSupports && props.onChangeClaimSupport && props.onQuestionStateChanged ? <ReaderClaimSupports activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimSupports} change={props.onChangeClaimSupport} onCommitted={props.onQuestionStateChanged} t={props.t} /> : null}{props.activeVaultId && props.onSearchClaimSupersessions && props.onChangeClaimSupersession && props.onQuestionStateChanged ? <ReaderClaimSupersessions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimSupersessions} change={props.onChangeClaimSupersession} onCommitted={props.onQuestionStateChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onSearchClaimEvidence && props.onChangeClaimEvidence && props.onQuestionStateChanged ? (
         <ReaderClaimEvidence activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchClaimEvidence} change={props.onChangeClaimEvidence} onCommitted={props.onQuestionStateChanged} t={props.t} />
       ) : null}

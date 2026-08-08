@@ -224,6 +224,10 @@ import type {
   NoteSearchClaimSupportsResult,
   NoteChangeClaimSupportRequest,
   NoteChangeClaimSupportResult,
+  NoteSearchClaimSupersessionsRequest,
+  NoteSearchClaimSupersessionsResult,
+  NoteChangeClaimSupersessionRequest,
+  NoteChangeClaimSupersessionResult,
   NoteSearchClaimEvidenceRequest,
   NoteSearchClaimEvidenceResult,
   NoteChangeClaimEvidenceRequest,
@@ -878,6 +882,12 @@ import {
   NoteSearchClaimSupportsResultSchema,
   NoteChangeClaimSupportRequestSchema,
   NoteChangeClaimSupportResultSchema,
+  NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL,
+  NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL,
+  NoteSearchClaimSupersessionsRequestSchema,
+  NoteSearchClaimSupersessionsResultSchema,
+  NoteChangeClaimSupersessionRequestSchema,
+  NoteChangeClaimSupersessionResultSchema,
   NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL,
   NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL,
   NoteSearchClaimEvidenceRequestSchema,
@@ -2800,6 +2810,18 @@ const api: PigeDesktopApi = {
     ): Promise<NoteChangeClaimSupportResult> =>
       NoteChangeClaimSupportResultSchema.parse(await ipcRenderer.invoke(
         NOTE_CHANGE_CLAIM_SUPPORT_CHANNEL, NoteChangeClaimSupportRequestSchema.parse(request)
+      )),
+    searchClaimSupersessions: async (
+      request: NoteSearchClaimSupersessionsRequest
+    ): Promise<NoteSearchClaimSupersessionsResult> =>
+      NoteSearchClaimSupersessionsResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL, NoteSearchClaimSupersessionsRequestSchema.parse(request)
+      )),
+    changeClaimSupersession: async (
+      request: NoteChangeClaimSupersessionRequest
+    ): Promise<NoteChangeClaimSupersessionResult> =>
+      NoteChangeClaimSupersessionResultSchema.parse(await ipcRenderer.invoke(
+        NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL, NoteChangeClaimSupersessionRequestSchema.parse(request)
       )),
     searchClaimEvidence: async (
       request: NoteSearchClaimEvidenceRequest

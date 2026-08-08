@@ -114,7 +114,7 @@ function t(key: string): string {
     "note.relatedType.links_to": "Wiki link", "note.relatedType.related_to": "Related page",
     "note.relatedType.mentions_entity": "Entity mention", "note.relatedType.broader_than": "Broader concept",
     "note.relatedType.answers": "Answers this question",
-    "note.relatedType.contradicts": "Contradicts this claim" } as Record<string, string>)[key] ?? key;
+    "note.relatedType.contradicts": "Contradicts this claim", "note.relatedType.supersedes": "Supersedes this claim" } as Record<string, string>)[key] ?? key;
 }
 
 function createDom(): JSDOM {

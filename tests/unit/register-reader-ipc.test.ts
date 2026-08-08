@@ -245,6 +245,8 @@ describe("registerReaderIpc", () => {
       "notes.changeClaimContradiction",
       "notes.searchClaimSupports",
       "notes.changeClaimSupport",
+      "notes.searchClaimSupersessions",
+      "notes.changeClaimSupersession",
       "notes.searchClaimEvidence",
       "notes.changeClaimEvidence",
       "notes.searchConceptParents",

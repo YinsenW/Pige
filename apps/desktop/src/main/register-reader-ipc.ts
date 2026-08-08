@@ -176,6 +176,12 @@ import {
   NoteSearchClaimSupportsResultSchema,
   NoteChangeClaimSupportRequestSchema,
   NoteChangeClaimSupportResultSchema,
+  NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL,
+  NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL,
+  NoteSearchClaimSupersessionsRequestSchema,
+  NoteSearchClaimSupersessionsResultSchema,
+  NoteChangeClaimSupersessionRequestSchema,
+  NoteChangeClaimSupersessionResultSchema,
   NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL,
   NOTE_CHANGE_CLAIM_EVIDENCE_CHANNEL,
   NoteSearchClaimEvidenceRequestSchema,
@@ -286,6 +292,7 @@ import type { EntityMentionService } from "./services/entity-mention-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
 import type { ClaimContradictionService } from "./services/claim-contradiction-service";
 import type { ClaimSupportService } from "./services/claim-support-service";
+import type { ClaimSupersessionService } from "./services/claim-supersession-service";
 import type { ClaimEvidenceService } from "./services/claim-evidence-service";
 import type { ConceptParentService } from "./services/concept-parent-service";
 import type { TopicParentService } from "./services/topic-parent-service";
@@ -320,6 +327,7 @@ interface RegisterReaderIpcOptions {
   readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getClaimContradictionService: () => ClaimContradictionService;
   readonly getClaimSupportService: () => ClaimSupportService;
+  readonly getClaimSupersessionService: () => ClaimSupersessionService;
   readonly getClaimEvidenceService: () => ClaimEvidenceService;
   readonly getConceptParentService: () => ConceptParentService;
   readonly getTopicParentService: () => TopicParentService;
@@ -823,6 +831,21 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       if (result.status === "committed") options.onNoteRelated();
       return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed() ? result : NoteChangeClaimSupportResultSchema.parse({ ...parsed, status: "failed" });
     } catch { return NoteChangeClaimSupportResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteSearchClaimSupersessionsRequestSchema.parse(request), ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteSearchClaimSupersessionsResultSchema.parse({ ...parsed, status: "failed" });
+    try { return NoteSearchClaimSupersessionsResultSchema.parse(options.getClaimSupersessionService().search(ownerId, parsed)); }
+    catch { return NoteSearchClaimSupersessionsResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeClaimSupersessionRequestSchema.parse(request), ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteChangeClaimSupersessionResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = NoteChangeClaimSupersessionResultSchema.parse(await options.getClaimSupersessionService().change(ownerId, parsed));
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed() ? result : NoteChangeClaimSupersessionResultSchema.parse({ ...parsed, status: "failed" });
+    } catch { return NoteChangeClaimSupersessionResultSchema.parse({ ...parsed, status: "failed" }); }
   });
   options.ipcMain.handle(NOTE_SEARCH_CLAIM_EVIDENCE_CHANNEL, async (event, request: unknown) => {
     const parsed = NoteSearchClaimEvidenceRequestSchema.parse(request);
