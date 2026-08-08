@@ -6,7 +6,7 @@ export function DiagnosticsRecentErrorsCard(props: {
   readonly onPrepareSupport: () => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  if (props.failed) {
+  if (props.failed && !props.result) {
     return (
       <section
         className="settings-card diagnostics-recent-errors-card diagnostics-recent-errors-card-failed"
@@ -41,6 +41,7 @@ export function DiagnosticsRecentErrorsCard(props: {
       aria-labelledby="recent-errors-title"
       aria-describedby="recent-errors-description"
     >
+      {props.failed ? <p className="error" role="alert">{props.t("system.recentErrorsUnavailable")}</p> : null}
       <div className="diagnostics-recent-errors-header">
         <div className="diagnostics-recent-errors-heading">
           <span className="diagnostics-recent-errors-eyebrow">{props.t("system.diagnosticsTitle")}</span>

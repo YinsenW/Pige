@@ -11,7 +11,10 @@ export function DiagnosticsRecentErrorsPanel(props: {
 
   useEffect(() => {
     let active = true;
+    let requestActive = false;
     const refresh = async (): Promise<void> => {
+      if (!active || requestActive) return;
+      requestActive = true;
       try {
         if (typeof window.pige.diagnostics.recentErrors !== "function") {
           throw new Error("diagnostics_recent_errors_unavailable");
@@ -25,8 +28,10 @@ export function DiagnosticsRecentErrorsPanel(props: {
         setFailed(false);
       } catch {
         if (!active) return;
-        setResult(null);
+        // Keep the last safe projection visible during a transient refresh failure.
         setFailed(true);
+      } finally {
+        requestActive = false;
       }
     };
     void refresh();
