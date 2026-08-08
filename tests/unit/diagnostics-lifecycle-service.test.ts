@@ -40,7 +40,7 @@ function lifecycle(
   });
 }
 
-function ids(prefix: "diagpreviewreq" | "diagexportreq" | "diagcancelreq" | "diagretryreq" | "diagclearreq", suffix: string) {
+function ids(prefix: "diagpreviewreq" | "diagexportreq" | "diagcancelreq" | "diagretryreq" | "diagrevealsupportreq" | "diagclearreq", suffix: string) {
   return `${prefix}_${suffix.padEnd(16, "0")}`;
 }
 
@@ -278,6 +278,60 @@ describe("durable diagnostics lifecycle", () => {
     expect(completed.job?.jobId).toBe(originalJobId);
     expect(writes).toBe(1);
     expect(fs.readFileSync(destination, "utf8")).toContain('"localOnly": true');
+    restarted.close();
+  });
+
+  it("reveals only an exact completed bundle and rejects stale or missing destinations", async () => {
+    const root = tempRoot();
+    const userData = path.join(root, "user-data");
+    const destination = path.join(root, "revealed-support.json");
+    const first = lifecycle(userData, writeExporter());
+    startExport(first, destination, "reveal");
+    const completed = await waitFor(first, "completed");
+    const revealDestination = vi.fn();
+
+    const stale = first.reveal({
+      apiVersion: 1,
+      requestId: ids("diagrevealsupportreq", "stale"),
+      jobId: completed.job!.jobId,
+      scopeContextId: completed.scopeContextId,
+      expectedRevision: completed.revision - 1
+    }, revealDestination);
+    expect(stale.status).toBe("stale");
+    expect(revealDestination).not.toHaveBeenCalled();
+
+    first.close();
+    const restarted = lifecycle(userData, writeExporter());
+    const recovered = await waitFor(restarted, "completed");
+    const revealed = restarted.reveal({
+      apiVersion: 1,
+      requestId: ids("diagrevealsupportreq", "success"),
+      jobId: recovered.job!.jobId,
+      scopeContextId: recovered.scopeContextId,
+      expectedRevision: recovered.revision
+    }, revealDestination);
+    expect(revealed.status).toBe("revealed");
+    expect(revealDestination).toHaveBeenCalledWith(destination);
+
+    const failed = restarted.reveal({
+      apiVersion: 1,
+      requestId: ids("diagrevealsupportreq", "failure"),
+      jobId: recovered.job!.jobId,
+      scopeContextId: recovered.scopeContextId,
+      expectedRevision: recovered.revision
+    }, () => { throw new Error("file manager unavailable"); });
+    expect(failed.status).toBe("failed");
+
+    fs.unlinkSync(destination);
+    const missing = restarted.reveal({
+      apiVersion: 1,
+      requestId: ids("diagrevealsupportreq", "missing"),
+      jobId: recovered.job!.jobId,
+      scopeContextId: recovered.scopeContextId,
+      expectedRevision: restarted.summary().revision
+    }, revealDestination);
+    expect(missing.status).toBe("not_found");
+    expect(revealDestination).toHaveBeenCalledTimes(1);
     restarted.close();
   });
 

@@ -4,6 +4,7 @@ import {
   DIAGNOSTICS_CLEAR_LOCAL_CHANNEL,
   DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
@@ -11,6 +12,8 @@ import {
   DiagnosticsExportSupportBundleRequestSchema,
   DiagnosticsExportSupportBundleResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
   DiagnosticsWorkflowSummarySchema,
@@ -20,6 +23,8 @@ import {
   type DiagnosticsExportSupportBundleRequest,
   type DiagnosticsExportSupportBundleResult,
   type DiagnosticsPreviewSupportBundleRequest,
+  type DiagnosticsRevealSupportBundleRequest,
+  type DiagnosticsRevealSupportBundleResult,
   type DiagnosticsSupportBundleMutationRequest,
   type DiagnosticsSupportBundleMutationResult,
   type DiagnosticsWorkflowSummary,
@@ -40,6 +45,7 @@ export interface RegisterDiagnosticsIpcOptions {
   readonly start: (request: DiagnosticsExportSupportBundleRequest, destinationPath: string) => Awaitable<DiagnosticsExportSupportBundleResult>;
   readonly cancel: (request: DiagnosticsSupportBundleMutationRequest) => Awaitable<DiagnosticsSupportBundleMutationResult>;
   readonly retry: (request: DiagnosticsSupportBundleMutationRequest) => Awaitable<DiagnosticsSupportBundleMutationResult>;
+  readonly reveal: (request: DiagnosticsRevealSupportBundleRequest) => Awaitable<DiagnosticsRevealSupportBundleResult>;
   readonly clear: (request: DiagnosticsClearLocalRequest) => Awaitable<DiagnosticsClearLocalResult>;
 }
 
@@ -92,6 +98,15 @@ export function registerDiagnosticsIpc(options: RegisterDiagnosticsIpcOptions): 
   options.ipcMain.handle(DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL, async (event, input: unknown) => {
     return mutation(options, event.sender, input, "retry");
   });
+  options.ipcMain.handle(DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL, async (event, input: unknown) => {
+    const request = DiagnosticsRevealSupportBundleRequestSchema.parse(input);
+    if (!options.isTrustedSender(event.sender)) return failedReveal(request);
+    try {
+      const result = DiagnosticsRevealSupportBundleResultSchema.parse(await options.reveal(request));
+      assertRevealIdentity(request, result);
+      return result;
+    } catch { return failedReveal(request); }
+  });
   options.ipcMain.handle(DIAGNOSTICS_CLEAR_LOCAL_CHANNEL, async (event, input: unknown) => {
     const request = DiagnosticsClearLocalRequestSchema.parse(input);
     if (!options.isTrustedSender(event.sender)) return DiagnosticsClearLocalResultSchema.parse({ ...request, status: "failed" });
@@ -125,6 +140,10 @@ function failedMutation(request: DiagnosticsSupportBundleMutationRequest): Diagn
   return DiagnosticsSupportBundleMutationResultSchema.parse({ ...request, status: "failed" });
 }
 
+function failedReveal(request: DiagnosticsRevealSupportBundleRequest): DiagnosticsRevealSupportBundleResult {
+  return DiagnosticsRevealSupportBundleResultSchema.parse({ ...request, status: "failed" });
+}
+
 function assertExportIdentity(request: DiagnosticsExportSupportBundleRequest, result: DiagnosticsExportSupportBundleResult): void {
   if (result.requestId !== request.requestId || result.previewId !== request.previewId ||
     result.scopeContextId !== request.scopeContextId || result.expectedRevision !== request.expectedRevision) {
@@ -136,5 +155,12 @@ function assertMutationIdentity(request: DiagnosticsSupportBundleMutationRequest
   if (result.requestId !== request.requestId || result.jobId !== request.jobId ||
     result.scopeContextId !== request.scopeContextId || result.expectedRevision !== request.expectedRevision) {
     throw new Error("Diagnostics mutation identity changed.");
+  }
+}
+
+function assertRevealIdentity(request: DiagnosticsRevealSupportBundleRequest, result: DiagnosticsRevealSupportBundleResult): void {
+  if (result.requestId !== request.requestId || result.jobId !== request.jobId ||
+    result.scopeContextId !== request.scopeContextId || result.expectedRevision !== request.expectedRevision) {
+    throw new Error("Diagnostics reveal identity changed.");
   }
 }

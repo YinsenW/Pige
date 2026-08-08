@@ -4275,6 +4275,17 @@ describe("full UI Settings surface", () => {
       activeVaultId: "vault_20260730_diagnostics",
       localOnly: true as const,
       ownedArtifactCount: 0,
+      job: {
+        jobId: "job_20260730_revealsupport1",
+        state: "completed" as const,
+        progress: { completedUnits: 3, totalUnits: 3, percent: 100, messageKey: "diagnostics.support.completed" },
+        createdAt: "2026-07-16T00:00:00.000Z",
+        updatedAt: "2026-07-16T00:00:01.000Z",
+        canCancel: false,
+        canRetry: false,
+        canReveal: true,
+        repairAction: "clear" as const
+      },
       eventSelection: {
         revision: `diagevents_${"c".repeat(64)}`,
         events: [{
@@ -4287,6 +4298,13 @@ describe("full UI Settings surface", () => {
       }
     };
     let echoOptionalCategories = true;
+    const revealSupportBundle = vi.fn(async (request: {
+      apiVersion: 1;
+      requestId: string;
+      jobId: string;
+      scopeContextId: string;
+      expectedRevision: number;
+    }) => ({ ...request, status: "revealed" as const, workflow }));
     const previewSupportBundle = vi.fn(async (request: {
       apiVersion: 1;
       requestId: string;
@@ -4328,7 +4346,8 @@ describe("full UI Settings surface", () => {
           previewSupportBundle,
           exportSupportBundle: vi.fn(),
           cancelSupportBundleExport: vi.fn(),
-          retrySupportBundleExport: vi.fn()
+          retrySupportBundleExport: vi.fn(),
+          revealSupportBundle
         }
       }
     });
@@ -4361,6 +4380,16 @@ describe("full UI Settings surface", () => {
     expect(panel.querySelector("h1")?.textContent).toBe("Diagnostics");
     expect(panel.textContent).not.toContain("Check for updates");
     expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
+    expect(buttonNamed(panel, "Show in folder")).not.toBeNull();
+    await act(async () => {
+      buttonNamed(panel, "Show in folder").click();
+      await settle(dom);
+    });
+    expect(revealSupportBundle).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: workflow.job.jobId,
+      scopeContextId: workflow.scopeContextId,
+      expectedRevision: workflow.revision
+    }));
     const providerMetadata = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include provider metadata"]'));
     const privateExcerptToggle = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include a private excerpt"]'));
     expect(providerMetadata.checked).toBe(false);
@@ -4489,7 +4518,8 @@ describe("full UI Settings surface", () => {
           previewSupportBundle: vi.fn(),
           exportSupportBundle: vi.fn(),
           cancelSupportBundleExport: vi.fn(),
-          retrySupportBundleExport: vi.fn()
+          retrySupportBundleExport: vi.fn(),
+          revealSupportBundle: vi.fn()
         }
       }
     });

@@ -105,6 +105,8 @@ import type {
   DiagnosticsOptionalSupportCategory,
   DiagnosticsPreviewSupportBundleRequest,
   DiagnosticsReviewedPrivateExcerpt,
+  DiagnosticsRevealSupportBundleRequest,
+  DiagnosticsRevealSupportBundleResult,
   DiagnosticsScopeContextId,
   DiagnosticsSupportBundleJobSummary,
   DiagnosticsSupportBundleMutationRequest,
@@ -701,6 +703,8 @@ export type {
   DiagnosticsOptionalSupportCategory,
   DiagnosticsPreviewSupportBundleRequest,
   DiagnosticsReviewedPrivateExcerpt,
+  DiagnosticsRevealSupportBundleRequest,
+  DiagnosticsRevealSupportBundleResult,
   DiagnosticsScopeContextId,
   DiagnosticsSupportBundleJobSummary,
   DiagnosticsSupportBundleMutationRequest,
@@ -3055,6 +3059,9 @@ export interface PigeDesktopApi {
     readonly retrySupportBundleExport: (
       request: DiagnosticsSupportBundleMutationRequest
     ) => Promise<DiagnosticsSupportBundleMutationResult>;
+    readonly revealSupportBundle: (
+      request: DiagnosticsRevealSupportBundleRequest
+    ) => Promise<DiagnosticsRevealSupportBundleResult>;
   };
   readonly models: {
     readonly summary: () => Promise<ModelProviderSettingsSummary>;

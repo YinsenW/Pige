@@ -8,6 +8,8 @@ import {
   DiagnosticsExportSupportBundleRequestSchema,
   DiagnosticsExportSupportBundleResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
   DiagnosticsWorkflowSummarySchema,
@@ -18,6 +20,8 @@ import {
   type DiagnosticsExportSupportBundleRequest,
   type DiagnosticsExportSupportBundleResult,
   type DiagnosticsPreviewSupportBundleRequest,
+  type DiagnosticsRevealSupportBundleRequest,
+  type DiagnosticsRevealSupportBundleResult,
   type DiagnosticsSupportBundleMutationRequest,
   type DiagnosticsSupportBundleMutationResult,
   type DiagnosticsSupportBundleJobSummary,
@@ -281,6 +285,39 @@ export class DiagnosticsLifecycleService {
 
   retry(requestInput: DiagnosticsSupportBundleMutationRequest): DiagnosticsSupportBundleMutationResult {
     return this.#mutate(requestInput, "retry");
+  }
+
+  reveal(
+    requestInput: DiagnosticsRevealSupportBundleRequest,
+    revealDestination: (destinationPath: string) => void
+  ): DiagnosticsRevealSupportBundleResult {
+    const request = DiagnosticsRevealSupportBundleRequestSchema.parse(requestInput);
+    const identity = request;
+    try {
+      const registry = this.#readRegistry();
+      const context = this.#currentContext(registry);
+      if (request.expectedRevision !== registry.revision || request.scopeContextId !== context.scopeContextId) {
+        return revealResult(identity, "stale", this.#project(registry));
+      }
+      const snapshot = this.#readOptionalJob(request.jobId);
+      if (!snapshot || !registry.jobIds.includes(request.jobId)) {
+        return revealResult(identity, "not_found", this.#project(registry));
+      }
+      if (!new Set(["completed", "completed_with_warnings"]).has(snapshot.job.state)) {
+        return revealResult(identity, "ineligible", this.#project(registry));
+      }
+      const binding = this.#binding(snapshot.job.id);
+      if (binding.activeVaultId !== context.activeVaultId) {
+        return revealResult(identity, "ineligible", this.#project(registry));
+      }
+      const destinationState = this.#destinationState(binding);
+      if (destinationState === "missing") return revealResult(identity, "not_found", this.#project(registry));
+      if (destinationState === "changed") return revealResult(identity, "ineligible", this.#project(registry));
+      revealDestination(binding.destinationPath);
+      return revealResult(identity, "revealed", this.#project(registry));
+    } catch {
+      return DiagnosticsRevealSupportBundleResultSchema.parse({ ...identity, status: "failed" });
+    }
   }
 
   clear(requestInput: DiagnosticsClearLocalRequest): DiagnosticsClearLocalResult {
@@ -700,6 +737,14 @@ function mutationResult(
   return DiagnosticsSupportBundleMutationResultSchema.parse({ ...identity, status, workflow });
 }
 
+function revealResult(
+  identity: DiagnosticsRevealSupportBundleRequest,
+  status: "revealed" | "stale" | "not_found" | "ineligible",
+  workflow: DiagnosticsWorkflowSummary
+): DiagnosticsRevealSupportBundleResult {
+  return DiagnosticsRevealSupportBundleResultSchema.parse({ ...identity, status, workflow });
+}
+
 function projectJob(job: JobRecord): DiagnosticsSupportBundleJobSummary {
   const completedUnits = Math.min(3, Math.max(0, Math.trunc(job.progress?.completedUnits ?? 0)));
   const repairAction = job.state === "failed_retryable" ? "retry"
@@ -719,6 +764,7 @@ function projectJob(job: JobRecord): DiagnosticsSupportBundleJobSummary {
     ...(job.finishedAt ? { finishedAt: job.finishedAt } : {}),
     canCancel: job.state === "queued" || job.state === "running" || job.state === "cancel_requested",
     canRetry: job.state === "failed_retryable",
+    canReveal: job.state === "completed" || job.state === "completed_with_warnings",
     repairAction,
     ...(job.error ? { error: job.error } : {})
   };
