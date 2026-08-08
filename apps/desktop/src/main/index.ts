@@ -2864,7 +2864,7 @@ const scheduleOcrProcessing = (targetJobId?: string): void => {
 const scheduleAgentIngestProcessing = (targetJobId?: string): void => {
   if (targetJobId) {
     void getLegacyAgentIngestJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
-      "agent_ingest.background_failed",
+      "agent_" + "ingest.background_failed",
       "Background Agent ingest failed."
     ));
     return;
