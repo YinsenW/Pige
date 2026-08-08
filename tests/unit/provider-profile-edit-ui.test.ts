@@ -79,6 +79,27 @@ describe("Provider Profile edit panel", () => {
     await harness.unmount();
   });
 
+  it("fails closed when the authoritative provider result does not match the submitted draft", async () => {
+    const updateProviderProfile = vi.fn(async () => summary({
+      ...provider, displayName: "Different provider", baseUrl: "https://other.example/v1"
+    }));
+    const harness = await mount(updateProviderProfile, vi.fn(async () => null));
+    await act(async () => { button(harness.container, "Edit connection").click(); await settle(harness.dom); });
+    const inputs = harness.container.querySelectorAll<HTMLInputElement>("input");
+    await act(async () => {
+      change(inputs[0]!, "Retained mismatch draft");
+      change(inputs[1]!, "https://submitted.example/v1");
+      await settle(harness.dom);
+    });
+    const save = button(harness.container, "Save and reconnect");
+    await act(async () => { save.click(); await settle(harness.dom); });
+    expect(inputs[0]?.value).toBe("Retained mismatch draft");
+    expect(inputs[1]?.value).toBe("https://submitted.example/v1");
+    expect(harness.container.querySelector('[role="alert"]')?.textContent).toBe("Failed");
+    expect(harness.dom.window.document.activeElement).toBe(inputs[1]);
+    await harness.unmount();
+  });
+
   it("does not render endpoint editing for a reviewed preset", async () => {
     const harness = await mount(vi.fn(), vi.fn(), { ...provider, presetId: "openai" });
     expect(harness.container.textContent).toBe("");

@@ -50,9 +50,13 @@ export function ProviderProfileEditPanel(props: {
     pendingRef.current = true; setNotice(null); props.onBusy(true);
     try {
       const result = await window.pige.models.updateProviderProfile(request);
+      const normalizedEndpoint = new URL(endpoint).toString().replace(/\/$/u, "");
       const updated = result.providers.find((provider) => provider.id === owner);
-      if (sequence !== sequenceRef.current || ownerRef.current !== owner || !updated ||
-        updated.displayName !== name || updated.baseUrl !== new URL(endpoint).toString().replace(/\/$/u, "")) return;
+      if (sequence !== sequenceRef.current || ownerRef.current !== owner) return;
+      if (!updated || updated.displayName !== name || updated.baseUrl !== normalizedEndpoint) {
+        setNotice("failed");
+        return;
+      }
       await props.onRefresh();
       if (sequence !== sequenceRef.current || ownerRef.current !== owner) return;
       restoreFocusRef.current = true; setEditing(false); setNotice("saved");
