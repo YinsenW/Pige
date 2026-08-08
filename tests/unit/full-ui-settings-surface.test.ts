@@ -6156,6 +6156,7 @@ describe("full UI Settings surface", () => {
       preference: { mode: "preferred", language: "ja" }
     });
     expect(onPreferenceChanged).toHaveBeenLastCalledWith({ mode: "preferred", language: "ja" });
+    await act(async () => settle(dom));
     expect(dom.window.document.activeElement).toBe(select);
 
     await act(async () => root.unmount());
