@@ -95,6 +95,31 @@ describe("SettingsProfileTransferPanel", () => {
       api.previewImport.mockResolvedValueOnce({
         apiVersion: 1,
         requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
+        status: "ready",
+        previewId: "settingspreview_0123456789abcdef0123456789abcdef",
+        changes: [{ key: "app_locale", before: "en", after: "fr" }]
+      });
+      api.applyImport.mockResolvedValueOnce({
+        apiVersion: 1,
+        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
+        previewId: "settingspreview_0123456789abcdef0123456789abcdef",
+        status: "committed",
+        keys: ["app_locale"]
+      });
+      await act(async () => { choose.click(); await Promise.resolve(); });
+      const apply = findButton(container, "Import");
+      expect(container.querySelector(".settings-card")?.getAttribute("aria-busy")).toBe("false");
+      await act(async () => {
+        apply.click();
+        await Promise.resolve();
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+      });
+      const restoredChoose = findButton(container, "Choose file");
+      expect(dom.window.document.activeElement).toBe(restoredChoose);
+
+      api.previewImport.mockResolvedValueOnce({
+        apiVersion: 1,
+        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
         status: "current"
       });
       await act(async () => { choose.click(); await Promise.resolve(); });

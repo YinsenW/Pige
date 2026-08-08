@@ -56,6 +56,10 @@ export function SettingsProfileTransferPanel(props: {
 
   const cancelImport = (): void => {
     setPreview(null);
+    restoreImportFocus();
+  };
+
+  const restoreImportFocus = (): void => {
     window.requestAnimationFrame(() => importButtonRef.current?.focus({ preventScroll: true }));
   };
 
@@ -68,11 +72,11 @@ export function SettingsProfileTransferPanel(props: {
     if (result.status === "committed") {
       setPreview(null);
       setNotice("committed");
-      importButtonRef.current?.focus({ preventScroll: true });
+      restoreImportFocus();
     } else if (result.status === "stale" || result.status === "not_found") {
       setPreview(null);
       setNotice("stale");
-      importButtonRef.current?.focus({ preventScroll: true });
+      restoreImportFocus();
     } else if (result.status === "failed") {
       setNotice("failed");
     }
@@ -82,7 +86,7 @@ export function SettingsProfileTransferPanel(props: {
     <h2 className="settings-section-title" id="settings-profile-transfer-title">
       {props.t("settings.general.profileTransferTitle")}
     </h2>
-    <div className="settings-card">
+    <div className="settings-card" aria-busy={busy}>
       <div className="settings-row">
         <div className="settings-row-copy">
           <strong>{props.t("settings.general.profileTransferExportTitle")}</strong>
