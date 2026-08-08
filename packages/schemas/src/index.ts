@@ -5261,6 +5261,7 @@ export const DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL = "diagnostics.exportSupp
 export const DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.cancelSupportBundleExport" as const;
 export const DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL = "diagnostics.retrySupportBundleExport" as const;
 export const DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.revealSupportBundle" as const;
+export const DIAGNOSTICS_RECENT_ERRORS_CHANNEL = "diagnostics.recentErrors" as const;
 export const DiagnosticsClearRequestIdSchema = z.string()
   .regex(/^diagclearreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsWorkflowRequestIdSchema = z.string()
@@ -5273,6 +5274,8 @@ export const DiagnosticsMutationRequestIdSchema = z.string()
   .regex(/^diag(?:cancel|retry)req_[a-z0-9]{16,64}$/u);
 export const DiagnosticsRevealRequestIdSchema = z.string()
   .regex(/^diagrevealsupportreq_[a-z0-9]{16,64}$/u);
+export const DiagnosticsRecentErrorsRequestIdSchema = z.string()
+  .regex(/^diagrecentreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
@@ -5293,6 +5296,22 @@ export const DiagnosticEventSummarySchema = z.object({
 export const DiagnosticsEventSelectionSchema = z.object({
   revision: DiagnosticsEventSelectionRevisionSchema,
   events: z.array(DiagnosticEventSummarySchema).max(DIAGNOSTICS_EVENT_SELECTION_MAX_ITEMS)
+}).strict();
+export const DiagnosticsRecentErrorSchema = DiagnosticEventSummarySchema.extend({
+  message: z.string().min(1).max(240),
+  redactedDetails: PigeSafeErrorMetadataSchema.optional()
+}).strict();
+export const DiagnosticsRecentErrorsRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsRecentErrorsRequestIdSchema
+}).strict();
+export const DiagnosticsRecentErrorsResultSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsRecentErrorsRequestIdSchema,
+  checkedAt: z.string().datetime({ offset: true }),
+  localOnly: z.literal(true),
+  eventSelectionRevision: DiagnosticsEventSelectionRevisionSchema,
+  errors: z.array(DiagnosticsRecentErrorSchema).max(10)
 }).strict();
 export const DIAGNOSTICS_PRIVATE_EXCERPT_MAX_UTF8_BYTES = 2 * 1024;
 export const DiagnosticsOptionalSupportCategorySchema = z.enum(["provider_metadata", "private_excerpt"]);
@@ -13991,6 +14010,9 @@ export type DiagnosticsEventId = z.infer<typeof DiagnosticsEventIdSchema>;
 export type DiagnosticsEventSelectionRevision = z.infer<typeof DiagnosticsEventSelectionRevisionSchema>;
 export type DiagnosticEventSummary = z.infer<typeof DiagnosticEventSummarySchema>;
 export type DiagnosticsEventSelection = z.infer<typeof DiagnosticsEventSelectionSchema>;
+export type DiagnosticsRecentError = z.infer<typeof DiagnosticsRecentErrorSchema>;
+export type DiagnosticsRecentErrorsRequest = z.infer<typeof DiagnosticsRecentErrorsRequestSchema>;
+export type DiagnosticsRecentErrorsResult = z.infer<typeof DiagnosticsRecentErrorsResultSchema>;
 export type DiagnosticsSupportBundleJobSummary = z.infer<typeof DiagnosticsSupportBundleJobSummarySchema>;
 export type DiagnosticsWorkflowSummary = z.infer<typeof DiagnosticsWorkflowSummarySchema>;
 export type SupportBundleCategory = z.infer<typeof SupportBundleCategorySchema>;

@@ -39,6 +39,14 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) } as Pick<IpcMain, "handle">,
     isTrustedSender: () => options.trusted ?? true,
     health: () => ({ status: "ok", checkedAt: "2026-07-30T00:00:00.000Z", localOnly: true, recentErrorCount: 0, checks: [] }),
+    recentErrors: (request) => ({
+      apiVersion: 1,
+      requestId: request.requestId,
+      checkedAt: "2026-07-30T00:00:00.000Z",
+      localOnly: true,
+      eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+      errors: []
+    }),
     workflowSummary: () => summary,
     preview: (request) => ({
       ...request, previewId: exportRequest.previewId, generatedAt: "2026-07-30T00:00:00.000Z",
@@ -62,6 +70,25 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
 }
 
 describe("diagnostics IPC", () => {
+  it("projects a trusted recent-error snapshot without private paths", async () => {
+    const app = harness();
+    const request = { apiVersion: 1 as const, requestId: "diagrecentreq_abcdefghijklmnop" };
+    const result = await app.handlers.get("diagnostics.recentErrors")!(app.event, request);
+    expect(result).toEqual({
+      ...request,
+      checkedAt: "2026-07-30T00:00:00.000Z",
+      localOnly: true,
+      eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+      errors: []
+    });
+  });
+
+  it("rejects an untrusted recent-error query before calling Main", async () => {
+    const app = harness({ trusted: false });
+    const request = { apiVersion: 1 as const, requestId: "diagrecentreq_abcdefghijklmnop" };
+    await expect(app.handlers.get("diagnostics.recentErrors")!(app.event, request)).rejects.toThrow("Untrusted diagnostics sender");
+  });
+
   it("keeps the renderer pathless while Main owns destination selection", async () => {
     const destination = "/private/main-owned/support.json";
     const app = harness({ destination });

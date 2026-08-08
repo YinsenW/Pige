@@ -69,6 +69,36 @@ afterEach(() => {
 });
 
 describe("diagnostics service", () => {
+  it("projects only bounded redacted errors for the Settings disclosure", () => {
+    const userDataPath = makeTempRoot();
+    const service = new DiagnosticsService(userDataPath, {
+      now: () => new Date("2026-08-08T12:00:00.000Z")
+    });
+    service.recordEvent({ level: "warning", code: "jobs.waiting", message: "ignored" });
+    service.recordEvent({
+      level: "error",
+      code: "provider.failure",
+      message: "ignored private message",
+      redactedDetails: { providerId: "provider_openai", apiKey: "secret-value", durationMs: 42 }
+    });
+    service.recordEvent({ level: "error", code: "parser.document.background_failed", message: "ignored" });
+
+    const errors = service.recentErrors();
+    expect(errors).toHaveLength(2);
+    expect(errors.map((error) => error.code)).toEqual([
+      "parser.document.background_failed",
+      "provider.failure"
+    ]);
+    expect(errors[1]?.message).toBe("[REDACTED_CONTENT]");
+    expect(errors[1]?.redactedDetails).toMatchObject({
+      providerId: "provider_openai",
+      durationMs: 42,
+      redactedSecretCount: 1
+    });
+    expect(JSON.stringify(errors)).not.toContain("secret-value");
+    expect(JSON.stringify(errors)).not.toContain("ignored private message");
+  });
+
   it("redacts and bounds messages and redacted details before local persistence", () => {
     const userDataPath = makeTempRoot();
     const service = new DiagnosticsService(userDataPath, {

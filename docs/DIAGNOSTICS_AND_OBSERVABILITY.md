@@ -290,6 +290,9 @@ Diagnostics should be visible only where useful:
 
 - Inline failure cards for failed captures, parser errors, OCR failures, provider failures, and permission denials.
 - Settings > Updates & Diagnostics for health overview, repair actions, clear diagnostics, and export support bundle.
+- That Settings surface may disclose at most ten current redacted error summaries. A user may
+  seed those event IDs into the existing support-bundle preview, but still explicitly reviews
+  and exports it; query failure remains pathless and creates no retry authority.
 - Vault & Note Storage may show storage/path health only.
 - Local Capabilities may show tool/model health and repair state.
 - Jobs/proposals can expose IDs for troubleshooting without making the default UI technical.

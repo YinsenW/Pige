@@ -4343,6 +4343,14 @@ describe("full UI Settings surface", () => {
       value: {
         diagnostics: {
           workflowSummary: vi.fn(async () => workflow),
+          recentErrors: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            requestId: "diagrecentreq_abcdefghijklmnop",
+            checkedAt: "2026-07-16T00:00:00.000Z",
+            localOnly: true as const,
+            eventSelectionRevision: workflow.eventSelection.revision,
+            errors: []
+          })),
           previewSupportBundle,
           exportSupportBundle: vi.fn(),
           cancelSupportBundleExport: vi.fn(),
@@ -4935,6 +4943,22 @@ describe("full UI Settings surface", () => {
       configurable: true,
       value: {
         diagnostics: {
+          workflowSummary: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            revision: 0,
+            scopeContextId: `diagctx_${"a".repeat(48)}`,
+            activeVaultId: null,
+            localOnly: true as const,
+            ownedArtifactCount: 0
+          })),
+          recentErrors: vi.fn(async () => ({
+            apiVersion: 1 as const,
+            requestId: "diagrecentreq_abcdefghijklmnop",
+            checkedAt: "2026-07-16T00:00:00.000Z",
+            localOnly: true as const,
+            eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+            errors: []
+          })),
           previewSupportBundle: vi.fn(),
           exportSupportBundle: vi.fn(),
           cancelSupportBundleExport: vi.fn()
@@ -4980,7 +5004,11 @@ describe("full UI Settings surface", () => {
     const onRepairRecoverySources = vi.fn();
     Object.defineProperty(dom.window, "pige", {
       configurable: true,
-      value: { diagnostics: { workflowSummary: vi.fn(async () => ({
+      value: { diagnostics: {
+        recentErrors: vi.fn(async () => ({
+          apiVersion: 1, requestId: "diagrecentreq_abcdefghijklmnop", checkedAt: "2026-08-01T01:02:00.000Z",
+          localOnly: true, eventSelectionRevision: `diagevents_${"a".repeat(64)}`, errors: []
+        })), workflowSummary: vi.fn(async () => ({
         apiVersion: 1, revision: 0, scopeContextId: `diagctx_${"a".repeat(48)}`,
         activeVaultId: null, localOnly: true, ownedArtifactCount: 0
       })) } }

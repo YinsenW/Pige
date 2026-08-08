@@ -62,6 +62,8 @@ When support bundle export exists:
 - Never upload a full vault, raw source file, raw prompt/response log, or API key.
 
 Support bundles are local files. Pige should not upload them automatically in v0.1.
+Recent Errors is only a bounded local redacted summary; its action may preselect existing
+diagnostic events for the in-app preview, never attach or export them automatically.
 
 ## Maintainer Triage
 

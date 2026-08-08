@@ -128,6 +128,11 @@ export interface DiagnosticEvent {
   readonly redactedDetails?: Record<string, string | number | boolean>;
 }
 
+export interface RecentDiagnosticError extends DiagnosticEventSummary {
+  readonly message: string;
+  readonly redactedDetails?: Record<string, string | number | boolean>;
+}
+
 export interface DiagnosticsClearGuard {
   readonly assertClearAllowed: () => void;
 }
@@ -241,6 +246,18 @@ export class DiagnosticsService {
       revision: eventSelectionRevision(entries),
       events: entries.map(({ summary }) => summary)
     };
+  }
+
+  recentErrors(): readonly RecentDiagnosticError[] {
+    return this.#readSelectableEventEntries(true)
+      .filter(({ event }) => event.level === "error")
+      .slice(-10)
+      .reverse()
+      .map(({ event, summary }) => ({
+        ...summary,
+        message: event.message,
+        ...(event.redactedDetails ? { redactedDetails: projectRecentDetails(event.redactedDetails) } : {})
+      }));
   }
 
   isCurrentEventSelection(preview: Pick<SupportBundlePreview,
@@ -792,6 +809,15 @@ function sanitizeSafeDetailToken(input: string, maxBytes: number): string {
   if (redacted !== input) return REDACTED_CONTENT_MARKER;
   const token = sanitizeToken(input);
   return token.length > 0 && token === input ? token : REDACTED_CONTENT_MARKER;
+}
+
+function projectRecentDetails(
+  details: Record<string, string | number | boolean>
+): Record<string, string | number | boolean> {
+  return Object.fromEntries(Object.entries(details).map(([key, value]) => [
+    key,
+    typeof value === "string" && Buffer.byteLength(value) > 500 ? TRUNCATED_MARKER : value
+  ]));
 }
 
 function normalizeDetailKey(input: string): string {

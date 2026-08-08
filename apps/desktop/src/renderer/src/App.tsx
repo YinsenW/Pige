@@ -70,6 +70,7 @@ import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel"
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
 import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
+import { DiagnosticsRecentErrorsPanel } from "./components/DiagnosticsRecentErrorsPanel";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -8248,6 +8249,7 @@ export function SystemSettingsPanel(props: {
 }): React.JSX.Element {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
+  const [recommendedEventIds, setRecommendedEventIds] = useState<readonly string[] | undefined>();
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
   const [updateLoadState, setUpdateLoadState] = useState<"loading" | "ready" | "failed">("loading");
@@ -8266,7 +8268,6 @@ export function SystemSettingsPanel(props: {
     readonly kind: "check" | "download" | "apply";
     readonly requestId: string;
   } | null>(null);
-
   useEffect(() => {
     if (props.surface !== "updates") return;
     let active = true;
@@ -8303,7 +8304,6 @@ export function SystemSettingsPanel(props: {
       unsubscribe();
     };
   }, []);
-
   useEffect(() => {
     if (props.surface !== "diagnostics") return;
     let active = true;
@@ -8758,8 +8758,13 @@ export function SystemSettingsPanel(props: {
             onRepairSources={props.onRepairRecoverySources}
             t={props.t}
           />
+          <DiagnosticsRecentErrorsPanel
+            onPrepareSupport={setRecommendedEventIds}
+            t={props.t}
+          />
           <DiagnosticsEventExportComposer
             workflow={diagnosticsWorkflow}
+            recommendedEventIds={recommendedEventIds}
             disabled={Boolean(diagnosticsBusy)}
             onPreviewReady={props.onSupportBundlePreviewChange}
             previewRequestRef={previewSupportBundleRef}
