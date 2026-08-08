@@ -23,6 +23,9 @@ export function HomeJobAction(props: {
   readonly onRetryJob: (jobId: string) => Promise<unknown> | void;
   readonly t: (key: string) => string;
 }): React.JSX.Element | null {
+  const modelButtonRef = useRef<HTMLButtonElement>(null);
+  const modelOpenActiveRef = useRef(false);
+  const [modelOpenPending, setModelOpenPending] = useState(false);
   const repairButtonRef = useRef<HTMLButtonElement>(null);
   const repairActiveRef = useRef(false);
   const [repairPending, setRepairPending] = useState(false);
@@ -43,8 +46,27 @@ export function HomeJobAction(props: {
     }
   };
 
+  const activateModels = async (opener: HTMLButtonElement): Promise<void> => {
+    if (modelOpenActiveRef.current) return;
+    modelOpenActiveRef.current = true;
+    setModelOpenPending(true);
+    try {
+      await props.onOpenModels(opener);
+    } finally {
+      modelOpenActiveRef.current = false;
+      setModelOpenPending(false);
+    }
+  };
+
   if (props.ownsSourceModelAction) {
-    return <button className="job-action" type="button" onClick={(event) => void props.onOpenModels(event.currentTarget)}>
+    return <button
+      ref={modelButtonRef}
+      className="job-action"
+      type="button"
+      disabled={modelOpenPending}
+      aria-busy={modelOpenPending || undefined}
+      onClick={(event) => void activateModels(event.currentTarget)}
+    >
       {props.t("home.connectModel")}
     </button>;
   }
