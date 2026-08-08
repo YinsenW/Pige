@@ -792,6 +792,7 @@ describe("full UI Library", () => {
     const requests: LibraryTagsRequest[] = [];
     let resolveLoadMore!: (result: LibraryTagsResult) => void;
     let pagesContinuationAttempt = 0;
+    let mismatchNotesResponse = false;
     const snapshotId = `library_tags_snapshot_${"a".repeat(64)}`;
     const cursor = `library_tags_cursor_${"b".repeat(64)}`;
     const api = {
@@ -810,6 +811,20 @@ describe("full UI Library", () => {
           });
         }
         if (!request.cursor) {
+          if (mismatchNotesResponse) {
+            mismatchNotesResponse = false;
+            return Promise.resolve({
+              apiVersion: 1,
+              requestId: `${request.requestId}_mismatch`,
+              activeVaultId: request.activeVaultId,
+              mode: "list_pages_for_tag",
+              tag: request.tag,
+              status: "ready",
+              snapshotId,
+              pages: [],
+              total: 0,
+            });
+          }
           return Promise.resolve({
             apiVersion: 1,
             requestId: request.requestId,
@@ -881,10 +896,15 @@ describe("full UI Library", () => {
       await settle(dom);
     });
     const container = dom.window.document.querySelector("#root")!;
+    const tagTrigger = buttonNamed(container, "research2 notes");
     await act(async () => {
-      buttonNamed(container, "research2 notes").click();
+      tagTrigger.click();
       await settle(dom);
     });
+    expect(tagTrigger.getAttribute("aria-expanded")).toBe("true");
+    expect(tagTrigger.getAttribute("aria-controls")).toBe("library-tagged-notes");
+    expect(container.querySelector("#library-tagged-notes")?.getAttribute("aria-labelledby")).toBe("library-tagged-notes-heading");
+    expect(dom.window.document.activeElement?.id).toBe("library-tagged-notes-heading");
     expect(requests[1]).toMatchObject({
       mode: "list_pages_for_tag",
       tag: "research",
@@ -941,6 +961,25 @@ describe("full UI Library", () => {
       .map((element) => element.textContent))).toEqual(
         new Set(["research", "Research brief", "Source review"]),
       );
+
+    mismatchNotesResponse = true;
+    await act(async () => {
+      root.render(createElement(LibraryTagsBrowser, {
+        activeVaultId: "vault_20260730_librarytags_next",
+        api,
+        labels,
+        onOpenNote: async (pageId) => { opened.push(pageId); },
+      }));
+      await settle(dom);
+      await settle(dom);
+    });
+    await act(async () => {
+      buttonNamed(container, "research2 notes").click();
+      await settle(dom);
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Tagged notes unavailable");
+    expect(dom.window.document.activeElement?.textContent?.trim()).toBe("Try again");
 
     await act(async () => root.unmount());
     dom.window.close();
