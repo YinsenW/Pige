@@ -42,12 +42,12 @@ export class NoteAliasService {
     const ownMatches = aliases.filter((alias) => normalizeMarkdownPageReferenceKey(alias) === key);
     if ((request.action === "add" && (aliases.length >= 64 || ownMatches.length !== 0)) ||
       (request.action === "remove" && ownMatches.length !== 1)) return closed(request, "ineligible");
+    const markdown = changeAliasMarkdown(opened.markdown, request.action, request.alias, this.#now().toISOString());
+    if (!markdown) return closed(request, "ineligible");
     const proof = referenceProof(vaultPath, key, request.currentPageId);
     if (!proof || proof.otherPageIds.length > 0 || (request.action === "add" && proof.currentKinds.length > 0)) {
       return closed(request, "conflict");
     }
-    const markdown = changeAliasMarkdown(opened.markdown, request.action, request.alias, this.#now().toISOString());
-    if (!markdown) return closed(request, "ineligible");
     const currentProof = referenceProof(vaultPath, key, request.currentPageId);
     if (!currentProof || JSON.stringify(currentProof) !== JSON.stringify(proof) || !target.assertCurrent()) {
       return closed(request, "conflict");

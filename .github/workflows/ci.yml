@@ -31,8 +31,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Test merge candidate or main
-        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-gates')
+      - name: Test
         run: npm test
 
       - name: Build

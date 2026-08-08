@@ -1220,6 +1220,7 @@ describe("Restore identity UI", () => {
     const { container, root } = await mountApp(dom, api);
 
     await openSettingsSection(dom, container, "Diagnostics");
+    await selectFirstDiagnosticEvent(dom, container);
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -1261,6 +1262,7 @@ describe("Restore identity UI", () => {
     const { container, root } = await mountApp(dom, api);
 
     await openSettingsSection(dom, container, "Diagnostics");
+    await selectFirstDiagnosticEvent(dom, container);
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -1758,6 +1760,17 @@ function appearanceSummary(locale: Locale): AppearanceSettingsSummary {
   };
 }
 
+const diagnosticEventSelection = {
+  revision: `diagevents_${"c".repeat(64)}`,
+  events: [{
+    eventId: `diagevent_${"d".repeat(32)}`,
+    recordedAt: "2026-07-31T00:00:00.000Z",
+    level: "warning" as const,
+    code: "jobs.resume_failed",
+    redactedDetailCount: 1
+  }]
+};
+
 function supportBundlePreview(requestId: string) {
   return {
     apiVersion: 1 as const,
@@ -1769,6 +1782,9 @@ function supportBundlePreview(requestId: string) {
     scopeContextId: `diagctx_${"b".repeat(32)}` as const,
     expectedRevision: 1,
     activeVaultId: null,
+    eventSelectionRevision: diagnosticEventSelection.revision,
+    selectedDiagnosticEventIds: [diagnosticEventSelection.events[0]!.eventId],
+    selectedDiagnosticEvents: [{ ...diagnosticEventSelection.events[0]! }],
     selectedOptionalCategories: [],
     includedCategories: [{ id: "app_runtime", label: "App runtime", included: true,
       reason: "Required runtime diagnostics." }],
@@ -1790,6 +1806,10 @@ function supportBundleWorkflow(
     activeVaultId: null,
     localOnly: true as const,
     ownedArtifactCount: 0,
+    eventSelection: {
+      revision: diagnosticEventSelection.revision,
+      events: diagnosticEventSelection.events.map((event) => ({ ...event }))
+    },
     job: {
       jobId: "job_20260731_supportexport01",
       state,
@@ -1799,6 +1819,7 @@ function supportBundleWorkflow(
       updatedAt: `2026-07-31T00:00:0${revision}.000Z`,
       canCancel,
       canRetry: false,
+      canReveal: false,
       repairAction: "none" as const
     }
   };
@@ -2088,6 +2109,17 @@ function radio(container: HTMLElement, value: string): HTMLInputElement {
   const match = container.querySelector<HTMLInputElement>(`input[type="radio"][value="${value}"]`);
   if (!match) throw new Error(`Radio not found: ${value}`);
   return match;
+}
+
+async function selectFirstDiagnosticEvent(dom: JSDOM, container: HTMLElement): Promise<void> {
+  const selection = container.querySelector<HTMLElement>("[data-diagnostics-event-selection]");
+  if (!selection) throw new Error("Diagnostic event selection not found.");
+  const event = selection.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  if (!event) throw new Error("Diagnostic event checkbox not found.");
+  await act(async () => {
+    event.click();
+    await settle(dom);
+  });
 }
 
 async function click(dom: JSDOM, element: HTMLButtonElement): Promise<void> {

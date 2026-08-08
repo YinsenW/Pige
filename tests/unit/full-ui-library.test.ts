@@ -4024,7 +4024,8 @@ function createDom(): JSDOM {
   Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: {
     unlinkRelation: vi.fn(), setQuestionState: vi.fn(), searchQuestionAnswers: vi.fn(),
     changeQuestionAnswer: vi.fn(), searchClaimContradictions: vi.fn(), changeClaimContradiction: vi.fn(),
-    searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn()
+    searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn(),
+    readEntityIdentifiers: vi.fn(async () => ({ status: "failed" as const }))
   } } });
   return dom;
 }

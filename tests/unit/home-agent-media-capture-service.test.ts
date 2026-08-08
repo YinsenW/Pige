@@ -75,8 +75,10 @@ describe("HomeAgentMediaCaptureService", () => {
       }
     });
     const pageId = job.sourceId!.replace(/^src_/u, "page_");
-    const sourcePage = findFile(path.join(vaultPath, "Knowledge"), `${pageId}.md`);
-    expect(fs.readFileSync(sourcePage, "utf8")).toContain("Pige did not send it to a model.");
+    const sourcePage = findFile(path.join(vaultPath, "sources"), `${job.sourceId!}.md`);
+    const sourcePageMarkdown = fs.readFileSync(sourcePage, "utf8");
+    expect(sourcePageMarkdown).toContain(`id: ${JSON.stringify(pageId)}`);
+    expect(sourcePageMarkdown).toContain("Pige did not send it to a model.");
   });
 });
 

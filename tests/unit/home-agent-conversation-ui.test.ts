@@ -7716,7 +7716,19 @@ function makePigeApi(harness: ConversationHarness): object {
       list: async () => testLibraryList(),
       related: async ({ pageId }: { readonly pageId: string }) => testRelatedPages(pageId)
     },
+    sources: {
+      listTrash: async (request: { readonly requestId: string; readonly activeVaultId: string }) => ({
+        ...request,
+        status: "ready" as const,
+        sources: []
+      })
+    },
     notes: {
+      listSourceDerived: async (request: { readonly requestId: string; readonly sourceId: string }) => ({
+        ...request,
+        status: "ready" as const,
+        pages: []
+      }),
       listTrash: async (request: NoteTrashListRequest) => ({
         ...request,
         status: "ready" as const,

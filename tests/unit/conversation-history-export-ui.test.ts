@@ -68,7 +68,12 @@ describe("ConversationHistoryPanel durable export", () => {
     expect(container.textContent).not.toMatch(/\/private\/|\.json/iu);
 
     await click(dom, buttonContaining(container, conversation.safePreview));
-    expect(opened).toHaveBeenCalledWith(conversation.conversationId, "history");
+    expect(opened).toHaveBeenCalledWith(
+      conversation.conversationId,
+      "history",
+      conversation.tailEventId,
+      undefined
+    );
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -99,7 +104,12 @@ describe("ConversationHistoryPanel durable export", () => {
 
 async function mount(
   exportConversation: (request: AgentConversationExportRequest) => Promise<AgentConversationExportResult>,
-  onOpenConversation: (conversationId: string, view: "current" | "history") => Promise<boolean>
+  onOpenConversation: (
+    conversationId: string,
+    view: "current" | "history",
+    expectedTailEventId: string,
+    searchMatchEventId?: string
+  ) => Promise<boolean>
 ) {
   const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
     pretendToBeVisual: true,

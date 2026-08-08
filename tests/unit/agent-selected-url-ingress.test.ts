@@ -486,7 +486,7 @@ describe("Agent-selected URL ingress", () => {
         const fetchContext = toolContext("same_response_fetch");
         expect(await fetchTool.authorize?.({ candidateIndex: 1 }, fetchContext)).not.toBe(false);
         await fetchTool.execute({ candidateIndex: 1 }, fetchContext.signal, fetchContext);
-        return runtimeResult(request, [fetchTool.name], "The URL was fetched for this turn. [citation_17]");
+        return runtimeResult(request, [fetchTool.name], "The URL was fetched for this turn.");
       }
     };
     const { home } = makeHome(fixture, { fetchSnapshot: async () => makeSnapshot() }, runtime);
@@ -501,7 +501,7 @@ describe("Agent-selected URL ingress", () => {
       state: "completed",
       sourceIds: [],
       answer: {
-        answer: "The URL was fetched for this turn. [citation_17]",
+        answer: "The URL was fetched for this turn.",
         grounding: "general",
         citations: []
       }
@@ -580,7 +580,10 @@ describe("Agent-selected URL ingress", () => {
 
     expect(outcome).toMatchObject({
       state: "completed",
-      answer: { answer: "The source was inspected under host policy.", grounding: "general" }
+      answer: {
+        answer: "I couldn't verify an answer from the selected local evidence.",
+        grounding: "insufficient_evidence"
+      }
     });
     expect(inspectedOutput.match(/<PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);
     expect(inspectedOutput.match(/<\/PIGE_UNTRUSTED_EVIDENCE_V1>/gu)).toHaveLength(1);

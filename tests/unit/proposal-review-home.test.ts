@@ -95,10 +95,17 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
         generatedKnowledgeLanguage: "preserve_source",
         revision: 0
       }),
-      onAppearanceChanged: () => () => undefined
+      onAppearanceChanged: () => () => undefined,
+      startupDestination: async () => ({ apiVersion: 1 as const, destination: "home" as const, revision: 0 })
     },
     system: {
       toolchainHealth: async () => ({ status: "ready" })
+    },
+    localCapabilities: {
+      dictationLanguagePreference: async (request: { readonly requestId: string }) => ({
+        ...request,
+        status: "failed" as const
+      })
     },
     vault: {
       onboardingStatus: async () => ({
@@ -123,6 +130,7 @@ function makePigeApi(awaitingReview: boolean, calls: ProposalApiCalls): object {
       runtimeStatus: async () => null
     },
     jobs: {
+      onChanged: () => () => undefined,
       list: async () => ({
         scannedAt: "2026-07-16T08:00:00.000Z",
         activeVaultId: "vault_review_fixture",
