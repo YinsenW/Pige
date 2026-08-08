@@ -92,14 +92,19 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
     setStatusKey(null);
     setIssues([]);
     try {
+      const requestId = `pigepolicyreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`;
       const result = await api.updatePigePolicy({
         apiVersion: 1,
-        requestId: `pigepolicyreq_${window.crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+        requestId,
         activeVaultId: vaultId,
         expectedRevision: summary.revision,
         markdown: draft
       });
       if (requestSequenceRef.current !== sequence || activeVaultRef.current !== vaultId) return;
+      if (result.requestId !== requestId || result.activeVaultId !== vaultId) {
+        setStatusKey("pigePolicy.failed");
+        return;
+      }
       if (result.status === "updated") {
         setSummary(result.summary);
         setDraft(null);
