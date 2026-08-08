@@ -200,6 +200,7 @@ Conflict cases:
 | Source changed externally | Referenced original file modified. | Mark source state `changed`, offer re-ingest. |
 | Missing referenced original | External file moved/deleted. | Mark `missing_source`, offer relink. |
 | Source page projection differs from sidecar | User edited or stale generated source metadata. | Preserve Markdown; sidecar remains operational authority; stage repair/conflict rather than copying paths in either direction. |
+| Confirmed refresh output tree changes | PDF parser/OCR fan-out created dynamic derived files. | Reprove confined receipt paths/checksums and restore the before tree with its Source Record on failure, Undo, or restart; never retain a partial output set. |
 | External managed-copy root missing | A source record's `rootId` has no available machine binding. | Set dependent jobs `waiting_dependency`, request reconnect/restore, never retarget to the current default root. |
 | Schema version too new | Vault edited by newer Pige. | Open read-only or block with clear message. |
 

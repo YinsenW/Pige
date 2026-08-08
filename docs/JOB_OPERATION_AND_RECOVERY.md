@@ -194,8 +194,10 @@ forward, including restore. Drift is inert.
 A confirmed Markdown/TXT/PDF/DOCX/PPTX source refresh creates one parse Job bound to the
 opaque preview candidate and expected source revision. Confirmation rechecks candidate
 currentness before the Job records before/after receipts and publishes one
-`update_source_record` Operation. Restart adopts or rolls back the same transaction;
-Activity Undo restores the before receipt. Source-page conflicts preserve edited Markdown,
+`update_source_record` Operation. A PDF parser result declaring `needsOcr` fans out inside
+that same confirmed parent; its dynamic parser/render/OCR output tree stays receipt-covered,
+and validated child `create_artifact` Operations fold into the parent Activity. Restart adopts
+or rolls back the same transaction; Activity Undo restores the before receipt. Source-page conflicts preserve edited Markdown,
 and index refresh is scheduled only after the durable source commit. The resulting review is
 persisted independently of renderer lifetime. Keep records a no-write decision; Apply commits the
 reviewed refreshed projection through the existing reversible `update_page` owner; Save creates one

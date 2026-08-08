@@ -192,6 +192,9 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - The bounded worker returns data only. Main-process Parser Service writes checksummed
   text/metadata Artifacts and safely refreshes the source projection. Only the enclosing
   Pi tool event creates or reuses its parse child and selects any supported follow-up OCR.
+  A separately confirmed PDF Source Refresh may atomically fan out parser-to-OCR only when
+  its parser result declares `needsOcr`; its one parent receipt and Activity do not grant
+  ordinary parser routing authority.
 
 ### 8.5 PPTX
 
@@ -252,8 +255,8 @@ Minimum behavior:
 
 ## 9. OCR Routing
 
-The following policy runs inside an Agent-selected OCR tool. Parser quality may
-recommend OCR but cannot invoke it.
+The following policy runs inside an Agent-selected OCR tool. Outside the explicit confirmed
+Source Refresh parent above, parser quality may recommend OCR but cannot invoke it.
 
 OCR priority:
 
