@@ -23,6 +23,7 @@ import {
 } from "../../apps/desktop/src/main/services/backup-service";
 import { LocalSettingsStore } from "../../apps/desktop/src/main/services/local-settings";
 import { RestoreCoordinatorService } from "../../apps/desktop/src/main/services/restore-coordinator-service";
+import { RestoreRollbackRestoreService } from "../../apps/desktop/src/main/services/restore-rollback-restore-service";
 import { RestoreJobStore, createPreviousVaultBindingHash } from "../../apps/desktop/src/main/services/restore-job-store";
 import { RestorePreviewRegistry, type ApplyingRestorePreview } from "../../apps/desktop/src/main/services/restore-preview-registry";
 import { createVaultOnDisk, loadVaultSummary } from "../../apps/desktop/src/main/services/vault-layout";
@@ -215,6 +216,46 @@ describe("RestoreCoordinatorService", () => {
     for (const [index, filePath] of machineFiles.entries()) {
       expect(fs.readFileSync(filePath)).toEqual(machineBytes[index]);
     }
+  });
+
+  it("revalidates the latest completed replacement rollback before exposing a new replace-only preview", async () => {
+    const fixture = await makeFixture("replace_existing");
+    const coordinator = trackCoordinator(new RestoreCoordinatorService({
+      ...coordinatorOptions(fixture),
+      pauseMutableWork: async () => () => undefined,
+      rebuildIndexes: async () => rebuildResult()
+    }));
+    const restored = await coordinator.apply({
+      preview: fixture.applying,
+      destinationPath: fixture.destinationPath,
+      replaceConfirmed: true
+    });
+    if (!restored.jobId) throw new Error("Expected a committed replacement Restore Job.");
+
+    const rollback = new RestoreRollbackRestoreService({
+      userDataPath: fixture.userDataPath,
+      backupService: fixture.backup,
+      vaultService: fixture.vaults
+    });
+    const candidate = rollback.candidate(fixture.preview.sourceVaultId);
+    expect(candidate).toEqual({
+      activeVaultId: fixture.preview.sourceVaultId,
+      restoreJobId: restored.jobId,
+      expectedRestoreJobUpdatedAt: expect.any(String)
+    });
+    const prepared = await rollback.prepare(candidate!);
+    expect(prepared).toMatchObject({
+      status: "prepared",
+      preview: {
+        sourceVaultId: fixture.preview.sourceVaultId,
+        invalidFileCount: 0
+      }
+    });
+    await expect(rollback.prepare({
+      ...candidate!,
+      expectedRestoreJobUpdatedAt: "2026-01-01T00:00:00.000Z"
+    })).resolves.toEqual({ status: "stale" });
+    expect(prepared.status).toBe("prepared");
   });
 
   it("recovers the same rollback Backup stage when persistence stops before archive-staged checkpoint", async () => {

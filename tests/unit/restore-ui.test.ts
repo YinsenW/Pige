@@ -23,6 +23,10 @@ import type {
   RestoreApplyResult,
   RestoreCancelRequest,
   RestoreCancelResult,
+  RestoreRollbackCandidate,
+  RestoreRollbackPrepareRequest,
+  RestoreRollbackPrepareResult,
+  RestoreRollbackStatus,
   RestorePreviewResult,
   UpdateSourceStoragePolicyRequest,
   VaultActionResult,
@@ -631,6 +635,47 @@ describe("Restore identity UI", () => {
     await waitFor(dom, () => dom.window.document.activeElement === button(container, "Restore Backup"));
     expect(container.querySelector(".settings-restore-page")).toBeNull();
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("previews only the revalidated previous replacement state and keeps the ordinary confirmation path", async () => {
+    const dom = createDom();
+    const harness = createHarness(readyOnboarding(), bothModesPreview());
+    const candidate: RestoreRollbackCandidate = {
+      activeVaultId: "vault_restore_ui",
+      restoreJobId: "job_20260714_rollback01",
+      expectedRestoreJobUpdatedAt: "2026-07-14T08:10:00.000Z"
+    };
+    harness.rollbackRestoreStatus = async () => ({ apiVersion: 1, status: "ready", candidate });
+    harness.prepareRollbackRestore = async (request) => {
+      harness.rollbackRestorePrepareRequests.push(request);
+      return {
+        ...request,
+        status: "prepared",
+        preview: readyPreview("sha256:" + "b".repeat(64), ["replace_existing"], "replace_existing") as Extract<RestorePreviewResult, { readonly status: "ready" }>
+      };
+    };
+    const { container, root } = await mountApp(dom, makePigeApi(harness, true));
+
+    await openVaultSettings(dom, container);
+    await waitFor(dom, () => buttons(container, "Restore previous state").length === 1);
+    await click(dom, button(container, "Restore previous state"));
+    await waitFor(dom, () => container.textContent?.includes("Restore preview") ?? false);
+    expect(container.querySelector('input[value="clone_as_new"]')).toBeNull();
+    expect(radio(container, "replace_existing").checked).toBe(true);
+    expect(harness.rollbackRestorePrepareRequests).toEqual([{
+      apiVersion: 1,
+      requestId: expect.stringMatching(/^restorerollbackreq_[a-z0-9]{16,64}$/u),
+      ...candidate
+    }]);
+    expect(JSON.stringify(harness.rollbackRestorePrepareRequests)).not.toContain("/private/");
+
+    await click(dom, button(container, "Replace Current Vault"));
+    expect(harness.applyRequests).toEqual([{
+      previewId: `sha256:${"b".repeat(64)}`,
+      mode: "replace_existing"
+    }]);
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -1355,6 +1400,9 @@ interface RestoreHarness {
   reconnectDestination: (request: BackupReconnectDestinationRequest) => Promise<BackupReconnectDestinationResult>;
   readonly continueIncompleteRequests: BackupContinueIncompleteRequest[];
   continueIncomplete: (request: BackupContinueIncompleteRequest) => Promise<BackupContinueIncompleteResult>;
+  readonly rollbackRestorePrepareRequests: RestoreRollbackPrepareRequest[];
+  rollbackRestoreStatus: () => Promise<RestoreRollbackStatus>;
+  prepareRollbackRestore: (request: RestoreRollbackPrepareRequest) => Promise<RestoreRollbackPrepareResult>;
   readonly configureManagedCopyRootRequests: ManagedCopyRootConfigureRequest[];
   configureManagedCopyRoot: (request: ManagedCopyRootConfigureRequest) => Promise<ManagedCopyRootConfigureResult>;
   readonly revealRequests: VaultRevealTarget[];
@@ -1398,6 +1446,12 @@ function createHarness(onboarding: OnboardingStatus, preview: RestorePreviewResu
     continueIncomplete: async (request) => {
       harness.continueIncompleteRequests.push(request);
       return { ...request, status: "cancelled" };
+    },
+    rollbackRestorePrepareRequests: [],
+    rollbackRestoreStatus: async () => ({ apiVersion: 1, status: "unavailable" }),
+    prepareRollbackRestore: async (request) => {
+      harness.rollbackRestorePrepareRequests.push(request);
+      return { ...request, status: "failed" };
     },
     configureManagedCopyRootRequests: [],
     configureManagedCopyRoot: async (request) => {
@@ -1602,6 +1656,8 @@ function makePigeApi(harness: RestoreHarness, sidebarOpen = false) {
       applyRestore: (request: RestoreApplyRequest) => harness.applyRestore(request),
       cancelRestore: (request: RestoreCancelRequest) => harness.cancelRestore(request),
       create: async () => harness.backupCreateResult,
+      rollbackRestoreStatus: () => harness.rollbackRestoreStatus(),
+      prepareRollbackRestore: (request: RestoreRollbackPrepareRequest) => harness.prepareRollbackRestore(request),
       reconnectDependency: (request: { readonly requestId: string; readonly activeVaultId: string; readonly waitingJobId: string }) =>
         harness.reconnectDependency(request),
       reconnectDestination: (request: BackupReconnectDestinationRequest) => harness.reconnectDestination(request),

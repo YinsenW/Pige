@@ -16,6 +16,9 @@ import type {
   BackupReconnectDestinationRequest,
   BackupReconnectDestinationResult,
   BackupRestoreStatus,
+  RestoreRollbackPrepareRequest,
+  RestoreRollbackPrepareResult,
+  RestoreRollbackStatus,
   RestoreApplyRequest,
   RestoreApplyResult,
   RestoreCancelRequest,
@@ -28,7 +31,9 @@ import {
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
   BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL,
   BACKUP_MEMORY_PREFERENCE_STATUS_CHANNEL,
+  BACKUP_PREPARE_ROLLBACK_RESTORE_CHANNEL,
   BACKUP_RECONNECT_DESTINATION_CHANNEL,
+  BACKUP_ROLLBACK_RESTORE_STATUS_CHANNEL,
   BACKUP_SET_CONVERSATION_PREFERENCE_CHANNEL,
   BACKUP_SET_MEMORY_PREFERENCE_CHANNEL,
   BACKUP_TRASH_PREFERENCE_STATUS_CHANNEL,
@@ -48,6 +53,9 @@ import {
   BackupReconnectDependencyResultSchema,
   BackupReconnectDestinationRequestSchema,
   BackupReconnectDestinationResultSchema,
+  RestoreRollbackPrepareRequestSchema,
+  RestoreRollbackPrepareResultSchema,
+  RestoreRollbackStatusSchema,
   RESTORE_CANCEL_CHANNEL,
   RestoreCancelRequestSchema,
   RestoreCancelResultSchema,
@@ -60,6 +68,7 @@ import type { BackupCoordinatorService } from "./services/backup-coordinator-ser
 import type { BackupRestoreService } from "./services/backup-service";
 import { RestorePreviewRegistry } from "./services/restore-preview-registry";
 import type { RestoreCoordinatorService } from "./services/restore-coordinator-service";
+import type { RestoreRollbackRestoreService } from "./services/restore-rollback-restore-service";
 
 interface RegisterBackupRestoreIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
@@ -84,6 +93,7 @@ interface RegisterBackupRestoreIpcOptions {
   readonly getBackupTrashPreferenceService?: () => BackupTrashPreferenceService;
   readonly getBackupCoordinator: () => BackupCoordinatorService;
   readonly getRestoreCoordinator: () => RestoreCoordinatorService;
+  readonly getRestoreRollbackRestoreService: () => RestoreRollbackRestoreService;
   readonly resumeBackgroundJobs: () => void;
 }
 
@@ -108,6 +118,69 @@ export function registerBackupRestoreIpc(options: RegisterBackupRestoreIpcOption
       { ...vault, ...(lastBackupAt ? { lastBackupAt } : {}) },
       options.getActiveVaultPath?.()
     );
+  });
+  options.ipcMain.handle(BACKUP_ROLLBACK_RESTORE_STATUS_CHANNEL, (): RestoreRollbackStatus => {
+    const activeVault = options.getActiveVault();
+    const candidate = activeVault
+      ? options.getRestoreRollbackRestoreService().candidate(activeVault.vaultId)
+      : undefined;
+    return RestoreRollbackStatusSchema.parse(candidate
+      ? { apiVersion: 1, status: "ready", candidate }
+      : { apiVersion: 1, status: "unavailable" });
+  });
+  options.ipcMain.handle(BACKUP_PREPARE_ROLLBACK_RESTORE_CHANNEL, async (
+    event,
+    request: RestoreRollbackPrepareRequest
+  ): Promise<RestoreRollbackPrepareResult> => {
+    const parsed = RestoreRollbackPrepareRequestSchema.parse(request);
+    const identity = {
+      apiVersion: parsed.apiVersion,
+      requestId: parsed.requestId,
+      activeVaultId: parsed.activeVaultId,
+      restoreJobId: parsed.restoreJobId,
+      expectedRestoreJobUpdatedAt: parsed.expectedRestoreJobUpdatedAt
+    } as const;
+    const activeVault = options.getActiveVault();
+    if (!activeVault || activeVault.vaultId !== parsed.activeVaultId) {
+      return RestoreRollbackPrepareResultSchema.parse({ ...identity, status: "not_found" });
+    }
+    trackSender(event.sender);
+    let generation: number;
+    try {
+      generation = previews.begin(event.sender.id);
+    } catch {
+      return RestoreRollbackPrepareResultSchema.parse({ ...identity, status: "failed" });
+    }
+    const prepared = await options.getRestoreRollbackRestoreService().prepare(parsed).catch(() => ({
+      status: "failed" as const
+    }));
+    if (prepared.status !== "prepared") {
+      previews.cancel(event.sender.id, generation);
+      return RestoreRollbackPrepareResultSchema.parse({ ...identity, status: prepared.status });
+    }
+    try {
+      const accepted = previews.complete(event.sender.id, generation, prepared.preview);
+      if (options.getActiveVault()?.vaultId !== parsed.activeVaultId) {
+        previews.cancel(event.sender.id, generation);
+        return RestoreRollbackPrepareResultSchema.parse({ ...identity, status: "stale" });
+      }
+      return RestoreRollbackPrepareResultSchema.parse({
+        ...identity,
+        status: "prepared",
+        preview: {
+          status: "ready",
+          previewId: accepted.previewId,
+          manifest: prepared.preview.manifest,
+          invalidFileCount: prepared.preview.invalidFileCount,
+          warnings: prepared.preview.warnings,
+          permittedModes: ["replace_existing"],
+          defaultMode: "replace_existing"
+        }
+      });
+    } catch {
+      previews.cancel(event.sender.id, generation);
+      return RestoreRollbackPrepareResultSchema.parse({ ...identity, status: "failed" });
+    }
   });
   if (options.getBackupConversationPreferenceService) {
     options.ipcMain.handle(BACKUP_CONVERSATION_PREFERENCE_STATUS_CHANNEL, () =>

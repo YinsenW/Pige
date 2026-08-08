@@ -174,6 +174,8 @@
   "backup.continueIncompleteStale": "This backup changed before continuation finished. Review its current status.",
   "backup.continueIncompleteFailed": "Pige could not continue this backup. Review its current status and try again.",
   "backup.restore": "Restore Backup",
+  "backup.restorePrevious": "Restore previous state",
+  "backup.restorePreviousDescription": "Review the protected snapshot created before the last replacement restore.",
   "backup.restoreApply": "Restore",
   "backup.restoreCancel": "Cancel",
   "backup.restoreFailed": "Pige could not safely continue this restore. Try again.",
