@@ -7722,6 +7722,11 @@ function makePigeApi(harness: ConversationHarness): object {
         status: "ready" as const,
         notes: []
       }),
+      listSourceDerived: async (request: { readonly apiVersion: 1; readonly requestId: string }) => ({
+        apiVersion: 1 as const,
+        requestId: request.requestId,
+        status: "failed" as const
+      }),
       render: async ({ pageId }: { readonly pageId: string }) => {
         harness.noteRenderRequests.push(pageId);
         return harness.renderNote(pageId);
@@ -7789,6 +7794,13 @@ function makePigeApi(harness: ConversationHarness): object {
         harness.noteRelateRequests.push(request);
         return harness.relateCurrent(request);
       }
+    },
+    sources: {
+      listTrash: async (request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string }) => ({
+        ...request,
+        status: "ready" as const,
+        sources: []
+      })
     }
   };
 }
