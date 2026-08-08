@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review recoverable Source evidence trash and restore with stable identities, reference-original preservation, managed-copy currentness guards, and pathless Reader and Activity controls.",
+    "scope": "Review confirmed Source Refresh PDF parser-to-OCR fan-out, receipt-covered dynamic outputs, rollback/restart recovery, and parent Activity folding.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "bb744f767ad1493c28e2b67f97c8261e75e81cfa5ac350a68954c5bdb5f78853"
+    "reviewedSha256": "1d1590c55244a91759bb3db78b2b9783fa1caf80e6f9b6796446030590bf82e1"
   },
   "reviewers": [
     {
       "reviewerId": "source-evidence-lifecycle-review",
-      "task": "Review recoverable Source evidence trash and restore",
+      "task": "Review atomic Source Refresh parser-to-OCR recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -93,14 +93,14 @@
       "score": 9.8,
       "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "PIGE-VAULT-004 and PIGE-JOB-002 gain exact service, guard, IPC and UI evidence while remaining partial for their broader durable lifecycle and recovery coverage."
+      "summary": "PIGE-INGEST-003 and PIGE-VAULT-006 gain exact atomic fan-out, receipt, Undo, and restart evidence while remaining partial for broader ingest and cross-domain commit coverage."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
       "reviewerId": "source-evidence-lifecycle-review",
       "blockerCount": 0,
-      "summary": "One bounded Source lifecycle owner reuses Notes, Jobs, Operation and Activity composition without altering capture, parser, OCR, backup or external-root authority."
+      "summary": "One private receipt-output owner keeps dynamic parser/render/OCR files within the existing Source Refresh, Job, Operation, and Activity boundaries."
     },
     {
       "id": "documentation_leanness_and_maintainability",
@@ -112,9 +112,9 @@
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/source-trash-service.test.ts tests/unit/source-trash-ui.test.ts tests/unit/register-reader-ipc.test.ts tests/unit/notes-service.test.ts tests/unit/jobs-service.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/source-refresh-service.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused Source lifecycle, Jobs guard, Notes projection, IPC and pathless Reader and Activity tests prove trash, restore, replay and restart-safe behavior."
+      "evidence": "Focused Source Refresh tests prove atomic PDF parser-to-OCR publication, receipt-covered Undo, and restart rollback without retained partial output."
     },
     {
       "command": "npm run verify:architecture-reset && npm run verify:change",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "source-evidence-trash-restore-20260808",
-    "taskTitle": "Recoverable Source evidence trash and restore",
+    "taskId": "source-refresh-atomic-fanout-20260808",
+    "taskTitle": "Atomic Source Refresh parser-to-OCR fan-out",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Source capture, parser and OCR access, source reconnect, backup, external roots and durable Job semantics remain unchanged; only a pathless trash-first lifecycle is added.",
-    "acknowledgement": "PIGE-VAULT-004 and PIGE-JOB-002 gain bounded Source evidence lifecycle proof while both remain partial for broader durable classes, recovery and platform coverage."
+    "compatibility": "Existing capture, Agent-selected parser/OCR routing, source reconnect, backup, external roots and durable Job semantics remain unchanged; only confirmed Source Refresh atomically owns its PDF parser-to-OCR output tree.",
+    "acknowledgement": "PIGE-INGEST-003 and PIGE-VAULT-006 gain bounded Source Refresh fan-out and recovery proof while both remain partial for broader ingest and cross-domain commit coverage."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

@@ -11,6 +11,7 @@ import {
   type NativeImageOcrAdapterPort,
   type OcrPort
 } from "../../apps/desktop/src/main/services/ocr-service";
+import type { OcrSourceResult } from "../../apps/desktop/src/main/services/ocr-artifact-service";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import { ParserArtifactService } from "../../apps/desktop/src/main/services/parser-artifact-service";
 import { SourceRefreshService } from "../../apps/desktop/src/main/services/source-refresh-service";
@@ -167,6 +168,75 @@ describe("SourceRefreshService", () => {
         .toContain(revision.text);
       expect(published.original?.checksum).toBe(checksum(revision.bytes));
     }
+  });
+
+  it("atomically refreshes PDF parser and OCR evidence as one source revision", async () => {
+    const fixture = makeFixture("pdf_file", "%PDF-old\n", "evidence.pdf");
+    fs.writeFileSync(fixture.originalPath, "%PDF-new\n", "utf8");
+    const service = makeService(
+      fixture,
+      successfulDocumentParser("Fresh parsed PDF evidence", true),
+      successfulPdfOcr("Fresh OCR PDF evidence")
+    );
+
+    const preview = await service.preview(previewRequest(fixture), () => true);
+    if (preview.status !== "changed") throw new Error("Expected changed PDF preview");
+    const result = await service.confirm({
+      ...confirmIdentity(fixture), previewId: preview.preview.previewId,
+      expectedSourceRevision: preview.preview.expectedSourceRevision
+    }, () => true);
+
+    expect(result).toMatchObject({ status: "refreshed", sourceId: fixture.source.id });
+    if (result.status !== "refreshed") throw new Error("Expected refreshed PDF");
+    const published = readSource(fixture);
+    expect(published.artifacts.map((artifact) => artifact.kind).sort())
+      .toEqual(["extracted_text", "metadata", "metadata", "ocr", "rendered_page"]);
+    expect(fs.readFileSync(path.join(fixture.vaultPath, "artifacts", "ocr", "2026", "07", `${fixture.source.id}.pdf.txt`), "utf8"))
+      .toContain("Fresh OCR PDF evidence");
+    expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "operations"))).toHaveLength(1);
+
+    expect(service.undo(readOperation(fixture.vaultPath, result.operationId))).toMatchObject({ status: "undone" });
+    expect(readSource(fixture)).toEqual(fixture.source);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "rendered-pages", "2026", "07", fixture.source.id, "page-0001.png")))
+      .toBe(false);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "ocr", "2026", "07", `${fixture.source.id}.pdf.txt`)))
+      .toBe(false);
+    expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "operations"))).toHaveLength(2);
+  });
+
+  it("recovers an interrupted PDF parser-to-OCR refresh without retaining its new page artifacts", async () => {
+    const fixture = makeFixture("pdf_file", "%PDF-old\n", "evidence.pdf");
+    fs.writeFileSync(fixture.originalPath, "%PDF-new\n", "utf8");
+    const enteredOcr = deferred<void>();
+    const blockedOcr = deferred<never>();
+    const completeOcr = successfulPdfOcr("Fresh OCR PDF evidence");
+    const ocr: OcrPort = {
+      canOcr: completeOcr.canOcr,
+      async ocrSource(...args) {
+        await completeOcr.ocrSource(...args);
+        enteredOcr.resolve();
+        return blockedOcr.promise;
+      }
+    };
+    const service = makeService(fixture, successfulDocumentParser("Fresh parsed PDF evidence", true), ocr);
+    const preview = await service.preview(previewRequest(fixture), () => true);
+    if (preview.status !== "changed") throw new Error("Expected changed PDF preview");
+    const confirming = service.confirm({
+      ...confirmIdentity(fixture), previewId: preview.preview.previewId,
+      expectedSourceRevision: preview.preview.expectedSourceRevision
+    }, () => true);
+    await enteredOcr.promise;
+
+    const restarted = makeService(fixture, successfulDocumentParser("Fresh parsed PDF evidence", true), ocr);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(readSource(fixture)).toEqual(fixture.source);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "rendered-pages", "2026", "07", fixture.source.id, "page-0001.png")))
+      .toBe(false);
+    expect(fs.existsSync(path.join(fixture.vaultPath, "artifacts", "ocr", "2026", "07", `${fixture.source.id}.pdf.txt`)))
+      .toBe(false);
+    expect(listJsonFiles(path.join(fixture.vaultPath, ".pige", "operations"))).toEqual([]);
+    blockedOcr.reject(new Error("old process stopped"));
+    await expect(confirming).resolves.toMatchObject({ status: "failed" });
   });
 
   it("refreshes referenced and managed images through local OCR and restores prior evidence through Undo", async () => {
@@ -410,7 +480,7 @@ class StaticOcrAdapter implements NativeImageOcrAdapterPort {
   }
 }
 
-function successfulDocumentParser(text: string): DocumentParserPort {
+function successfulDocumentParser(text: string, needsOcr = false): DocumentParserPort {
   return {
     canParse: (kind) => kind === "pdf_file" || kind === "docx_file" || kind === "pptx_file",
     parseSource: async (vaultPath, sourceRecord, sourceRecordPath, job) => {
@@ -422,13 +492,94 @@ function successfulDocumentParser(text: string): DocumentParserPort {
         textCharacterCount: text.length,
         textCoverage: "high",
         truncated: false,
-        needsOcr: false,
-        agentTextReady: true,
-        ocrCandidateLocators: [],
+        needsOcr,
+        agentTextReady: !needsOcr,
+        ocrCandidateLocators: needsOcr ? ["page:1"] : [],
         sidecarMetadata: {},
         sourceMetadata: {},
         warnings: []
       });
+    }
+  };
+}
+
+function successfulPdfOcr(text: string): OcrPort {
+  return {
+    canOcr: (kind) => kind === "pdf_file",
+    async ocrSource(vaultPath, sourceRecord, sourceRecordPath, job): Promise<OcrSourceResult> {
+      expect(sourceRecord.kind).toBe("pdf_file");
+      const date = /^job_(\d{8})_/u.exec(job.id)?.[1];
+      if (!date) throw new Error("Expected dated refresh Job");
+      const year = sourceRecord.id.slice(4, 8);
+      const month = sourceRecord.id.slice(8, 10);
+      const renderedPath = `artifacts/rendered-pages/${year}/${month}/${sourceRecord.id}/page-0001.png`;
+      const textPath = `artifacts/ocr/${year}/${month}/${sourceRecord.id}.pdf.txt`;
+      const metadataPath = `artifacts/metadata/${year}/${month}/${sourceRecord.id}.pdf-ocr.json`;
+      for (const [relativePath, contents] of [
+        [renderedPath, "rendered-new-page"],
+        [textPath, `${text}\n`],
+        [metadataPath, JSON.stringify({ sourceId: sourceRecord.id, sourceChecksum: sourceRecord.original?.checksum })]
+      ] as const) {
+        const target = path.join(vaultPath, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, contents, "utf8");
+      }
+      const artifacts = [
+        ...sourceRecord.artifacts,
+        { id: `art_${sourceRecord.id.slice(4)}_pdf_page_0001`, kind: "rendered_page" as const, path: renderedPath,
+          checksum: checksum("rendered-new-page"), size: Buffer.byteLength("rendered-new-page") },
+        { id: `art_${sourceRecord.id.slice(4)}_pdf_ocr_text`, kind: "ocr" as const, path: textPath,
+          checksum: checksum(`${text}\n`), size: Buffer.byteLength(`${text}\n`) },
+        { id: `art_${sourceRecord.id.slice(4)}_pdf_ocr_metadata`, kind: "metadata" as const, path: metadataPath,
+          checksum: checksum(JSON.stringify({ sourceId: sourceRecord.id, sourceChecksum: sourceRecord.original?.checksum })),
+          size: Buffer.byteLength(JSON.stringify({ sourceId: sourceRecord.id, sourceChecksum: sourceRecord.original?.checksum })) }
+      ];
+      const updated = SourceRecordSchema.parse({
+        ...sourceRecord,
+        artifacts,
+        metadata: {
+          ...sourceRecord.metadata,
+          needsOcr: false,
+          agentTextReady: true,
+          ocrStatus: "completed",
+          ocrJobId: job.id,
+          ocrTextCharacterCount: text.length
+        },
+        updatedAt: "2026-08-08T12:00:00.000Z"
+      });
+      fs.writeFileSync(sourceRecordPath, `${JSON.stringify(updated, null, 2)}\n`, "utf8");
+      const operationId = `op_${date}_cafebabefeed`;
+      const operationPath = path.join(vaultPath, ".pige", "operations", date.slice(0, 4), date.slice(4, 6), `${operationId}.json`);
+      fs.mkdirSync(path.dirname(operationPath), { recursive: true });
+      fs.writeFileSync(operationPath, `${JSON.stringify(OperationRecordSchema.parse({
+        id: operationId,
+        schemaVersion: 1,
+        jobId: job.id,
+        createdAt: "2026-08-08T12:00:00.000Z",
+        actor: { kind: "system", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
+        kind: "create_artifact",
+        targetRefs: [{ kind: "artifact", id: `art_${sourceRecord.id.slice(4)}_pdf_ocr_text`, path: textPath }],
+        sourceRefs: [{ kind: "source", id: sourceRecord.id }],
+        summary: "Created refreshed PDF OCR evidence.",
+        reversible: "best_effort",
+        rollbackHint: "The parent source refresh owns this artifact set.",
+        warnings: []
+      }), null, 2)}\n`, "utf8");
+      return {
+        sourceId: sourceRecord.id,
+        created: true,
+        ocrTextArtifactPath: textPath,
+        metadataArtifactPath: metadataPath,
+        textCharacterCount: text.length,
+        agentTextReady: true,
+        warnings: [],
+        sourcePageUpdated: false,
+        sourcePageConflict: false,
+        durableEffect: {
+          outputRefs: [{ kind: "artifact", id: `art_${sourceRecord.id.slice(4)}_pdf_ocr_text`, path: textPath, role: "ocr_text" }],
+          operationIds: [operationId]
+        }
+      };
     }
   };
 }
