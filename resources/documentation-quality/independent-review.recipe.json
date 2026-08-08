@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the Main-owned local ZIP Archive Source capture boundary: one preserved source/page, checked bounded private yauzl central-directory inventory, source reproof, retry/restart adoption, and no extraction, recursive import, execution, network, model, or renderer path authority.",
+    "scope": "Review the planned-input format boundary: AnyDoc owns one local semantic artifact for the supported PDF/DOCX/PPTX kinds, while Pige retains only provenance and selected visual OCR bridges; native text, URL, image, Dataset, archive, and deferred-media owners remain distinct.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "8e7158860e7dd7e56cc1fd4800119ee2ee7bcd7d552607af6b20da6aee4767f9"
+    "reviewedSha256": "99b30fa1cbcffb537cb451e0cc7d87a5d6a7c5e2fc071babd2c2ff0c60b41d3f"
   },
   "reviewers": [
     {
-      "reviewerId": "zip-archive-capture-prefreeze-review",
-      "task": "Review implemented local ZIP Archive Source capture and bounded inventory evidence",
+      "reviewerId": "anydoc-format-boundary-review",
+      "task": "Review the AnyDoc semantic-conversion boundary across Pige's planned input kinds",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,56 +70,56 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Main-owned source selection and reproof, bounded yauzl metadata handling, rejection and restart adoption, and body/path-free renderer projection separately from runtime implementation authorship."
+      "independence": "Project review checks source-kind ownership, one-artifact semantic conversion, local-only adapter limits, visual OCR separation, and Dataset/Archive/Media exclusions separately from runtime implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "anydoc-format-boundary-review",
       "blockerCount": 0,
-      "summary": "One user-selected ZIP remains one preserved Archive Source and Source Page; member data and paths cannot become navigation or filesystem authority."
+      "summary": "Each planned source family has one authority: AnyDoc semantic conversion is limited to PDF/DOCX/PPTX, and Pige retains source identity, provenance, and bounded visual bridges without renderer filesystem authority."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "anydoc-format-boundary-review",
       "blockerCount": 0,
-      "summary": "Source, parser, security, dependency, and Job owners match the implemented exact limits, source reproof, private metadata Artifact, and no extraction or recursive import."
+      "summary": "PRD, parser, architecture, dependency, OCR, Dataset, and recovery owners agree that AnyDoc is the sole semantic converter for current PDF/DOCX/PPTX kinds and does not silently add upstream formats."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "anydoc-format-boundary-review",
       "blockerCount": 0,
-      "summary": "Trace records direct Capture Job, rejection, safe Source Page projection, and restart-adoption evidence while PIGE-CAP-001 remains partial."
+      "summary": "Trace distinguishes semantic document conversion from selected visual OCR and preserves partial PIGE-INGEST-003/PIGE-INGEST-004 exit evidence without a completion claim."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "anydoc-format-boundary-review",
       "blockerCount": 0,
-      "summary": "The implemented private inventory owner reuses the existing capture/source/Job lifecycle and does not create child source/page, operation, IPC, or renderer mutation owners."
+      "summary": "The boundary removes duplicate Office semantic parsing while retaining the existing verified snapshot, artifact, locator, OCR, Dataset, archive, and media lifecycle owners."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "anydoc-format-boundary-review",
       "blockerCount": 0,
-      "summary": "The bind reuses existing product, parser, source, security, dependency, quality, trace, and review owners without a new dependency or design document."
+      "summary": "The decision reuses existing product, parser, source, security, dependency, trace, and review owners without expanding the accepted file-kind contract."
     }
   ],
   "verification": [
     {
       "command": "npm run verify:docs",
       "status": "passed",
-      "evidence": "The owner documents and linked local references remain structurally valid after the Archive Source contract freeze."
+      "evidence": "The owner documents and linked local references remain structurally valid after the planned-format ownership correction."
     },
     {
       "command": "npm run verify:decisions",
       "status": "passed",
-      "evidence": "The accepted local ZIP inventory decision has complete owner references and does not create a vague phase or completion claim."
+      "evidence": "The revised AnyDoc decision has complete owner references and does not create a vague phase or completion claim."
     },
     {
       "command": "npm run verify:independent-documentation-review",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "zip-archive-capture-prefreeze-20260808",
-    "taskTitle": "Local ZIP Archive Source capture",
+    "taskId": "anydoc-format-boundary-20260808",
+    "taskTitle": "AnyDoc planned-format ownership boundary",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main re-proves one selected ZIP before inventory; only a bounded private metadata Artifact can adopt after exact source revision/checksum and limit-profile checks, while renderer projections remain aggregate and pathless.",
-    "acknowledgement": "PIGE-CAP-001 remains partial; direct implementation evidence now covers bounded ZIP inventory, rejection, safe projection, and restart adoption without a dependency or public-contract change."
+    "compatibility": "Main retains verified snapshot, checksum, artifact, locator, and recovery authority; only AnyDoc byte APIs create the document semantic artifact, while visual OCR and all non-document source families stay behind their existing bounded owners.",
+    "acknowledgement": "PIGE-INGEST-003 and PIGE-INGEST-004 remain partial; this bind clarifies one semantic owner and the visual-coverage boundary without claiming new runtime evidence or expanding accepted input kinds."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

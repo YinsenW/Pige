@@ -445,11 +445,11 @@ Build:
 - [B5.01 -> E5.01] URL detection beyond the single-URL Home composer route.
 - [B5.02 -> E5.01] Address-pinned fetch with private authority and strict fresh Fake-IP IPv4 compatibility.
 - [B5.03 -> E5.01] Local Readability extraction.
-- [B5.04 -> E5.01] PDF text extraction with page locators.
-- [B5.05 -> E5.01] Semantic DOCX extraction.
-- [B5.06 -> E5.01] Relationship-ordered PPTX best-effort extraction.
+- [B5.04 -> E5.01] AnyDoc semantic PDF conversion with Pige page locators.
+- [B5.05 -> E5.01] AnyDoc semantic DOCX conversion.
+- [B5.06 -> E5.01] AnyDoc semantic PPTX conversion with Pige slide/media provenance, not a parallel semantic parser.
 - [B5.07 -> E5.05] Image and screenshot OCR routing.
-- [B5.08 -> E5.05] OCR fallback for image-only PDF pages and presentation slides.
+- [B5.08 -> E5.05] OCR fallback for image-only PDF pages and visual-only presentation content.
 - [B5.09 -> E5.01] Checksummed parser-artifact storage and safe refresh.
 - [B5.10 -> E5.02] Toolchain manifests, health checks, and explicit install, test, update, disable, remove, and repair lifecycle for optional PaddleOCR dependencies and language packs.
 - [B5.11 -> E5.03] Untrusted-source boundary enforcement across URL, document, image, OCR, and extracted-artifact Agent handoff.
@@ -479,11 +479,12 @@ governed structured-source matrix.
 
 Evidence exists for preserved PDF -> recoverable local worker -> deterministic text/metadata artifacts -> page locators -> checksum-safe source-page refresh -> OCR handoff -> Agent ingest when text coverage is useful.
 
-Agent-led Office evidence proves preserve→inspect→parse→inspect→publish for useful
-DOCX/PPTX text and preserve→inspect→parse(`needs_ocr`)→selected DOCX/PPTX raster media OCR→inspect→
-publish when required. Deterministic children survive wait/retry, parent cancellation
-reaches parsing, optional unavailable OCR keeps useful native evidence with warnings,
-and no-readable evidence waits without a note. Already-persisted schema-compatible
+Agent-led Office evidence proves preserve→inspect→AnyDoc semantic parse→inspect→publish for
+useful DOCX/PPTX text and preserve→inspect→parse(`needs_ocr`)→selected DOCX/PPTX visual-media
+OCR→inspect→publish when required. AnyDoc owns the semantic Artifact; Pige does not append an
+independent Office text or speaker-notes bridge. Deterministic children survive wait/retry,
+parent cancellation reaches parsing, optional unavailable OCR keeps useful native evidence with
+warnings, and no-readable evidence waits without a note. Already-persisted schema-compatible
 Office route Jobs remain processable.
 
 PDF and Office parser adapters now create their worker input only after verified Artifact
@@ -527,9 +528,10 @@ B5.12/E5.04 evidence covers seven text, URL, PDF, PPTX, and image-OCR cases acro
 
 Evidence exists for startup reconciliation of interrupted idempotent document/OCR/Agent jobs.
 
-Still open before P5 completion: signed packaged proof, Windows/Paddle,
-full-slide/vector/chart OCR, unsupported/oversized PPTX targets,
-progress/cancel UI, other Job classes, and strict cross-process CAS.
+Still open before P5 completion: removal of any duplicate Office semantic text/notes bridge,
+signed packaged proof, Windows/Paddle, visual-only full-slide/vector/chart OCR,
+unsupported/oversized PPTX targets, progress/cancel UI, other Job classes, and strict
+cross-process CAS.
 
 Deferred from this phase:
 
