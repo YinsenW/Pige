@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "정책 편집",
   "pigePolicy.noVault": "Vault를 열어 Agent 정책을 확인하세요.",
   "pigePolicy.loading": "정책 불러오는 중…",
+  "pigePolicy.loadFailed": "Agent 정책을 불러오지 못했습니다.",
+  "pigePolicy.retry": "다시 시도",
   "pigePolicy.editorLabel": "PIGE.md 정책",
   "pigePolicy.requiredSections": "필수 섹션",
   "pigePolicy.cancel": "취소",

@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "Modifier la politique",
   "pigePolicy.noVault": "Ouvrez un coffre pour consulter sa politique Agent.",
   "pigePolicy.loading": "Chargement de la politique…",
+  "pigePolicy.loadFailed": "Pige n’a pas pu charger la politique Agent.",
+  "pigePolicy.retry": "Réessayer",
   "pigePolicy.editorLabel": "Politique PIGE.md",
   "pigePolicy.requiredSections": "Sections requises",
   "pigePolicy.cancel": "Annuler",
