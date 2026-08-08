@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review confirmed one Agent-selected current-note cited append plus bounded tags as one exact durable page update, Operation, Activity Undo and restart recovery.",
+    "scope": "Review confirmed bounded Reader Entity identifier add/remove through the existing exact page update, Operation, Activity Undo and restart recovery.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "07e57c2f39a75b72f0a376ebfa81b852f06e8e21ddb5330df7fc314acba81e14"
+    "reviewedSha256": "581c6ee04ebd49882b10b4b0fb959107c063ecefb00cc10442d0cd94b72bfb72"
   },
   "reviewers": [
     {
-      "reviewerId": "agent-compound-update-review",
-      "task": "Review atomic Agent current-note update and tag recovery",
+      "reviewerId": "entity-identifier-review",
+      "task": "Review Entity identifier current-page correction and recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,56 +70,56 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks existing Agent tool authority, single-page CAS, Activity before-image recovery and rejection of incompatible effects separately from implementation authorship."
+      "independence": "Project review checks Entity frontmatter bounds, current-page CAS, Activity before-image recovery and renderer-safe identifier projection separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "agent-compound-update-review",
+      "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "Pi receives only an opaque retrieval ref and bounded tags; Main keeps page bytes, hashes and receipts private while Activity exposes one existing reversible update."
+      "summary": "Reader sends only a current-page identity and one bounded identifier; Main keeps Markdown, hashes and receipts private while Activity exposes one existing reversible update."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "agent-compound-update-review",
+      "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "Tool schema, source-quality checks, page CAS, checkpoint recovery and Activity Undo agree that update and tags are one compatible same-page effect."
+      "summary": "Typed IPC, Entity schema validation, page CAS, editor recovery and Activity Undo agree that every identifier correction is one exact same-page effect."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "agent-compound-update-review",
+      "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "PIGE-PI-001 and PIGE-PI-005 gain exact one-turn compound write evidence while both remain partial for broader tool routes and cross-page transactions."
+      "summary": "PIGE-KNOW-003 gains bounded Entity identity correction evidence while its broader relationship, merge and unresolved-conflict routes remain partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "agent-compound-update-review",
+      "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "Existing Tool Registry and page-update owners retain the bounded one-page mutation while a stable checkpoint reuses the established Operation and recovery path."
+      "summary": "The dedicated identifier owner delegates only to established page-edit, Operation and recovery paths, keeping generic Notes and Reader owners within their frozen bounds."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "agent-compound-update-review",
+      "reviewerId": "entity-identifier-review",
       "blockerCount": 0,
-      "summary": "Existing Pi, Playbook and trace documents record the compatible compound boundary without adding a design document or duplicating durable rules."
+      "summary": "Knowledge-model and trace documents record the bounded identifier correction without adding a design document or duplicating durable rules."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/agent-led-ingest-retrieval.test.ts --maxWorkers=1",
+      "command": "npx vitest run tests/unit/entity-identifier-service.test.ts tests/unit/reader-entity-identifiers-ui.test.ts",
       "status": "passed",
-      "evidence": "Focused Agent tests prove a single cited update-plus-tags Operation, exact Undo and recovery without another model turn."
+      "evidence": "Focused service and Reader tests prove one exact Entity identifier update with bounded projection and a stale-preserving UI path."
     },
     {
       "command": "npm run verify:architecture-reset && npm run verify:change",
       "status": "passed",
-      "evidence": "Existing Agent owners stay within frozen budgets and the normal architecture and change rules remain enforced."
+      "evidence": "The dedicated Entity identifier owner keeps existing Reader and Notes owners within frozen budgets while architecture and change rules remain enforced."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "agent-compound-update-tags-20260808",
-    "taskTitle": "Atomic Agent existing-note update plus tags",
+    "taskId": "entity-identifier-current-page-20260808",
+    "taskTitle": "Current Entity identifier add and remove",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing capture, Agent-selected retrieval, tag-only and link writes, review proposals and durable Job semantics remain unchanged; only one validated same-page cited update plus tags shares a single Operation.",
-    "acknowledgement": "PIGE-PI-001 and PIGE-PI-005 gain bounded compound update and recovery proof while both remain partial for broader tool routes and cross-page commit coverage."
+    "compatibility": "Existing Entity type, mention, merge, relationship and generic Markdown editing flows remain unchanged; only one validated canonical identifier add or remove shares the established same-page Operation.",
+    "acknowledgement": "PIGE-KNOW-003 gains bounded Entity identifier correction and recovery proof while broader relationship, merge and unresolved-conflict coverage remains partial."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
