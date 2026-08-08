@@ -34,6 +34,7 @@ import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog"; import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
 import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableAddAction } from "./ManagedCollectionTableAddAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction"; import { ManagedCollectionTableTrashAction } from "./ManagedCollectionTableTrashAction"; import { ManagedCollectionRevisionHistory } from "./ManagedCollectionRevisionHistory";
+import { ManagedCollectionRelatedRecordPanel } from "./ManagedCollectionRelatedRecords";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -81,66 +82,6 @@ export function ManagedCollectionCitationPanel(props: CitationPanelProps): React
     </tr>)}</tbody></table></div>
     {props.preview.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
   </section>;
-}
-
-type RelatedRecordReady = Extract<CollectionOpenRelatedRecordsResult, { readonly status: "ready" }>;
-
-export function ManagedCollectionRelatedRecordPanel(props: {
-  readonly result: CollectionOpenRelatedRecordsResult;
-  readonly onClose: () => void;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const panelRef = useRef<HTMLElement | null>(null);
-  const ready = props.result.status === "ready" ? props.result : undefined;
-  const snapshot = ready?.snapshot ?? (props.result.status === "empty" ? props.result.snapshot : undefined);
-  const statusMessage = props.result.status === "stale"
-    ? props.t("collection.relatedStale")
-    : props.result.status === "not_found" || props.result.status === "ineligible"
-      ? props.t("collection.relatedUnavailable")
-      : props.result.status === "failed"
-        ? props.t("collection.relatedFailed")
-        : props.result.status === "empty"
-          ? props.t("collection.relatedEmpty")
-          : undefined;
-  useLayoutEffect(() => {
-    const panel = panelRef.current;
-    if (!panel) return;
-    const target = panel.querySelector<HTMLElement>('[data-related-target="true"]');
-    (target ?? panel).focus({ preventScroll: true });
-  }, [props.result]);
-  return (
-    <section ref={panelRef} className="settings-card settings-row tall managed-collection-related-record" aria-live="polite" aria-label={props.t("collection.relatedRecords")} tabIndex={-1}>
-      <header className="dataset-answer-header">
-        <div>
-          <p className="retrieval-eyebrow">{props.t("collection.relatedRecords")}</p>
-          <h2>{snapshot?.tableName ?? props.t("collection.relatedRecords")}</h2>
-        </div>
-        <button type="button" className="ghost back-button" onClick={props.onClose}>{props.t("collection.back")}</button>
-      </header>
-      {statusMessage ? <p className={props.result.status === "empty" ? "muted" : "settings-inline-status error"} role="status">{statusMessage}</p> : null}
-      {snapshot && ready ? <RelatedRecordTable ready={ready} t={props.t} /> : null}
-    </section>
-  );
-}
-
-function RelatedRecordTable(props: { readonly ready: RelatedRecordReady; readonly t: (key: string) => string }): React.JSX.Element {
-  return (
-    <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("collection.relatedTable")}>
-      <table className="dataset-table">
-        <caption>{props.ready.snapshot.tableName}</caption>
-        <thead><tr>{props.ready.snapshot.columns.map((column) => <th scope="col" key={column.columnId}>{column.label}</th>)}</tr></thead>
-        <tbody>{props.ready.snapshot.rows.map((row) => (
-          <tr key={row.rowId} data-related-row-id={row.rowId} data-related-target={row.rowId === props.ready.targetRowId ? "true" : undefined} tabIndex={-1} aria-current={row.rowId === props.ready.targetRowId ? "true" : undefined}>
-            {props.ready.snapshot.columns.map((column) => {
-              const cell = row.cells.find((candidate) => candidate.columnId === column.columnId);
-              return <td key={column.columnId}>{cell ? formatCollectionCellValue(cell.value) : "-"}</td>;
-            })}
-          </tr>
-        ))}</tbody>
-      </table>
-      {props.ready.snapshot.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
-    </div>
-  );
 }
 
 type EditNotice =
@@ -1078,7 +1019,7 @@ export function ManagedCollectionPanel(props: {
           </tbody>
         </table>
       </div>
-      {relatedRecordResult ? <ManagedCollectionRelatedRecordPanel result={relatedRecordResult} onClose={closeRelatedRecords} t={props.t} /> : null}
+      {relatedRecordBusy || relatedRecordResult ? <ManagedCollectionRelatedRecordPanel result={relatedRecordResult} loading={relatedRecordBusy} onClose={closeRelatedRecords} t={props.t} /> : null}
       {visibleRows.length === 0 ? <p className="muted">{props.t("collection.empty")}</p> : null}
       {rowsLoadFailed ? <p className="muted retrieval-warning" role="status">{props.t("collection.rowsLoadFailed")}</p> : null}
       {nextRowCursor ? (
