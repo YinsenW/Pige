@@ -1367,6 +1367,7 @@ export const KnowledgeActivitySummarySchema = z.object({
     "update_collection_rollup",
     "rename_collection_column",
     "rename_collection_table",
+    "trash_collection_table",
     "create_collection_view",
     "update_collection_view",
     "rename_collection_view",
@@ -7658,6 +7659,17 @@ export const DatasetRevisionSchema = z.object({
       undoOfOperationId: OperationIdSchema
     }).strict(),
     z.object({
+      kind: z.literal("collection_table_trash"),
+      tableId: TableIdSchema,
+      name: CollectionTableNameSchema
+    }).strict(),
+    z.object({
+      kind: z.literal("collection_table_trash_undo"),
+      tableId: TableIdSchema,
+      name: CollectionTableNameSchema,
+      undoOfOperationId: OperationIdSchema
+    }).strict(),
+    z.object({
       kind: z.literal("collection_column_trash"),
       tableId: TableIdSchema,
       columnId: ColumnIdSchema
@@ -8154,6 +8166,7 @@ export const COLLECTION_RESTORE_DATASET_CHANNEL = "collections.restoreDataset" a
 export const COLLECTION_PURGE_DATASET_CHANNEL = "collections.purgeDataset" as const;
 export const COLLECTION_RENAME_DATASET_CHANNEL = "collections.renameDataset" as const;
 export const COLLECTION_RENAME_TABLE_CHANNEL = "collections.renameTable" as const;
+export const COLLECTION_TRASH_TABLE_CHANNEL = "collections.trashTable" as const;
 export const COLLECTION_LIST_MAX_LIMIT = 50;
 export const COLLECTION_ROW_PAGE_MAX_LIMIT = 50;
 export const CollectionScalarValueSchema = DatasetQueryScalarSchema;
@@ -8553,6 +8566,7 @@ export const CollectionSnapshotSchema = z.object({
   canAddRelationColumn: z.boolean().default(false),
   canAddLookupColumn: z.boolean().default(false),
   canAddRollupColumn: z.boolean().default(false),
+  canTrashTable: z.boolean().default(false),
   views: z.array(CollectionViewSummarySchema).max(32),
   activeViewId: ViewIdSchema.optional()
 }).strict().superRefine((snapshot, context) => {
@@ -9194,6 +9208,16 @@ export const CollectionRenameTableRequestSchema = z.object({
   name: CollectionTableNameSchema
 }).strict();
 
+/** Moves one eligible Pige-managed table out of the active immutable Dataset revision. */
+export const CollectionTrashTableRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  tableId: DatasetQueryTableIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
 export const CollectionTrashColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
   requestId: CollectionRequestIdSchema,
@@ -9728,6 +9752,27 @@ export const CollectionRenameTableResultSchema = z.discriminatedUnion("status", 
   }
   if (result.status === "committed" && result.snapshot.tableName !== result.name) {
     context.addIssue({ code: "custom", path: ["name"], message: "Committed Collection table renames must project the requested name." });
+  }
+});
+
+const CollectionTrashTableResultIdentitySchema = CollectionResultIdentitySchema.strict();
+
+export const CollectionTrashTableResultSchema = z.discriminatedUnion("status", [
+  CollectionTrashTableResultIdentitySchema.extend({
+    status: z.literal("committed"), operationId: OperationIdSchema, revisionId: DatasetQueryRevisionIdSchema
+  }).strict(),
+  CollectionTrashTableResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashTableResultIdentitySchema.extend({
+    status: z.literal("ineligible"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionTrashTableResultIdentitySchema.extend({ status: z.literal("not_found") }).strict(),
+  CollectionTrashTableResultIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]).superRefine((result, context) => {
+  if (!("snapshot" in result)) return;
+  if (result.snapshot.datasetId !== result.datasetId || result.snapshot.tableId !== result.tableId) {
+    context.addIssue({ code: "custom", path: ["snapshot"], message: "Collection table-trash snapshots must match the request identity." });
   }
 });
 
@@ -12660,6 +12705,7 @@ export const OperationRecordSchema = z.object({
     "update_collection_rollup",
     "rename_collection_column",
     "rename_collection_table",
+    "trash_collection_table",
     "create_collection_view",
     "update_collection_view",
     "rename_collection_view",
@@ -13325,6 +13371,8 @@ export type CollectionRenameColumnRequest = z.infer<typeof CollectionRenameColum
 export type CollectionRenameColumnResult = z.infer<typeof CollectionRenameColumnResultSchema>;
 export type CollectionRenameTableRequest = z.infer<typeof CollectionRenameTableRequestSchema>;
 export type CollectionRenameTableResult = z.infer<typeof CollectionRenameTableResultSchema>;
+export type CollectionTrashTableRequest = z.infer<typeof CollectionTrashTableRequestSchema>;
+export type CollectionTrashTableResult = z.infer<typeof CollectionTrashTableResultSchema>;
 export type CollectionCreateViewRequest = z.infer<typeof CollectionCreateViewRequestSchema>;
 export type CollectionCreateViewResult = z.infer<typeof CollectionCreateViewResultSchema>;
 export type CollectionUpdateViewRequest = z.infer<typeof CollectionUpdateViewRequestSchema>;

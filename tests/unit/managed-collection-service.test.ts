@@ -25,6 +25,7 @@ import {
   readBundle,
   readCollectionSnapshot,
   readImmutableCollectionRevision,
+  fileRef,
   operationPathFor
 } from "../../apps/desktop/src/main/services/managed-collection-storage";
 import {
@@ -2061,6 +2062,57 @@ describe("ManagedCollectionService", () => {
       tableId: table.id, name: table.name, undoOfOperationId: recovered.id });
   }, 30_000);
 
+  it("moves one eligible table out of the active revision, recovers the Operation, and restores it through Activity Undo", async () => {
+    const fixture = await makeCollectionFixture();
+    addSecondCollectionTable(fixture);
+    const vault = loadVaultSummary(fixture.vaultPath);
+    const port = { current: () => vault, activeVaultPath: () => fixture.vaultPath };
+    const service = new ManagedCollectionTableService(port);
+    const initial = readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId)!;
+    const table = required(initial.schema.tables.find((candidate) => candidate.name === "Archive"));
+    expect(readCollectionSnapshot(initial, table.id)?.canTrashTable).toBe(true);
+    const request = { apiVersion: 1 as const, requestId: "collection_request_aaaaaaaaaaaaaaaa",
+      activeVaultId: vault.vaultId, datasetId: initial.manifest.datasetId, tableId: table.id,
+      expectedRevisionId: initial.revision.id };
+    const committed = await service.trash(request);
+    expect(committed).toMatchObject({ status: "committed", operationId: expect.stringMatching(/^op_/),
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    if (committed.status !== "committed") throw new Error("Collection table trash did not commit");
+    const current = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(current.schema.tables.map(({ id }) => id)).not.toContain(table.id);
+    expect(current.revision.change).toEqual({ kind: "collection_table_trash", tableId: table.id, name: "Archive" });
+    expect(readCollectionSnapshot(current, table.id)).toBeUndefined();
+    expect(readImmutableCollectionRevision(current, initial.revision.id).schema.tables.map(({ id }) => id)).toContain(table.id);
+    await expect(service.trash(request)).resolves.toEqual(committed);
+
+    const operationPath = operationPathFor(fixture.vaultPath, committed.operationId);
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    expect(operation).toMatchObject({ kind: "trash_collection_table", reversible: "yes" });
+    fs.rmSync(operationPath);
+    const restarted = new ManagedCollectionTableService(port);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    const activity = new KnowledgeActivityService(port, restarted);
+    const summary = required(activity.list({ limit: 20 }).activities.find((entry) => entry.kind === "trash_collection_table"));
+    expect(summary).toMatchObject({ operationId: committed.operationId, status: "applied", canUndo: true,
+      target: { kind: "collection", datasetId: initial.manifest.datasetId, tableId: table.id, revisionId: committed.revisionId } });
+    const undone = await activity.undo({ operationId: summary.operationId, expectedRevisionId: committed.revisionId });
+    expect(undone).toMatchObject({ status: "undone", revisionId: expect.stringMatching(/^dataset_rev_/) });
+    if (undone.status !== "undone") throw new Error("Collection table trash was not undone");
+    const restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(restored.revision.change).toMatchObject({ kind: "collection_table_trash_undo", tableId: table.id,
+      name: "Archive", undoOfOperationId: committed.operationId });
+    expect(readCollectionSnapshot(restored, table.id)?.rows).toHaveLength(1);
+
+    const lastTable = required(restored.schema.tables.find((candidate) => candidate.id !== table.id));
+    const afterUndo = await restarted.trash({ ...request, requestId: "collection_request_bbbbbbbbbbbbbbbb",
+      tableId: lastTable.id, expectedRevisionId: restored.revision.id });
+    expect(afterUndo.status).toBe("committed");
+    if (afterUndo.status !== "committed") throw new Error("Collection setup table trash did not commit");
+    const ineligible = await restarted.trash({ ...request, requestId: "collection_request_cccccccccccccccc",
+      tableId: table.id, expectedRevisionId: afterUndo.revisionId });
+    expect(ineligible).toMatchObject({ status: "ineligible", snapshot: { tableId: table.id, canTrashTable: false } });
+  }, 30_000);
+
   it("browses immutable history, restores forward, and undoes the restore after restart", async () => {
     const fixture = await makeCollectionFixture();
     const vault = loadVaultSummary(fixture.vaultPath);
@@ -2309,6 +2361,66 @@ function readPayloadSourceName(payloadPath: string, tableId: string): string {
     const row = database.prepare("SELECT source_name FROM pige_dataset_tables WHERE table_id = ?").get(tableId) as { source_name?: unknown } | undefined;
     if (typeof row?.source_name !== "string") throw new Error("Missing Dataset table");
     return row.source_name;
+  } finally { database.close(); }
+}
+
+function addSecondCollectionTable(fixture: Awaited<ReturnType<typeof makeCollectionFixture>>): void {
+  const binding = readBundle(fixture.vaultPath, readManifest(fixture.bundlePath).datasetId)!;
+  const first = required(binding.schema.tables[0]);
+  const firstColumn = required(first.columns[0]);
+  const second = {
+    ...first,
+    id: "table_archive000001",
+    ordinal: 1,
+    name: "Archive",
+    sourceLocator: "test:archive",
+    rowCount: 1,
+    columnCount: 1,
+    columns: [{ ...firstColumn, id: "column_archive000001", ordinal: 0, name: "Archived name" }]
+  };
+  const rowId = "row_archive000001";
+  const database = new DatabaseSync(binding.payloadPath);
+  try {
+    database.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE;");
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
+      second.id, second.ordinal, "archive", second.sourceLocator, JSON.stringify({}), JSON.stringify({ mode: "absent", used: false }), 1, 1
+    );
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+      second.columns[0]!.id, second.id, 0, second.columns[0]!.name, firstColumn.logicalType,
+      JSON.stringify(firstColumn.sourceTypes ?? [firstColumn.sourceType]), JSON.stringify(firstColumn.stats ?? { missing: 0, empty: 0, null: 0, value: 1 })
+    );
+    database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)").run(rowId, second.id, 0, 1);
+    const sourceRow = database.prepare("SELECT state, source_type, lexical_raw, lexical_text, quoted, projection_kind, projection_json, formula_json, source_style_json FROM pige_dataset_cells WHERE row_id = ? AND column_id = ?")
+      .get(readFirstRowId(binding.payloadPath), firstColumn.id) as Record<string, unknown> | undefined;
+    if (!sourceRow) throw new Error("Missing Collection source cell");
+    database.prepare("INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").run(
+      rowId, second.columns[0]!.id, sourceRow.state, sourceRow.source_type, sourceRow.lexical_raw, sourceRow.lexical_text,
+      sourceRow.quoted, sourceRow.projection_kind, sourceRow.projection_json, sourceRow.formula_json, sourceRow.source_style_json
+    );
+    database.exec("COMMIT;");
+  } catch (caught) { database.exec("ROLLBACK;"); throw caught; } finally { database.close(); }
+  const schemaPath = path.join(binding.bundlePath, binding.manifest.schema.path);
+  const schema = DatasetSchemaRecordSchema.parse({ ...binding.schema, tables: [...binding.schema.tables, second] });
+  fs.writeFileSync(schemaPath, `${JSON.stringify(schema, null, 2)}\n`);
+  const revisionPath = path.join(binding.bundlePath, binding.manifest.revision.path);
+  const revision = DatasetRevisionSchema.parse({ ...binding.revision, schema: fileRef(binding.bundlePath, binding.manifest.schema.path),
+    payload: { ...fileRef(binding.bundlePath, binding.manifest.payload.path), format: "sqlite" }, stats: {
+      tableCount: binding.revision.stats.tableCount + 1, rowCount: binding.revision.stats.rowCount + 1,
+      columnCount: binding.revision.stats.columnCount + 1, cellCount: binding.revision.stats.cellCount + 1,
+      retainedValueBytes: binding.revision.stats.retainedValueBytes + String(sourceCellRaw(binding.payloadPath, firstColumn.id)).length
+    } });
+  fs.writeFileSync(revisionPath, `${JSON.stringify(revision, null, 2)}\n`);
+  const manifest = DatasetManifestSchema.parse({ ...binding.manifest, schema: fileRef(binding.bundlePath, binding.manifest.schema.path),
+    payload: { ...fileRef(binding.bundlePath, binding.manifest.payload.path), format: "sqlite" },
+    revision: fileRef(binding.bundlePath, binding.manifest.revision.path) });
+  fs.writeFileSync(path.join(binding.bundlePath, "dataset.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+function sourceCellRaw(payloadPath: string, columnId: string): string {
+  const database = new DatabaseSync(payloadPath, { readOnly: true });
+  try {
+    const row = database.prepare("SELECT lexical_raw FROM pige_dataset_cells WHERE column_id = ? ORDER BY row_id LIMIT 1").get(columnId) as { lexical_raw?: unknown } | undefined;
+    return typeof row?.lexical_raw === "string" ? row.lexical_raw : "";
   } finally { database.close(); }
 }
 

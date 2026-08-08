@@ -634,6 +634,8 @@ import {
   CollectionRenameColumnResultSchema,
   CollectionRenameTableRequestSchema,
   CollectionRenameTableResultSchema,
+  CollectionTrashTableRequestSchema,
+  CollectionTrashTableResultSchema,
   CollectionTrashColumnRequestSchema,
   CollectionTrashColumnResultSchema,
   CollectionTrashRowRequestSchema,
@@ -1123,6 +1125,8 @@ import type {
   CollectionRenameColumnResult,
   CollectionRenameTableRequest,
   CollectionRenameTableResult,
+  CollectionTrashTableRequest,
+  CollectionTrashTableResult,
   CollectionTrashColumnRequest,
   CollectionTrashColumnResult,
   CollectionTrashRowRequest,
@@ -1616,6 +1620,20 @@ async function invokeCollectionRenameTable(
   if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
       result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
       result.name !== parsedRequest.name) throw new Error("Invalid Managed Collection table-rename response identity.");
+  return result;
+}
+
+async function invokeCollectionTrashTable(
+  request: CollectionTrashTableRequest
+): Promise<CollectionTrashTableResult> {
+  const parsedRequest = CollectionTrashTableRequestSchema.parse(request);
+  const result = CollectionTrashTableResultSchema.parse(
+    await ipcRenderer.invoke("collections.trashTable", parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId) {
+    throw new Error("Invalid Managed Collection table-trash response identity.");
+  }
   return result;
 }
 
@@ -2540,6 +2558,7 @@ const api: PigeDesktopApi = {
     updateRollupColumn: invokeCollectionUpdateRollupColumn,
     renameColumn: invokeCollectionRenameColumn,
     renameTable: invokeCollectionRenameTable,
+    trashTable: invokeCollectionTrashTable,
     createView: invokeCollectionCreateView,
     updateView: invokeCollectionUpdateView,
     renameView: invokeCollectionRenameView,

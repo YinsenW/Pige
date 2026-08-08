@@ -353,7 +353,7 @@ function readOnlySnapshot(snapshot: CollectionSnapshot): CollectionSnapshot {
     rows: snapshot.rows.map((row) => ({ ...row, canTrash: false,
       cells: row.cells.map((cell) => ({ ...cell, editable: false,
         readOnlyReason: cell.readOnlyReason ?? "unsupported_type" })) })),
-    canAppendDefaultRow: false, canAddColumn: false, canAddFormulaColumn: false,
+    canAppendDefaultRow: false, canAddColumn: false, canAddFormulaColumn: false, canTrashTable: false,
     canAddRelationColumn: false, canAddLookupColumn: false, canAddRollupColumn: false,
     views: snapshot.views.map((view) => ({ ...view, canEdit: false, canRename: false, canTrash: false }))
   });
