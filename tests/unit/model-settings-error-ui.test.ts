@@ -427,9 +427,14 @@ describe("Models error ownership", () => {
     }));
 
     await openProviderDetails(dom, mount.container);
-    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    const removeTrigger = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
+    removeTrigger.focus();
+    await click(dom, removeTrigger);
     expect(mount.container.textContent).toContain(enMessages["models.confirmRemoveManualModel"]);
-    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    const keepManualModel = buttonNamed(mount.container, enMessages["models.keepManualModel"]);
+    await waitFor(dom, () => dom.window.document.activeElement === keepManualModel);
+    const confirmRemove = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
+    await click(dom, confirmRemove);
     await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.manualModelDeleteFailed"]) === true);
 
     expect(requests).toEqual([{
@@ -438,6 +443,12 @@ describe("Models error ownership", () => {
     }]);
     expect(mount.container.textContent).not.toContain("raw manual model deletion failure");
     expect(mount.container.textContent).toContain(enMessages["models.confirmRemoveManualModel"]);
+    await waitFor(dom, () => dom.window.document.activeElement === confirmRemove);
+    await click(dom, keepManualModel);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(
+      mount.container,
+      enMessages["models.removeManualModel"]
+    ));
 
     await unmount(dom, mount.root);
   });
