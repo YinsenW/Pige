@@ -2170,7 +2170,7 @@ describe("full UI Library", () => {
       expectedTargetUpdatedAt: target.updatedAt });
     expect(container.querySelector(".note-reader")).not.toBeNull();
     expect(container.querySelector("select")?.value).toBe(target.pageId);
-    expect(dom.window.document.activeElement).toBe(container.querySelector("select"));
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector("select"));
     await act(async () => root.unmount()); dom.window.close();
   });
 
@@ -4025,7 +4025,13 @@ function createDom(): JSDOM {
     unlinkRelation: vi.fn(), setQuestionState: vi.fn(), searchQuestionAnswers: vi.fn(),
     changeQuestionAnswer: vi.fn(), searchClaimContradictions: vi.fn(), changeClaimContradiction: vi.fn(),
     searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn(),
-    readEntityIdentifiers: vi.fn(async () => ({ status: "failed" as const }))
+    readEntityIdentifiers: vi.fn(async (request: { readonly expectedRevision: string }) => ({
+      ...request,
+      status: "ready" as const,
+      identifiers: [],
+      canEdit: true,
+      revision: request.expectedRevision
+    }))
   } } });
   return dom;
 }

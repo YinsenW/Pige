@@ -230,7 +230,7 @@ function exportPath(): string {
 }
 
 function createRoot(prefix: string): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   roots.push(root);
   return root;
 }

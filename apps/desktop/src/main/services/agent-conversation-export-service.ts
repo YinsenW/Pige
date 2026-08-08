@@ -154,9 +154,9 @@ function writePrivateExport(destinationPath: string, contents: string, random: (
   if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) throw new Error("Conversation export parent is unsafe.");
   const parentReal = fs.realpathSync.native(parent);
   if (parentReal !== parent) throw new Error("Conversation export parent changed.");
-  if (fs.existsSync(destinationPath)) {
-    const destinationStats = fs.lstatSync(destinationPath);
-    if (!destinationStats.isFile() || destinationStats.isSymbolicLink()) throw new Error("Conversation export destination is unsafe.");
+  const destinationStats = fs.lstatSync(destinationPath, { throwIfNoEntry: false });
+  if (destinationStats && (!destinationStats.isFile() || destinationStats.isSymbolicLink())) {
+    throw new Error("Conversation export destination is unsafe.");
   }
   const temporaryPath = path.join(parent, `.${path.basename(destinationPath)}.${process.pid}.${random(8).toString("hex")}.tmp`);
   let descriptor: number | undefined;
@@ -170,7 +170,7 @@ function writePrivateExport(destinationPath: string, contents: string, random: (
     const parentAfter = fs.lstatSync(parent);
     if (parentAfter.dev !== parentStats.dev || parentAfter.ino !== parentStats.ino ||
         fs.realpathSync.native(parent) !== parentReal) throw new Error("Conversation export parent changed.");
-    if (fs.existsSync(destinationPath) && fs.lstatSync(destinationPath).isSymbolicLink()) {
+    if (fs.lstatSync(destinationPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
       throw new Error("Conversation export destination changed.");
     }
     fs.renameSync(temporaryPath, destinationPath);
