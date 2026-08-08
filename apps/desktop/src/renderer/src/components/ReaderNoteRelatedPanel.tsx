@@ -24,6 +24,7 @@ export function ReaderNoteRelatedPanel(props: {
   const inFlightRef = useRef(false);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const dialogRef = useRef<HTMLElement | null>(null);
+  const confirmRef = useRef<HTMLButtonElement | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<LibraryRelatedPage | null>(null);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -34,6 +35,9 @@ export function ReaderNoteRelatedPanel(props: {
     setPending(false);
     setFailed(false);
   }, [ownerIdentity]);
+  useEffect(() => {
+    if (failed && confirmTarget && !pending) confirmRef.current?.focus({ preventScroll: true });
+  }, [confirmTarget, failed, pending]);
 
   const restoreFocus = (pageId: string): void => {
     window.requestAnimationFrame(() => triggerRefs.current.get(pageId)?.focus({ preventScroll: true }));
@@ -67,11 +71,9 @@ export function ReaderNoteRelatedPanel(props: {
         return;
       }
       setFailed(true);
-      restoreFocus(target.summary.pageId);
     } catch {
       if (ownerRef.current === identity) {
         setFailed(true);
-        restoreFocus(target.summary.pageId);
       }
     } finally {
       if (ownerRef.current === identity) {
@@ -115,7 +117,7 @@ export function ReaderNoteRelatedPanel(props: {
         {failed ? <p role="alert">{props.t("note.unlink.failed")}</p> : null}</div>
       <div className="confirmation-actions"><button type="button" disabled={pending} autoFocus onClick={() => {
         const pageId = confirmTarget.summary.pageId; setConfirmTarget(null); setFailed(false); restoreFocus(pageId);
-      }}>{props.t("note.unlink.cancel")}</button><button type="button" className="danger" disabled={pending} onClick={() => void unlink()}>
+      }}>{props.t("note.unlink.cancel")}</button><button ref={confirmRef} type="button" className="danger" disabled={pending} onClick={() => void unlink()}>
         {props.t(pending ? "note.unlink.pending" : "note.unlink.confirm")}</button></div>
     </section></div> : null}
   </aside>;

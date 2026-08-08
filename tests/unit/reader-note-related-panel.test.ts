@@ -59,6 +59,7 @@ describe("Reader knowledge-page relationships", () => {
     expect(dom.window.document.querySelector("[role=alert]")?.textContent).toBe("The relationship could not be removed.");
     expect(button(dom, "Open")).toBeTruthy();
     expect(button(dom, "Unlink")).toBeTruthy();
+    expect(dom.window.document.activeElement?.textContent).toBe("Remove relationship");
     await act(async () => root.unmount()); dom.window.close();
   });
 
