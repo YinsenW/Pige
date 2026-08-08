@@ -13,6 +13,7 @@ import {
   COLLECTION_RENAME_VIEW_CHANNEL,
   COLLECTION_TRASH_VIEW_CHANNEL,
   COLLECTION_RENAME_DATASET_CHANNEL,
+  COLLECTION_ADD_TABLE_CHANNEL,
   COLLECTION_RENAME_TABLE_CHANNEL,
   COLLECTION_TRASH_TABLE_CHANNEL,
   COLLECTION_REVEAL_CHANNEL,
@@ -62,6 +63,8 @@ import {
   CollectionRenameColumnResultSchema,
   CollectionRenameTableRequestSchema,
   CollectionRenameTableResultSchema,
+  CollectionAddTableRequestSchema,
+  CollectionAddTableResultSchema,
   CollectionTrashTableRequestSchema,
   CollectionTrashTableResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -122,6 +125,8 @@ import {
   type CollectionRenameColumnResult,
   type CollectionRenameTableRequest,
   type CollectionRenameTableResult,
+  type CollectionAddTableRequest,
+  type CollectionAddTableResult,
   type CollectionTrashTableRequest,
   type CollectionTrashTableResult,
   type CollectionTrashColumnRequest,
@@ -189,6 +194,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly renameCollectionTable: (
     request: CollectionRenameTableRequest
   ) => CollectionRenameTableResult | Promise<CollectionRenameTableResult>;
+  readonly addCollectionTable: (
+    request: CollectionAddTableRequest
+  ) => CollectionAddTableResult | Promise<CollectionAddTableResult>;
   readonly trashCollectionTable: (
     request: CollectionTrashTableRequest
   ) => CollectionTrashTableResult | Promise<CollectionTrashTableResult>;
@@ -421,6 +429,11 @@ function failedRenameTable(request: CollectionRenameTableRequest): CollectionRen
   return CollectionRenameTableResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
     activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
     name: request.name, status: "failed" });
+}
+
+function failedAddTable(request: CollectionAddTableRequest): CollectionAddTableResult {
+  return CollectionAddTableResultSchema.parse({ apiVersion: request.apiVersion, requestId: request.requestId,
+    activeVaultId: request.activeVaultId, datasetId: request.datasetId, name: request.name, status: "failed" });
 }
 
 function failedTrashTable(request: CollectionTrashTableRequest): CollectionTrashTableResult {
@@ -832,6 +845,23 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result
       : failedRenameColumn(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_ADD_TABLE_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionAddTableRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId) {
+      return failedAddTable(parsed);
+    }
+    let rawResult: CollectionAddTableResult;
+    try { rawResult = await options.addCollectionTable(parsed); }
+    catch { return failedAddTable(parsed); }
+    const result = CollectionAddTableResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.name !== parsed.name) {
+      throw new Error("Managed Collection table-add response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedAddTable(parsed);
   });
 
   options.ipcMain.handle(COLLECTION_RENAME_TABLE_CHANNEL, async (event, request: unknown) => {

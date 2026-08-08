@@ -2469,7 +2469,7 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const history = getManagedCollectionRevisionHistoryService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
     operation.kind === "rename_dataset" ? titles :
-      ["rename_collection_table", "trash_collection_table"].includes(operation.kind) ? tables :
+      ["add_collection_table", "rename_collection_table", "trash_collection_table"].includes(operation.kind) ? tables :
       operation.kind === "restore_collection_revision" ? history :
       operation.kind === "purge_dataset" ? getManagedDatasetPurgeService() :
       ["trash_dataset", "restore_dataset"].includes(operation.kind) ? datasets :
@@ -3499,6 +3499,7 @@ registerManagedCollectionIpc({
   addRollupCollectionColumn: (request) => getManagedCollectionService().addRollupColumn(request),
   updateRollupCollectionColumn: (request) => getManagedCollectionService().updateRollupColumn(request),
   renameCollectionColumn: (request) => getManagedCollectionService().renameColumn(request),
+  addCollectionTable: (request) => getManagedCollectionTableService().add(request),
   renameCollectionTable: (request) => getManagedCollectionTableService().rename(request),
   trashCollectionTable: (request) => getManagedCollectionTableService().trash(request),
   createCollectionView: (request) => getManagedCollectionViewService().createView(request),

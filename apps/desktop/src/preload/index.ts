@@ -634,6 +634,8 @@ import {
   CollectionRenameColumnResultSchema,
   CollectionRenameTableRequestSchema,
   CollectionRenameTableResultSchema,
+  CollectionAddTableRequestSchema,
+  CollectionAddTableResultSchema,
   CollectionTrashTableRequestSchema,
   CollectionTrashTableResultSchema,
   CollectionTrashColumnRequestSchema,
@@ -1125,6 +1127,8 @@ import type {
   CollectionRenameColumnResult,
   CollectionRenameTableRequest,
   CollectionRenameTableResult,
+  CollectionAddTableRequest,
+  CollectionAddTableResult,
   CollectionTrashTableRequest,
   CollectionTrashTableResult,
   CollectionTrashColumnRequest,
@@ -1620,6 +1624,20 @@ async function invokeCollectionRenameTable(
   if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
       result.datasetId !== parsedRequest.datasetId || result.tableId !== parsedRequest.tableId ||
       result.name !== parsedRequest.name) throw new Error("Invalid Managed Collection table-rename response identity.");
+  return result;
+}
+
+async function invokeCollectionAddTable(
+  request: CollectionAddTableRequest
+): Promise<CollectionAddTableResult> {
+  const parsedRequest = CollectionAddTableRequestSchema.parse(request);
+  const result = CollectionAddTableResultSchema.parse(
+    await ipcRenderer.invoke("collections.addTable", parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId || result.name !== parsedRequest.name) {
+    throw new Error("Invalid Managed Collection table-add response identity.");
+  }
   return result;
 }
 
@@ -2557,6 +2575,7 @@ const api: PigeDesktopApi = {
     addRollupColumn: invokeCollectionAddRollupColumn,
     updateRollupColumn: invokeCollectionUpdateRollupColumn,
     renameColumn: invokeCollectionRenameColumn,
+    addTable: invokeCollectionAddTable,
     renameTable: invokeCollectionRenameTable,
     trashTable: invokeCollectionTrashTable,
     createView: invokeCollectionCreateView,

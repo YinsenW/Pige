@@ -201,7 +201,7 @@ export class KnowledgeActivityService {
     return vaultPath;
   }
 }
-function isCollectionActivityOperation(operation: OperationRecord): boolean { return ["update_collection_cell", "add_collection_row", "add_collection_column", "update_collection_formula", "add_collection_relation", "update_collection_relation", "add_collection_lookup", "update_collection_lookup", "add_collection_rollup", "update_collection_rollup", "update_collection_relation_cell", "rename_collection_column", "rename_collection_table", "trash_collection_table", "create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view", "trash_collection_column", "trash_collection_row", "trash_dataset", "restore_dataset", "rename_dataset"].includes(operation.kind); }
+function isCollectionActivityOperation(operation: OperationRecord): boolean { return ["update_collection_cell", "add_collection_row", "add_collection_column", "update_collection_formula", "add_collection_relation", "update_collection_relation", "add_collection_lookup", "update_collection_lookup", "add_collection_rollup", "update_collection_rollup", "update_collection_relation_cell", "rename_collection_column", "add_collection_table", "rename_collection_table", "trash_collection_table", "create_collection_view", "update_collection_view", "rename_collection_view", "trash_collection_view", "restore_collection_view", "trash_collection_column", "trash_collection_row", "trash_dataset", "restore_dataset", "rename_dataset"].includes(operation.kind); }
 function toActivitySummary(
   vaultPath: string,
   operation: OperationRecord,

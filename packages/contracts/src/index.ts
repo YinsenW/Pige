@@ -144,6 +144,8 @@ import type {
   CollectionRenameColumnResult,
   CollectionRenameTableRequest,
   CollectionRenameTableResult,
+  CollectionAddTableRequest,
+  CollectionAddTableResult,
   CollectionTrashTableRequest,
   CollectionTrashTableResult,
   CollectionTrashColumnRequest,
@@ -1708,6 +1710,7 @@ export interface KnowledgeActivitySummary {
     | "add_collection_rollup"
     | "update_collection_rollup"
     | "rename_collection_column"
+    | "add_collection_table"
     | "rename_collection_table"
     | "trash_collection_table"
     | "create_collection_view"
@@ -2640,6 +2643,9 @@ export interface PigeDesktopApi {
     readonly renameTable: (
       request: CollectionRenameTableRequest
     ) => Promise<CollectionRenameTableResult>;
+    readonly addTable: (
+      request: CollectionAddTableRequest
+    ) => Promise<CollectionAddTableResult>;
     readonly trashTable: (
       request: CollectionTrashTableRequest
     ) => Promise<CollectionTrashTableResult>;
