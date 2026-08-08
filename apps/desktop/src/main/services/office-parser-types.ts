@@ -1,12 +1,17 @@
 import type { SourceKind } from "@pige/schemas";
+import {
+  ANYDOC_PARSER_ENGINE,
+  ANYDOC_PARSER_ID,
+  ANYDOC_PARSER_VERSION
+} from "./anydoc-converter";
 import type { ParserTextCoverage } from "./parser-artifact-service";
 
-export const OFFICE_PARSER_ID = "office_openxml";
-export const MAMMOTH_VERSION = "1.12.0";
+export const OFFICE_PARSER_ID = ANYDOC_PARSER_ID;
+export const ANYDOC_VERSION = ANYDOC_PARSER_VERSION;
 export const FAST_XML_PARSER_VERSION = "5.10.1";
 export const YAUZL_VERSION = "3.4.0";
-export const OFFICE_PARSER_ENGINE = "mammoth+fast-xml-parser+yauzl";
-export const OFFICE_PARSER_VERSION = `${MAMMOTH_VERSION}+${FAST_XML_PARSER_VERSION}+${YAUZL_VERSION}`;
+export const OFFICE_PARSER_ENGINE = ANYDOC_PARSER_ENGINE;
+export const OFFICE_PARSER_VERSION = ANYDOC_PARSER_VERSION;
 export const OFFICE_PARSER_MAX_BYTES = 100 * 1024 * 1024;
 export const OFFICE_PARSER_MAX_ENTRIES = 10_000;
 export const OFFICE_PARSER_MAX_UNCOMPRESSED_BYTES = 512 * 1024 * 1024;

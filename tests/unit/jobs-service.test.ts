@@ -27,6 +27,8 @@ import { OfficeParserService } from "../../apps/desktop/src/main/services/office
 import {
   OFFICE_MEDIA_MATERIALIZER_ID,
   OFFICE_MEDIA_MATERIALIZER_VERSION,
+  OFFICE_PARSER_ID,
+  OFFICE_PARSER_VERSION,
   OFFICE_PARSER_MAX_BYTES,
   OFFICE_PARSER_MAX_ENTRIES,
   OFFICE_PARSER_MAX_SELECTED_XML_BYTES,
@@ -38,6 +40,7 @@ import {
 } from "../../apps/desktop/src/main/services/office-parser-types";
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import { PDF_PARSER_ENGINE, PDF_PARSER_VERSION } from "../../apps/desktop/src/main/services/pdf-parser-types";
 import type { PdfPageRendererPort } from "../../apps/desktop/src/main/services/pdf-page-renderer-service";
 import {
   PDF_PAGE_RENDERER_ID,
@@ -1380,8 +1383,8 @@ describe("jobs service", () => {
     expect(operation).not.toContain(embeddedText);
     expect(sourceRecord.metadata).toMatchObject({
       parserStatus: "parsed",
-      parserEngine: "pdfjs-dist",
-      parserVersion: "6.1.200",
+      parserEngine: PDF_PARSER_ENGINE,
+      parserVersion: PDF_PARSER_VERSION,
       textCoverage: "high",
       agentTextReady: true
     });
@@ -2404,8 +2407,8 @@ describe("jobs service", () => {
       expect(metadataArtifact.size).toBe(fs.statSync(path.join(vaultPath, metadataArtifact.path)).size);
       expect(sourceRecord.metadata).toMatchObject({
         parserStatus: "parsed_needs_ocr",
-        parserId: "office_openxml",
-        parserVersion: "1.12.0+5.10.1+3.4.0",
+        parserId: OFFICE_PARSER_ID,
+        parserVersion: OFFICE_PARSER_VERSION,
         agentTextReady: true,
         needsOcr: true
       });

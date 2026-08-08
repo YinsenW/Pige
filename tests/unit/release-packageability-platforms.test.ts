@@ -117,6 +117,25 @@ describe("release packageability platforms", () => {
     }
   });
 
+  it("pins AnyDoc and the exact local native targets needed by supported packaged platforms", () => {
+    const desktopPackage = JSON.parse(fs.readFileSync(path.join(root, "apps/desktop/package.json"), "utf8"));
+    const lockfile = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")) as {
+      packages: Record<string, { version?: string; os?: string[]; cpu?: string[] }>;
+    };
+
+    expect(desktopPackage.dependencies["@firecrawl/anydoc"]).toBe("0.1.7");
+    expect(lockfile.packages["node_modules/@firecrawl/anydoc"]?.version).toBe("0.1.7");
+    expect(lockfile.packages["node_modules/@firecrawl/anydoc-darwin-arm64"]).toMatchObject({
+      version: "0.1.7", os: ["darwin"], cpu: ["arm64"]
+    });
+    expect(lockfile.packages["node_modules/@firecrawl/anydoc-darwin-x64"]).toMatchObject({
+      version: "0.1.7", os: ["darwin"], cpu: ["x64"]
+    });
+    expect(lockfile.packages["node_modules/@firecrawl/anydoc-win32-x64-msvc"]).toMatchObject({
+      version: "0.1.7", os: ["win32"], cpu: ["x64"]
+    });
+  });
+
   it("rejects unsupported platform and architecture combinations", () => {
     expect(() => resolvePackageabilityPlatform("windows", "arm64")).toThrow(/Unsupported packageability target/u);
     expect(() => resolvePackageabilityPlatform("linux", "x64")).toThrow(/Unsupported packageability target/u);
@@ -206,6 +225,9 @@ describe("release packageability platforms", () => {
     expect(packageResources).toContain("pruneNativeSemanticRuntimePackages");
     expect(packageResources).not.toContain("packageJson.peerDependencies");
     expect(packageResources).toContain('const llamaCppRef = "pkg:generic/llama.cpp@b8390"');
+    expect(packageResources).toContain('"@firecrawl/anydoc"');
+    expect(packagedSmoke).toContain('"@firecrawl/anydoc"');
+    expect(packagedSmoke).not.toContain('"mammoth"');
     expect(packagedSmoke).toContain("verifyNativeSemanticRuntimeFiles(unpackedRoot, target)");
     expect(packagedSmoke).toContain('report.semanticRuntime?.embedding?.buildType !== "prebuilt"');
     expect(packagedSmoke).toContain('report.semanticRuntime?.sqliteVec !== true');

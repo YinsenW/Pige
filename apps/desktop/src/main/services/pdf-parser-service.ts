@@ -48,8 +48,8 @@ export class PdfParserWorkerAdapter implements PdfTextExtractor {
   isAvailable(): boolean {
     try {
       return Boolean(
-        this.#resolveModule("pdfjs-dist/package.json") &&
-        this.#resolveModule("@napi-rs/canvas/package.json")
+        this.#resolveModule("@firecrawl/anydoc") &&
+        this.#resolveModule("pdfjs-dist/package.json")
       );
     } catch {
       return false;

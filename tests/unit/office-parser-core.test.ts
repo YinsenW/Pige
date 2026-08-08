@@ -55,9 +55,9 @@ describe("Office parser core", () => {
     });
     expect(result.text).toContain("# Local knowledge architecture");
     expect(result.text).toContain("- Capture locally before enrichment");
-    expect(result.text).toContain("Table row 1: Owner | Local Agent");
-    expect(result.text).toContain("reference link (https://example.com/reference?token=%5Bredacted%5D)");
-    expect(result.text).toContain("[Image: Architecture diagram]");
+    expect(result.text).toContain("| Owner | Local Agent |");
+    expect(result.text).toContain("[reference link](https://example.com/reference?token=%5Bredacted%5D)");
+    expect(result.text).toContain("Architecture diagram");
     expect(result.text).not.toContain("fixture-secret");
     expect(result.ocrCandidateLocators).toEqual(["image:1"]);
     expect(result.units.flatMap((unit) => unit.mediaReferences ?? [])).toEqual([{
@@ -107,8 +107,8 @@ describe("Office parser core", () => {
       }
     });
     expect(result.text.indexOf("Roadmap first")).toBeLessThan(result.text.indexOf("Second in presentation order"));
-    expect(result.text).toContain("Speaker notes:\nSpeaker note: verify the local-first release gate.");
-    expect(result.text).toContain("[Image references: 1]");
+    expect(result.text).toContain("### Slide 1\nSpeaker note: verify the local-first release gate.");
+    expect(result.text).toContain("Speaker note: verify the local-first release gate.");
     expect(result.text).not.toContain("fixture-secret");
     expect(result.ocrCandidateLocators).toEqual(["slide:1"]);
     expect(result.units.map((unit) => unit.locator)).toEqual(["slide:1", "slide:2"]);
@@ -127,21 +127,28 @@ describe("Office parser core", () => {
     expect(result.warnings.join(" ")).toContain("Ignored 1 external presentation relationship");
   });
 
-  it("truncates a presentation by the configured slide bound", async () => {
+  it("fails closed before AnyDoc conversion when a presentation exceeds the configured slide bound", async () => {
     const filePath = await writeFixture("bounded.pptx", await createTestPptx());
 
-    const result = await extractOfficeText({
+    await expect(extractOfficeText({
       requestId: "pptx-bounded",
       filePath,
       sourceKind: "pptx_file",
       limits: parserLimits({ maxSlides: 1 })
-    });
+    })).rejects.toMatchObject({ code: "parser.pptx.resource_limit" });
+  });
 
-    expect(result.truncated).toBe(true);
-    expect(result.unitCount).toBe(2);
-    expect(result.processedUnitCount).toBe(1);
-    expect(result.text).toContain("Roadmap first");
-    expect(result.text).not.toContain("Second in presentation order");
+  it("rejects a symbolic-link input before OpenXML preflight reads it", async () => {
+    const targetPath = await writeFixture("target.docx", await createTestDocx());
+    const linkPath = path.join(path.dirname(targetPath), "linked.docx");
+    fs.symlinkSync(targetPath, linkPath);
+
+    await expect(extractOfficeText({
+      requestId: "docx-symbolic-link",
+      filePath: linkPath,
+      sourceKind: "docx_file",
+      limits: parserLimits()
+    })).rejects.toMatchObject({ code: "parser.office.source_missing" });
   });
 
   it("rejects DOCTYPE declarations before a DOCX converter sees them", async () => {
@@ -168,7 +175,7 @@ describe("Office parser core", () => {
     })).rejects.toMatchObject({ code: "parser.docx.doctype_not_allowed" });
   });
 
-  it("preflights secondary DOCX XML parts before Mammoth follows relationships", async () => {
+  it("preflights secondary DOCX XML parts before AnyDoc receives the snapshot bytes", async () => {
     const documentXml = `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>`;
     const unsafeStyles = `<?xml version="1.0"?><!DOCTYPE w:styles [<!ENTITY x "unsafe">]><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:styleId="&x;"/></w:styles>`;
     const filePath = await writeFixture("secondary-doctype.docx", await createOpenXmlZip([

@@ -46,7 +46,6 @@ export class OfficeMediaMaterializerWorkerAdapter implements OfficeMediaMaterial
   isAvailable(): boolean {
     try {
       return Boolean(
-        this.#resolveModule("mammoth/package.json") &&
         this.#resolveModule("fast-xml-parser") &&
         this.#resolveModule("yauzl/package.json")
       );

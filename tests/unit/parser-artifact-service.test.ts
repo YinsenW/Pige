@@ -56,6 +56,46 @@ describe("parser artifact service", () => {
     expect(fs.readFileSync(textArtifactPath, "utf8")).toBe(`${extractor.result.text}\n`);
   });
 
+  it("rebuilds legacy parser artifacts after a service restart", async () => {
+    const fixture = makeFixture();
+    const extractor = new StaticOfficeExtractor();
+    const initialService = new OfficeParserService(extractor);
+
+    await initialService.parseSource(
+      fixture.vaultPath,
+      fixture.sourceRecord,
+      fixture.sourceRecordPath,
+      fixture.job
+    );
+    const current = readSourceRecord(fixture);
+    const legacy = SourceRecordSchema.parse({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        parserId: "office_openxml",
+        parserEngine: "mammoth",
+        parserVersion: "1.9.1"
+      }
+    });
+    writeVaultFile(fixture.vaultPath, fixture.sourceRecordPath, Buffer.from(`${JSON.stringify(legacy, null, 2)}\n`));
+
+    const restartedService = new OfficeParserService(extractor);
+    const rebuilt = await restartedService.parseSource(
+      fixture.vaultPath,
+      legacy,
+      fixture.sourceRecordPath,
+      fixture.job
+    );
+
+    expect(rebuilt.created).toBe(true);
+    expect(extractor.callCount).toBe(2);
+    expect(readSourceRecord(fixture).metadata).toMatchObject({
+      parserId: OFFICE_PARSER_ID,
+      parserEngine: OFFICE_PARSER_ENGINE,
+      parserVersion: OFFICE_PARSER_VERSION
+    });
+  });
+
   it("binds Office extraction to a private snapshot across a live pathname replacement", async () => {
     const fixture = makeFixture();
     const result = new StaticOfficeExtractor().result;

@@ -9,8 +9,8 @@ Third-party software bundled by Pige includes:
   licensed under the Apache License 2.0. https://github.com/mozilla/pdf.js
 - NAPI-RS Canvas (`@napi-rs/canvas`), Copyright its contributors,
   licensed under the MIT License. https://github.com/Brooooooklyn/canvas
-- Mammoth.js (`mammoth`), Copyright Michael Williamson and contributors,
-  licensed under the BSD 2-Clause License. https://github.com/mwilliamson/mammoth.js
+- Firecrawl AnyDoc (`@firecrawl/anydoc`), Copyright Firecrawl and contributors,
+  licensed under the MIT License. https://github.com/firecrawl/anydoc
 - fast-xml-parser, Copyright Natural Intelligence and contributors,
   licensed under the MIT License. https://github.com/NaturalIntelligence/fast-xml-parser
 - yauzl, Copyright Josh Wolfe and contributors,

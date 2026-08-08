@@ -159,10 +159,10 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.3 PDF
 
-- Extract embedded text with page locators.
+- Convert semantic Markdown from a verified PDF snapshot's bytes through bundled AnyDoc, while retaining PDF.js page locators.
 - Render pages for OCR only when text is absent, sparse, or visibly image-heavy.
 - Keep page count and per-page warnings.
-- Current Phase 5 foundation pins `pdfjs-dist` `6.1.200` and `@napi-rs/canvas` `1.0.2`. One bounded worker extracts embedded text; a separate explicit page-materializer worker rasterizes only verified OCR candidate pages. Neither path has network access or task-time downloads.
+- Current Phase 5 foundation pins `@firecrawl/anydoc` `0.1.7` for byte-only semantic conversion and retains `pdfjs-dist` `6.1.200` plus `@napi-rs/canvas` `1.0.2` for bounded PDF inspection and explicit candidate-page materialization. Neither path has network access, a hosted API, a CLI, or task-time downloads.
 - The embedded-text worker caps input at 200 MiB, pages at 2,000, execution at 60 seconds, and old-generation memory at 512 MiB.
 - The parser writes normalized text and a text-free metadata sidecar with parser version,
   page locators/spans/counts, warnings, coverage, truncation and OCR candidates. Evidence
@@ -187,7 +187,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Extract headings, paragraphs, lists, tables, links, and images when feasible.
 - Preserve document structure without pretending layout is perfect.
 - DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected DOCX/PPTX raster media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
-- Current Phase 5 adapter pins Mammoth `1.12.0`, performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`, disables embedded style maps and external file access, replaces images with local references, and never renders converter HTML in the product UI.
+- Current Phase 5 adapter pins AnyDoc `0.1.7` for byte-only semantic Markdown/Document conversion, while Pige performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`. Pige maps only AnyDoc Document assets back to verified local media references, never opens external parts, and never renders converted HTML in the product UI.
 - DOCX output preserves heading/list/table/link structure as normalized text plus `block:N` units, redacts secret-like URL query values, records referenced embedded media, and emits `image:N` OCR candidates only for images reached from document content.
 - The bounded worker returns data only. Main-process Parser Service writes checksummed
   text/metadata Artifacts and safely refreshes the source projection. Only the enclosing
@@ -200,7 +200,7 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 - Extract slide text, speaker notes, image references, and slide order.
 - OCR slide images when visible text is not otherwise recoverable.
-- Current Phase 5 adapter uses yauzl `3.4.0` plus fast-xml-parser `5.10.1` over selected bounded OpenXML parts. Presentation relationships determine slide order; speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved.
+- Current Phase 5 adapter pins AnyDoc `0.1.7` for semantic PPTX Markdown and uses yauzl `3.4.0` plus fast-xml-parser `5.10.1` only over selected bounded OpenXML bridge parts. Presentation relationships determine slide order; Pige-owned speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved until AnyDoc proves equivalent provenance.
 - XML value coercion and entity processing are disabled, DOCTYPE is rejected, nesting is capped, internal relationship traversal is rejected, and external targets are recorded but never opened.
 - Image-bearing slides with sparse text return OCR candidates to Pi; they do not execute
   or delay another semantic step themselves.

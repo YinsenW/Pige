@@ -488,9 +488,8 @@ Responsibilities:
 Suggested parser adapters:
 
 - Markdown and text: native file read.
-- PDF: bundled PDF.js text extractor plus a separate bounded PDF.js + native Canvas candidate-page materializer; Poppler/PDFium remains a replaceable future fallback behind the same port.
-- DOCX: bundled Mammoth-style converter or equivalent local converter.
-- PPTX: bundled local OpenXML parser or office conversion adapter.
+- PDF: bundled AnyDoc semantic Markdown conversion from a verified snapshot's bytes, with a separate bounded PDF.js + native Canvas page-locator and candidate-page materializer; Poppler/PDFium remains a replaceable future fallback behind the same port.
+- DOCX/PPTX: bundled AnyDoc semantic Markdown conversion from verified snapshot bytes, with Pige-owned bounded OpenXML preflight, relationship, media, slide-order, and speaker-notes bridges.
 - Images: OCR service in v0.1 when a supported local engine is available.
 - Rendered PDF pages or presentation slides: OCR service when visible text is not otherwise recoverable.
 
@@ -1803,14 +1802,13 @@ Waiver rules:
 | Undici (`web.undici`) | required | Main-process HTTP(S) URL capture with validated-address connection pinning. | https://github.com/nodejs/undici | Pin `8.7.0`; Node `>=22.19.0`; rerun SSRF, redirect, body-timeout, decompression-size, proxy/TLS, and packaged runtime smoke tests on update. | Explicit HTTP/1.1 (`allowH2: false`), manual per-hop redirects, and a fresh pinned Agent preserve the reviewed boundary; never expose the dispatcher to renderer or Skills. |
 | `@mozilla/readability` (`web.mozilla-readability`) | required | Clean article text and metadata extraction from fetched web pages. | https://github.com/mozilla/readability | Pin `0.6.0`; rerun representative/malformed/hostile/large-page and packaged-worker fixtures on update. | Apache-2.0; raw snapshot stays immutable and article HTML is never rendered as trusted UI. |
 | jsdom (`web.jsdom`; types `types.jsdom`) | required | Inert DOM runtime for Readability in the bounded web-extractor worker. | https://github.com/jsdom/jsdom | Pin runtime `29.1.1` and types `28.0.3`; review parser/security and Node-engine changes before update. | MIT; scripts and subresources remain disabled; local worker only. |
-| `pdfjs-dist` (`parser.pdfjs-dist`) | required | Default v0.1 embedded-text extraction, PDF metadata/page locators, and bounded rasterization of verified OCR candidate pages through separate worker adapters. | https://github.com/mozilla/pdf.js | Pin `6.1.200`; update only after corrupt/encrypted/multilingual/image-only/large-page fixtures and Electron worker packaging tests. | Apache-2.0; bundled local dependency; text extraction and pixel materialization have independent protocols and limits. |
+| `@firecrawl/anydoc` (`parser.anydoc`) | required | Semantic local Markdown/Document conversion for the supported `pdf_file`, `docx_file`, and `pptx_file` source kinds. | https://github.com/firecrawl/anydoc | Pin exact `0.1.7`; rerun malformed/encrypted/resource-limit, DOCX block/asset, PPTX slide/notes/media, PDF native-text, artifact-reuse/restart, and Electron native-addon startup fixtures on macOS arm64/x64 and Windows x64. | MIT; Node `>=20`; bundled local N-API package. The byte-only adapter receives one verified private snapshot and never calls a hosted API, CLI, runtime downloader, or network service. |
+| `pdfjs-dist` (`parser.pdfjs-dist`) | required | PDF metadata/page locators and bounded rasterization of verified OCR candidate pages through separate worker adapters. | https://github.com/mozilla/pdf.js | Pin `6.1.200`; update only after corrupt/encrypted/multilingual/image-only/large-page fixtures and Electron worker packaging tests. | Apache-2.0; bundled local dependency. AnyDoc owns semantic Markdown conversion; PDF.js page inspection and pixel materialization retain independent protocols and limits. |
 | `@napi-rs/canvas` (`parser.napi-rs-canvas`) | required | Supply PDF.js Node primitives and bounded native Canvas/PNG encoding for the explicit page OCR materializer. | https://github.com/Brooooooklyn/canvas | Pin `1.0.2`; test native package inclusion and page-renderer startup on every macOS/Windows release target. | MIT; local-only native dependency; selected-page buffers remain in the worker and are released after transfer. |
 | Poppler utilities | candidate | Alternative PDF page materializer if PDF.js/native Canvas packaging, fidelity, or hostile-input evidence fails. | https://poppler.freedesktop.org | Bundle/pin binary per platform only if adopted; include license notices. | Local parser port; raw PDF remains immutable. |
 | PDFium-style renderer | candidate | Alternative PDF rendering path if Poppler packaging fails. | https://pdfium.googlesource.com/pdfium/ | Record concrete package/binary before use. | Local parser. |
-| `mammoth` (`parser.mammoth`) | required | Semantic local DOCX conversion for headings, paragraphs, lists, tables, links, and image references. | https://github.com/mwilliamson/mammoth.js | Pin `1.12.0`; update only after semantic, external-file, malformed ZIP/XML, image, and Electron worker fixtures. | BSD-2-Clause; pure JS; disable embedded style maps and external file access; never render converter HTML directly. |
-| OpenXML parser for PPTX | required | Best-effort PPTX text/image/notes extraction using bounded ZIP + XML parsing. | Open XML SDK docs: https://learn.microsoft.com/en-us/office/open-xml/open-xml-sdk | Keep the adapter format-driven and fixture-backed; do not assume slide filenames equal presentation order. | Do not bundle LibreOffice in v0.1. |
-| `fast-xml-parser` (`parser.fast-xml-parser`) | required | Parse bounded PPTX relationships, slide order, slide text, notes, metadata, and normalized DOCX converter output. | https://github.com/NaturalIntelligence/fast-xml-parser | Pin `5.10.1`; fuzz malformed XML and recheck entity/order options on update. | MIT; pure JS; disable value coercion and entity processing for untrusted Office XML. |
-| JSZip | transitive | Mammoth uses JSZip internally for DOCX package reads; Pige does not import it directly and uses yauzl for Pige-owned OpenXML inspection. | https://stuk.github.io/jszip/ | Version follows the pinned Mammoth lock graph; audit through lockfile/SBOM. | Do not add a second direct ZIP abstraction without fixture evidence. |
+| Pige OpenXML locator bridge | required | Bounded DOCX/PPTX archive preflight, relationship order, speaker notes, embedded-media locations, and OCR candidates around AnyDoc semantic conversion. | Open XML SDK docs: https://learn.microsoft.com/en-us/office/open-xml/open-xml-sdk | Keep the bridge format-driven and fixture-backed; do not assume slide filenames equal presentation order. | Does not perform semantic document conversion or bundle LibreOffice in v0.1. |
+| `fast-xml-parser` (`parser.fast-xml-parser`) | required | Parse bounded OpenXML relationships, slide order, notes, metadata, and Dataset XML where Pige's locator bridge needs structured inspection. | https://github.com/NaturalIntelligence/fast-xml-parser | Pin `5.10.1`; fuzz malformed XML and recheck entity/order options on update. | MIT; pure JS; disable value coercion and entity processing for untrusted Office XML. |
 | PaddleOCR | optional | Cross-platform OCR fallback managed by Local Tools. | https://github.com/PaddlePaddle/PaddleOCR | Download/install only after user consent; pin supported model packs. | Local OCR; network off during OCR execution. |
 | PP-OCRv5 language packs | optional | CPU-friendly OCR language packs for v0.1 locales. | PaddleOCR registry entry above | Install only needed language packs and record their own version/checksum. | Local OCR fallback for Chinese/English/Japanese, Korean, and Latin text. |
 | LibreOffice | not-default | Office conversion fallback only for future review. | https://www.libreoffice.org | Do not bundle in v0.1. | Large package and licensing/UX cost. |
@@ -1847,7 +1845,7 @@ Reference-only capture, conversion, and local-tool evaluation:
   neither stable Pige identities nor Markdown, Artifacts, or acceptance evidence. Source
   mutation plus raw/resident/network/plugin/MCP/install/update/watch/browser surfaces remain
   unauthorized. Any experiment must pass the gate below, isolate the original behind a
-  disposable private copy with networking disabled, and retain current Mammoth/Pige OpenXML
+  disposable private copy with networking disabled, and retain current AnyDoc/Pige OpenXML
   defaults.
 - These rows do not enter the machine dependency manifest because no upstream code,
   package, binary, service, or fixture is used by the product or build. Changing any of
@@ -1932,7 +1930,7 @@ These exit paths must be considered before major dependency upgrades:
 - Apple and Windows platform OCR/speech APIs: use runtime capability detection and keep PaddleOCR as managed fallback for OCR.
 - PaddleOCR: keep platform OCR first and allow PaddleOCR removal without deleting notes, sources, or OCR artifacts.
 - Poppler: keep PDF parser interface separate so PDFium or another local renderer can replace it.
-- Mammoth/OpenXML parser stack: keep raw Office files immutable and extracted artifacts regenerable.
+- AnyDoc/OpenXML parser stack: keep raw Office files immutable and extracted artifacts regenerable.
 - Readability/jsdom/Undici: keep fetch and extraction behind `SourceFetchImplementation` and `WebContentExtractorPort`; preserve decoded snapshots so extraction can be rerun with a better reviewed stack.
 - Git/Git Bash, Bun, `uv`, and Python: keep them as bundled toolchain components owned by Pige, not user-installed hidden prerequisites.
 - Pi packages: keep Package Manager optional and permissioned; Pige-native RAG, memory, parser, and backup behavior must not require community packages.
@@ -1948,7 +1946,7 @@ Pin before implementing:
 
 - Markdown stack: CodeMirror 6 plus unified/remark/rehype packages.
 - Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
-- PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.10.1`; JSZip remains Mammoth-transitive only.
+- Semantic document conversion: `@firecrawl/anydoc` `0.1.7`; Pige's DOCX/PPTX relationship, notes, and media bridge continues to use yauzl `3.4.0` plus fast-xml-parser `5.10.1`.
 - Backup/restore archive engine: yazl/yauzl.
 - Secret storage: schema-v2 machine-local app-data file, injected Electron `safeStorage`
   ciphertext when available, owner-only POSIX mode where supported, explicit portable/

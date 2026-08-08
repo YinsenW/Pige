@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { XMLParser } from "fast-xml-parser";
-import mammoth from "mammoth";
+import { convertAnyDocSnapshot, limitConvertedMarkdown } from "./anydoc-converter";
 import { readOpenXmlPackage, type OpenXmlPackage } from "./office-archive";
 import {
   OFFICE_PARSER_ENGINE,
@@ -21,7 +21,6 @@ import type { ParserTextCoverage } from "./parser-artifact-service";
 type OrderedNode = Record<string, unknown>;
 
 const PROMPT_INJECTION_PATTERN = /(?:ignore\s+(?:all\s+)?previous|system\s+prompt|reveal\s+(?:the\s+)?(?:api\s+key|secret)|override\s+(?:the\s+)?instructions)/iu;
-const SENSITIVE_QUERY_KEY_PATTERN = /(?:^|[_-])(?:api[_-]?key|access[_-]?token|auth|authorization|code|credential|key|password|secret|signature|sig|token)(?:$|[_-])/iu;
 
 const xmlParser = new XMLParser({
   preserveOrder: true,
@@ -50,72 +49,26 @@ export async function extractOfficeText(request: OfficeParserRequest): Promise<O
 }
 
 async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPackage): Promise<OfficeExtractionResult> {
-  const documentXml = requirePart(packageData, "word/document.xml", "docx");
+  requirePart(packageData, "word/document.xml", "docx");
   const relationshipXml = requirePart(packageData, "word/_rels/document.xml.rels", "docx");
-  const relationshipById = new Map(
-    parseRelationships(relationshipXml, "word/document.xml", "docx")
-      .filter((relationship) => !relationship.external && relationship.type.endsWith("/image"))
-      .map((relationship) => [relationship.id, relationship])
-  );
-  const packageMediaByPath = new Map(packageData.mediaReferences.map((media) => [media.packagePath, media]));
-  const docxMediaByImageIndex = new Map<number, OfficeUnitMediaReference>();
-  const imageRelationshipIds = findElements(parseOrderedXml(documentXml, "docx"), "blip")
-    .map((node) => attribute(node, "r:embed") ?? attribute(node, "embed"))
-    .filter((value): value is string => Boolean(value));
-  imageRelationshipIds.forEach((relationshipId, index) => {
-    const relationship = relationshipById.get(relationshipId);
-    if (!relationship) return;
-    const packagePath = resolveRelationshipTarget("word/document.xml", relationship.target, "docx");
-    const media = packageMediaByPath.get(packagePath);
-    if (!media) return;
-    const image = index + 1;
-    docxMediaByImageIndex.set(image, {
-      mediaIndex: image,
-      locator: `image:${image}`,
-      packagePath: media.packagePath,
-      size: media.size,
-      extension: media.extension
-    });
-  });
-  let imageIndex = 0;
-  let converted;
-  try {
-    converted = await mammoth.convertToHtml({ path: request.filePath }, {
-      includeEmbeddedStyleMap: false,
-      includeDefaultStyleMap: true,
-      externalFileAccess: false,
-      ignoreEmptyParagraphs: true,
-      idPrefix: "pige-docx-",
-      convertImage: mammoth.images.imgElement(async () => ({ src: `pige-image:${++imageIndex}` }))
-    });
-  } catch {
-    throw new PigeDomainError("parser.docx.invalid", "The DOCX document could not be converted safely.");
-  }
-
-  const renderer = new DocxHtmlRenderer(request.limits.maxTextCharacters, docxMediaByImageIndex);
-  let orderedHtml: OrderedNode[];
-  try {
-    orderedHtml = parseOrderedXml(`<pige-root>${converted.value}</pige-root>`, "docx");
-  } catch {
-    throw new PigeDomainError("parser.docx.invalid_output", "The DOCX converter returned invalid structured output.");
-  }
-  renderer.render(orderedHtml);
-  const title = extractCoreTitle(packageData) ?? renderer.firstHeading;
+  parseRelationships(relationshipXml, "word/document.xml", "docx");
+  const converted = await convertAnyDocSnapshot(request.filePath, "docx", request.limits.maxBytes, { includeDocument: true });
+  const { text, truncated } = limitConvertedMarkdown(converted.markdown, request.limits.maxTextCharacters);
   const mediaReferences = [...packageData.mediaReferences].sort((left, right) => left.packagePath.localeCompare(right.packagePath));
-  const ocrCandidateLocators = renderer.imageLocators.filter((locator) =>
-    renderer.units.some((unit) => unit.needsOcr && unit.mediaReferences?.some((media) => media.locator === locator))
-  );
-  const warnings = renderer.warnings;
-  if (converted.messages.length > 0) {
-    warnings.push(`The DOCX converter reported ${converted.messages.length} recoverable issue(s).`);
-  }
+  const bridgedMedia = mapAnyDocAssetsToMedia(converted.document?.assets ?? [], mediaReferences, "image");
+  const units = buildMarkdownUnits(text, bridgedMedia);
+  const markdownStats = summarizeMarkdown(text);
+  const title = extractCoreTitle(packageData) ?? firstMarkdownHeading(text);
+  const ocrCandidateLocators = bridgedMedia.map((media) => media.locator);
+  const warnings: string[] = [];
+  if (truncated) warnings.push("DOCX text was truncated at the configured extracted-text limit.");
   if (ocrCandidateLocators.length > 0) {
     warnings.push("The DOCX contains embedded images that are waiting for OCR enrichment.");
   }
-  if (PROMPT_INJECTION_PATTERN.test(renderer.text)) {
+  if (PROMPT_INJECTION_PATTERN.test(text)) {
     warnings.push("The document contains instruction-like text and remains untrusted source content.");
   }
-  const textCoverage = classifyDocxCoverage(renderer.text.length);
+  const textCoverage = classifyDocxCoverage(text.length);
   if (textCoverage === "none" || textCoverage === "low") {
     warnings.push("The DOCX contains too little readable text for Agent ingest.");
   }
@@ -126,39 +79,32 @@ async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPac
     engineVersion: OFFICE_PARSER_VERSION,
     format: "docx",
     ...(title ? { title } : {}),
-    text: renderer.text,
-    textCharacterCount: renderer.text.length,
+    text,
+    textCharacterCount: text.length,
     textCoverage,
-    truncated: renderer.truncated,
+    truncated,
     needsOcr: ocrCandidateLocators.length > 0,
     agentTextReady: textCoverage === "medium" || textCoverage === "high",
     ocrCandidateLocators,
-    unitCount: renderer.units.length,
-    processedUnitCount: renderer.units.length,
-    unitsWithText: renderer.units.filter((unit) => unit.characterCount > 0).length,
-    units: renderer.units,
+    unitCount: units.length,
+    processedUnitCount: units.length,
+    unitsWithText: units.filter((unit) => unit.characterCount > 0).length,
+    units,
     entryCount: packageData.entryCount,
     totalUncompressedBytes: packageData.totalUncompressedBytes,
     mediaReferences,
     structure: {
       mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
-      headingCount: renderer.headingCount,
-      paragraphCount: renderer.paragraphCount,
-      listItemCount: renderer.listItemCount,
-      tableCount: renderer.tableCount,
-      linkCount: renderer.linkCount,
-      imageCount: ocrCandidateLocators.length,
+      headingCount: markdownStats.headingCount,
+      paragraphCount: markdownStats.paragraphCount,
+      listItemCount: markdownStats.listItemCount,
+      tableCount: markdownStats.tableCount,
+      linkCount: markdownStats.linkCount,
+      imageCount: bridgedMedia.length,
       embeddedMediaCount: mediaReferences.length,
-      ocrCandidateMediaCount: renderer.units
-        .filter((unit) => unit.needsOcr)
-        .reduce((total, unit) => total + (unit.mediaReferences?.length ?? 0), 0),
-      ocrMaterializableMediaCount: renderer.units
-        .filter((unit) => unit.needsOcr)
-        .flatMap((unit) => unit.mediaReferences ?? [])
-        .filter((media) => isMaterializableOfficeMedia(media.extension, media.size)).length,
-      ocrMaterializableMediaBytes: renderer.units
-        .filter((unit) => unit.needsOcr)
-        .flatMap((unit) => unit.mediaReferences ?? [])
+      ocrCandidateMediaCount: bridgedMedia.length,
+      ocrMaterializableMediaCount: bridgedMedia.filter((media) => isMaterializableOfficeMedia(media.extension, media.size)).length,
+      ocrMaterializableMediaBytes: bridgedMedia
         .filter((media) => isMaterializableOfficeMedia(media.extension, media.size))
         .reduce((total, media) => total + media.size, 0)
     },
@@ -166,7 +112,7 @@ async function extractDocx(request: OfficeParserRequest, packageData: OpenXmlPac
   };
 }
 
-function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage): OfficeExtractionResult {
+async function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage): Promise<OfficeExtractionResult> {
   const presentationXml = requirePart(packageData, "ppt/presentation.xml", "pptx");
   const presentationRelsXml = requirePart(packageData, "ppt/_rels/presentation.xml.rels", "pptx");
   const presentationNodes = parseOrderedXml(presentationXml, "pptx");
@@ -186,25 +132,25 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
   }
   slideParts = Array.from(new Set(slideParts));
   const originalSlideCount = slideParts.length;
-  const limitedSlideParts = slideParts.slice(0, request.limits.maxSlides);
-  let truncated = originalSlideCount > limitedSlideParts.length;
-  if (truncated) warnings.push(`Only the first ${request.limits.maxSlides} slides were processed because the presentation exceeds the slide limit.`);
+  if (originalSlideCount > request.limits.maxSlides) {
+    throw new PigeDomainError("parser.pptx.resource_limit", "The PPTX exceeds the configured local slide safety limit.");
+  }
 
-  const outputParts: string[] = [];
   const units: OfficeExtractionUnit[] = [];
   const ocrCandidateLocators: string[] = [];
   let firstSlideTitle: string | undefined;
   let externalRelationshipCount = presentationRelations.filter((relation) => relation.external).length;
   let slidesWithNotes = 0;
   let slidesWithImages = 0;
-  let outputLength = 0;
   let ocrCandidateMediaCount = 0;
   let ocrMaterializableMediaCount = 0;
   let ocrMaterializableMediaBytes = 0;
   const mediaByPath = new Map(packageData.mediaReferences.map((media) => [media.packagePath, media]));
+  const slideVisibleText: string[] = [];
 
-  for (let index = 0; index < limitedSlideParts.length; index += 1) {
-    const slidePart = limitedSlideParts[index];
+  const speakerNotes: Array<{ readonly index: number; readonly text: string }> = [];
+  for (let index = 0; index < slideParts.length; index += 1) {
+    const slidePart = slideParts[index];
     if (!slidePart) continue;
     const slideXml = packageData.entries.get(slidePart);
     if (!slideXml) {
@@ -249,6 +195,7 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
       : [];
     if (noteParagraphs.length > 0) slidesWithNotes += 1;
     const visibleText = normalizeParagraphs(visibleParagraphs);
+    slideVisibleText.push(visibleText);
     const notesText = normalizeParagraphs(noteParagraphs);
     const needsOcr = imageCount > 0 && visibleText.length < 80;
     if (needsOcr) {
@@ -258,27 +205,13 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
       ocrMaterializableMediaCount += materializable.length;
       ocrMaterializableMediaBytes += materializable.reduce((total, media) => total + media.size, 0);
     }
-    const slideBody = [
-      `--- Slide ${index + 1} ---`,
-      visibleText || "[No embedded slide text]",
-      notesText ? `Speaker notes:\n${notesText}` : "",
-      imageCount > 0 ? `[Image references: ${imageCount}]` : ""
-    ].filter(Boolean).join("\n\n");
-    const separatorLength = outputParts.length > 0 ? 2 : 0;
-    const characterStart = outputLength + separatorLength;
-    if (characterStart + slideBody.length > request.limits.maxTextCharacters) {
-      truncated = true;
-      warnings.push("Presentation text was truncated at the configured extracted-text limit.");
-      break;
-    }
-    outputParts.push(slideBody);
-    outputLength = characterStart + slideBody.length;
+    if (notesText) speakerNotes.push({ index: index + 1, text: notesText });
     units.push({
       index: index + 1,
       locator: `slide:${index + 1}`,
       kind: "slide",
-      characterStart,
-      characterEnd: characterStart + slideBody.length,
+      characterStart: 0,
+      characterEnd: 0,
       characterCount: visibleText.length + notesText.length,
       imageCount,
       ...(notesText ? { notesCharacterCount: notesText.length } : {}),
@@ -288,7 +221,17 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
     });
   }
 
-  const text = outputParts.join("\n\n");
+  const converted = await convertAnyDocSnapshot(request.filePath, "pptx", request.limits.maxBytes);
+  const notesBridge = speakerNotes.length > 0
+    ? `\n\n## Speaker notes\n\n${speakerNotes.map((note) => `### Slide ${note.index}\n${note.text}`).join("\n\n")}`
+    : "";
+  const limited = limitConvertedMarkdown(`${converted.markdown}${notesBridge}`, request.limits.maxTextCharacters);
+  const text = limited.text;
+  const textRanges = mapSlideTextRanges(text, slideVisibleText);
+  const finalizedUnits = units.map((unit, index) => {
+    const range = textRanges[index];
+    return range ? { ...unit, ...range } : unit;
+  });
   if (externalRelationshipCount > 0) {
     warnings.push(`Ignored ${externalRelationshipCount} external presentation relationship(s); no external target was opened.`);
   }
@@ -298,11 +241,12 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
   if (PROMPT_INJECTION_PATTERN.test(text)) {
     warnings.push("The presentation contains instruction-like text and remains untrusted source content.");
   }
-  const unitsWithText = units.filter((unit) => unit.characterCount > 0).length;
-  const meaningfulUnits = units.filter((unit) => unit.characterCount >= 32).length;
-  const textCoverage = classifyUnitCoverage(units.length, meaningfulUnits, text.length);
+  const unitsWithText = finalizedUnits.filter((unit) => unit.characterCount > 0).length;
+  const meaningfulUnits = finalizedUnits.filter((unit) => unit.characterCount >= 32).length;
+  const textCoverage = classifyUnitCoverage(finalizedUnits.length, meaningfulUnits, text.length);
   if (textCoverage === "none" || textCoverage === "low") warnings.push("The PPTX contains too little readable text for Agent ingest.");
-  const title = extractCoreTitle(packageData, "pptx") ?? firstSlideTitle;
+  if (limited.truncated) warnings.push("Presentation text was truncated at the configured extracted-text limit.");
+  const title = extractCoreTitle(packageData, "pptx") ?? firstMarkdownHeading(text) ?? firstSlideTitle;
 
   return {
     parserId: OFFICE_PARSER_ID,
@@ -313,21 +257,21 @@ function extractPptx(request: OfficeParserRequest, packageData: OpenXmlPackage):
     text,
     textCharacterCount: text.length,
     textCoverage,
-    truncated,
+    truncated: limited.truncated,
     needsOcr: ocrCandidateLocators.length > 0,
     agentTextReady: textCoverage === "medium" || textCoverage === "high",
     ocrCandidateLocators,
     unitCount: originalSlideCount,
-    processedUnitCount: units.length,
+    processedUnitCount: finalizedUnits.length,
     unitsWithText,
-    units,
+    units: finalizedUnits,
     entryCount: packageData.entryCount,
     totalUncompressedBytes: packageData.totalUncompressedBytes,
     mediaReferences: [...packageData.mediaReferences].sort((left, right) => left.packagePath.localeCompare(right.packagePath)),
     structure: {
       mediaTargetSchemaVersion: OFFICE_MEDIA_TARGET_SCHEMA_VERSION,
       slideCount: originalSlideCount,
-      processedSlideCount: units.length,
+      processedSlideCount: finalizedUnits.length,
       slidesWithNotes,
       slidesWithImages,
       imageCount: packageData.mediaReferences.length,
@@ -345,155 +289,108 @@ function isMaterializableOfficeMedia(extension: string, size: number): boolean {
     OFFICE_MEDIA_OCR_EXTENSIONS.includes(extension as typeof OFFICE_MEDIA_OCR_EXTENSIONS[number]);
 }
 
-class DocxHtmlRenderer {
-  readonly units: OfficeExtractionUnit[] = [];
-  readonly warnings: string[] = [];
-  readonly imageLocators: string[] = [];
-  readonly #maxCharacters: number;
-  readonly #mediaByImageIndex: ReadonlyMap<number, OfficeUnitMediaReference>;
-  readonly #parts: string[] = [];
-  headingCount = 0;
-  paragraphCount = 0;
-  listItemCount = 0;
-  tableCount = 0;
-  linkCount = 0;
-  truncated = false;
-  firstHeading: string | undefined;
-
-  constructor(maxCharacters: number, mediaByImageIndex: ReadonlyMap<number, OfficeUnitMediaReference>) {
-    this.#maxCharacters = maxCharacters;
-    this.#mediaByImageIndex = mediaByImageIndex;
-  }
-
-  get text(): string {
-    return this.#parts.join("\n\n");
-  }
-
-  render(nodes: readonly OrderedNode[]): void {
-    const root = findElements(nodes, "pige-root")[0];
-    this.#renderBlockNodes(root ? elementChildren(root) : nodes);
-  }
-
-  #renderBlockNodes(nodes: readonly OrderedNode[]): void {
-    for (const node of nodes) {
-      if (this.truncated) return;
-      const name = localName(elementName(node));
-      if (/^h[1-6]$/u.test(name)) {
-        const level = Number(name.slice(1));
-        const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
-        const text = this.#renderInline(elementChildren(node), state);
-        if (text) {
-          this.headingCount += 1;
-          this.firstHeading ??= text;
-          this.#appendBlock(`${"#".repeat(level)} ${text}`, "heading", state.images);
-        }
-        continue;
-      }
-      if (name === "p") {
-        const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
-        const text = this.#renderInline(elementChildren(node), state);
-        this.linkCount += state.links;
-        if (text) {
-          this.paragraphCount += 1;
-          this.#appendBlock(text, "paragraph", state.images);
-        }
-        continue;
-      }
-      if (name === "ul" || name === "ol") {
-        this.#renderList(node, name === "ol");
-        continue;
-      }
-      if (name === "table") {
-        this.#renderTable(node);
-        continue;
-      }
-      this.#renderBlockNodes(elementChildren(node));
-    }
-  }
-
-  #renderList(node: OrderedNode, ordered: boolean): void {
-    const items = directElements(elementChildren(node), "li");
-    items.forEach((item, index) => {
-      const state = { links: 0, images: [] as OfficeUnitMediaReference[] };
-      const text = this.#renderInline(elementChildren(item), state);
-      this.linkCount += state.links;
-      if (!text) return;
-      this.listItemCount += 1;
-      this.#appendBlock(`${ordered ? `${index + 1}.` : "-"} ${text}`, "list_item", state.images);
+function mapAnyDocAssetsToMedia(
+  assets: readonly { readonly originPart: string }[],
+  media: readonly { readonly packagePath: string; readonly size: number; readonly extension: string }[],
+  locatorPrefix: "image"
+): OfficeUnitMediaReference[] {
+  const byPackagePath = new Map(media.map((entry) => [entry.packagePath, entry]));
+  const resolved: OfficeUnitMediaReference[] = [];
+  for (const asset of assets) {
+    const originPart = asset.originPart.replaceAll("\\", "/").replace(/^\/+/, "");
+    const entry = byPackagePath.get(originPart);
+    if (!entry || resolved.some((candidate) => candidate.packagePath === entry.packagePath)) continue;
+    const mediaIndex = resolved.length + 1;
+    resolved.push({
+      mediaIndex,
+      locator: `${locatorPrefix}:${mediaIndex}`,
+      packagePath: entry.packagePath,
+      size: entry.size,
+      extension: entry.extension
     });
   }
+  return resolved;
+}
 
-  #renderTable(node: OrderedNode): void {
-    const rows = findElements(elementChildren(node), "tr")
-      .map((row, rowIndex) => {
-        const cells = directElements(elementChildren(row), "th", "td")
-          .map((cell) => normalizeInline(rawText(elementChildren(cell))))
-          .filter(Boolean);
-        return cells.length > 0 ? `Table row ${rowIndex + 1}: ${cells.join(" | ")}` : "";
-      })
-      .filter(Boolean);
-    if (rows.length === 0) return;
-    this.tableCount += 1;
-    this.#appendBlock(rows.join("\n"), "table", []);
-  }
-
-  #renderInline(nodes: readonly OrderedNode[], state: { links: number; images: OfficeUnitMediaReference[] }): string {
-    let value = "";
-    for (const node of nodes) {
-      if (typeof node["#text"] === "string") {
-        value += node["#text"];
-        continue;
-      }
-      const name = localName(elementName(node));
-      if (name === "br") {
-        value += "\n";
-        continue;
-      }
-      if (name === "img") {
-        const alt = attribute(node, "alt");
-        const source = attribute(node, "src");
-        const imageNumber = /^pige-image:(\d+)$/u.exec(source ?? "")?.[1] ?? String(this.imageLocators.length + 1);
-        const locator = `image:${imageNumber}`;
-        if (!this.imageLocators.includes(locator)) this.imageLocators.push(locator);
-        const media = this.#mediaByImageIndex.get(Number(imageNumber));
-        if (media && !state.images.some((candidate) => candidate.locator === media.locator)) state.images.push(media);
-        value += `[Image${alt ? `: ${normalizeInline(alt)}` : ` ${imageNumber}`}]`;
-        continue;
-      }
-      if (name === "a") {
-        state.links += 1;
-        const label = this.#renderInline(elementChildren(node), state);
-        const target = safeLinkTarget(attribute(node, "href"));
-        value += target ? `${label || "Link"} (${target})` : label;
-        continue;
-      }
-      value += this.#renderInline(elementChildren(node), state);
-    }
-    return normalizeInline(value);
-  }
-
-  #appendBlock(value: string, kind: OfficeExtractionUnit["kind"], mediaReferences: readonly OfficeUnitMediaReference[]): void {
-    const separatorLength = this.#parts.length > 0 ? 2 : 0;
-    const start = this.text.length + separatorLength;
-    if (start + value.length > this.#maxCharacters) {
-      this.truncated = true;
-      this.warnings.push("DOCX text was truncated at the configured extracted-text limit.");
-      return;
-    }
-    this.#parts.push(value);
-    this.units.push({
-      index: this.units.length + 1,
-      locator: `block:${this.units.length + 1}`,
+function buildMarkdownUnits(text: string, media: readonly OfficeUnitMediaReference[]): OfficeExtractionUnit[] {
+  const parts = text.split(/\n{2,}/u).map((part) => part.trim()).filter(Boolean);
+  let searchStart = 0;
+  const units = parts.map((part, index) => {
+    const foundAt = text.indexOf(part, searchStart);
+    const characterStart = foundAt >= 0 ? foundAt : searchStart;
+    searchStart = Math.min(text.length, characterStart + part.length);
+    const kind = part.startsWith("#")
+      ? "heading"
+      : /^(?:[-*+] |\d+\. )/u.test(part)
+        ? "list_item"
+        : part.includes("|") && part.includes("\n")
+          ? "table"
+          : "paragraph";
+    return {
+      index: index + 1,
+      locator: `block:${index + 1}`,
       kind,
-      characterStart: start,
-      characterEnd: start + value.length,
-      characterCount: value.length,
-      imageCount: mediaReferences.length,
-      ...(mediaReferences.length > 0 ? { mediaReferences } : {}),
-      needsOcr: mediaReferences.length > 0,
-      warnings: mediaReferences.length > 0 ? ["Block contains an image reference that may need OCR."] : []
-    });
-  }
+      characterStart: Math.max(0, characterStart),
+      characterEnd: Math.max(0, characterStart) + part.length,
+      characterCount: part.length,
+      imageCount: 0,
+      needsOcr: false,
+      warnings: []
+    } satisfies OfficeExtractionUnit;
+  });
+  if (media.length === 0) return units;
+  const target = units[0] ?? {
+    index: 1,
+    locator: "block:1",
+    kind: "paragraph" as const,
+    characterStart: 0,
+    characterEnd: 0,
+    characterCount: 0,
+    imageCount: 0,
+    needsOcr: false,
+    warnings: []
+  };
+  const bridgedTarget: OfficeExtractionUnit = {
+    ...target,
+    imageCount: media.length,
+    mediaReferences: media,
+    needsOcr: true,
+    warnings: ["Block contains embedded document assets that may need OCR."]
+  };
+  return units.length > 0 ? [bridgedTarget, ...units.slice(1)] : [bridgedTarget];
+}
+
+function summarizeMarkdown(text: string): {
+  readonly headingCount: number;
+  readonly paragraphCount: number;
+  readonly listItemCount: number;
+  readonly tableCount: number;
+  readonly linkCount: number;
+} {
+  const blocks = text.split(/\n{2,}/u).map((value) => value.trim()).filter(Boolean);
+  return {
+    headingCount: blocks.filter((block) => /^#{1,6}\s/u.test(block)).length,
+    paragraphCount: blocks.filter((block) => !/^#{1,6}\s/u.test(block) && !/^(?:[-*+] |\d+\. )/u.test(block) && !block.includes("|\n")).length,
+    listItemCount: text.split("\n").filter((line) => /^(?:[-*+] |\d+\. )/u.test(line)).length,
+    tableCount: blocks.filter((block) => block.includes("|\n")).length,
+    linkCount: (text.match(/\[[^\]]+\]\(https?:\/\//gu) ?? []).length
+  };
+}
+
+function firstMarkdownHeading(text: string): string | undefined {
+  const heading = /^#{1,6}\s+(.+)$/mu.exec(text)?.[1];
+  return heading ? trimTitle(heading) : undefined;
+}
+
+function mapSlideTextRanges(text: string, slideTexts: readonly string[]): Array<Pick<OfficeExtractionUnit, "characterStart" | "characterEnd"> | undefined> {
+  let searchStart = 0;
+  return slideTexts.map((slideText) => {
+    if (!slideText) return undefined;
+    const index = text.indexOf(slideText, searchStart);
+    if (index < 0) return undefined;
+    searchStart = index + slideText.length;
+    return { characterStart: index, characterEnd: searchStart };
+  });
 }
 
 interface OpenXmlRelationship {
@@ -580,11 +477,6 @@ function findElements(nodes: readonly OrderedNode[], wantedName: string): Ordere
   return found;
 }
 
-function directElements(nodes: readonly OrderedNode[], ...wantedNames: string[]): OrderedNode[] {
-  const wanted = new Set(wantedNames);
-  return nodes.filter((node) => wanted.has(localName(elementName(node))));
-}
-
 function elementName(node: OrderedNode): string {
   return Object.keys(node).find((key) => key !== ":@" && key !== "#text" && key !== "?xml") ?? "";
 }
@@ -637,24 +529,6 @@ function normalizeParagraphs(values: readonly string[]): string {
   return values.map(normalizeInline).filter(Boolean).join("\n");
 }
 
-function safeLinkTarget(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  if (value.startsWith("#")) return value.slice(0, 240);
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:" && parsed.protocol !== "mailto:") return undefined;
-  parsed.username = "";
-  parsed.password = "";
-  for (const key of [...parsed.searchParams.keys()]) {
-    if (SENSITIVE_QUERY_KEY_PATTERN.test(key)) parsed.searchParams.set(key, "[redacted]");
-  }
-  return parsed.toString().slice(0, 2_000);
-}
-
 function classifyDocxCoverage(characterCount: number): ParserTextCoverage {
   if (characterCount === 0) return "none";
   if (characterCount < 32) return "low";
@@ -687,8 +561,8 @@ function uniqueWarnings(warnings: readonly string[]): string[] {
 
 function validateSourceFile(request: OfficeParserRequest): void {
   try {
-    const stat = fs.statSync(request.filePath);
-    if (!stat.isFile()) throw new Error("not file");
+    const stat = fs.lstatSync(request.filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error("not regular file");
     if (stat.size > request.limits.maxBytes) {
       const format = request.sourceKind === "docx_file" ? "DOCX" : "PPTX";
       throw new PigeDomainError(`parser.${format.toLocaleLowerCase()}.file_too_large`, `The ${format} exceeds the configured local parser size limit.`);

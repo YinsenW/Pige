@@ -634,7 +634,7 @@ function verifyPackageResources(releaseResourcesPath, target) {
   ));
   for (const name of [
     "electron", "@earendil-works/pi-agent-core", "@earendil-works/pi-ai", "pdfjs-dist",
-    "@napi-rs/canvas", "mammoth", "fast-xml-parser", "@mozilla/readability", "jsdom", "undici",
+    "@napi-rs/canvas", "@firecrawl/anydoc", "fast-xml-parser", "@mozilla/readability", "jsdom", "undici",
     "node-llama-cpp", target.nativeSemantic.llamaPackage, "sqlite-vec",
     target.nativeSemantic.sqlitePackage, "llama.cpp",
     ...target.requiredSbomComponents
