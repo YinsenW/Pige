@@ -17,7 +17,7 @@ export function WindowModeToggle(props: WindowModeToggleProps): React.JSX.Elemen
     <button type="button" className="icon-button window-mode-button" aria-label={label} title={label}
       tabIndex={props.tabIndex} aria-busy={props.busy || undefined} disabled={!props.state || props.busy}
       onClick={props.onToggle}>
-      <PigeIcon name={compact ? "windowWide" : "windowNarrow"} />
+      <PigeIcon name="pictureInPicture2" />
     </button>
   );
 }

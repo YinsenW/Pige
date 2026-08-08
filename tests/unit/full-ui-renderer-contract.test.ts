@@ -123,6 +123,11 @@ describe("full production UI renderer contract", () => {
     expect(windowControlsSource).toContain("window.pige.window.setMode({");
     expect(windowControlsSource).toContain('state?.isFullScreen ? "expanded" : "fullscreen"');
     expect(windowModeToggleSource).not.toContain("window.pige.window.setMode(");
+    expect(iconSource).toContain("PictureInPicture2");
+    expect(iconSource).toContain("pictureInPicture2: PictureInPicture2");
+    expect(windowModeToggleSource).toContain('<PigeIcon name="pictureInPicture2" />');
+    expect(windowModeToggleSource).not.toContain("windowWide");
+    expect(windowModeToggleSource).not.toContain("windowNarrow");
     expect(readerFullscreenToggleSource).not.toContain("window.pige.window.setMode(");
     expect(readerFullscreenToggleSource).toContain("aria-pressed={fullScreen}");
     expect(enMessages["topbar.exitFullscreen"]).toBe("Exit full screen");
