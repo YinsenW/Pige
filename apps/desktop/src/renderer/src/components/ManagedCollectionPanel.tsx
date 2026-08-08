@@ -94,17 +94,11 @@ export function ManagedCollectionRelatedRecordPanel(props: {
   const panelRef = useRef<HTMLElement | null>(null);
   const ready = props.result?.status === "ready" ? props.result : undefined;
   const snapshot = ready?.snapshot ?? (props.result?.status === "empty" ? props.result.snapshot : undefined);
-  const statusMessage = props.loading
-    ? props.t("collection.openingRelatedRecord")
-    : props.result?.status === "stale"
-    ? props.t("collection.relatedStale")
-    : props.result?.status === "not_found" || props.result?.status === "ineligible"
-      ? props.t("collection.relatedUnavailable")
-      : props.result?.status === "failed"
-        ? props.t("collection.relatedFailed")
-        : props.result?.status === "empty"
-          ? props.t("collection.relatedEmpty")
-          : undefined;
+  const statusMessage = props.loading ? props.t("collection.openingRelatedRecord")
+    : props.result?.status === "stale" ? props.t("collection.relatedStale")
+    : props.result?.status === "not_found" || props.result?.status === "ineligible" ? props.t("collection.relatedUnavailable")
+    : props.result?.status === "failed" ? props.t("collection.relatedFailed")
+    : props.result?.status === "empty" ? props.t("collection.relatedEmpty") : undefined;
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
@@ -115,15 +109,7 @@ export function ManagedCollectionRelatedRecordPanel(props: {
     ? "loading"
     : props.result?.status ?? "unknown";
   return (
-    <section
-      ref={panelRef}
-      className="settings-card settings-row tall managed-collection-related-record"
-      aria-labelledby="managed-collection-related-record-title"
-      aria-busy={props.loading || undefined}
-      data-related-state={state}
-      role="region"
-      tabIndex={-1}
-    >
+    <section ref={panelRef} className="settings-card settings-row tall managed-collection-related-record" aria-labelledby="managed-collection-related-record-title" aria-busy={props.loading || undefined} data-related-state={state} role="region" tabIndex={-1}>
       <header className="dataset-answer-header">
         <div>
           <p className="retrieval-eyebrow">{props.t("collection.relatedRecords")}</p>
