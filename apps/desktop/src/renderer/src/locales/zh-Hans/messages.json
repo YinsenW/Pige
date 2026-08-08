@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "移除",
   "capabilities.semanticAsset.action.removing": "正在移除…",
   "capabilities.semanticAsset.actionFailed": "无法更改本地检索组件，现已显示最后确认的状态。",
+  "capabilities.semanticAsset.notice.notFound": "本地检索组件已不可用，现已显示当前状态。",
+  "capabilities.semanticAsset.notice.stale": "本地检索组件已在其他位置发生变化，现已显示当前状态；如需请重试。",
   "capabilities.semanticAsset.description": "启用后增加本地语义匹配；词法搜索始终可用。",
   "capabilities.semanticAsset.retry": "重试",
   "capabilities.semanticAsset.state.checking": "正在检查",

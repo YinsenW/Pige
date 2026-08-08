@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "Entfernen",
   "capabilities.semanticAsset.action.removing": "Wird entfernt...",
   "capabilities.semanticAsset.actionFailed": "Die lokale Suchkomponente konnte nicht geändert werden. Der zuletzt bestätigte Status wird angezeigt.",
+  "capabilities.semanticAsset.notice.notFound": "Die lokale Suchkomponente ist nicht mehr verfügbar. Der aktuelle Status wird angezeigt.",
+  "capabilities.semanticAsset.notice.stale": "Die lokale Suchkomponente wurde an anderer Stelle geändert. Der aktuelle Status wird angezeigt; versuchen Sie es bei Bedarf erneut.",
   "capabilities.semanticAsset.description": "Fügt bei Aktivierung lokale semantische Treffer hinzu. Die lexikalische Suche bleibt immer verfügbar.",
   "capabilities.semanticAsset.retry": "Erneut versuchen",
   "capabilities.semanticAsset.state.checking": "Wird geprüft",

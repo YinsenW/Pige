@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "제거",
   "capabilities.semanticAsset.action.removing": "제거 중...",
   "capabilities.semanticAsset.actionFailed": "로컬 검색 구성 요소를 변경하지 못했습니다. 마지막으로 확인된 상태를 표시합니다.",
+  "capabilities.semanticAsset.notice.notFound": "로컬 검색 구성 요소를 더 이상 사용할 수 없습니다. 현재 상태를 표시합니다.",
+  "capabilities.semanticAsset.notice.stale": "로컬 검색 구성 요소가 다른 곳에서 변경되었습니다. 현재 상태를 표시합니다. 필요하면 다시 시도하세요.",
   "capabilities.semanticAsset.description": "활성화하면 로컬 의미 검색이 추가됩니다. 어휘 검색은 항상 사용할 수 있습니다.",
   "capabilities.semanticAsset.retry": "다시 시도",
   "capabilities.semanticAsset.state.checking": "확인 중",

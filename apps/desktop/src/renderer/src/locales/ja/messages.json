@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "削除",
   "capabilities.semanticAsset.action.removing": "削除中...",
   "capabilities.semanticAsset.actionFailed": "ローカル検索コンポーネントを変更できませんでした。最後に確認された状態を表示します。",
+  "capabilities.semanticAsset.notice.notFound": "ローカル検索コンポーネントは利用できなくなりました。現在の状態を表示しています。",
+  "capabilities.semanticAsset.notice.stale": "ローカル検索コンポーネントが別の場所で変更されました。現在の状態を表示しています。必要に応じて再試行してください。",
   "capabilities.semanticAsset.description": "有効にするとローカル意味検索が加わります。字句検索は常に利用できます。",
   "capabilities.semanticAsset.retry": "再試行",
   "capabilities.semanticAsset.state.checking": "確認中",

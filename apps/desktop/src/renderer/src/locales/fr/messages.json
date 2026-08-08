@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "Supprimer",
   "capabilities.semanticAsset.action.removing": "Suppression...",
   "capabilities.semanticAsset.actionFailed": "Le composant de recherche locale n’a pas pu être modifié. Son dernier état confirmé est affiché.",
+  "capabilities.semanticAsset.notice.notFound": "Le composant de recherche locale n’est plus disponible. Son état actuel est affiché.",
+  "capabilities.semanticAsset.notice.stale": "Le composant de recherche locale a changé ailleurs. Son état actuel est affiché ; réessayez si nécessaire.",
   "capabilities.semanticAsset.description": "Ajoute la recherche sémantique locale lorsqu’elle est activée. La recherche lexicale reste toujours disponible.",
   "capabilities.semanticAsset.retry": "Réessayer",
   "capabilities.semanticAsset.state.checking": "Vérification",
