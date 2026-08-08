@@ -442,6 +442,59 @@ describe("Models error ownership", () => {
     await unmount(dom, mount.root);
   });
 
+  it("restores keyboard focus after cancelling or committing a manual-model removal", async () => {
+    const dom = createDom();
+    const summary: ModelProviderSettingsSummary = {
+      ...connectedSummary(),
+      defaultModelProfileId: "model_default",
+      hasDefaultModel: true,
+      defaultBinding: {
+        state: "ready",
+        providerProfileId: "provider_fixture",
+        modelProfileId: "model_default"
+      },
+      models: [{
+        id: "model_manual",
+        providerProfileId: "provider_fixture",
+        modelId: "manual-model",
+        source: "manual",
+        enabled: true,
+        isDefault: false,
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:00:00.000Z"
+      }, {
+        id: "model_default",
+        providerProfileId: "provider_fixture",
+        modelId: "default-model",
+        source: "provider_list",
+        enabled: true,
+        isDefault: true,
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:00:00.000Z"
+      }]
+    };
+    const mount = await mountPanel(dom, summary, modelApi({
+      deleteManualModel: async () => summary
+    }));
+
+    await openProviderDetails(dom, mount.container);
+    const remove = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
+    remove.focus();
+    await click(dom, remove);
+    const keep = buttonNamed(mount.container, enMessages["models.keepManualModel"]);
+    await waitFor(dom, () => dom.window.document.activeElement === keep);
+    await click(dom, keep);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    const confirmRemove = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
+    confirmRemove.focus();
+    await click(dom, confirmRemove);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(mount.container, enMessages["library.refresh"]));
+
+    await unmount(dom, mount.root);
+  });
+
   it("keeps the approved progressive Models structure without exposing routing controls", async () => {
     const dom = createDom();
     const mount = await mountPanel(dom, connectedSummary(), modelApi({}));
