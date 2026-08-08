@@ -98,7 +98,18 @@ export function ModelInventoryRow(props: {
         ) : null}
       </div>
       {props.model.source === "manual" && confirmingRemoval ? (
-        <div className="settings-row-control model-row-confirmation" role="group" aria-label={props.t("models.confirmRemoveManualModel")}>
+        <div
+          className="settings-row-control model-row-confirmation"
+          role="group"
+          aria-label={props.t("models.confirmRemoveManualModel")}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || removalPending) return;
+            event.preventDefault();
+            setRemoveFailed(false);
+            setConfirmingRemoval(false);
+            restoreRemoveTrigger();
+          }}
+        >
           <span className="settings-row-copy">
             <strong>{props.t("models.confirmRemoveManualModel")}</strong>
             <span>{props.t("models.confirmRemoveManualModelDescription")}</span>

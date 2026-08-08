@@ -487,6 +487,15 @@ describe("Models error ownership", () => {
     await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(mount.container, enMessages["models.removeManualModel"]));
 
     await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    const escapeKeep = buttonNamed(mount.container, enMessages["models.keepManualModel"]);
+    escapeKeep.focus();
+    await act(async () => {
+      escapeKeep.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
     const confirmRemove = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
     confirmRemove.focus();
     await click(dom, confirmRemove);
