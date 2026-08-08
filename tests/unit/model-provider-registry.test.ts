@@ -678,7 +678,11 @@ describe("model provider registry", () => {
     const crypto: SecretCryptoAdapter = {
       ...fakeCrypto,
       encryptString: vi.fn(fakeCrypto.encryptString),
-      decryptString: vi.fn(fakeCrypto.decryptString)
+      decryptString: vi.fn((encrypted: Buffer) => {
+        const value = encrypted.toString("utf8");
+        if (!value.startsWith("encrypted:")) throw new Error("ciphertext rejected");
+        return value.slice("encrypted:".length);
+      })
     };
     const { root, registry } = makeRegistry(okModelListFetch(["gpt-4.1"]), crypto);
 
