@@ -45,6 +45,7 @@ import {
   OcrSummaryPreferenceControl,
   type OcrSummaryPreferenceApi
 } from "./OcrSummaryPreferenceControl";
+import { usePaddleOcrPolling } from "./PaddleOcrPolling";
 export type { OcrEnginePreferenceApi } from "./OcrEnginePreferenceControl";
 
 type Translate = (key: string) => string;
@@ -115,7 +116,6 @@ export interface LocalCapabilitiesSettingsPanelProps {
 }
 
 const paddleOcrActions = ["install", "enable", "test", "disable", "remove"] as const;
-const paddleOcrPollLimit = 60;
 const ocrLanguagePreferences = ["automatic", "zh-Hans", "en", "ja", "ko", "fr", "de"] as const;
 const ocrLanguageLabels: Record<Locale, string> = {
   "zh-Hans": "简体中文",
@@ -454,7 +454,6 @@ function PaddleOcrLifecyclePanel(props: {
   const mountedRef = useRef(true);
   const requestSequenceRef = useRef(0);
   const actionActiveRef = useRef(false);
-  const pollStateRef = useRef<{ readonly jobId: string; attempts: number } | null>(null);
 
   const readSummary = useCallback(async (
     sequence: number,
@@ -493,33 +492,16 @@ function PaddleOcrLifecyclePanel(props: {
       mountedRef.current = false;
       requestSequenceRef.current += 1;
       actionActiveRef.current = false;
-      pollStateRef.current = null;
     };
   }, [readSummary]);
 
-  useEffect(() => {
-    if (!summary?.activeAction || !summary.activeJobId) {
-      pollStateRef.current = null;
-      return;
-    }
-    if (pollStateRef.current?.jobId !== summary.activeJobId) {
-      pollStateRef.current = { jobId: summary.activeJobId, attempts: 0 };
-    }
-    const timer = window.setInterval(() => {
-      const pollState = pollStateRef.current;
-      if (!pollState || pollState.jobId !== summary.activeJobId) return;
-      pollState.attempts += 1;
-      if (pollState.attempts > paddleOcrPollLimit) {
-        window.clearInterval(timer);
-        setNotice("failed");
-        return;
-      }
-      const sequence = requestSequenceRef.current + 1;
-      requestSequenceRef.current = sequence;
-      void readSummary(sequence, summary.revision);
-    }, 1_000);
-    return () => window.clearInterval(timer);
-  }, [readSummary, summary?.activeAction, summary?.activeJobId, summary?.revision]);
+  const handlePollLimit = useCallback(() => setNotice("failed"), []);
+  usePaddleOcrPolling({
+    summary,
+    readSummary,
+    requestSequenceRef,
+    onPollLimit: handlePollLimit
+  });
 
   const runAction = async (action: PaddleOcrLifecycleAction): Promise<void> => {
     const current = summary;

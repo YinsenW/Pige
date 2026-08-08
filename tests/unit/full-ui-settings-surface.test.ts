@@ -6539,6 +6539,51 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("keeps PaddleOCR status polling one-flight while an active job is unresolved", async () => {
+    const dom = createDom();
+    vi.useFakeTimers();
+    const active = {
+      ...paddleOcrSummary(1, "disabled"),
+      activeAction: "install" as const,
+      activeJobId: "job_20260808_paddlepoll01"
+    };
+    let resolvePoll!: (summary: PaddleOcrSummary) => void;
+    const poll = new Promise<PaddleOcrSummary>((resolve) => { resolvePoll = resolve; });
+    const summary = vi.fn().mockResolvedValueOnce(active).mockReturnValueOnce(poll);
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalCapabilitiesSettingsPanel, {
+        paddleOcrApi: {
+          paddleOcrSummary: summary,
+          installPaddleOcr: vi.fn(), enablePaddleOcr: vi.fn(), testPaddleOcr: vi.fn(),
+          disablePaddleOcr: vi.fn(), removePaddleOcr: vi.fn()
+        },
+        semanticRetrievalApi: semanticAssetApi("ready"),
+        toolchainHealth: null,
+        speechAvailability: null,
+        speechAvailabilityLoading: false,
+        speechAvailabilityFailed: false,
+        onRefresh: vi.fn(async () => undefined),
+        onDevelopment: vi.fn(),
+        t
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await act(async () => { vi.advanceTimersByTime(1_000); await Promise.resolve(); });
+    expect(summary).toHaveBeenCalledTimes(2);
+    await act(async () => { vi.advanceTimersByTime(1_000); await Promise.resolve(); });
+    expect(summary).toHaveBeenCalledTimes(2);
+    try {
+      resolvePoll(active);
+      await act(async () => { await poll; await Promise.resolve(); });
+      await act(async () => root.unmount());
+    } finally {
+      vi.useRealTimers();
+      dom.window.close();
+    }
+  });
+
   it("projects real speech availability without requesting permission and opens system settings only after denial", async () => {
     const dom = createDom();
     const onOpenSpeechSettings = vi.fn(async () => undefined);
