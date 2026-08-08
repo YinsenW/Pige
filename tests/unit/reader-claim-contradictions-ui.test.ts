@@ -2,7 +2,11 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type {
+  NoteRenderResult,
+  NoteSearchClaimContradictionsRequest,
+  NoteSearchClaimContradictionsResult
+} from "@pige/contracts";
 import { ReaderClaimContradictions } from "../../apps/desktop/src/renderer/src/components/ReaderClaimContradictions";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -12,6 +16,23 @@ afterEach(() => { for (const key of keys) { const descriptor = originals.get(key
   originals.clear(); Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT"); });
 
 describe("ReaderClaimContradictions", () => {
+  it("does not show contradiction candidates after the search query drifts while pending", async () => {
+    let resolveSearch: ((result: NoteSearchClaimContradictionsResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchClaimContradictionsRequest) => new Promise<NoteSearchClaimContradictionsResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(render(), search, vi.fn(), vi.fn());
+    const field = harness.container.querySelector("input")!;
+    await act(async () => { setInput(harness.dom, field, "Conflict"); await settle(harness.dom); });
+    await act(async () => { button(harness.container, "note.claimContradictions.search").click(); await Promise.resolve(); });
+    await act(async () => { setInput(harness.dom, field, "Different"); await settle(harness.dom); });
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [item()] });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Conflicting claim");
+    await harness.unmount();
+  });
+
   it("requires explicit confirmation and submits one exact sourced candidate", async () => {
     const search = vi.fn(async (request) => ({ ...request, status: "ready" as const, candidates: [item()] }));
     const change = vi.fn(async (request) => ({ ...request, status: "committed" as const,
