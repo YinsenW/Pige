@@ -105,7 +105,15 @@ export function ReaderNoteTagDialog(props: {
   const [removeTag, setRemoveTag] = useState<string | null>(null);
   const activeRef = useRef(false), sequenceRef = useRef(0), ownerRef = useRef(props.ownerIdentity);
   const inputRef = useRef<HTMLInputElement>(null), dialogRef = useRef<HTMLElement>(null); ownerRef.current = props.ownerIdentity;
-  useEffect(() => { sequenceRef.current += 1; activeRef.current = false; setTagsDraft(props.existingTags.join(", ")); setTopicsDraft(props.existingTopics.join(", ")); setRemoveTag(null); setPending(false); setFailed(false); inputRef.current?.focus({ preventScroll: true }); }, [props.ownerIdentity]);
+  const removeTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingRemoveFocusRef = useRef<string | null>(null);
+  useEffect(() => { sequenceRef.current += 1; activeRef.current = false; pendingRemoveFocusRef.current = null; setTagsDraft(props.existingTags.join(", ")); setTopicsDraft(props.existingTopics.join(", ")); setRemoveTag(null); setPending(false); setFailed(false); inputRef.current?.focus({ preventScroll: true }); }, [props.ownerIdentity]);
+  useEffect(() => {
+    const tag = pendingRemoveFocusRef.current;
+    if (removeTag !== null || !tag) return;
+    pendingRemoveFocusRef.current = null;
+    removeTriggerRefs.current.get(tag)?.focus({ preventScroll: true });
+  }, [removeTag]);
   const tags = parseDraft(tagsDraft), topics = parseDraft(topicsDraft);
   const changed = JSON.stringify(tags) !== JSON.stringify(props.existingTags) || JSON.stringify(topics) !== JSON.stringify(props.existingTopics);
   const valid = changed && validEntries(tags, 12, 48) && validEntries(topics, 8, 80);
@@ -138,13 +146,14 @@ export function ReaderNoteTagDialog(props: {
       <button type="button" className="primary" disabled={pending || !valid} onClick={() => void submit()}>{pending ? props.labels.pending : props.labels.confirm}</button></div>
     {props.onRemove && props.existingTags.length > 0 ? <div className="settings-card">{props.existingTags.map((tag) => <div className="settings-row" key={tag}>
       <span className="settings-row-copy"><strong>{tag}</strong></span><button type="button" className="settings-button" disabled={pending}
+        ref={(node) => { if (node) removeTriggerRefs.current.set(tag, node); else removeTriggerRefs.current.delete(tag); }}
         onClick={() => { setRemoveTag(tag); setFailed(false); }}>{props.labels.remove}</button></div>)}</div> : null}
     {removeTag ? <div className="confirmation-backdrop"><section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-busy={pending}
       aria-labelledby="reader-note-tag-remove-title" aria-describedby="reader-note-tag-remove-description"
-      onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Escape" && !pending) { event.preventDefault(); setRemoveTag(null); setFailed(false); } }}>
+      onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Escape" && !pending) { event.preventDefault(); pendingRemoveFocusRef.current = removeTag; setRemoveTag(null); setFailed(false); } }}>
       <div className="confirmation-copy"><h2 id="reader-note-tag-remove-title">{props.labels.removeTitle}</h2><p id="reader-note-tag-remove-description">{props.labels.removeDescription}</p><p><strong>{removeTag}</strong></p>
         {failed ? <p role="alert">{props.labels.removeFailed}</p> : null}</div><div className="confirmation-actions">
-        <button type="button" disabled={pending} autoFocus onClick={() => { setRemoveTag(null); setFailed(false); }}>{props.labels.cancel}</button>
+        <button type="button" disabled={pending} autoFocus onClick={() => { pendingRemoveFocusRef.current = removeTag; setRemoveTag(null); setFailed(false); }}>{props.labels.cancel}</button>
         <button type="button" className="danger" disabled={pending} onClick={() => void submitRemove()}>{pending ? props.labels.removePending : props.labels.removeConfirm}</button>
       </div></section></div> : null}
   </section></div>;
