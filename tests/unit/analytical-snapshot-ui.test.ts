@@ -6,9 +6,13 @@ import type {
   CollectionAnalyticalSnapshotCitationResult,
   CollectionAnalyticalSnapshotCreateResult,
   CollectionAnalyticalSnapshotListResult,
+  CollectionAnalyticalSnapshotListTrashResult,
   CollectionAnalyticalSnapshotOpenResult,
   CollectionAnalyticalSnapshotPreview,
+  CollectionAnalyticalSnapshotRestoreResult,
   CollectionAnalyticalSnapshotSummary,
+  CollectionAnalyticalSnapshotTrashResult,
+  CollectionAnalyticalSnapshotTrashSummary,
   CollectionSnapshot
 } from "@pige/schemas";
 import { AnalyticalSnapshotPanel } from "../../apps/desktop/src/renderer/src/components/AnalyticalSnapshotPanel";
@@ -110,13 +114,60 @@ describe("AnalyticalSnapshotPanel", () => {
     expect(harness.dom.window.document.activeElement).toBe(create);
     await harness.unmount();
   });
+
+  it("requires confirmation, moves a snapshot to trash, and restores it through the same identity-bound list", async () => {
+    const summary = snapshotSummary();
+    const trashSummary = snapshotTrashSummary(summary);
+    let trashed = false;
+    const list = vi.fn(async (request: Parameters<NonNullable<typeof window.pige.collections.listAnalyticalSnapshots>>[0]) =>
+      ({ ...request, status: "ready" as const, snapshots: trashed ? [] : [summary] } satisfies CollectionAnalyticalSnapshotListResult));
+    const listTrash = vi.fn(async (request: Parameters<NonNullable<typeof window.pige.collections.listAnalyticalSnapshotTrash>>[0]) =>
+      ({ ...request, status: "ready" as const, revision: trashSummary.trashRevision, snapshots: trashed ? [trashSummary] : [] } satisfies CollectionAnalyticalSnapshotListTrashResult));
+    const trash = vi.fn(async (request: Parameters<NonNullable<typeof window.pige.collections.trashAnalyticalSnapshot>>[0]) => {
+      trashed = true;
+      return { ...request, status: "committed" as const, operationId: trashSummary.trashOperationId } satisfies CollectionAnalyticalSnapshotTrashResult;
+    });
+    const restore = vi.fn(async (request: Parameters<NonNullable<typeof window.pige.collections.restoreAnalyticalSnapshot>>[0]) => {
+      trashed = false;
+      return { ...request, status: "committed" as const, operationId: "op_20260809_snapshotrestore01" } satisfies CollectionAnalyticalSnapshotRestoreResult;
+    });
+    const harness = await mount({
+      list,
+      listTrash,
+      create: vi.fn(),
+      open: vi.fn(),
+      openCitation: vi.fn(),
+      trash,
+      restore
+    });
+    await settle(harness.dom);
+    const createButton = button(harness.container, "collection.snapshotCreate");
+    const trashButton = button(harness.container, "collection.snapshotTrash");
+    trashButton.focus();
+    trashButton.click();
+    expect(trash).not.toHaveBeenCalled();
+    button(harness.container, "collection.snapshotTrashConfirm").click();
+    await act(async () => { await settle(harness.dom); });
+    expect(trash).toHaveBeenCalledOnce();
+    expect(listTrash).toHaveBeenCalled();
+    expect(harness.container.textContent).toContain("collection.snapshotTrashTitle");
+    const restoreButton = button(harness.container, "collection.snapshotRestore");
+    restoreButton.click();
+    await act(async () => { await settle(harness.dom); });
+    expect(restore).toHaveBeenCalledOnce();
+    expect(harness.dom.window.document.activeElement).toBe(createButton);
+    await harness.unmount();
+  });
 });
 
 async function mount(actions: {
   readonly list: (...args: never[]) => Promise<unknown>;
+  readonly listTrash?: (...args: never[]) => Promise<unknown>;
   readonly create: (...args: never[]) => Promise<unknown>;
   readonly open: (...args: never[]) => Promise<unknown>;
   readonly openCitation: (...args: never[]) => Promise<unknown>;
+  readonly trash?: (...args: never[]) => Promise<unknown>;
+  readonly restore?: (...args: never[]) => Promise<unknown>;
 }) {
   const dom = new JSDOM("<div id=\"root\"></div>", { pretendToBeVisual: true, url: "http://localhost/" });
   const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -142,7 +193,10 @@ async function mount(actions: {
     listAnalyticalSnapshots: actions.list,
     createAnalyticalSnapshot: actions.create,
     openAnalyticalSnapshot: actions.open,
-    openAnalyticalSnapshotCitation: actions.openCitation
+    openAnalyticalSnapshotCitation: actions.openCitation,
+    listAnalyticalSnapshotTrash: actions.listTrash ?? (async (request: unknown) => ({ ...(request as object), status: "failed" })),
+    trashAnalyticalSnapshot: actions.trash ?? (async (request: unknown) => ({ ...(request as object), status: "failed" })),
+    restoreAnalyticalSnapshot: actions.restore ?? (async (request: unknown) => ({ ...(request as object), status: "failed" }))
   } } });
   const container = dom.window.document.querySelector("#root") as HTMLElement;
   const root = createRoot(container);
@@ -219,6 +273,16 @@ function snapshotPreview(): CollectionAnalyticalSnapshotPreview {
     returnedRowCount: 1,
     truncated: false,
     snapshotHash: `sha256:${"b".repeat(64)}`
+  };
+}
+
+function snapshotTrashSummary(summary: CollectionAnalyticalSnapshotSummary): CollectionAnalyticalSnapshotTrashSummary {
+  return {
+    ...summary,
+    trashOperationId: "op_20260809_snapshottrash01",
+    trashedAt: summary.createdAt,
+    trashRevision: `snapshottrashrev_${"e".repeat(64)}`,
+    canRestore: true
   };
 }
 

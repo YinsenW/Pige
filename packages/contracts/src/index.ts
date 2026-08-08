@@ -161,6 +161,12 @@ import type {
   CollectionAnalyticalSnapshotOpenResult,
   CollectionAnalyticalSnapshotCitationRequest,
   CollectionAnalyticalSnapshotCitationResult,
+  CollectionAnalyticalSnapshotListTrashRequest,
+  CollectionAnalyticalSnapshotListTrashResult,
+  CollectionAnalyticalSnapshotTrashRequest,
+  CollectionAnalyticalSnapshotTrashResult,
+  CollectionAnalyticalSnapshotRestoreRequest,
+  CollectionAnalyticalSnapshotRestoreResult,
   CollectionRevealRequest,
   CollectionRevealResult,
   CollectionAppendDefaultRowRequest,
@@ -1808,6 +1814,8 @@ export interface KnowledgeActivitySummary {
     | "restore_collection_revision"
     | "trash_dataset"
     | "restore_dataset"
+    | "trash_analytical_snapshot"
+    | "restore_analytical_snapshot"
     | "purge_dataset"
     | "rename_dataset"
     | "create_memory"
@@ -2696,6 +2704,15 @@ export interface PigeDesktopApi {
   readonly openAnalyticalSnapshotCitation: (
     request: CollectionAnalyticalSnapshotCitationRequest
   ) => Promise<CollectionAnalyticalSnapshotCitationResult>;
+  readonly listAnalyticalSnapshotTrash: (
+    request: CollectionAnalyticalSnapshotListTrashRequest
+  ) => Promise<CollectionAnalyticalSnapshotListTrashResult>;
+  readonly trashAnalyticalSnapshot: (
+    request: CollectionAnalyticalSnapshotTrashRequest
+  ) => Promise<CollectionAnalyticalSnapshotTrashResult>;
+  readonly restoreAnalyticalSnapshot: (
+    request: CollectionAnalyticalSnapshotRestoreRequest
+  ) => Promise<CollectionAnalyticalSnapshotRestoreResult>;
   readonly listRevisionHistory: (
       request: CollectionListRevisionHistoryRequest
     ) => Promise<CollectionListRevisionHistoryResult>;

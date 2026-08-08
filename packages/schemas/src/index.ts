@@ -1417,6 +1417,8 @@ export const KnowledgeActivitySummarySchema = z.object({
     "restore_collection_revision",
     "trash_dataset",
     "restore_dataset",
+    "trash_analytical_snapshot",
+    "restore_analytical_snapshot",
     "purge_dataset",
     "rename_dataset",
     "create_memory",
@@ -8536,6 +8538,9 @@ export const COLLECTION_ANALYTICAL_SNAPSHOT_LIST_CHANNEL = "collections.analytic
 export const COLLECTION_ANALYTICAL_SNAPSHOT_CREATE_CHANNEL = "collections.analyticalSnapshots.create" as const;
 export const COLLECTION_ANALYTICAL_SNAPSHOT_OPEN_CHANNEL = "collections.analyticalSnapshots.open" as const;
 export const COLLECTION_ANALYTICAL_SNAPSHOT_CITATION_CHANNEL = "collections.analyticalSnapshots.openCitation" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_TRASH_CHANNEL = "collections.analyticalSnapshots.trash" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_LIST_TRASH_CHANNEL = "collections.analyticalSnapshots.listTrash" as const;
+export const COLLECTION_ANALYTICAL_SNAPSHOT_RESTORE_CHANNEL = "collections.analyticalSnapshots.restore" as const;
 export const COLLECTION_ADD_FORMULA_COLUMN_CHANNEL = "collections.addFormulaColumn" as const;
 export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormulaColumn" as const;
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
@@ -9418,6 +9423,53 @@ export const CollectionAnalyticalSnapshotCitationResultSchema = z.discriminatedU
   }).strict(),
   CollectionAnalyticalSnapshotCitationIdentitySchema.extend({
     status: z.enum(["stale", "not_found", "failed"])
+  }).strict()
+]);
+
+export const CollectionAnalyticalSnapshotTrashRevisionSchema = z.string()
+  .regex(/^snapshottrashrev_[a-f0-9]{64}$/u);
+export const CollectionAnalyticalSnapshotTrashSummarySchema = CollectionAnalyticalSnapshotSummarySchema.extend({
+  trashOperationId: OperationIdSchema,
+  trashedAt: z.string().datetime({ offset: true }),
+  trashRevision: CollectionAnalyticalSnapshotTrashRevisionSchema,
+  canRestore: z.literal(true)
+}).strict();
+export const CollectionAnalyticalSnapshotListTrashRequestSchema = CollectionAnalyticalSnapshotListIdentitySchema;
+export const CollectionAnalyticalSnapshotListTrashResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotListTrashRequestSchema.extend({
+    status: z.literal("ready"),
+    revision: CollectionAnalyticalSnapshotTrashRevisionSchema,
+    snapshots: z.array(CollectionAnalyticalSnapshotTrashSummarySchema).max(100)
+  }).strict(),
+  CollectionAnalyticalSnapshotListTrashRequestSchema.extend({ status: z.enum(["not_found", "failed"]) }).strict()
+]);
+const CollectionAnalyticalSnapshotTrashIdentitySchema = CollectionAnalyticalSnapshotListIdentitySchema.extend({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema,
+  expectedOperationId: OperationIdSchema
+}).strict();
+export const CollectionAnalyticalSnapshotTrashRequestSchema = CollectionAnalyticalSnapshotTrashIdentitySchema;
+export const CollectionAnalyticalSnapshotTrashResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotTrashIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionAnalyticalSnapshotTrashIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "ineligible", "failed"])
+  }).strict()
+]);
+const CollectionAnalyticalSnapshotRestoreIdentitySchema = CollectionAnalyticalSnapshotListIdentitySchema.extend({
+  snapshotId: CollectionAnalyticalSnapshotIdSchema,
+  trashOperationId: OperationIdSchema,
+  expectedTrashRevision: CollectionAnalyticalSnapshotTrashRevisionSchema
+}).strict();
+export const CollectionAnalyticalSnapshotRestoreRequestSchema = CollectionAnalyticalSnapshotRestoreIdentitySchema;
+export const CollectionAnalyticalSnapshotRestoreResultSchema = z.discriminatedUnion("status", [
+  CollectionAnalyticalSnapshotRestoreIdentitySchema.extend({
+    status: z.literal("committed"),
+    operationId: OperationIdSchema
+  }).strict(),
+  CollectionAnalyticalSnapshotRestoreIdentitySchema.extend({
+    status: z.enum(["stale", "not_found", "ineligible", "failed"])
   }).strict()
 ]);
 
@@ -13313,6 +13365,8 @@ export const OperationRecordSchema = z.object({
     "restore_collection_revision",
     "trash_dataset",
     "restore_dataset",
+    "trash_analytical_snapshot",
+    "restore_analytical_snapshot",
     "purge_dataset",
     "rename_dataset",
     "trash_artifact",
@@ -14011,6 +14065,14 @@ export type CollectionAnalyticalSnapshotOpenRequest = z.infer<typeof CollectionA
 export type CollectionAnalyticalSnapshotOpenResult = z.infer<typeof CollectionAnalyticalSnapshotOpenResultSchema>;
 export type CollectionAnalyticalSnapshotCitationRequest = z.infer<typeof CollectionAnalyticalSnapshotCitationRequestSchema>;
 export type CollectionAnalyticalSnapshotCitationResult = z.infer<typeof CollectionAnalyticalSnapshotCitationResultSchema>;
+export type CollectionAnalyticalSnapshotTrashRevision = z.infer<typeof CollectionAnalyticalSnapshotTrashRevisionSchema>;
+export type CollectionAnalyticalSnapshotTrashSummary = z.infer<typeof CollectionAnalyticalSnapshotTrashSummarySchema>;
+export type CollectionAnalyticalSnapshotListTrashRequest = z.infer<typeof CollectionAnalyticalSnapshotListTrashRequestSchema>;
+export type CollectionAnalyticalSnapshotListTrashResult = z.infer<typeof CollectionAnalyticalSnapshotListTrashResultSchema>;
+export type CollectionAnalyticalSnapshotTrashRequest = z.infer<typeof CollectionAnalyticalSnapshotTrashRequestSchema>;
+export type CollectionAnalyticalSnapshotTrashResult = z.infer<typeof CollectionAnalyticalSnapshotTrashResultSchema>;
+export type CollectionAnalyticalSnapshotRestoreRequest = z.infer<typeof CollectionAnalyticalSnapshotRestoreRequestSchema>;
+export type CollectionAnalyticalSnapshotRestoreResult = z.infer<typeof CollectionAnalyticalSnapshotRestoreResultSchema>;
 export type CollectionRevealRequest = z.infer<typeof CollectionRevealRequestSchema>;
 export type CollectionRevealResult = z.infer<typeof CollectionRevealResultSchema>;
 export type CollectionRequestId = z.infer<typeof CollectionRequestIdSchema>;

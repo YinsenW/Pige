@@ -310,6 +310,7 @@ import { ManagedDatasetLifecycleService } from "./services/managed-dataset-lifec
 import { ManagedDatasetPurgeService } from "./services/managed-dataset-purge-service";
 import { ManagedDatasetTitleService } from "./services/managed-dataset-title-service";
 import { AnalyticalSnapshotService } from "./services/analytical-snapshot-service";
+import { AnalyticalSnapshotTrashService } from "./services/analytical-snapshot-trash-service";
 import { AgentConversationHistory } from "./services/agent-conversation-history";
 import { AssistantAnswerNoteService } from "./services/assistant-answer-note-service";
 import { AgentConversationExportService } from "./services/agent-conversation-export-service";
@@ -550,6 +551,7 @@ let managedDatasetLifecycleService: ManagedDatasetLifecycleService | undefined;
 let managedDatasetPurgeService: ManagedDatasetPurgeService | undefined;
 let managedDatasetTitleService: ManagedDatasetTitleService | undefined;
 let analyticalSnapshotService: AnalyticalSnapshotService | undefined;
+let analyticalSnapshotTrashService: AnalyticalSnapshotTrashService | undefined;
 const collectionCitationConversationHistory = new AgentConversationHistory();
 const agentConversationExportService = new AgentConversationExportService();
 const homeConversationHistory = new AgentConversationHistory();
@@ -2510,6 +2512,16 @@ const getAnalyticalSnapshotService = (): AnalyticalSnapshotService => {
   return analyticalSnapshotService;
 };
 
+const getAnalyticalSnapshotTrashService = (): AnalyticalSnapshotTrashService => {
+  if (!analyticalSnapshotTrashService) {
+    analyticalSnapshotTrashService = new AnalyticalSnapshotTrashService(
+      getVaultService(),
+      getAnalyticalSnapshotService()
+    );
+  }
+  return analyticalSnapshotTrashService;
+};
+
 const getManagedCollectionCitationService = (): ManagedCollectionCitationService => {
   if (!managedCollectionCitationService) {
     managedCollectionCitationService = new ManagedCollectionCitationService(
@@ -2531,6 +2543,7 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   const tables = getManagedCollectionTableService();
   const history = getManagedCollectionRevisionHistoryService();
   const owner = (operation: Parameters<KnowledgeActivityCollectionPort["activitySummary"]>[0]) =>
+    ["trash_analytical_snapshot", "restore_analytical_snapshot"].includes(operation.kind) ? getAnalyticalSnapshotTrashService() :
     operation.kind === "rename_dataset" ? titles :
       ["add_collection_table", "rename_collection_table", "trash_collection_table"].includes(operation.kind) ? tables :
       operation.kind === "restore_collection_revision" ? history :
@@ -2559,13 +2572,14 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const titleResult = titles.recoverIncompleteOperations();
       const tableResult = tables.recoverIncompleteOperations();
       const historyResult = history.recoverIncompleteOperations();
+      const snapshotTrashResult = getAnalyticalSnapshotTrashService().recoverIncompleteOperations();
       return {
         recovered: collectionRedoResult.recovered + tableRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
           viewResult.recovered + datasetResult.recovered + datasetPurgeResult.recovered +
-          titleResult.recovered + tableResult.recovered + historyResult.recovered,
+          titleResult.recovered + tableResult.recovered + historyResult.recovered + snapshotTrashResult.recovered,
         failed: collectionRedoResult.failed + tableRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
           viewResult.failed + datasetResult.failed + datasetPurgeResult.failed +
-          titleResult.failed + tableResult.failed + historyResult.failed
+          titleResult.failed + tableResult.failed + historyResult.failed + snapshotTrashResult.failed
       };
     }
   };
@@ -3629,7 +3643,8 @@ registerAnalyticalSnapshotIpc({
     return !!window && mainWindows.has(window);
   },
   getActiveVaultId: () => getVaultService().current()?.vaultId,
-  service: getAnalyticalSnapshotService()
+  service: getAnalyticalSnapshotService(),
+  trashService: getAnalyticalSnapshotTrashService()
 });
 registerKnowledgeHealthIpc({
   ipcMain,
@@ -4623,6 +4638,7 @@ app.whenReady().then(async () => {
   sourceRefreshService = undefined;
   sourceRefreshConflictService = undefined;
   sourceTrashService = undefined;
+  analyticalSnapshotTrashService = undefined;
   agentPageUpdateRedoService = new AgentPageUpdateRedoService();
   knowledgeActivityService = new KnowledgeActivityService(
     getVaultService(),

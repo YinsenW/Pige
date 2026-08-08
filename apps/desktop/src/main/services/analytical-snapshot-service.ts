@@ -195,6 +195,23 @@ export class AnalyticalSnapshotService {
     return summaries.sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.snapshotId.localeCompare(right.snapshotId));
   }
 
+  /** Re-proves a descriptor after its own file has been moved to recoverable trash. */
+  isCurrentRecord(activeVaultId: string, record: AnalyticalSnapshotRecord): boolean {
+    const vaultPath = this.#activeVaultPath(activeVaultId);
+    if (!vaultPath) return false;
+    try {
+      const binding = readBundle(vaultPath, record.datasetId);
+      if (!binding) return false;
+      const revision = readImmutableCollectionRevision(binding, record.revisionId);
+      const table = revision.schema.tables.find(({ id }) => id === record.tableId);
+      if (!table || table.rowCount !== record.rowCount || table.columnCount !== record.columnCount ||
+          snapshotSourceRevisionHash(binding.manifest.datasetId, revision.revision) !== record.sourceRevisionHash) return false;
+      return readCollectionSnapshot(revision, record.tableId, { totalRowCount: record.rowCount }) !== undefined;
+    } catch {
+      return false;
+    }
+  }
+
   open(activeVaultId: string, snapshotId: string): AnalyticalSnapshotOpenResult {
     const vaultPath = this.#activeVaultPath(activeVaultId);
     if (!vaultPath || !CollectionAnalyticalSnapshotIdSchema.safeParse(snapshotId).success) return { status: "stale" };

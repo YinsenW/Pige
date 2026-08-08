@@ -4,13 +4,17 @@ import type {
   CollectionAnalyticalSnapshotCreateResult,
   CollectionAnalyticalSnapshotListResult,
   CollectionAnalyticalSnapshotOpenResult,
+  CollectionAnalyticalSnapshotListTrashResult,
+  CollectionAnalyticalSnapshotTrashSummary,
+  CollectionAnalyticalSnapshotRestoreResult,
+  CollectionAnalyticalSnapshotTrashResult,
   CollectionAnalyticalSnapshotPreview,
   CollectionAnalyticalSnapshotSummary,
   CollectionSnapshot
 } from "@pige/schemas";
 import { formatCollectionCellValue } from "./ManagedCollectionScalarCellEditor";
 
-type SnapshotNotice = "created" | "stale" | "not_found" | "failed" | "citation_ready";
+type SnapshotNotice = "created" | "trashed" | "restored" | "stale" | "not_found" | "ineligible" | "failed" | "citation_ready";
 
 export function AnalyticalSnapshotPanel(props: {
   readonly activeVaultId: string;
@@ -19,6 +23,9 @@ export function AnalyticalSnapshotPanel(props: {
   readonly t: (key: string) => string;
 }): React.JSX.Element {
   const [snapshots, setSnapshots] = useState<readonly CollectionAnalyticalSnapshotSummary[]>([]);
+  const [trashSnapshots, setTrashSnapshots] = useState<readonly CollectionAnalyticalSnapshotTrashSummary[]>([]);
+  const [trashRevision, setTrashRevision] = useState<string | null>(null);
+  const [confirmTrashId, setConfirmTrashId] = useState<string | null>(null);
   const [preview, setPreview] = useState<CollectionAnalyticalSnapshotPreview | null>(null);
   const [citation, setCitation] = useState<Extract<CollectionAnalyticalSnapshotCitationResult, { readonly status: "ready" }>["citation"] | null>(null);
   const [notice, setNotice] = useState<SnapshotNotice | null>(null);
@@ -38,6 +45,9 @@ export function AnalyticalSnapshotPanel(props: {
   useEffect(() => {
     requestSequence.current += 1;
     setSnapshots([]);
+    setTrashSnapshots([]);
+    setTrashRevision(null);
+    setConfirmTrashId(null);
     setPreview(null);
     setCitation(null);
     setNotice(null);
@@ -77,6 +87,37 @@ export function AnalyticalSnapshotPanel(props: {
     }
     setListFailed(false);
     setSnapshots(result.snapshots.filter((item) =>
+      item.datasetId === props.snapshot.datasetId && item.tableId === props.snapshot.tableId
+    ));
+    const trashRequest = {
+      apiVersion: 1,
+      requestId: requestId(),
+      activeVaultId: props.activeVaultId
+    } as const;
+    let trashResult: CollectionAnalyticalSnapshotListTrashResult;
+    try {
+      trashResult = await window.pige.collections.listAnalyticalSnapshotTrash(trashRequest);
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        setTrashSnapshots([]);
+        setTrashRevision(null);
+        setListFailed(true);
+        setNotice("failed");
+      }
+      return;
+    }
+    if (sequence !== requestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
+        trashResult.requestId !== trashRequest.requestId || trashResult.activeVaultId !== trashRequest.activeVaultId) return;
+    if (trashResult.status !== "ready") {
+      setTrashSnapshots([]);
+      setTrashRevision(null);
+      setListFailed(true);
+      setNotice("failed");
+      return;
+    }
+    setListFailed(false);
+    setTrashRevision(trashResult.revision);
+    setTrashSnapshots(trashResult.snapshots.filter((item) =>
       item.datasetId === props.snapshot.datasetId && item.tableId === props.snapshot.tableId
     ));
   };
@@ -180,6 +221,78 @@ export function AnalyticalSnapshotPanel(props: {
     }
   };
 
+  const trashSnapshot = async (item: CollectionAnalyticalSnapshotSummary): Promise<void> => {
+    if (busy || inFlightRef.current || props.blocked) return;
+    inFlightRef.current = true;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    const expectedOwnerKey = ownerKey;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: requestId(),
+      activeVaultId: props.activeVaultId,
+      snapshotId: item.snapshotId,
+      expectedOperationId: item.operationId
+    };
+    focusCreateRef.current = true;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result: CollectionAnalyticalSnapshotTrashResult = await window.pige.collections.trashAnalyticalSnapshot(request);
+      if (sequence !== requestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
+          result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId ||
+          result.snapshotId !== request.snapshotId || result.expectedOperationId !== request.expectedOperationId) return;
+      if (result.status === "committed") {
+        setSnapshots((current) => current.filter((candidate) => candidate.snapshotId !== item.snapshotId));
+        setTrashSnapshots((current) => current.filter((candidate) => candidate.snapshotId !== item.snapshotId));
+        setPreview((current) => current?.snapshotId === item.snapshotId ? null : current);
+        setNotice("trashed");
+        await loadSnapshots(sequence, expectedOwnerKey);
+      } else setNotice(result.status === "stale" ? "stale" : result.status === "not_found" ? "not_found" : result.status === "ineligible" ? "ineligible" : "failed");
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setNotice("failed");
+    } finally {
+      inFlightRef.current = false;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
+  const restoreSnapshot = async (item: CollectionAnalyticalSnapshotTrashSummary): Promise<void> => {
+    if (busy || inFlightRef.current || props.blocked || !trashRevision) return;
+    inFlightRef.current = true;
+    const sequence = requestSequence.current + 1;
+    requestSequence.current = sequence;
+    const expectedOwnerKey = ownerKey;
+    const request = {
+      apiVersion: 1 as const,
+      requestId: requestId(),
+      activeVaultId: props.activeVaultId,
+      snapshotId: item.snapshotId,
+      trashOperationId: item.trashOperationId,
+      expectedTrashRevision: trashRevision
+    };
+    focusCreateRef.current = true;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result: CollectionAnalyticalSnapshotRestoreResult = await window.pige.collections.restoreAnalyticalSnapshot(request);
+      if (sequence !== requestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
+          result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId ||
+          result.snapshotId !== request.snapshotId || result.trashOperationId !== request.trashOperationId ||
+          result.expectedTrashRevision !== request.expectedTrashRevision) return;
+      if (result.status === "committed") {
+        setTrashSnapshots((current) => current.filter((candidate) => candidate.snapshotId !== item.snapshotId));
+        setNotice("restored");
+        await loadSnapshots(sequence, expectedOwnerKey);
+      } else setNotice(result.status === "stale" ? "stale" : result.status === "not_found" ? "not_found" : result.status === "ineligible" ? "ineligible" : "failed");
+    } catch {
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setNotice("failed");
+    } finally {
+      inFlightRef.current = false;
+      if (sequence === requestSequence.current && ownerKeyRef.current === expectedOwnerKey) setBusy(false);
+    }
+  };
+
   return (
     <section ref={panelRef} className="settings-card analytical-snapshot-panel" aria-labelledby="analytical-snapshot-title" tabIndex={-1}>
       <div className="settings-row-copy">
@@ -197,11 +310,26 @@ export function AnalyticalSnapshotPanel(props: {
           {snapshots.map((item) => (
             <li key={item.snapshotId} className="settings-row">
               <div className="settings-row-copy"><strong>{item.title}</strong><span className="muted">{item.tableName} · {item.rowCount} {props.t("collection.rows")}</span></div>
-              <button type="button" className="settings-button" disabled={busy} onClick={() => void openSnapshot(item.snapshotId)}>{props.t("collection.snapshotOpen")}</button>
+              <div className="settings-row-actions">
+                <button type="button" className="settings-button" disabled={busy} onClick={() => void openSnapshot(item.snapshotId)}>{props.t("collection.snapshotOpen")}</button>
+                {confirmTrashId === item.snapshotId ? <>
+                  <button type="button" className="settings-button" disabled={busy} onClick={() => void trashSnapshot(item)}>{props.t("collection.snapshotTrashConfirm")}</button>
+                  <button type="button" className="settings-button" disabled={busy} onClick={() => setConfirmTrashId(null)}>{props.t("common.cancel")}</button>
+                </> : <button type="button" className="settings-button" disabled={busy || props.blocked} onClick={() => setConfirmTrashId(item.snapshotId)}>{props.t("collection.snapshotTrash")}</button>}
+              </div>
             </li>
           ))}
         </ul>
       ) : <p className="muted">{props.t("collection.snapshotEmpty")}</p>}
+      {trashSnapshots.length > 0 ? <>
+        <h3>{props.t("collection.snapshotTrashTitle")}</h3>
+        <ul className="settings-list" aria-label={props.t("collection.snapshotTrashList")}>
+          {trashSnapshots.map((item) => <li key={item.snapshotId} className="settings-row">
+            <div className="settings-row-copy"><strong>{item.title}</strong><span className="muted">{item.tableName} · {item.rowCount} {props.t("collection.rows")}</span></div>
+            <button type="button" className="settings-button" disabled={busy || props.blocked || !item.canRestore} onClick={() => void restoreSnapshot(item)}>{props.t("collection.snapshotRestore")}</button>
+          </li>)}
+        </ul>
+      </> : null}
       {preview ? (
         <div className="dataset-answer analytical-snapshot-preview" aria-labelledby="analytical-snapshot-preview-title">
           <div className="settings-row-copy"><h3 id="analytical-snapshot-preview-title">{preview.tableName}</h3><span className="muted">{preview.returnedRowCount}/{preview.totalRowCount} {props.t("collection.rows")}</span></div>

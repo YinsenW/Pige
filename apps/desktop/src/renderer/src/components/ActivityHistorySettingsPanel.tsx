@@ -330,6 +330,10 @@ export function ActivityHistorySettingsPanel(props: {
                   ? "activity.trashedMemory"
                 : activity.kind === "restore_memory"
                   ? "activity.restoredMemory"
+                : activity.kind === "trash_analytical_snapshot"
+                  ? "activity.trashedAnalyticalSnapshot"
+                : activity.kind === "restore_analytical_snapshot"
+                  ? "activity.restoredAnalyticalSnapshot"
                 : activity.kind === "change_setting"
                   ? "activity.changedSetting"
                   : "activity.createdPage");

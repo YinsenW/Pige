@@ -1,11 +1,20 @@
 import type { IpcMain, WebContents } from "electron";
 import {
   COLLECTION_ANALYTICAL_SNAPSHOT_CITATION_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_LIST_TRASH_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_RESTORE_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_TRASH_CHANNEL,
   COLLECTION_ANALYTICAL_SNAPSHOT_CREATE_CHANNEL,
   COLLECTION_ANALYTICAL_SNAPSHOT_LIST_CHANNEL,
   COLLECTION_ANALYTICAL_SNAPSHOT_OPEN_CHANNEL,
   CollectionAnalyticalSnapshotCitationRequestSchema,
   CollectionAnalyticalSnapshotCitationResultSchema,
+  CollectionAnalyticalSnapshotListTrashRequestSchema,
+  CollectionAnalyticalSnapshotListTrashResultSchema,
+  CollectionAnalyticalSnapshotRestoreRequestSchema,
+  CollectionAnalyticalSnapshotRestoreResultSchema,
+  CollectionAnalyticalSnapshotTrashRequestSchema,
+  CollectionAnalyticalSnapshotTrashResultSchema,
   CollectionAnalyticalSnapshotCreateRequestSchema,
   CollectionAnalyticalSnapshotCreateResultSchema,
   CollectionAnalyticalSnapshotListRequestSchema,
@@ -21,12 +30,14 @@ import {
   AnalyticalSnapshotService,
   toAnalyticalSnapshotSummary
 } from "./services/analytical-snapshot-service";
+import { AnalyticalSnapshotTrashService } from "./services/analytical-snapshot-trash-service";
 
 interface RegisterAnalyticalSnapshotIpcOptions {
   readonly ipcMain: Pick<IpcMain, "handle">;
   readonly isTrustedSender: (sender: WebContents) => boolean;
   readonly getActiveVaultId: () => string | undefined;
   readonly service: AnalyticalSnapshotService;
+  readonly trashService: AnalyticalSnapshotTrashService;
 }
 
 export function registerAnalyticalSnapshotIpc(options: RegisterAnalyticalSnapshotIpcOptions): void {
@@ -88,6 +99,36 @@ export function registerAnalyticalSnapshotIpc(options: RegisterAnalyticalSnapsho
       });
     } catch {
       return failedCitation(request);
+    }
+  });
+
+  options.ipcMain.handle(COLLECTION_ANALYTICAL_SNAPSHOT_LIST_TRASH_CHANNEL, (event, input: unknown) => {
+    const request = CollectionAnalyticalSnapshotListTrashRequestSchema.parse(input);
+    if (!trusted(options, event.sender, request.activeVaultId)) return CollectionAnalyticalSnapshotListTrashResultSchema.parse({ ...request, status: "failed" });
+    try {
+      return CollectionAnalyticalSnapshotListTrashResultSchema.parse(options.trashService.listTrash(request));
+    } catch {
+      return CollectionAnalyticalSnapshotListTrashResultSchema.parse({ ...request, status: "failed" });
+    }
+  });
+
+  options.ipcMain.handle(COLLECTION_ANALYTICAL_SNAPSHOT_TRASH_CHANNEL, (event, input: unknown) => {
+    const request = CollectionAnalyticalSnapshotTrashRequestSchema.parse(input);
+    if (!trusted(options, event.sender, request.activeVaultId)) return CollectionAnalyticalSnapshotTrashResultSchema.parse({ ...request, status: "failed" });
+    try {
+      return CollectionAnalyticalSnapshotTrashResultSchema.parse(options.trashService.trash(request));
+    } catch {
+      return CollectionAnalyticalSnapshotTrashResultSchema.parse({ ...request, status: "failed" });
+    }
+  });
+
+  options.ipcMain.handle(COLLECTION_ANALYTICAL_SNAPSHOT_RESTORE_CHANNEL, (event, input: unknown) => {
+    const request = CollectionAnalyticalSnapshotRestoreRequestSchema.parse(input);
+    if (!trusted(options, event.sender, request.activeVaultId)) return CollectionAnalyticalSnapshotRestoreResultSchema.parse({ ...request, status: "failed" });
+    try {
+      return CollectionAnalyticalSnapshotRestoreResultSchema.parse(options.trashService.restore(request));
+    } catch {
+      return CollectionAnalyticalSnapshotRestoreResultSchema.parse({ ...request, status: "failed" });
     }
   });
 }
