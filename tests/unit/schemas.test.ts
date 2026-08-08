@@ -284,6 +284,7 @@ import {
   SetDictationLanguagePreferenceRequestSchema,
   SetDictationLanguagePreferenceResultSchema,
   SetDefaultModelRequestSchema,
+  DeleteManualModelRequestSchema,
   PiPackageInstallRequestSchema,
   PiPackageInstallResultSchema,
   PiPackageInspectRequestSchema,
@@ -455,6 +456,19 @@ describe("schemas", () => {
     expect(SetDefaultModelRequestSchema.parse(request)).toEqual(request);
     expect(() => SetDefaultModelRequestSchema.parse({ modelProfileId: request.modelProfileId })).toThrow();
     expect(() => SetDefaultModelRequestSchema.parse({
+      ...request,
+      expectedRevision: `sha256:${"b".repeat(63)}`
+    })).toThrow();
+  });
+
+  it("requires a current manual-model identity before removal", () => {
+    const request = {
+      modelProfileId: "model_manual_profile",
+      expectedRevision: `sha256:${"a".repeat(64)}`
+    } as const;
+    expect(DeleteManualModelRequestSchema.parse(request)).toEqual(request);
+    expect(() => DeleteManualModelRequestSchema.parse({ modelProfileId: request.modelProfileId })).toThrow();
+    expect(() => DeleteManualModelRequestSchema.parse({
       ...request,
       expectedRevision: `sha256:${"b".repeat(63)}`
     })).toThrow();

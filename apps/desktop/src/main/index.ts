@@ -8,6 +8,7 @@ import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
   AddManualModelRequest,
+  DeleteManualModelRequest,
   AgentConversationRequest,
   AgentConversationHistoryListRequest,
   AgentSaveAnswerAsNoteRequest,
@@ -105,6 +106,7 @@ import {
   ProviderApiKeyManagementRequestSchema,
   ProviderApiKeyManagementResultSchema,
   AddManualModelRequestSchema,
+  DeleteManualModelRequestSchema,
   JobCancelRequestSchema,
   JobCancelResultSchema,
   RefreshProviderModelsRequestSchema,
@@ -4134,6 +4136,18 @@ ipcMain.handle("models.addManualModel", async (_event, request: AddManualModelRe
     });
   }
 );
+ipcMain.handle("models.deleteManualModel", async (event, request: DeleteManualModelRequest) => {
+  const validatedRequest = DeleteManualModelRequestSchema.parse(request);
+  await confirmSettingAction(event.sender, ["models.providerProfiles"], {
+    title: "Remove this custom model?",
+    message: "Pige will remove only this manually added model ID. If it is the Global Default, Pige will select a usable remaining model or leave no default.",
+    confirmLabel: "Remove model"
+  });
+  return getModelProviderRegistry().deleteManualModel(validatedRequest).then((result) => {
+    scheduleWaitingAgentIngestAfterModelReady();
+    return result;
+  });
+});
 ipcMain.handle("models.updateModel", async (_event, request: UpdateModelRequest) => {
   const parsed = UpdateModelRequestSchema.parse(request);
   return getModelProviderRegistry().updateModel({

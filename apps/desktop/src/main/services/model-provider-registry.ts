@@ -16,6 +16,7 @@ import type {
   ProviderProfileSummary,
   ProviderRuntimeStatusSummary,
   RefreshProviderModelsRequest, UpdateProviderProfileRequest, UpdateProviderCredentialRequest, DeleteProviderRequest,
+  DeleteManualModelRequest,
   UpdateModelRequest,
   SetDefaultModelRequest
 } from "@pige/contracts";
@@ -54,6 +55,7 @@ import {
   ModelProviderGenerationProbe,
   type ModelProviderGenerationProbePort
 } from "./model-provider-generation-probe";
+import { deleteManualModelWithRecovery } from "./model-provider-manual-model-lifecycle";
 
 export class ModelProviderRegistry {
   readonly #providersPath: string;
@@ -170,13 +172,9 @@ export class ModelProviderRegistry {
     return this.#queueMutation(() => this.#connectProvider({ ...request, authRequirement: "api_key" }));
   }
 
-  refreshProviderModels(request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> {
-    return this.#queueMutation(() => this.#refreshProviderModels(request));
-  }
+  refreshProviderModels(request: RefreshProviderModelsRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => this.#refreshProviderModels(request)); }
 
-  updateProviderCredential(request: UpdateProviderCredentialRequest): Promise<ModelProviderSettingsSummary> {
-    return this.#queueMutation(() => this.#updateProviderCredential(request));
-  }
+  updateProviderCredential(request: UpdateProviderCredentialRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => this.#updateProviderCredential(request)); }
 
   updateProviderProfile(request: UpdateProviderProfileRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => this.#updateProviderProfile(request)); }
   async #updateProviderProfile(request: UpdateProviderProfileRequest): Promise<ModelProviderSettingsSummary> { this.#assertExpectedRevision(request.expectedRevision); const providers = this.#readProviders(), provider = providers.providers.find((candidate) => candidate.id === request.providerProfileId); if (!provider) throw new PigeDomainError("model_provider.profile_missing", "The selected Provider Profile is unavailable."); if (provider.presetId || isBuiltInProviderKind(provider.providerKind) || !provider.baseUrl) throw new PigeDomainError("model_provider.profile_edit_forbidden", "Reviewed and built-in Provider endpoints cannot be edited."); const baseUrl = normalizeProviderBaseUrl(request.baseUrl), boundary = classifyProviderBoundary(provider.providerKind, baseUrl, request.cloudBoundary), next = ProviderProfileSchema.parse({ ...provider, displayName: normalizeDisplayName(request.displayName, "Provider"), baseUrl, cloudBoundary: boundary.cloudBoundary, boundaryVerification: boundary.boundaryVerification, updatedAt: new Date().toISOString() }); if (provider.displayName === next.displayName && provider.baseUrl === next.baseUrl && provider.cloudBoundary === next.cloudBoundary && provider.boundaryVerification === next.boundaryVerification) throw new PigeDomainError("model_provider.profile_unchanged", "The Provider Profile has no changes to save."); const model = selectCredentialProbeModel(provider.id, this.#readModels()); if (!model) throw new PigeDomainError("model_provider.binding_unusable", "The selected Provider Profile has no enabled model for endpoint validation."); const apiKey = provider.authSecretRef ? this.#secrets.readProviderSecret(provider.authSecretRef) : undefined; this.#mutatingProviderIds.add(provider.id); try { this.#activeReferences.assertProviderInactive(provider.id); await this.#generationProbe.probe({ provider: next, model, ...(apiKey ? { apiKey } : {}) }); this.#activeReferences.assertProviderInactive(provider.id); this.#assertExpectedRevision(request.expectedRevision); const current = this.#readProviders(), exact = current.providers.find((candidate) => candidate.id === provider.id); if (!exact || !isDeepStrictEqual(exact, provider)) throw new PigeDomainError("model_provider.profile_stale", "The Provider Profile changed before it could be saved."); this.#writeProviders(ProviderProfilesFileSchema.parse({ ...current, providers: current.providers.map((candidate) => candidate.id === provider.id ? next : candidate) })); this.#recordRuntimeStatus(provider.id, { generation: "verified" }); return this.summary(); } finally { this.#mutatingProviderIds.delete(provider.id); } }
@@ -222,9 +220,7 @@ export class ModelProviderRegistry {
     }
   }
 
-  deleteProvider(request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> {
-    return this.#queueMutation(() => this.#deleteProvider(request));
-  }
+  deleteProvider(request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => this.#deleteProvider(request)); }
 
   async #deleteProvider(request: DeleteProviderRequest): Promise<ModelProviderSettingsSummary> {
     this.#assertExpectedRevision(request.expectedRevision);
@@ -368,6 +364,8 @@ export class ModelProviderRegistry {
       return this.summary();
     });
   }
+
+  deleteManualModel(request: DeleteManualModelRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => deleteManualModelWithRecovery(request, { assertExpectedRevision: (expectedRevision) => this.#assertExpectedRevision(expectedRevision), readProviders: () => this.#readProviders(), readModels: () => this.#readModels(), assertProviderInactive: (providerProfileId) => this.#activeReferences.assertProviderInactive(providerProfileId), setProviderMutating: (providerProfileId, mutating) => { if (mutating) this.#mutatingProviderIds.add(providerProfileId); else this.#mutatingProviderIds.delete(providerProfileId); }, selectDeterministicDefault: (providers, models) => selectDeterministicDefaultModel(providers, models, this.#secrets), commitProfileFiles: (providers, models) => this.#commitProfileFiles(providers, models), summary: () => this.summary() })); }
 
   updateModel(request: UpdateModelRequest): Promise<ModelProviderSettingsSummary> {
     return this.#queueMutation(async () => {
@@ -627,9 +625,7 @@ export class ModelProviderRegistry {
     }
   }
 
-  setDefaultModel(request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> {
-    return this.#queueMutation(() => this.#setDefaultModel(request));
-  }
+  setDefaultModel(request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> { return this.#queueMutation(() => this.#setDefaultModel(request)); }
 
   async #setDefaultModel(request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> {
     this.#assertExpectedRevision(request.expectedRevision);

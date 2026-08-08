@@ -1380,6 +1380,10 @@ describe("desktop shell build contract", () => {
       mainSource.indexOf('ipcMain.handle("models.deleteProvider"'),
       mainSource.indexOf('ipcMain.handle("models.addManualModel"')
     );
+    const deleteManualModelHandler = mainSource.slice(
+      mainSource.indexOf('ipcMain.handle("models.deleteManualModel"'),
+      mainSource.indexOf('ipcMain.handle("models.updateModel"')
+    );
     expect(resetHandler.indexOf("const expectedBinding")).toBeLessThan(resetHandler.indexOf("confirmSettingAction"));
     expect(resetHandler.indexOf("confirmSettingAction"))
       .toBeLessThan(resetHandler.indexOf("getVaultService().resetLocalDatabase(expectedBinding)"));
@@ -1405,12 +1409,16 @@ describe("desktop shell build contract", () => {
       .toBeLessThan(deleteProviderHandler.indexOf("confirmSettingAction"));
     expect(deleteProviderHandler.indexOf("confirmSettingAction"))
       .toBeLessThan(deleteProviderHandler.indexOf("getModelProviderRegistry().deleteProvider(validatedRequest)"));
+    expect(deleteManualModelHandler.indexOf("DeleteManualModelRequestSchema.parse(request)"))
+      .toBeLessThan(deleteManualModelHandler.indexOf("confirmSettingAction"));
+    expect(deleteManualModelHandler.indexOf("confirmSettingAction"))
+      .toBeLessThan(deleteManualModelHandler.indexOf("getModelProviderRegistry().deleteManualModel(validatedRequest)"));
     expect(mainSource).toContain('states: ["running", "cancel_requested"]');
     expect(mainSource).toContain('classes: ["agent_turn", "agent_ingest"]');
     expect(credentialHandler).not.toContain("oldApiKey");
     expect(deleteProviderHandler).not.toContain("authSecretRef");
     expect(mainSource).not.toContain('title: "Connect this model service?"');
-    for (const channel of ["models.updateProviderCredential", "models.updateProviderProfile", "models.deleteProvider"]) {
+    for (const channel of ["models.updateProviderCredential", "models.updateProviderProfile", "models.deleteProvider", "models.deleteManualModel"]) {
       expect(mainSource).toContain(`ipcMain.handle("${channel}"`);
       expect(preloadSource).toContain(`ipcRenderer.invoke("${channel}"`);
     }
@@ -1425,7 +1433,8 @@ describe("desktop shell build contract", () => {
       ["models.updateProviderCredential", "models.updateProviderProfile", "updateProviderCredential(validatedRequest)"],
       ["models.updateProviderProfile", "models.deleteProvider", "updateProviderProfile(validatedRequest)"],
       ["models.deleteProvider", "models.addManualModel", "deleteProvider(validatedRequest)"],
-      ["models.addManualModel", "models.updateModel", "addManualModel({"],
+      ["models.addManualModel", "models.deleteManualModel", "addManualModel({"],
+      ["models.deleteManualModel", "models.updateModel", "deleteManualModel(validatedRequest)"],
       ["models.updateModel", "models.setDefaultModel", "updateModel({"],
       ["models.setDefaultModel", "settings.appearance", "setDefaultModel("]
     ] as const;

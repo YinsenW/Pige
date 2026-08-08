@@ -100,6 +100,7 @@ import { NoteReader, type NoteRelatedState } from "./components/NoteReader";
 import { appendReaderQuoteToDraft, type ReaderQuoteIntoCapture } from "./reader-quote-into-capture";
 import { restoreActivityFocus, restoreActivityOpenFocus, restoreKnowledgeTreeFocus } from "./renderer-focus-restoration";
 import { ReaderSourceCitationPreview, type ReaderSourceCitationPreviewValue } from "./components/ReaderSourceCitationPreview";
+import { ModelInventoryRow } from "./components/ModelInventoryRow";
 import {
   NoteMarkdownEditor,
   type NoteMarkdownEditorLabels,
@@ -9107,6 +9108,24 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     }
   };
 
+  const deleteManualModel = async (modelProfileId: string): Promise<boolean> => {
+    props.onBusy(true);
+    setFailure(null);
+    try {
+      if (!summary?.revision) throw new Error("The current model settings revision is unavailable.");
+      await window.pige.models.deleteManualModel({
+        modelProfileId,
+        expectedRevision: summary.revision
+      });
+      await refreshCommittedSettings();
+      return true;
+    } catch {
+      return false;
+    } finally {
+      props.onBusy(false);
+    }
+  };
+
   const setModelEnabled = async (modelProfileId: string, enabled: boolean): Promise<void> => {
     props.onBusy(true);
     setFailure(null);
@@ -9559,6 +9578,7 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
               busy={props.busy}
               onRefresh={() => refreshProviderModels(selectedProvider.id)}
               onAddCustom={(modelId, modelDisplayName) => addManualModel(selectedProvider.id, modelId, modelDisplayName)}
+              onDeleteManual={deleteManualModel}
               onSetEnabled={setModelEnabled}
               onSetDisplayName={setModelDisplayName}
               t={props.t}
@@ -9786,6 +9806,7 @@ function ProviderModelGroup(props: {
   readonly busy: boolean;
   readonly onRefresh: () => Promise<void>;
   readonly onAddCustom: (modelId: string, displayName: string) => Promise<boolean>;
+  readonly onDeleteManual: (modelProfileId: string) => Promise<boolean>;
   readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
   readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
   readonly t: (key: string) => string;
@@ -9817,6 +9838,7 @@ function ProviderModelGroup(props: {
               key={model.id}
               model={model}
               busy={props.busy}
+              onDeleteManual={props.onDeleteManual}
               onSetEnabled={props.onSetEnabled}
               onSetDisplayName={props.onSetDisplayName}
               t={props.t}
@@ -9879,60 +9901,6 @@ function ProviderModelGroup(props: {
         </div>
       </details>
     </section>
-  );
-}
-
-function ModelInventoryRow(props: {
-  readonly model: ModelProfileSummary;
-  readonly busy: boolean;
-  readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
-  readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
-  readonly t: (key: string) => string;
-}): React.JSX.Element {
-  const initialName = props.model.displayName && props.model.displayName !== props.model.modelId
-    ? props.model.displayName
-    : "";
-  const [displayName, setDisplayName] = useState(initialName);
-  return (
-    <div className="settings-row model-row">
-      <span className="settings-row-copy">
-        <strong>{props.model.displayName ?? props.model.modelId}</strong>
-        <span>{props.model.source === "manual" ? props.t("models.manual") : props.model.modelId}</span>
-      </span>
-      <div className="settings-row-control model-row-controls">
-        <details className="model-name-editor">
-          <summary className="settings-button">{props.t("models.editDisplayName")}</summary>
-          <div className="model-name-fields">
-            <label htmlFor={`model-display-name-${props.model.id}`}>{props.t("models.displayName")}</label>
-            <input
-              className="settings-input"
-              id={`model-display-name-${props.model.id}`}
-              value={displayName}
-              placeholder={props.model.modelId}
-              onChange={(event) => setDisplayName(event.target.value)}
-            />
-            <button
-              type="button"
-              className="settings-button"
-              disabled={props.busy}
-              onClick={() => void props.onSetDisplayName(props.model.id, displayName.trim() || null)}
-            >
-              {props.t("models.saveDisplayName")}
-            </button>
-          </div>
-        </details>
-        <button
-          type="button"
-          className="settings-switch"
-          role="switch"
-          aria-checked={props.model.enabled}
-          disabled={props.busy || props.model.isDefault}
-          aria-label={`${props.t("models.enabled")}: ${props.model.displayName ?? props.model.modelId}`}
-          title={props.model.isDefault ? props.t("models.default") : props.t("models.enabled")}
-          onClick={() => void props.onSetEnabled(props.model.id, !props.model.enabled)}
-        />
-      </div>
-    </div>
   );
 }
 

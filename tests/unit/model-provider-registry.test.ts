@@ -1012,6 +1012,91 @@ describe("model provider registry", () => {
     expect(cleared.models.find((model) => model.id === modelD?.id)?.displayName).toBeUndefined();
   });
 
+  it("removes one manual model with revision fencing and deterministically rebinds the default", async () => {
+    const { registry } = makeRegistry(okModelListFetch(["model-a"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Manual lifecycle",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://manual-lifecycle.example/v1",
+      apiKey: "manual-lifecycle-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "cloud"
+    });
+    if ("status" in connected) throw new Error("Manual lifecycle Provider did not connect.");
+    const original = connected.models.find((model) => model.modelId === "model-a");
+    const withManual = await registry.addManualModel({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      modelId: "manual-b"
+    });
+    const manual = withManual.models.find((model) => model.modelId === "manual-b");
+    await registry.setDefaultModel({
+      modelProfileId: manual?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
+
+    const removed = await registry.deleteManualModel({
+      modelProfileId: manual?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    });
+
+    expect(removed.models.map((model) => model.id)).toEqual([original?.id]);
+    expect(removed.defaultModelProfileId).toBe(original?.id);
+    expect(removed.defaultBinding).toEqual({
+      state: "ready",
+      providerProfileId: connected.providers[0]?.id,
+      modelProfileId: original?.id
+    });
+    await expect(registry.deleteManualModel({
+      modelProfileId: manual?.id ?? "",
+      expectedRevision: `sha256:${"0".repeat(64)}`
+    })).rejects.toMatchObject({ code: "model_provider.profile_stale" });
+    expect(registry.summary().models.map((model) => model.id)).toEqual([original?.id]);
+  });
+
+  it("rejects provider-listed model removal and rolls back a failed manual-model removal", async () => {
+    const { root, registry } = makeRegistry(okModelListFetch(["model-a", "model-b"]));
+    const connected = await registry.addManualProvider({
+      displayName: "Manual removal provider",
+      providerKind: "custom",
+      endpointProtocol: "openai_chat_completions",
+      baseUrl: "https://manual-removal.example/v1",
+      apiKey: "manual-delete-secret",
+      manualModelId: "model-a",
+      cloudBoundary: "cloud"
+    });
+    if ("status" in connected) throw new Error("Manual removal Provider did not connect.");
+    const listed = connected.models.find((model) => model.modelId === "model-b");
+    await expect(registry.deleteManualModel({
+      modelProfileId: listed?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    })).rejects.toMatchObject({ code: "model_provider.manual_model_missing" });
+
+    const manual = await registry.addManualModel({
+      providerProfileId: connected.providers[0]?.id ?? "",
+      modelId: "manual-c"
+    });
+    const selected = manual.models.find((model) => model.modelId === "manual-c");
+    const modelsPath = path.join(root, "model-profiles.json");
+    const beforeModels = fs.readFileSync(modelsPath, "utf8");
+    const originalRename = fs.renameSync;
+    let failed = false;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
+      if (String(to) === modelsPath && !failed) {
+        failed = true;
+        throw new Error("injected manual-model deletion write failure");
+      }
+      return originalRename(from, to);
+    });
+
+    await expect(registry.deleteManualModel({
+      modelProfileId: selected?.id ?? "",
+      expectedRevision: registry.summary().revision ?? ""
+    })).rejects.toMatchObject({ code: "model_provider.persistence_failed" });
+    expect(fs.readFileSync(modelsPath, "utf8")).toBe(beforeModels);
+    expect(registry.summary().models.some((model) => model.id === selected?.id)).toBe(true);
+  });
+
   it("recovers a persisted Refresh transaction after a crash-window rollback failure", async () => {
     let modelIds = ["model-a"];
     const { root, registry } = makeRegistry(async () => okModelListFetch(modelIds)("https://example.invalid"));

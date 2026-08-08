@@ -1462,6 +1462,11 @@ export interface AddManualModelRequest {
   readonly displayName?: string;
 }
 
+export interface DeleteManualModelRequest {
+  readonly modelProfileId: string;
+  readonly expectedRevision: string;
+}
+
 export interface UpdateModelRequest {
   readonly modelProfileId: string;
   readonly enabled?: boolean;
@@ -2981,6 +2986,7 @@ export interface PigeDesktopApi {
     ) => Promise<ModelProviderSettingsSummary>;
     readonly deleteProvider: (request: DeleteProviderRequest) => Promise<ModelProviderSettingsSummary>;
     readonly addManualModel: (request: AddManualModelRequest) => Promise<ModelProviderSettingsSummary>;
+    readonly deleteManualModel: (request: DeleteManualModelRequest) => Promise<ModelProviderSettingsSummary>;
     readonly updateModel: (request: UpdateModelRequest) => Promise<ModelProviderSettingsSummary>;
     readonly setDefaultModel: (request: SetDefaultModelRequest) => Promise<ModelProviderSettingsSummary>;
   };
