@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteRenderResult, NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult } from "@pige/contracts";
 import { ReaderQuestionAnswers } from "../../apps/desktop/src/renderer/src/components/ReaderQuestionAnswers";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -19,6 +19,39 @@ afterEach(() => {
 });
 
 describe("ReaderQuestionAnswers", () => {
+  it("does not show answer candidates after the search query drifts while pending", async () => {
+    let resolveSearch: ((result: NoteSearchQuestionAnswersResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchQuestionAnswersRequest) => new Promise<NoteSearchQuestionAnswersResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(questionRender(), search, vi.fn(), vi.fn());
+    const input = harness.container.querySelector("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Answer");
+      const propertyChange = new harness.dom.window.Event("propertychange", { bubbles: true });
+      Object.defineProperty(propertyChange, "propertyName", { value: "value" });
+      input.dispatchEvent(propertyChange);
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Answer", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    await act(async () => { [...harness.container.querySelectorAll("button")].find((button) => button.textContent === "note.questionAnswers.search")!.click(); await Promise.resolve(); });
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Different");
+      const propertyChange = new harness.dom.window.Event("propertychange", { bubbles: true });
+      Object.defineProperty(propertyChange, "propertyName", { value: "value" });
+      input.dispatchEvent(propertyChange);
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Different", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [answerItem()] });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Answer note");
+    await harness.unmount();
+  });
+
   it("searches and adds one exact candidate while fencing duplicate activation", async () => {
     const search = vi.fn(async (searchRequest) => ({ ...searchRequest, status: "ready" as const, candidates: [answerItem()] }));
     const change = vi.fn(async (changeRequest) => ({ ...changeRequest, status: "committed" as const,

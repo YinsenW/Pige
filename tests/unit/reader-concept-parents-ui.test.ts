@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteRenderResult, NoteSearchConceptParentsRequest, NoteSearchConceptParentsResult } from "@pige/contracts";
 import { ReaderConceptParents } from "../../apps/desktop/src/renderer/src/components/ReaderConceptParents";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent",
@@ -13,6 +13,33 @@ afterEach(() => { for (const key of keys) { const descriptor = originals.get(key
   originals.clear(); Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT"); });
 
 describe("ReaderConceptParents", () => {
+  it("does not show parent candidates after the search query drifts while pending", async () => {
+    let resolveSearch: ((result: NoteSearchConceptParentsResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchConceptParentsRequest) => new Promise<NoteSearchConceptParentsResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(conceptRender(), search, vi.fn(), vi.fn());
+    const input = harness.container.querySelector("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Broader");
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Broader", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    await act(async () => { [...harness.container.querySelectorAll("button")].find((button) => button.textContent === "note.conceptParents.search")!.click(); await Promise.resolve(); });
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Different");
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Different", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [parentItem()] });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Broader idea");
+    await harness.unmount();
+  });
+
   it("searches, adds, and fences duplicate activation", async () => {
     const search = vi.fn(async (value) => ({ ...value, status: "ready" as const, candidates: [parentItem()] }));
     const change = vi.fn(async (value) => ({ ...value, status: "committed" as const,
