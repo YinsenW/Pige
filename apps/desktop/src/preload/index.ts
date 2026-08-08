@@ -3,6 +3,7 @@ import type {
   AddPresetProviderRequest,
   AddManualProviderRequest,
   AddManualModelRequest,
+  DeleteManualModelRequest,
   AgentConversationRequest,
   AgentConversationResult,
   AgentConversationHistoryListRequest,
@@ -3394,6 +3395,8 @@ const api: PigeDesktopApi = {
       ipcRenderer.invoke("models.deleteProvider", request) as Promise<ModelProviderSettingsSummary>,
     addManualModel: async (request: AddManualModelRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.addManualModel", request) as Promise<ModelProviderSettingsSummary>,
+    deleteManualModel: async (request: DeleteManualModelRequest): Promise<ModelProviderSettingsSummary> =>
+      ipcRenderer.invoke("models.deleteManualModel", request) as Promise<ModelProviderSettingsSummary>,
     updateModel: async (request: UpdateModelRequest): Promise<ModelProviderSettingsSummary> =>
       ipcRenderer.invoke("models.updateModel", request) as Promise<ModelProviderSettingsSummary>,
     setDefaultModel: async (request: SetDefaultModelRequest): Promise<ModelProviderSettingsSummary> =>

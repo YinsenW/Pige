@@ -175,6 +175,10 @@ Rules:
 
 - One `(providerProfileId, modelId)` inventory merges discovery/manual records and preserves
   alias/enabled/default. Refresh retains missing IDs disabled; failure preserves inventory.
+- A manual model can be removed only from the current revision, never from provider
+  discovery. Main confirms the action, fences active Provider references, atomically
+  removes the exact manual record, and deterministically rebinds or clears Global Default.
+  The existing journal restores the prior inventory after an interrupted write.
 - First Connect enables its validated bootstrap model and sets it as Global Default only
   when none exists. Default selects an enabled model across Providers; disabling it needs
   an atomic replacement, and unusable bindings stay visible without auto-switch/free text.

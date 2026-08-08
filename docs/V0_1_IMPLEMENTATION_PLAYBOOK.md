@@ -294,7 +294,7 @@ Build:
 - [B3.01 -> E3.01] Preset-first Provider profiles whose reviewed templates bind protocol/Endpoint; Custom Provider alone selects a compatible protocol.
 - [B3.02 -> E3.02] Encrypted-by-default API-key storage.
 - [B3.03 -> E3.01] Non-durable discovery plus one real Pi bootstrap generation/tool probe and all-or-restore readback before persistence.
-- [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, and provider-grouped Global Default.
+- [B3.04 -> E3.01] Unified Provider model inventory with auto-sync/Refresh, merged manual fallback, enable/alias controls, revision-fenced manual removal, and provider-grouped Global Default.
 - [B3.05 -> E3.03] Simple Provider send boundary: Connect/select plus Send authorizes
   exact user-authored and selected bounded context unchanged; keep stored credentials
   out of the payload and fail on Provider/model identity drift.

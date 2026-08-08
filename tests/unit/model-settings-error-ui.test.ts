@@ -371,6 +371,61 @@ describe("Models error ownership", () => {
     await unmount(dom, mount.root);
   });
 
+  it("keeps a failed manual-model removal confirmed and never exposes the raw failure", async () => {
+    const dom = createDom();
+    const summary: ModelProviderSettingsSummary = {
+      ...connectedSummary(),
+      defaultModelProfileId: "model_default",
+      hasDefaultModel: true,
+      defaultBinding: {
+        state: "ready",
+        providerProfileId: "provider_fixture",
+        modelProfileId: "model_default"
+      },
+      models: [{
+        id: "model_manual",
+        providerProfileId: "provider_fixture",
+        modelId: "manual-model",
+        source: "manual",
+        enabled: true,
+        isDefault: false,
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:00:00.000Z"
+      }, {
+        id: "model_default",
+        providerProfileId: "provider_fixture",
+        modelId: "default-model",
+        source: "provider_list",
+        enabled: true,
+        isDefault: true,
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:00:00.000Z"
+      }]
+    };
+    const requests: Array<{ readonly modelProfileId: string; readonly expectedRevision: string }> = [];
+    const mount = await mountPanel(dom, summary, modelApi({
+      deleteManualModel: async (request) => {
+        requests.push(request);
+        throw new Error("raw manual model deletion failure");
+      }
+    }));
+
+    await openProviderDetails(dom, mount.container);
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    expect(mount.container.textContent).toContain(enMessages["models.confirmRemoveManualModel"]);
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    await waitFor(dom, () => mount.container.textContent?.includes(enMessages["models.manualModelDeleteFailed"]) === true);
+
+    expect(requests).toEqual([{
+      modelProfileId: "model_manual",
+      expectedRevision: summary.revision ?? ""
+    }]);
+    expect(mount.container.textContent).not.toContain("raw manual model deletion failure");
+    expect(mount.container.textContent).toContain(enMessages["models.confirmRemoveManualModel"]);
+
+    await unmount(dom, mount.root);
+  });
+
   it("keeps the approved progressive Models structure without exposing routing controls", async () => {
     const dom = createDom();
     const mount = await mountPanel(dom, connectedSummary(), modelApi({}));
@@ -640,6 +695,10 @@ function modelApi(overrides: {
   readonly addManualProvider?: () => Promise<ProviderConnectResult>;
   readonly refreshProviderModels?: () => Promise<ModelProviderSettingsSummary>;
   readonly addManualModel?: () => Promise<ModelProviderSettingsSummary>;
+  readonly deleteManualModel?: (request: {
+    readonly modelProfileId: string;
+    readonly expectedRevision: string;
+  }) => Promise<ModelProviderSettingsSummary>;
   readonly updateProviderCredential?: (request: {
     readonly providerProfileId: string;
     readonly expectedRevision: string;
@@ -662,6 +721,7 @@ function modelApi(overrides: {
       updateProviderCredential: overrides.updateProviderCredential ?? (async () => summary),
       deleteProvider: overrides.deleteProvider ?? (async () => summary),
       addManualModel: overrides.addManualModel ?? (async () => summary),
+      deleteManualModel: overrides.deleteManualModel ?? (async () => summary),
       updateModel: async () => summary
     }
   };

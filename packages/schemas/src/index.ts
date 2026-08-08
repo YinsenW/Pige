@@ -12942,6 +12942,11 @@ export const AddManualModelRequestSchema = z.object({
   displayName: z.string().trim().min(1).max(200).optional()
 }).strict();
 
+export const DeleteManualModelRequestSchema = z.object({
+  modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
+  expectedRevision: z.string().regex(/^sha256:[a-f0-9]{64}$/)
+}).strict();
+
 export const UpdateModelRequestSchema = z.object({
   modelProfileId: z.string().regex(/^model_[a-z0-9_]+$/),
   enabled: z.boolean().optional(),

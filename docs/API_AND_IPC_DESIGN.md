@@ -868,6 +868,7 @@ Commands:
 - `models.updateProviderCredential`
 - `models.deleteProvider`
 - `models.addManualModel`
+- `models.deleteManualModel`
 - `models.updateModel`
 - `models.setDefaultModel`
 - `memory.disable`
