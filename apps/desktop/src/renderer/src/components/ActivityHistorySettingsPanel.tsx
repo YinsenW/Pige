@@ -40,6 +40,7 @@ export function ActivityHistorySettingsPanel(props: {
   const loadTriggerRef = useRef<HTMLButtonElement | null>(null);
   const historyTitleRef = useRef<HTMLHeadingElement | null>(null);
   const loadInFlightRef = useRef(false);
+  const [loadBusy, setLoadBusy] = useState(false);
   const activityActionInFlightRef = useRef<{ readonly id: string; readonly kind: "undo" | "redo" } | null>(null);
   const activityOwnerRef = useRef(props.activeVaultId);
   const activityRowRefs = useRef(new Map<string, HTMLElement>());
@@ -89,12 +90,14 @@ export function ActivityHistorySettingsPanel(props: {
     setActivityActionInFlight(null);
   }, [props.activeVaultId]);
   const loadMore = async (): Promise<void> => {
-    if (loadInFlightRef.current || props.loadingMore) return;
+    if (loadInFlightRef.current || props.loadingMore || loadBusy) return;
     loadInFlightRef.current = true;
+    setLoadBusy(true);
     try {
       await props.onLoadMore();
     } finally {
       loadInFlightRef.current = false;
+      setLoadBusy(false);
       setFocusEpoch((current) => current + 1);
     }
   };
@@ -301,7 +304,8 @@ export function ActivityHistorySettingsPanel(props: {
             <span>{props.t(historyAppliedFilter.query || historyAppliedFilter.status !== "all" ? "activity.search.emptyDescription" : "activity.emptyDescription")}</span>
           </div>
         ) : (
-          <div className="settings-card activity-history-list" role="list" aria-labelledby="activity-recent-title">
+          <div id="activity-history-list" className="settings-card activity-history-list" role="list"
+            aria-labelledby="activity-recent-title" aria-busy={props.loadingMore || loadBusy || undefined}>
             {props.activities.map((activity, index) => {
               const activityMessageKey = collectionViewActivityMessageKey(activity.kind) ?? (activity.kind === "update_collection_cell"
                 ? "activity.updatedCollection"
@@ -370,8 +374,10 @@ export function ActivityHistorySettingsPanel(props: {
           </div>
         )}
         {props.hasMore ? (
-          <button ref={loadTriggerRef} type="button" className="settings-button" aria-busy={props.loadingMore}
-            disabled={props.loadingMore} onClick={() => void loadMore()}>
+          <button ref={loadTriggerRef} type="button" className="settings-button"
+            aria-controls={props.activities.length > 0 ? "activity-history-list" : undefined}
+            aria-busy={props.loadingMore || loadBusy || undefined}
+            disabled={props.loadingMore || loadBusy} onClick={() => void loadMore()}>
             {props.t(props.loadingMore ? "activity.loadingMore" : "activity.loadMore")}
           </button>
         ) : null}

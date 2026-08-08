@@ -338,12 +338,18 @@ describe("full UI Settings surface", () => {
     }
     await act(async () => { root.render(createElement(Harness)); await settle(dom); });
     const loadMore = buttonNamed(dom.window.document, "Load more");
+    const historyList = requireElement(dom.window.document.querySelector<HTMLElement>("#activity-history-list"));
+    expect(loadMore.getAttribute("aria-controls")).toBe("activity-history-list");
     loadMore.focus();
     await act(async () => { loadMore.click(); loadMore.click(); await settle(dom); });
     expect(load).toHaveBeenCalledOnce();
+    expect(loadMore.disabled).toBe(true);
+    expect(loadMore.getAttribute("aria-busy")).toBe("true");
+    expect(historyList.getAttribute("aria-busy")).toBe("true");
     await act(async () => { release(); await pending; await settle(dom); await settle(dom); });
     await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 10));
     expect(dom.window.document.querySelectorAll("[data-activity-row-id]")).toHaveLength(2);
+    expect(historyList.getAttribute("aria-busy")).toBeNull();
     expect(dom.window.document.querySelector("button")?.textContent).not.toBe("Load more");
     expect(dom.window.document.activeElement?.id).toBe("settings-history-title");
     await act(async () => root.unmount());
