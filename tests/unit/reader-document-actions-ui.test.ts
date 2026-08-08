@@ -95,6 +95,57 @@ describe("Reader document actions", () => {
     await harness.unmount();
   });
 
+  it("keeps the document action menu keyboard navigable and wraps focus", async () => {
+    const harness = await mount({
+      canMoveToTrash: true,
+      canMerge: true,
+      onMoveToTrash: vi.fn(async () => "retained" as const),
+      onLoadMergeTargets: vi.fn(async () => []),
+      onMerge: vi.fn(async () => ({ status: "retained" }))
+    });
+    const trigger = button(harness.container, "More actions");
+    await click(harness.dom, trigger);
+    const items = Array.from(harness.container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(items).toHaveLength(2);
+    items[0]?.focus();
+    await act(async () => {
+      items[0]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[1]);
+    await act(async () => {
+      items[1]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[0]);
+    await act(async () => {
+      items[0]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "End", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[1]);
+    await act(async () => {
+      items[1]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[0]);
+    await act(async () => {
+      items[0]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[1]);
+    await act(async () => {
+      items[1]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(items[0]);
+    await act(async () => {
+      items[0]?.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
+
   it("fences an old committed result after the Reader identity changes", async () => {
     const pending = deferred<ReaderDocumentTrashOutcome>();
     const onMoveToTrash = vi.fn(async () => pending.promise);
