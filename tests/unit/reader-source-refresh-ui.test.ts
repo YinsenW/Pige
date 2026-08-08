@@ -132,6 +132,42 @@ describe("Reader source refresh action", () => {
     await harness.unmount();
   });
 
+  it("keeps the committed refresh notice and trigger focus when the optional Reader reread fails", async () => {
+    const onPreview = vi.fn(async (request: any) => ({
+      ...request,
+      status: "changed" as const,
+      preview: {
+        previewId: `sourcerefreshpreview_${"6".repeat(32)}`,
+        expectedSourceRevision: `sourcerefreshrev_${"7".repeat(64)}`,
+        displayName: "Evidence.txt",
+        sourceKind: "plain_text" as const,
+        previousSize: 1024,
+        currentSize: 2048,
+        sizeDelta: 1024,
+        affectedArtifactCount: 1,
+        refreshesSourcePage: true
+      }
+    }));
+    const onConfirm = vi.fn(async (request: any) => ({ ...request, status: "refreshed" as const,
+      operationId: "op_20260809_refreshbest_effort", jobId: "job_20260809_refreshbest_effort",
+      sourceRevision: `sourcerefreshrev_${"8".repeat(64)}`, sourcePageConflict: false }));
+    const onRender = vi.fn(async () => { throw new Error("transient reread"); });
+    const harness = await mount({ onPreview, onConfirm, onRender, onRefreshed: vi.fn() });
+    const trigger = harness.container.querySelector<HTMLButtonElement>("button")!;
+    await act(async () => { trigger.focus(); trigger.click(); await settle(harness.dom); });
+    const dialog = harness.container.querySelector('[role="dialog"]')!;
+    await act(async () => {
+      const buttons = dialog.querySelectorAll<HTMLButtonElement>("button");
+      buttons.item(buttons.length - 1).click();
+      await settle(harness.dom);
+      await settle(harness.dom);
+    });
+    expect(harness.container.textContent).toContain("Source refreshed.");
+    expect(harness.container.textContent).not.toContain("Refresh failed.");
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
+
   it("distinguishes artifact-only refresh and reports a preserved edited Source Page", async () => {
     const onPreview = vi.fn(async (request: any) => ({
       ...request,
