@@ -2244,6 +2244,7 @@ describe("desktop shell build contract", () => {
     expect(mainSource).toContain('ipcMain.handle("activity.list"');
     expect(mainSource).toContain('ipcMain.handle("activity.undo"');
     expect(mainSource).toContain('ipcMain.handle("activity.redo"');
+    expect(mainUndoHandler).toContain("getManagedCollectionTableRedoService().redo(request)");
     expect(mainUndoHandler).toContain("getNoteTrashRedoService().redo(request)");
     expect(mainUndoHandler).toContain("getSourceTrashRedoService().redo(request)");
     expect(mainUndoHandler).toContain("getNoteRenameService().redo(request)");

@@ -295,6 +295,7 @@ import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-healt
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionTableService } from "./services/managed-collection-table-service";
+import { ManagedCollectionTableRedoService } from "./services/managed-collection-table-redo-service";
 import { ManagedCollectionRedoService } from "./services/managed-collection-redo-service";
 import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
 import { ManagedCollectionViewService } from "./services/managed-collection-view-service";
@@ -527,6 +528,7 @@ let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService |
 let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionTableService: ManagedCollectionTableService | undefined;
+let managedCollectionTableRedoService: ManagedCollectionTableRedoService | undefined;
 let managedCollectionRedoService: ManagedCollectionRedoService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
 let managedCollectionViewRedoService: ManagedCollectionViewRedoService | undefined;
@@ -2417,6 +2419,8 @@ const getManagedCollectionService = (): ManagedCollectionService => {
 
 const getManagedCollectionTableService = (): ManagedCollectionTableService =>
   managedCollectionTableService ??= new ManagedCollectionTableService(getVaultService());
+const getManagedCollectionTableRedoService = (): ManagedCollectionTableRedoService =>
+  managedCollectionTableRedoService ??= new ManagedCollectionTableRedoService(getVaultService());
 
 const getManagedCollectionRevealService = (): ManagedCollectionRevealService =>
   new ManagedCollectionRevealService(getVaultService(), {
@@ -2478,7 +2482,8 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
   return {
     activitySummary: (operation, undo) => {
       const summary = owner(operation).activitySummary(operation, undo);
-      const redo = summary && (getManagedCollectionRedoService().activityState(operation, undo) ??
+      const redo = summary && (getManagedCollectionTableRedoService().activityState(operation, undo) ??
+        getManagedCollectionRedoService().activityState(operation, undo) ??
         getManagedCollectionViewRedoService().activityState(operation, undo));
       return summary && redo ? { ...summary, ...redo } : summary;
     },
@@ -2486,6 +2491,7 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
     undo: (operation, expectedRevisionId) => Promise.resolve(owner(operation).undo(operation, expectedRevisionId)),
     recoverIncompleteOperations: () => {
       const collectionRedoResult = getManagedCollectionRedoService().recoverIncompleteRedos();
+      const tableRedoResult = getManagedCollectionTableRedoService().recoverIncompleteRedos();
       const viewRedoResult = getManagedCollectionViewRedoService().recoverIncompleteRedos();
       const collectionResult = collections.recoverIncompleteOperations();
       const viewResult = views.recoverIncompleteOperations();
@@ -2495,10 +2501,10 @@ const createManagedCollectionActivityPort = (): KnowledgeActivityCollectionPort 
       const tableResult = tables.recoverIncompleteOperations();
       const historyResult = history.recoverIncompleteOperations();
       return {
-        recovered: collectionRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
+        recovered: collectionRedoResult.recovered + tableRedoResult.recovered + viewRedoResult.recovered + collectionResult.recovered +
           viewResult.recovered + datasetResult.recovered + datasetPurgeResult.recovered +
           titleResult.recovered + tableResult.recovered + historyResult.recovered,
-        failed: collectionRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
+        failed: collectionRedoResult.failed + tableRedoResult.failed + viewRedoResult.failed + collectionResult.failed +
           viewResult.failed + datasetResult.failed + datasetPurgeResult.failed +
           titleResult.failed + tableResult.failed + historyResult.failed
       };
@@ -3735,9 +3741,12 @@ ipcMain.handle("activity.undo", async (_event, request: KnowledgeActivityUndoReq
 });
 ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) => {
   const collectionResult = getManagedCollectionRedoService().redo(request);
-  const viewResult = collectionResult.status === "not_found"
-    ? getManagedCollectionViewRedoService().redo(request)
+  const tableResult = collectionResult.status === "not_found"
+    ? getManagedCollectionTableRedoService().redo(request)
     : collectionResult;
+  const viewResult = tableResult.status === "not_found"
+    ? getManagedCollectionViewRedoService().redo(request)
+    : tableResult;
   const datasetResult = viewResult.status === "not_found" ? getManagedDatasetLifecycleService().redo(request) : viewResult;
   const trashResult = datasetResult.status === "not_found" ? getNoteTrashRedoService().redo(request) : datasetResult;
   const sourceTrashResult = trashResult.status === "not_found" ? getSourceTrashRedoService().redo(request) : trashResult;
@@ -4357,6 +4366,7 @@ app.whenReady().then(async () => {
   );
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
+  managedCollectionTableRedoService = new ManagedCollectionTableRedoService(getVaultService());
   managedCollectionRedoService = new ManagedCollectionRedoService(getVaultService());
   managedCollectionViewService = new ManagedCollectionViewService(getVaultService());
   managedCollectionViewRedoService = new ManagedCollectionViewRedoService(getVaultService());
