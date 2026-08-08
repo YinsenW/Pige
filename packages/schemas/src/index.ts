@@ -8457,6 +8457,7 @@ export const COLLECTION_UPDATE_FORMULA_COLUMN_CHANNEL = "collections.updateFormu
 export const COLLECTION_ADD_RELATION_COLUMN_CHANNEL = "collections.addRelationColumn" as const;
 export const COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL = "collections.updateRelationColumn" as const;
 export const COLLECTION_EDIT_RELATION_CELL_CHANNEL = "collections.editRelationCell" as const;
+export const COLLECTION_OPEN_RELATED_RECORDS_CHANNEL = "collections.openRelatedRecords" as const;
 export const COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL = "collections.addLookupColumn" as const;
 export const COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL = "collections.updateLookupColumn" as const;
 export const COLLECTION_UPDATE_VIEW_CHANNEL = "collections.updateView" as const;
@@ -9430,6 +9431,18 @@ export const CollectionEditRelationCellRequestSchema = z.object({
   targetRowId: DatasetQueryRowIdSchema.nullable()
 }).strict();
 
+/** Opens the bounded target row for one current relation cell without exposing a path or payload. */
+export const CollectionOpenRelatedRecordsRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: CollectionRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  datasetId: DatasetQueryDatasetIdSchema,
+  sourceTableId: DatasetQueryTableIdSchema,
+  sourceColumnId: DatasetQueryColumnIdSchema,
+  sourceRowId: DatasetQueryRowIdSchema,
+  expectedRevisionId: DatasetQueryRevisionIdSchema
+}).strict();
+
 /** Creates one read-only scalar lookup over an existing same-table relation. */
 export const CollectionAddLookupColumnRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -9827,6 +9840,49 @@ const CollectionEditRelationCellResultIdentitySchema = CollectionResultIdentityS
   columnId: DatasetQueryColumnIdSchema,
   targetRowId: DatasetQueryRowIdSchema.nullable()
 }).strict();
+
+const CollectionOpenRelatedRecordsResultIdentitySchema = CollectionOpenRelatedRecordsRequestSchema.pick({
+  apiVersion: true,
+  requestId: true,
+  activeVaultId: true,
+  datasetId: true,
+  sourceTableId: true,
+  sourceColumnId: true,
+  sourceRowId: true
+}).strict();
+
+export const CollectionOpenRelatedRecordsResultSchema = z.discriminatedUnion("status", [
+  CollectionOpenRelatedRecordsResultIdentitySchema.extend({
+    status: z.literal("ready"),
+    targetTableId: DatasetQueryTableIdSchema,
+    targetRowId: DatasetQueryRowIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionOpenRelatedRecordsResultIdentitySchema.extend({
+    status: z.literal("empty"),
+    targetTableId: DatasetQueryTableIdSchema,
+    snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionOpenRelatedRecordsResultIdentitySchema.extend({
+    status: z.literal("stale"), snapshot: CollectionSnapshotSchema
+  }).strict(),
+  CollectionOpenRelatedRecordsResultIdentitySchema.extend({
+    status: z.enum(["not_found", "ineligible", "failed"]),
+    targetTableId: DatasetQueryTableIdSchema.optional(),
+    targetRowId: DatasetQueryRowIdSchema.optional(),
+    snapshot: CollectionSnapshotSchema.optional()
+  }).strict()
+]).superRefine((result, context) => {
+  if ((result.status === "ready" || result.status === "empty") && result.snapshot.tableId !== result.targetTableId) {
+    context.addIssue({ code: "custom", path: ["snapshot", "tableId"], message: "Related-record snapshots must belong to the declared target table." });
+  }
+  if (result.status === "ready" && !result.snapshot.rows.some((row) => row.rowId === result.targetRowId)) {
+    context.addIssue({ code: "custom", path: ["snapshot", "rows"], message: "Ready related-record results must include the declared target row." });
+  }
+  if (result.status === "stale" && result.snapshot.tableId !== result.sourceTableId) {
+    context.addIssue({ code: "custom", path: ["snapshot", "tableId"], message: "Stale related-record snapshots must belong to the source table." });
+  }
+});
 
 export const CollectionEditRelationCellResultSchema = z.discriminatedUnion("status", [
   CollectionEditRelationCellResultIdentitySchema.extend({
@@ -13698,6 +13754,8 @@ export type CollectionUpdateRelationColumnRequest = z.infer<typeof CollectionUpd
 export type CollectionUpdateRelationColumnResult = z.infer<typeof CollectionUpdateRelationColumnResultSchema>;
 export type CollectionEditRelationCellRequest = z.infer<typeof CollectionEditRelationCellRequestSchema>;
 export type CollectionEditRelationCellResult = z.infer<typeof CollectionEditRelationCellResultSchema>;
+export type CollectionOpenRelatedRecordsRequest = z.infer<typeof CollectionOpenRelatedRecordsRequestSchema>;
+export type CollectionOpenRelatedRecordsResult = z.infer<typeof CollectionOpenRelatedRecordsResultSchema>;
 export type CollectionAddLookupColumnRequest = z.infer<typeof CollectionAddLookupColumnRequestSchema>;
 export type CollectionAddLookupColumnResult = z.infer<typeof CollectionAddLookupColumnResultSchema>;
 export type CollectionUpdateLookupColumnRequest = z.infer<typeof CollectionUpdateLookupColumnRequestSchema>;
