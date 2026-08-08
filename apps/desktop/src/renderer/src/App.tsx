@@ -70,6 +70,7 @@ import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel"
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
 import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
 import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
+import { DiagnosticsHealthChecks } from "./components/DiagnosticsHealthChecks";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
 import { CrashRecoveryStatus } from "./components/CrashRecoveryStatus";
 import { GeneralSettingsPanel, type StartupDestinationApi } from "./components/GeneralSettingsPanel";
@@ -8712,6 +8713,7 @@ export function SystemSettingsPanel(props: {
             onRepairSources={props.onRepairRecoverySources}
             t={props.t}
           />
+          <DiagnosticsHealthChecks health={props.diagnosticsHealth} t={props.t} />
           <DiagnosticsEventExportComposer
             workflow={diagnosticsWorkflow}
             disabled={Boolean(diagnosticsBusy)}
