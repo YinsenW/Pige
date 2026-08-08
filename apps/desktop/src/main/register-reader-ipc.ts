@@ -38,6 +38,8 @@ import type {
   NoteSetClaimConfidenceResult,
   NoteSetEntityTypeRequest,
   NoteSetEntityTypeResult,
+  NoteReadEntityIdentifiersRequest,
+  NoteChangeEntityIdentifierRequest,
   NoteAddTagRequest,
   NoteAddTagResult,
   NoteEditTaxonomyRequest,
@@ -140,6 +142,12 @@ import {
   NOTE_SET_ENTITY_TYPE_CHANNEL,
   NoteSetEntityTypeRequestSchema,
   NoteSetEntityTypeResultSchema,
+  NOTE_READ_ENTITY_IDENTIFIERS_CHANNEL,
+  NoteReadEntityIdentifiersRequestSchema,
+  NoteReadEntityIdentifiersResultSchema,
+  NOTE_CHANGE_ENTITY_IDENTIFIER_CHANNEL,
+  NoteChangeEntityIdentifierRequestSchema,
+  NoteChangeEntityIdentifierResultSchema,
   NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL,
   NOTE_CHANGE_ENTITY_MENTION_CHANNEL,
   NoteSearchEntityMentionsRequestSchema,
@@ -263,6 +271,7 @@ import type { LibraryTopicRenameService } from "./services/library-topic-rename-
 import type { QuestionStateService } from "./services/question-state-service";
 import type { ClaimConfidenceService } from "./services/claim-confidence-service";
 import type { EntityTypeService } from "./services/entity-type-service";
+import type { EntityIdentifierService } from "./services/entity-identifier-service";
 import type { EntityMentionService } from "./services/entity-mention-service";
 import type { QuestionAnswerService } from "./services/question-answer-service";
 import type { ClaimContradictionService } from "./services/claim-contradiction-service";
@@ -295,6 +304,7 @@ interface RegisterReaderIpcOptions {
   readonly getQuestionStateService: () => QuestionStateService;
   readonly getClaimConfidenceService: () => ClaimConfidenceService;
   readonly getEntityTypeService: () => EntityTypeService;
+  readonly getEntityIdentifierService: () => EntityIdentifierService;
   readonly getEntityMentionService: () => EntityMentionService;
   readonly getQuestionAnswerService: () => QuestionAnswerService;
   readonly getClaimContradictionService: () => ClaimContradictionService;
@@ -695,6 +705,23 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       return NoteSetEntityTypeResultSchema.parse({ ...parsed, status: "failed" });
     }
     return result;
+  });
+  options.ipcMain.handle(NOTE_READ_ENTITY_IDENTIFIERS_CHANNEL, (event, request: unknown) => {
+    const parsed = NoteReadEntityIdentifiersRequestSchema.parse(request) as NoteReadEntityIdentifiersRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteReadEntityIdentifiersResultSchema.parse({ ...parsed, status: "failed" });
+    try { return NoteReadEntityIdentifiersResultSchema.parse(options.getEntityIdentifierService().read(ownerId, parsed)); }
+    catch { return NoteReadEntityIdentifiersResultSchema.parse({ ...parsed, status: "failed" }); }
+  });
+  options.ipcMain.handle(NOTE_CHANGE_ENTITY_IDENTIFIER_CHANNEL, async (event, request: unknown) => {
+    const parsed = NoteChangeEntityIdentifierRequestSchema.parse(request) as NoteChangeEntityIdentifierRequest;
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    if (ownerId === undefined || event.sender.isDestroyed()) return NoteChangeEntityIdentifierResultSchema.parse({ ...parsed, status: "failed" });
+    try {
+      const result = NoteChangeEntityIdentifierResultSchema.parse(await options.getEntityIdentifierService().change(ownerId, parsed));
+      if (result.status === "committed") options.onNoteRelated();
+      return notesTrackedSenders.get(event.sender.id) === ownerId && !event.sender.isDestroyed() ? result : NoteChangeEntityIdentifierResultSchema.parse({ ...parsed, status: "failed" });
+    } catch { return NoteChangeEntityIdentifierResultSchema.parse({ ...parsed, status: "failed" }); }
   });
   options.ipcMain.handle(NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL, async (event, request: unknown) => {
     const parsed = NoteSearchEntityMentionsRequestSchema.parse(request);

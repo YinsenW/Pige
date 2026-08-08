@@ -378,6 +378,7 @@ import { NoteArchiveService } from "./services/note-archive-service";
 import { QuestionStateService } from "./services/question-state-service";
 import { ClaimConfidenceService } from "./services/claim-confidence-service";
 import { EntityTypeService } from "./services/entity-type-service";
+import { EntityIdentifierService } from "./services/entity-identifier-service";
 import { EntityMentionService } from "./services/entity-mention-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
@@ -556,6 +557,7 @@ let noteArchiveService: NoteArchiveService | undefined;
 let questionStateService: QuestionStateService | undefined;
 let claimConfidenceService: ClaimConfidenceService | undefined;
 let entityTypeService: EntityTypeService | undefined;
+let entityIdentifierService: EntityIdentifierService | undefined;
 let entityMentionService: EntityMentionService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
@@ -2074,6 +2076,12 @@ const getEntityTypeService = (): EntityTypeService => {
     new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowEntity: true })
   );
   return entityTypeService;
+};
+const getEntityIdentifierService = (): EntityIdentifierService => {
+  entityIdentifierService ??= new EntityIdentifierService(
+    getNotesService(), new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowEntity: true })
+  );
+  return entityIdentifierService;
 };
 const getEntityMentionService = (): EntityMentionService => {
   entityMentionService ??= new EntityMentionService(
@@ -3823,6 +3831,7 @@ registerReaderIpc({
   getQuestionStateService,
   getClaimConfidenceService,
   getEntityTypeService,
+  getEntityIdentifierService,
   getEntityMentionService,
   getQuestionAnswerService,
   getClaimContradictionService,
@@ -4412,6 +4421,9 @@ app.whenReady().then(async () => {
   entityTypeService = new EntityTypeService(
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowEntity: true })
+  );
+  entityIdentifierService = new EntityIdentifierService(
+    getNotesService(), new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowEntity: true })
   );
   entityMentionService = new EntityMentionService(
     getNotesService(),

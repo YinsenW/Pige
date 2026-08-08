@@ -22,6 +22,7 @@ import type { LibraryTopicRenameService } from "../../apps/desktop/src/main/serv
 import type { QuestionStateService } from "../../apps/desktop/src/main/services/question-state-service";
 import type { ClaimConfidenceService } from "../../apps/desktop/src/main/services/claim-confidence-service";
 import type { EntityTypeService } from "../../apps/desktop/src/main/services/entity-type-service";
+import type { EntityIdentifierService } from "../../apps/desktop/src/main/services/entity-identifier-service";
 import type { EntityMentionService } from "../../apps/desktop/src/main/services/entity-mention-service";
 import type { QuestionAnswerService } from "../../apps/desktop/src/main/services/question-answer-service";
 import type { ConceptParentService } from "../../apps/desktop/src/main/services/concept-parent-service";
@@ -67,7 +68,8 @@ function makeHarness(
   topicParentService?: Partial<TopicParentService>,
   entityMentionService?: Partial<EntityMentionService>,
   sourceRefreshConflictService?: Partial<SourceRefreshConflictService>,
-  sourceTrashService?: Partial<SourceTrashService>
+  sourceTrashService?: Partial<SourceTrashService>,
+  entityIdentifierService?: Partial<EntityIdentifierService>
 ) {
   const handlers = new Map<string, IpcHandler>();
   registerReaderIpc({
@@ -135,6 +137,10 @@ function makeHarness(
     getEntityTypeService: () => {
       if (entityTypeService) return entityTypeService as EntityTypeService;
       throw new Error("Entity type service was not expected.");
+    },
+    getEntityIdentifierService: () => {
+      if (entityIdentifierService) return entityIdentifierService as EntityIdentifierService;
+      throw new Error("Entity identifier service was not expected.");
     },
     getEntityMentionService: () => {
       if (entityMentionService) return entityMentionService as EntityMentionService;
@@ -229,6 +235,8 @@ describe("registerReaderIpc", () => {
       "notes.setQuestionState",
       "notes.setClaimConfidence",
       "notes.setEntityType",
+      "notes.readEntityIdentifiers",
+      "notes.changeEntityIdentifier",
       "notes.searchEntityMentions",
       "notes.changeEntityMention",
       "notes.searchQuestionAnswers",

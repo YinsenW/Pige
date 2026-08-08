@@ -2257,6 +2257,8 @@ export const NOTE_RESTORE_ARCHIVED_CHANNEL = "notes.restoreArchived" as const;
 export const NOTE_SET_QUESTION_STATE_CHANNEL = "notes.setQuestionState" as const;
 export const NOTE_SET_CLAIM_CONFIDENCE_CHANNEL = "notes.setClaimConfidence" as const;
 export const NOTE_SET_ENTITY_TYPE_CHANNEL = "notes.setEntityType" as const;
+export const NOTE_READ_ENTITY_IDENTIFIERS_CHANNEL = "notes.readEntityIdentifiers" as const;
+export const NOTE_CHANGE_ENTITY_IDENTIFIER_CHANNEL = "notes.changeEntityIdentifier" as const;
 export const NOTE_SEARCH_ENTITY_MENTIONS_CHANNEL = "notes.searchEntityMentions" as const;
 export const NOTE_CHANGE_ENTITY_MENTION_CHANNEL = "notes.changeEntityMention" as const;
 export const NOTE_SEARCH_QUESTION_ANSWERS_CHANNEL = "notes.searchQuestionAnswers" as const;
@@ -2390,6 +2392,30 @@ export const NoteSetEntityTypeResultSchema = z.discriminatedUnion("status", [
   ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) =>
     NoteSetEntityTypeResultIdentitySchema.extend({ status: z.literal(status) }).strict()
   )
+]);
+export const NoteEntityIdentifierSchema = z.string().min(1).max(256).refine((value) =>
+  !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(value) &&
+  value === value.normalize("NFKC").replace(/\s+/gu, " ").trim(),
+  "Entity identifiers must use the canonical stored representation."
+);
+const NoteEntityIdentifierOwnerSchema = z.object({
+  apiVersion: z.literal(1), requestId: z.string().regex(/^entityidentifierreq_[a-z0-9]{16,64}$/),
+  activeVaultId: VaultIdSchema, currentPageId: PageIdSchema, renderContextId: NoteRenderContextIdSchema,
+  expectedRevision: NoteEditorRevisionSchema
+}).strict();
+export const NoteReadEntityIdentifiersRequestSchema = NoteEntityIdentifierOwnerSchema;
+export const NoteReadEntityIdentifiersResultSchema = z.discriminatedUnion("status", [
+  NoteEntityIdentifierOwnerSchema.extend({ status: z.literal("ready"), identifiers: z.array(NoteEntityIdentifierSchema).max(32), canEdit: z.boolean(), revision: NoteEditorRevisionSchema }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) => NoteEntityIdentifierOwnerSchema.extend({ status: z.literal(status) }).strict())
+]);
+export const NoteChangeEntityIdentifierRequestSchema = NoteEntityIdentifierOwnerSchema.extend({
+  action: z.enum(["add", "remove"]), identifier: NoteEntityIdentifierSchema
+}).strict();
+const NoteChangeEntityIdentifierResultIdentitySchema = NoteChangeEntityIdentifierRequestSchema;
+export const NoteChangeEntityIdentifierResultSchema = z.discriminatedUnion("status", [
+  NoteChangeEntityIdentifierResultIdentitySchema.extend({ status: z.literal("committed"), operationId: OperationIdSchema,
+    render: NoteRenderResultSchema.extend({ renderContextId: NoteRenderContextIdSchema }).strict() }).strict(),
+  ...(["stale", "not_found", "ineligible", "failed"] as const).map((status) => NoteChangeEntityIdentifierResultIdentitySchema.extend({ status: z.literal(status) }).strict())
 ]);
 const NoteEntityMentionOwnerSchema = z.object({
   apiVersion: z.literal(1),
@@ -13736,6 +13762,10 @@ export type NoteSetClaimConfidenceResult = z.infer<typeof NoteSetClaimConfidence
 export type NoteEntityTypeRequestId = z.infer<typeof NoteEntityTypeRequestIdSchema>;
 export type NoteSetEntityTypeRequest = z.infer<typeof NoteSetEntityTypeRequestSchema>;
 export type NoteSetEntityTypeResult = z.infer<typeof NoteSetEntityTypeResultSchema>;
+export type NoteReadEntityIdentifiersRequest = z.infer<typeof NoteReadEntityIdentifiersRequestSchema>;
+export type NoteReadEntityIdentifiersResult = z.infer<typeof NoteReadEntityIdentifiersResultSchema>;
+export type NoteChangeEntityIdentifierRequest = z.infer<typeof NoteChangeEntityIdentifierRequestSchema>;
+export type NoteChangeEntityIdentifierResult = z.infer<typeof NoteChangeEntityIdentifierResultSchema>;
 export type NoteSearchEntityMentionsRequest = z.infer<typeof NoteSearchEntityMentionsRequestSchema>;
 export type NoteSearchEntityMentionsResult = z.infer<typeof NoteSearchEntityMentionsResultSchema>;
 export type NoteChangeEntityMentionRequest = z.infer<typeof NoteChangeEntityMentionRequestSchema>;
