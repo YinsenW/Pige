@@ -14,6 +14,7 @@ import type {
 
 type Translate = (key: string) => string;
 type SemanticAssetAction = "install" | "enable" | "disable" | "remove";
+type SemanticAssetNotice = "stale" | "not_found" | "failed";
 
 export interface LocalSemanticRetrievalApi {
   readonly localSemanticStatus: (
@@ -74,10 +75,21 @@ export function LocalSemanticRetrievalSettingsPanel(
   const [status, setStatus] = useState<LocalSemanticRetrievalStatus | null>(null);
   const [readState, setReadState] = useState<"loading" | "ready" | "failed">("loading");
   const [pendingAction, setPendingAction] = useState<SemanticAssetAction | null>(null);
-  const [actionFailed, setActionFailed] = useState(false);
+  const [actionNotice, setActionNotice] = useState<SemanticAssetNotice | null>(null);
   const mountedRef = useRef(true);
   const requestSequenceRef = useRef(0);
   const actionActiveRef = useRef(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const actionTriggerRefs = useRef(new Map<SemanticAssetAction, HTMLButtonElement>());
+  const pendingFocusActionRef = useRef<SemanticAssetAction | null>(null);
+
+  useEffect(() => {
+    if (pendingAction !== null || pendingFocusActionRef.current === null) return;
+    const action = pendingFocusActionRef.current;
+    pendingFocusActionRef.current = null;
+    const firstAvailableAction = actionTriggerRefs.current.values().next().value;
+    (actionTriggerRefs.current.get(action) ?? firstAvailableAction ?? rowRef.current)?.focus({ preventScroll: true });
+  }, [actionNotice, pendingAction, readState, status]);
 
   const readStatus = useCallback(async (
     sequence: number,
@@ -99,6 +111,7 @@ export function LocalSemanticRetrievalSettingsPanel(
   const refresh = useCallback(async (): Promise<void> => {
     const sequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = sequence;
+    setActionNotice(null);
     setReadState(status ? "ready" : "loading");
     await readStatus(sequence, status?.revision ?? 0);
   }, [readStatus, status]);
@@ -128,8 +141,9 @@ export function LocalSemanticRetrievalSettingsPanel(
     const sequence = requestSequenceRef.current + 1;
     requestSequenceRef.current = sequence;
     const requestId = createRequestId();
+    pendingFocusActionRef.current = action;
     setPendingAction(action);
-    setActionFailed(false);
+    setActionNotice(null);
     try {
       const request = {
         apiVersion: 1 as const,
@@ -145,13 +159,15 @@ export function LocalSemanticRetrievalSettingsPanel(
             : await props.api.removeLocalSemanticAsset(request);
       if (!mountedRef.current || sequence !== requestSequenceRef.current) return;
       if (result.requestId !== requestId || result.status === "failed") {
-        setActionFailed(true);
+        setActionNotice("failed");
         return;
       }
+      if (result.status === "stale") setActionNotice("stale");
+      else if (result.status === "not_found") setActionNotice("not_found");
       const next = await readStatus(sequence, Math.max(current.revision, result.revision));
-      if (!next) setActionFailed(true);
+      if (!next) setActionNotice("failed");
     } catch {
-      if (mountedRef.current && sequence === requestSequenceRef.current) setActionFailed(true);
+      if (mountedRef.current && sequence === requestSequenceRef.current) setActionNotice("failed");
     } finally {
       if (mountedRef.current && sequence === requestSequenceRef.current) {
         actionActiveRef.current = false;
@@ -166,6 +182,11 @@ export function LocalSemanticRetrievalSettingsPanel(
     : readState === "failed"
       ? "capabilities.semanticAsset.state.failed"
       : `capabilities.semanticAsset.state.${status?.assetState ?? "failed"}`;
+  const actionNoticeKey = actionNotice === "stale"
+    ? "capabilities.semanticAsset.notice.stale"
+    : actionNotice === "not_found"
+      ? "capabilities.semanticAsset.notice.notFound"
+      : "capabilities.semanticAsset.actionFailed";
 
   return (
     <section className="settings-section" aria-labelledby="capabilities-retrieval-title">
@@ -173,7 +194,7 @@ export function LocalSemanticRetrievalSettingsPanel(
         {props.t("capabilities.localRetrieval")}
       </h2>
       <div className="settings-card">
-        <div className="settings-row tall" data-semantic-asset-state={status?.assetState ?? readState}>
+        <div ref={rowRef} className="settings-row tall" data-semantic-asset-state={status?.assetState ?? readState} tabIndex={-1}>
           <div className="settings-row-copy">
             <strong>{props.t("capabilities.semanticAsset.title")}</strong>
             <span>{props.t("capabilities.semanticAsset.description")}</span>
@@ -192,6 +213,10 @@ export function LocalSemanticRetrievalSettingsPanel(
                 className="settings-button"
                 type="button"
                 data-semantic-asset-action={action}
+                ref={(node) => {
+                  if (node) actionTriggerRefs.current.set(action, node);
+                  else actionTriggerRefs.current.delete(action);
+                }}
                 disabled={pendingAction !== null}
                 key={action}
                 onClick={() => void runAction(action)}
@@ -207,9 +232,9 @@ export function LocalSemanticRetrievalSettingsPanel(
           </div>
         </div>
       </div>
-      {actionFailed ? (
+      {actionNotice ? (
         <p className="settings-inline-status error" role="alert" aria-live="polite">
-          {props.t("capabilities.semanticAsset.actionFailed")}
+          {props.t(actionNoticeKey)}
         </p>
       ) : null}
     </section>

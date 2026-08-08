@@ -6845,6 +6845,162 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("retains semantic asset state on stale or missing actions, then restores the next valid trigger", async () => {
+    const dom = createDom();
+    let current = semanticAssetStatus(1, "disabled");
+    let resolveEnable!: (result: LocalSemanticRetrievalEnableResult) => void;
+    let resolveRemove!: (result: LocalSemanticRetrievalRemoveResult) => void;
+    const enableResult = new Promise<LocalSemanticRetrievalEnableResult>((resolve) => { resolveEnable = resolve; });
+    const removeResult = new Promise<LocalSemanticRetrievalRemoveResult>((resolve) => { resolveRemove = resolve; });
+    const status = vi.fn(async () => current);
+    const enable = vi.fn()
+      .mockImplementationOnce(async () => enableResult)
+      .mockImplementationOnce(async (request: LocalSemanticRetrievalEnableRequest) => {
+        current = semanticAssetStatus(3, "ready");
+        return { apiVersion: 1, requestId: request.requestId, revision: 3, status: "committed" as const };
+      });
+    const remove = vi.fn()
+      .mockImplementationOnce(async () => removeResult)
+      .mockImplementationOnce(async (request: LocalSemanticRetrievalRemoveRequest) => {
+        current = semanticAssetStatus(5, "not_installed");
+        return { apiVersion: 1, requestId: request.requestId, revision: 5, status: "committed" as const };
+      });
+    const install = vi.fn()
+      .mockImplementationOnce(async (request: LocalSemanticRetrievalInstallRequest): Promise<LocalSemanticRetrievalInstallResult> => ({
+        apiVersion: 1,
+        requestId: request.requestId,
+        revision: 6,
+        status: "failed"
+      }))
+      .mockImplementationOnce(async (request: LocalSemanticRetrievalInstallRequest): Promise<LocalSemanticRetrievalInstallResult> => {
+        current = semanticAssetStatus(7, "disabled");
+        return {
+          apiVersion: 1,
+          requestId: request.requestId,
+          revision: 7,
+          status: "accepted",
+          jobId: "job_20260809_semanticretry"
+        };
+      });
+    const unavailable = async (): Promise<never> => {
+      throw new Error("Unexpected semantic asset action in this fixture.");
+    };
+    const api: LocalSemanticRetrievalApi = {
+      localSemanticStatus: status,
+      installLocalSemanticAsset: install,
+      enableLocalSemanticAsset: enable,
+      disableLocalSemanticAsset: unavailable,
+      removeLocalSemanticAsset: remove
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(LocalSemanticRetrievalSettingsPanel, { api, t }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const enableButton = buttonNamed(container, "Enable");
+    enableButton.focus();
+    await act(async () => {
+      enableButton.click();
+      enableButton.click();
+      await settle(dom);
+    });
+    expect(enable).toHaveBeenCalledOnce();
+    expect(buttonNamed(container, "Enabling...").disabled).toBe(true);
+
+    current = semanticAssetStatus(2, "disabled");
+    const firstEnableRequest = enable.mock.calls[0]?.[0] as LocalSemanticRetrievalEnableRequest;
+    await act(async () => {
+      resolveEnable({
+        apiVersion: 1,
+        requestId: firstEnableRequest.requestId,
+        revision: 2,
+        status: "stale"
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("changed elsewhere");
+    expect(container.textContent).toContain("Disabled");
+    expect(container.querySelector('[role="alert"][aria-live="polite"]')).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Enable"));
+
+    await act(async () => {
+      buttonNamed(container, "Enable").click();
+      await settle(dom);
+    });
+    const secondEnableRequest = enable.mock.calls[1]?.[0] as LocalSemanticRetrievalEnableRequest;
+    await act(async () => {
+      resolveEnable({
+        apiVersion: 1,
+        requestId: secondEnableRequest.requestId,
+        revision: 3,
+        status: "committed"
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Enabled");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Disable"));
+
+    const removeButton = buttonNamed(container, "Remove");
+    removeButton.focus();
+    await act(async () => {
+      removeButton.click();
+      await settle(dom);
+    });
+    expect(remove).toHaveBeenCalledOnce();
+    current = semanticAssetStatus(4, "ready");
+    const firstRemoveRequest = remove.mock.calls[0]?.[0] as LocalSemanticRetrievalRemoveRequest;
+    await act(async () => {
+      resolveRemove({
+        apiVersion: 1,
+        requestId: firstRemoveRequest.requestId,
+        revision: 4,
+        status: "not_found"
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("no longer available");
+    expect(container.textContent).toContain("Enabled");
+    expect(container.querySelector('[role="alert"][aria-live="polite"]')).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Remove"));
+
+    await act(async () => {
+      buttonNamed(container, "Remove").click();
+      await settle(dom);
+    });
+    const secondRemoveRequest = remove.mock.calls[1]?.[0] as LocalSemanticRetrievalRemoveRequest;
+    await act(async () => {
+      resolveRemove({
+        apiVersion: 1,
+        requestId: secondRemoveRequest.requestId,
+        revision: 5,
+        status: "committed"
+      });
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("Not installed");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install"));
+
+    await act(async () => {
+      buttonNamed(container, "Install").click();
+      await settle(dom);
+    });
+    expect(container.textContent).toContain("could not be changed");
+    expect(container.textContent).toContain("Not installed");
+    expect(container.querySelector('[role="alert"][aria-live="polite"]')).not.toBeNull();
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install"));
+    await act(async () => {
+      buttonNamed(container, "Install").click();
+      await settle(dom);
+    });
+    expect(install).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Disabled");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Enable"));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("lists and restores deleted and reset Memory through exact body-free trash authority", async () => {
     const dom = createDom();
     const summary = memorySummary(4, "active");

@@ -1656,6 +1656,8 @@
   "capabilities.semanticAsset.action.remove": "Remove",
   "capabilities.semanticAsset.action.removing": "Removing...",
   "capabilities.semanticAsset.actionFailed": "The local retrieval component could not be changed. Its last confirmed state is shown.",
+  "capabilities.semanticAsset.notice.notFound": "The local retrieval component is no longer available. Its current state is shown.",
+  "capabilities.semanticAsset.notice.stale": "The local retrieval component changed elsewhere. Its current state is shown; try again if needed.",
   "capabilities.semanticAsset.description": "Adds local semantic matching when enabled. Lexical search always remains available.",
   "capabilities.semanticAsset.retry": "Try again",
   "capabilities.semanticAsset.state.checking": "Checking",
