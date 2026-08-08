@@ -9,6 +9,54 @@ let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => { await cleanup?.(); cleanup = undefined; });
 
 describe("ManagedCollectionTableTrashAction", () => {
+  it("does not steal initial focus, moves it into confirmation, and restores it on Escape", async () => {
+    let priorFocus: HTMLButtonElement | undefined;
+    const harness = await mount(async (request) => ({
+      apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId, tableId: request.tableId, status: "failed" as const
+    }), vi.fn(), (dom) => {
+      priorFocus = dom.window.document.createElement("button");
+      priorFocus.textContent = "Prior focus";
+      dom.window.document.body.append(priorFocus);
+      priorFocus.focus();
+    });
+    expect(harness.dom.window.document.activeElement).toBe(priorFocus);
+
+    const remove = button(harness.container, "Remove table");
+    await click(remove, harness.dom);
+    const cancel = button(harness.container, "Cancel");
+    expect(harness.dom.window.document.activeElement).toBe(cancel);
+
+    await act(async () => {
+      cancel.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+    });
+    expect(harness.container.querySelector('[role="group"]')).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(button(harness.container, "Remove table"));
+  });
+
+  it("submits an explicit table trash confirmation only once while pending", async () => {
+    let resolveTrash: ((value: unknown) => void) | undefined;
+    const onTrash = vi.fn((request: CollectionTrashTableRequest) => new Promise((resolve) => {
+      resolveTrash = resolve;
+    }));
+    const harness = await mount(onTrash, vi.fn());
+
+    await click(button(harness.container, "Remove table"), harness.dom);
+    const confirm = button(harness.container, "Move to history");
+    await act(async () => {
+      confirm.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true }));
+      confirm.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true }));
+    });
+    expect(onTrash).toHaveBeenCalledOnce();
+
+    const request = onTrash.mock.calls[0]![0] as CollectionTrashTableRequest;
+    resolveTrash?.({
+      apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId, tableId: request.tableId, status: "failed" as const
+    });
+    await settle(harness.dom);
+  });
+
   it("requires an explicit confirmation and closes only after the immutable revision commits", async () => {
     const onTrash = vi.fn(async (request: CollectionTrashTableRequest) => ({
       apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
@@ -19,7 +67,7 @@ describe("ManagedCollectionTableTrashAction", () => {
     const harness = await mount(onTrash, onTrashed);
     await click(button(harness.container, "Remove table"), harness.dom);
     expect(onTrash).not.toHaveBeenCalled();
-    expect(harness.container.querySelector('[role="alertdialog"]')?.textContent).toContain("Move this table out");
+    expect(harness.container.querySelector('[role="group"]')?.textContent).toContain("Move this table out");
 
     await click(button(harness.container, "Move to history"), harness.dom);
     expect(onTrash).toHaveBeenCalledTimes(1);
@@ -31,7 +79,11 @@ describe("ManagedCollectionTableTrashAction", () => {
   });
 });
 
-async function mount(onTrash: (request: CollectionTrashTableRequest) => Promise<unknown>, onTrashed: () => void) {
+async function mount(
+  onTrash: (request: CollectionTrashTableRequest) => Promise<unknown>,
+  onTrashed: () => void,
+  beforeRender?: (dom: JSDOM) => void
+) {
   const dom = new JSDOM('<div id="root"></div>', { pretendToBeVisual: true });
   const originals = new Map<string, PropertyDescriptor | undefined>();
   for (const key of ["window", "document", "navigator", "HTMLElement", "crypto", "requestAnimationFrame"])
@@ -63,10 +115,15 @@ async function mount(onTrash: (request: CollectionTrashTableRequest) => Promise<
     });
   }
   Object.defineProperty(dom.window, "pige", { configurable: true, value: { collections: { trashTable: onTrash } } });
+  beforeRender?.(dom);
   await act(async () => root.render(createElement(Harness)));
   cleanup = async () => { await act(async () => root.unmount()); dom.window.close();
     for (const [key, descriptor] of originals) descriptor ? Object.defineProperty(globalThis, key, descriptor) : Reflect.deleteProperty(globalThis, key); };
   return { dom, container };
+}
+
+async function settle(dom: JSDOM): Promise<void> {
+  await act(async () => { await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0)); });
 }
 
 function snapshot(): CollectionSnapshot {
