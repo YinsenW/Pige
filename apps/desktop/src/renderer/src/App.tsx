@@ -3125,6 +3125,7 @@ export function App(): React.JSX.Element {
                 locale={locale}
                 error={error}
                 localDatabaseStatus={localDatabaseStatus}
+                jobs={recentJobs}
                 onRefresh={refreshVaultState}
                 onRefreshDiagnostics={refreshDiagnostics}
                 onOpenPage={async (pageId) => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  JobSummary,
   KnowledgeHealthIssueKind,
   KnowledgeHealthIssueSummary,
   KnowledgeHealthOrphanParentCandidate,
@@ -22,6 +23,7 @@ import {
   KnowledgeHealthOrphanRelationRepair,
   type OrphanParentPickerState
 } from "./KnowledgeHealthOrphanRelationRepair";
+import { IndexRebuildStatus } from "./IndexRebuildStatus";
 
 type KnowledgeHealthState =
   | { readonly kind: "not_run" | "checking" | "unavailable" | "failed" }
@@ -50,6 +52,7 @@ export interface MaintenanceSettingsPanelProps {
   readonly locale: Locale;
   readonly error: string | null;
   readonly localDatabaseStatus: LocalDatabaseStatus | null;
+  readonly jobs?: readonly JobSummary[];
   readonly onRefresh: () => Promise<void>;
   readonly onRefreshDiagnostics: () => Promise<void>;
   readonly onOpenPage: (pageId: string) => Promise<boolean>;
@@ -82,6 +85,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
   const knowledgeHealthTargetSearchSequenceRef = useRef(0);
   const orphanParentSearchSequenceRef = useRef(0);
   const knowledgeHealthRepairBusyRef = useRef(false);
+  const maintenanceBusyRef = useRef<"check" | "rebuild" | "reset" | null>(null);
+  const indexRebuildCancelRequestedRef = useRef(false);
   const knowledgeHealthStateRef = useRef(knowledgeHealthState);
   activeVaultIdRef.current = props.activeVaultId;
   knowledgeHealthStateRef.current = knowledgeHealthState;
@@ -134,7 +139,8 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     action: () => Promise<void>,
     successKey: string
   ): Promise<void> => {
-    if (maintenanceBusy) return;
+    if (maintenanceBusyRef.current) return;
+    maintenanceBusyRef.current = kind;
     props.onError(null);
     setMaintenanceBusy(kind);
     setMaintenanceNotice(null);
@@ -142,8 +148,14 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       await action();
       setMaintenanceNotice({ kind: "success", key: successKey });
     } catch {
-      setMaintenanceNotice({ kind: "error", key: "error.generic" });
+      setMaintenanceNotice({
+        kind: indexRebuildCancelRequestedRef.current && kind === "rebuild" ? "success" : "error",
+        key: indexRebuildCancelRequestedRef.current && kind === "rebuild"
+          ? "maintenance.rebuildCancelRequested"
+          : "error.generic"
+      });
     } finally {
+      maintenanceBusyRef.current = null;
       setMaintenanceBusy(null);
     }
   };
@@ -161,12 +173,14 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
     window.requestAnimationFrame(() => resetDatabaseButtonRef.current?.focus());
   };
 
-  const rebuildLocalDatabase = async (): Promise<void> =>
-    runMaintenanceAction("rebuild", async () => {
+  const rebuildLocalDatabase = async (): Promise<void> => {
+    indexRebuildCancelRequestedRef.current = false;
+    await runMaintenanceAction("rebuild", async () => {
       await window.pige.maintenance.rebuildLocalDatabase();
       await props.onRefresh();
       await props.onRefreshDiagnostics();
     }, "maintenance.rebuildStarted");
+  };
 
   const beginResetConfirmation = (): void => {
     if (maintenanceBusy) return;
@@ -605,6 +619,11 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
       issues: knowledgeHealthState.result.issues.filter((issue) => issue.kind === kind)
     })).filter(({ issues }) => issues.length > 0)
     : [];
+  const indexRebuildIsActive = (props.jobs ?? []).some((job) =>
+    job.class === "index_rebuild" &&
+    (job.state === "queued" || job.state === "running" ||
+      job.state === "waiting_dependency" || job.state === "cancel_requested")
+  );
 
   return (
     <section className="settings-page maintenance-settings-page" aria-labelledby="settings-maintenance-title">
@@ -651,12 +670,28 @@ export function MaintenanceSettingsPanel(props: MaintenanceSettingsPanelProps): 
             <button
               className="settings-button settings-action"
               type="button"
-              disabled={maintenanceBusy !== null}
+              disabled={maintenanceBusy !== null || indexRebuildIsActive}
               onClick={() => void rebuildLocalDatabase()}
             >
-              {props.t(maintenanceBusy === "rebuild" ? "maintenance.rebuilding" : "maintenance.rebuild")}
+              {props.t(maintenanceBusy === "rebuild" || indexRebuildIsActive
+                ? "maintenance.rebuilding"
+                : "maintenance.rebuild")}
             </button>
           </div>
+          <IndexRebuildStatus
+            activeVaultId={props.activeVaultId}
+            jobs={props.jobs ?? []}
+            onCancelOutcome={(outcome) => {
+              if (outcome === "accepted") indexRebuildCancelRequestedRef.current = true;
+              setMaintenanceNotice({
+                kind: outcome === "accepted" ? "success" : "error",
+                key: outcome === "accepted"
+                  ? "maintenance.rebuildCancelRequested"
+                  : "maintenance.rebuildCancelFailed"
+              });
+            }}
+            t={props.t}
+          />
         </div>
       </section>
 
