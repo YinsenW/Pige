@@ -588,6 +588,12 @@ Reader reference query contract:
 - `notes.openSourceReference` accepts exact request/vault/page/render/source identity and returns
   body-free `unresolved | not_found | stale | resolved`; only `resolved` adds target page ID. Other
   states retain Reader. `revealSource` revalidates and reveals only that asset, path/body-free.
+- `notes.listSourceDerived` accepts the active Vault, current Source Page/render context, and one
+  exact Source ID. Main rereads the Source Record and current Markdown, excludes the Source Page and
+  inactive/source pages, and returns at most 32 active derived-page summaries (`pageId`, title,
+  `pageType`, `updatedAt`) ordered by `updatedAt` descending then `pageId`. `ready` is the only
+  result carrying summaries; `not_found | stale | mismatch | changed | failed` are body/path-free
+  and retain Reader. The renderer receives no source path, body, checksum, or filesystem authority.
 - `source.refresh.preview` checks a referenced or managed Markdown/TXT/PDF/DOCX/PPTX source and
   returns only safe change metadata plus an opaque candidate. `source.refresh.confirm` binds that
   candidate and expected source revision, rechecks currentness, and returns only closed status,

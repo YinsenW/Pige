@@ -188,6 +188,11 @@ Rules:
 - `packages/schemas/src/index.ts` is the executable field/enum authority. New IDs use `src_`, `page_`, and `art_`; `artifact_` is not emitted.
 - The sidecar under `.pige/source-records/` is the sole operational source-record authority.
 - A Markdown source page is user-editable bounded sidecar projection, not owner of paths, copy resolution, checksums, or artifact locators. After accepted Agent-turn preservation, `SourcePageService` ensures one current page per accepted record before inspect citation; rejected items get none, and parent retry/restart adopts rather than duplicates it.
+- Source-to-derived-note discovery is a read-only projection over current truth: Main rereads the
+  exact Source Record and scans active Markdown pages, excludes the Source Page itself and other
+  source pages, and includes only active pages whose `source_ids` contain that exact source ID.
+  It rechecks Source Record, page/render, and Vault identity before returning a bounded deterministic
+  summary. Paths, bodies, checksums, and locator internals remain Main-only.
 - Accepted `audio_file` and `video_file` records use the same deterministic Source Page and
   storage binding. Until P2 transcription, their bytes and any derived transcript remain out
   of model input and egress; only the body-free unavailable-capability state is projected.
