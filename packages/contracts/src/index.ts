@@ -318,8 +318,6 @@ import type {
   JobCancelResult,
   JobDependencyRepairRequest,
   JobDependencyRepairResult,
-  JobDependencyRepairRequest,
-  JobDependencyRepairResult,
   JobChangedEvent as JobChangedEventSchemaType,
   JobRecord,
   JobStage,
