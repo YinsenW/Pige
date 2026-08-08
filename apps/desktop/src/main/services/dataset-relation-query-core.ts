@@ -47,14 +47,14 @@ interface AggregateRow {
   readonly tieKey: string;
 }
 
-/** Executes up to three bounded inner joins by Pige-owned single-row relations. */
+/** Executes up to four bounded inner joins by Pige-owned single-row relations. */
 export function executeDatasetRelationQuery(
   database: DatabaseSync,
   request: DatasetQueryWorkerRequest
 ): DatasetQueryCoreResult {
   const joins = request.joins;
-  if (!joins || joins.length < 1 || joins.length > 3) {
-    fail("dataset.query.plan_invalid", "The Dataset relation join plan is invalid.");
+  if (!joins || joins.length < 1 || joins.length > request.limits.maxRelationHops) {
+    limit("relation_hops");
   }
   validateTargetBindings(database, request);
   const columnsById = new Map(request.columns.map((column) => [column.id, column]));

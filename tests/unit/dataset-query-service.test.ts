@@ -101,7 +101,7 @@ describe("Dataset Query Service", () => {
     const catalog = await service.createCatalog(fixture.vaultPath);
     const catalogResult = await service.revalidateCatalog(fixture.vaultPath, catalog);
 
-    expect(catalogResult.evidence.modelText).toContain("at most three declared Pige relations");
+    expect(catalogResult.evidence.modelText).toContain("at most four declared Pige relations");
     expect(catalogResult.evidence.modelText).toContain('"targetTableRef":"table_3"');
     const request = {
       action: "query" as const,
@@ -144,8 +144,8 @@ describe("Dataset Query Service", () => {
     })).rejects.toMatchObject({ code: "dataset.query.ref_invalid" });
   });
 
-  it("executes a declared three-hop grouped aggregate and rejects a fourth hop at the tool boundary", async () => {
-    const fixture = await createManagedFixture({ withTwoHopRelation: true });
+  it("executes a declared four-hop grouped aggregate and rejects a fifth hop at the tool boundary", async () => {
+    const fixture = await createManagedFixture({ withThreeHopRelation: true });
     const service = new DatasetQueryService(directExecutor);
     const catalog = await service.createCatalog(fixture.vaultPath);
     const request = {
@@ -158,11 +158,15 @@ describe("Dataset Query Service", () => {
         next: {
           relation: "column_6" as const,
           targetTable: "table_3" as const,
-          next: { relation: "column_8" as const, targetTable: "table_4" as const }
+          next: {
+            relation: "column_8" as const,
+            targetTable: "table_4" as const,
+            next: { relation: "column_10" as const, targetTable: "table_5" as const }
+          }
         }
       },
-      select: ["column_9" as const],
-      groupBy: ["column_9" as const],
+      select: ["column_11" as const],
+      groupBy: ["column_11" as const],
       aggregates: [{ op: "sum" as const, column: "column_5" as const }],
       orderBy: [{ by: "aggregate_1" as const, direction: "desc" as const }],
       limit: 10
@@ -170,11 +174,11 @@ describe("Dataset Query Service", () => {
 
     const result = await service.execute(fixture.vaultPath, catalog, request);
     expect(result.preview).toMatchObject({
-      tableName: "records → people → regions → countries",
+      tableName: "records → people → regions → countries → continents",
       returnedRowCount: 2,
       matchedRowCount: 2,
-      columns: [{ label: "country" }, { label: "sum(rate)", aggregate: "sum" }],
-      rows: [{ values: ["US", 80] }, { values: ["UK", 40] }]
+      columns: [{ label: "continent" }, { label: "sum(rate)", aggregate: "sum" }],
+      rows: [{ values: ["North America", 80] }, { values: ["Europe", 40] }]
     });
     expect(result.citations[0]?.evidence.columnIds).toEqual(expect.arrayContaining([
       expect.stringMatching(/^column_/u)
@@ -186,10 +190,13 @@ describe("Dataset Query Service", () => {
         ...request.join,
         next: {
           ...request.join.next,
-          next: {
-            ...request.join.next.next,
-            next: { relation: "column_9", targetTable: "table_1" }
-          }
+            next: {
+              ...request.join.next.next,
+              next: {
+                ...request.join.next.next.next,
+                next: { relation: "column_11", targetTable: "table_1" }
+              }
+            }
         }
       }
     })).toThrow();
@@ -453,7 +460,7 @@ describe("Dataset Query Service", () => {
   });
 
   it("runs the real Home Pi tool loop through the bound Dataset service and durable result contract", async () => {
-    const fixture = await createManagedFixture({ privateEvidence: false, withTwoHopRelation: true });
+    const fixture = await createManagedFixture({ privateEvidence: false, withThreeHopRelation: true });
     const vault = loadVaultSummary(fixture.vaultPath);
     let retrievalCalls = 0;
     const retrieval: HomeAgentRetrievalPort = {
@@ -480,17 +487,19 @@ describe("Dataset Query Service", () => {
               tableRef: "table_1",
               join: { relation: "column_3", targetTable: "table_2", next: {
                 relation: "column_6", targetTable: "table_3", next: {
-                  relation: "column_8", targetTable: "table_4"
+                  relation: "column_8", targetTable: "table_4", next: {
+                    relation: "column_10", targetTable: "table_5"
+                  }
                 }
               } },
-              select: ["column_9"],
-              groupBy: ["column_9"],
+              select: ["column_11"],
+              groupBy: ["column_11"],
               aggregates: [{ op: "sum", column: "column_5" }],
               orderBy: [{ by: "aggregate_1", direction: "desc" }],
               limit: 2
             }
           },
-          { kind: "text", text: "The three-hop grouped totals are US 80 and UK 40. [citation_10]" }
+          { kind: "text", text: "The four-hop grouped totals are North America 80 and Europe 40. [citation_10]" }
         ]
       }),
       undefined,
@@ -500,7 +509,7 @@ describe("Dataset Query Service", () => {
     );
 
     const outcome = await service.submitTurn({
-      text: "Follow the project, person, region, and country relations and total rates by country.",
+      text: "Follow the project, person, region, country, and continent relations and total rates by continent.",
       inputKind: "typed_text",
       locale: "en"
     });
@@ -516,7 +525,7 @@ describe("Dataset Query Service", () => {
         datasetResult: {
           datasetId: fixture.manifest.datasetId,
           revisionId: fixture.manifest.activeRevision,
-          tableName: "records → people → regions → countries",
+          tableName: "records → people → regions → countries → continents",
           returnedRowCount: 2,
           matchedRowCount: 2
         }
@@ -537,8 +546,8 @@ describe("Dataset Query Service", () => {
     expect(restarted.conversation({ conversationId: outcome.conversationId }).messages.at(-1)).toMatchObject({
       role: "assistant",
       answer: { datasetResult: {
-        tableName: "records → people → regions → countries",
-        rows: [{ values: ["US", 80] }, { values: ["UK", 40] }]
+        tableName: "records → people → regions → countries → continents",
+        rows: [{ values: ["North America", 80] }, { values: ["Europe", 40] }]
       } }
     });
     expect(restartedRuntimeCalls).toBe(0);
@@ -711,6 +720,7 @@ async function createManagedFixture(options: {
   readonly privateEvidence?: boolean;
   readonly withRelationJoin?: boolean;
   readonly withTwoHopRelation?: boolean;
+  readonly withThreeHopRelation?: boolean;
 } = {}): Promise<ManagedFixture> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-dataset-query-service-"));
   roots.push(root);
@@ -774,12 +784,16 @@ async function createManagedFixture(options: {
   const bundlePath = onlyEntryPath(path.join(vaultPath, "datasets"));
   const manifestPath = path.join(bundlePath, "dataset.json");
   let manifest = DatasetManifestSchema.parse(readJson(manifestPath));
-  if (options.withRelationJoin || options.withTwoHopRelation) {
+  if (options.withRelationJoin || options.withTwoHopRelation || options.withThreeHopRelation) {
     publishRelationJoinRevision(bundlePath, manifest);
     manifest = DatasetManifestSchema.parse(readJson(manifestPath));
   }
-  if (options.withTwoHopRelation) {
+  if (options.withTwoHopRelation || options.withThreeHopRelation) {
     publishSecondRelationJoinRevision(bundlePath, manifest);
+    manifest = DatasetManifestSchema.parse(readJson(manifestPath));
+  }
+  if (options.withThreeHopRelation) {
+    publishThirdRelationJoinRevision(bundlePath, manifest);
     manifest = DatasetManifestSchema.parse(readJson(manifestPath));
   }
   return {
@@ -1193,6 +1207,136 @@ function publishSecondRelationJoinRevision(
     schema: schemaRef,
     payload,
     updatedAt: "2026-08-02T00:00:00.000Z"
+  });
+}
+
+function publishThirdRelationJoinRevision(
+  bundlePath: string,
+  manifest: ReturnType<typeof DatasetManifestSchema.parse>
+): void {
+  const revisionId = "dataset_rev_20260803_relationjoin03";
+  const countriesTableId = "table_countriesjoin1";
+  const relationColumnId = "column_continentjoin01";
+  const targetTableId = "table_continents01x";
+  const continentColumnId = "column_continentname01";
+  const previousRevision = DatasetRevisionSchema.parse(readJson(path.join(bundlePath, manifest.revision.path)));
+  const previousSchema = DatasetSchemaRecordSchema.parse(readJson(path.join(bundlePath, manifest.schema.path)));
+  const countriesTable = requireValue(previousSchema.tables.find(({ id }) => id === countriesTableId));
+  const sourcePayload = path.join(bundlePath, manifest.payload.path);
+  const payloadRelativePath = `data/revisions/${revisionId}.sqlite`;
+  const schemaRelativePath = `schemas/${revisionId}.json`;
+  const revisionRelativePath = `revisions/${revisionId}.json`;
+  const payloadPath = path.join(bundlePath, payloadRelativePath);
+  const schemaPath = path.join(bundlePath, schemaRelativePath);
+  const revisionPath = path.join(bundlePath, revisionRelativePath);
+  fs.mkdirSync(path.dirname(payloadPath), { recursive: true });
+  fs.copyFileSync(sourcePayload, payloadPath);
+  const database = new DatabaseSync(payloadPath);
+  try {
+    database.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
+    database.prepare("UPDATE pige_dataset_tables SET column_count = column_count + 1 WHERE table_id = ?")
+      .run(countriesTableId);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(relationColumnId, countriesTableId, countriesTable.columnCount, "continent", "text",
+        '["pige.relation.single"]', JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    database.prepare("INSERT INTO pige_dataset_tables VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(targetTableId, 4, "continents", "fixture:continents", "{}", "{}", 2, 1);
+    database.prepare("INSERT INTO pige_dataset_columns VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(continentColumnId, targetTableId, 0, "continent", "text", '["text"]',
+        JSON.stringify({ missing: 0, empty: 0, null: 0, value: 2 }));
+    const insertRow = database.prepare("INSERT INTO pige_dataset_rows VALUES (?, ?, ?, ?)");
+    insertRow.run("row_continentjoin001", targetTableId, 0, 8);
+    insertRow.run("row_continentjoin002", targetTableId, 1, 9);
+    const insertCell = database.prepare(
+      "INSERT INTO pige_dataset_cells VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)"
+    );
+    insertCell.run("row_countryjoin001", relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_continentjoin001" }));
+    insertCell.run("row_countryjoin002", relationColumnId, "value", "pige.relation.single", null, null, null,
+      "pige_relation_target_v1", JSON.stringify({ kind: "pige_relation_target", schemaVersion: 1, targetRowId: "row_continentjoin002" }));
+    insertCell.run("row_continentjoin001", continentColumnId, "value", "text", "North America", "North America", 0,
+      "text", JSON.stringify({ kind: "text", value: "North America" }));
+    insertCell.run("row_continentjoin002", continentColumnId, "value", "text", "Europe", "Europe", 0,
+      "text", JSON.stringify({ kind: "text", value: "Europe" }));
+    database.prepare("UPDATE pige_dataset_meta SET value = ? WHERE key = 'revision_id'").run(revisionId);
+    database.exec("COMMIT");
+  } catch (caught) {
+    database.exec("ROLLBACK");
+    throw caught;
+  } finally { database.close(); }
+
+  const schema = DatasetSchemaRecordSchema.parse({
+    ...previousSchema,
+    revisionId,
+    createdAt: "2026-08-03T00:00:00.000Z",
+    tables: [...previousSchema.tables.map((table) => table.id !== countriesTableId ? table : {
+      ...table,
+      columnCount: table.columnCount + 1,
+      columns: [...table.columns, {
+        id: relationColumnId,
+        name: "continent",
+        ordinal: table.columnCount,
+        sourceType: "pige.relation.single",
+        sourceTypes: ["pige.relation.single"],
+        logicalType: "string",
+        nullable: true,
+        relation: { kind: "pige_single_relation", schemaVersion: 1, targetTableId, targetDisplayColumnId: continentColumnId },
+        stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }), {
+      id: targetTableId,
+      name: "continents",
+      sourceLocator: "fixture:continents",
+      sourceMetadata: {},
+      header: { mode: "absent", used: false },
+      ordinal: 4,
+      rowCount: 2,
+      columnCount: 1,
+      columns: [{
+        id: continentColumnId,
+        name: "continent",
+        ordinal: 0,
+        sourceType: "text",
+        sourceTypes: ["text"],
+        logicalType: "string",
+        nullable: false,
+        stats: { missing: 0, empty: 0, null: 0, value: 2 }
+      }]
+    }]
+  });
+  writeJson(schemaPath, schema);
+  const payload = fileRef(payloadPath, payloadRelativePath, { format: "sqlite" });
+  const schemaRef = fileRef(schemaPath, schemaRelativePath);
+  const revision = DatasetRevisionSchema.parse({
+    ...previousRevision,
+    id: revisionId,
+    parentRevisionId: previousRevision.id,
+    schema: schemaRef,
+    payload,
+    stats: {
+      ...previousRevision.stats,
+      tableCount: previousRevision.stats.tableCount + 1,
+      rowCount: previousRevision.stats.rowCount + 2,
+      columnCount: previousRevision.stats.columnCount + 2
+    },
+    operationId: "op_20260803_relationjoin03",
+    change: {
+      kind: "collection_relation_add",
+      tableId: countriesTableId,
+      columnId: relationColumnId,
+      targetTableId,
+      targetDisplayColumnId: continentColumnId
+    },
+    createdAt: "2026-08-03T00:00:00.000Z"
+  });
+  writeJson(revisionPath, revision);
+  writeJson(path.join(bundlePath, "dataset.json"), {
+    ...manifest,
+    activeRevision: revisionId,
+    revision: fileRef(revisionPath, revisionRelativePath),
+    schema: schemaRef,
+    payload,
+    updatedAt: "2026-08-03T00:00:00.000Z"
   });
 }
 

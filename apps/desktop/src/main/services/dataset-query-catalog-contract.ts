@@ -35,6 +35,7 @@ export interface DatasetQueryCatalogEnvelope {
       readonly aggregates: number;
       readonly orderBy: number;
       readonly rows: number;
+      readonly relationHops: number;
     };
   };
   readonly omitted: { readonly datasets: number; readonly tables: number; readonly columns: number };

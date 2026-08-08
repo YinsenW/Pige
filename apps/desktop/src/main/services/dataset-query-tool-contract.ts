@@ -16,11 +16,19 @@ const DATASET_SECOND_RELATION_HOP_TOOL_SCHEMA = Object.freeze({
   }
 });
 
-/** Shared JSON Schema fragment for at most three model-facing Dataset relation hops. */
-export const DATASET_RELATION_JOIN_TOOL_SCHEMA = Object.freeze({
+const DATASET_THIRD_RELATION_HOP_TOOL_SCHEMA = Object.freeze({
   ...DATASET_RELATION_HOP_TOOL_SCHEMA,
   properties: {
     ...DATASET_RELATION_HOP_TOOL_SCHEMA.properties,
     next: DATASET_SECOND_RELATION_HOP_TOOL_SCHEMA
+  }
+});
+
+/** Shared JSON Schema fragment for at most four model-facing Dataset relation hops. */
+export const DATASET_RELATION_JOIN_TOOL_SCHEMA = Object.freeze({
+  ...DATASET_RELATION_HOP_TOOL_SCHEMA,
+  properties: {
+    ...DATASET_RELATION_HOP_TOOL_SCHEMA.properties,
+    next: DATASET_THIRD_RELATION_HOP_TOOL_SCHEMA
   }
 });
