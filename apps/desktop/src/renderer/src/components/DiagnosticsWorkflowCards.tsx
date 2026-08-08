@@ -31,6 +31,8 @@ export function DiagnosticsJobCard(props: {
   readonly busy: boolean;
   readonly onCancel: () => void;
   readonly onRetry: () => void;
+  readonly onReveal: () => void;
+  readonly revealTriggerRef?: React.Ref<HTMLButtonElement>;
   readonly onChooseDestination: () => void;
   readonly t: Translate;
 }): React.JSX.Element {
@@ -46,6 +48,7 @@ export function DiagnosticsJobCard(props: {
         <div className="settings-row-control">
           {props.job.canCancel ? <button className="settings-button" type="button" disabled={props.busy} onClick={props.onCancel}>{props.t("maintenance.cancelSupportExport")}</button> : null}
           {props.job.canRetry ? <button className="settings-button primary" type="button" disabled={props.busy} onClick={props.onRetry}>{props.t("system.retrySupportExport")}</button> : null}
+          {props.job.canReveal ? <button ref={props.revealTriggerRef} className="settings-button" type="button" disabled={props.busy} onClick={props.onReveal}>{props.t("system.revealSupportBundle")}</button> : null}
           {props.job.repairAction === "choose_destination" ? <button className="settings-button primary" type="button" disabled={props.busy} onClick={props.onChooseDestination}>{props.t("system.chooseNewSupportDestination")}</button> : null}
         </div>
       </div>

@@ -55,6 +55,8 @@ import type {
   DiagnosticsClearLocalRequest,
   DiagnosticsClearLocalResult,
   DiagnosticsPreviewSupportBundleRequest,
+  DiagnosticsRevealSupportBundleRequest,
+  DiagnosticsRevealSupportBundleResult,
   DiagnosticsSupportBundleMutationRequest,
   DiagnosticsSupportBundleMutationResult,
   DiagnosticsWorkflowSummary,
@@ -514,12 +516,15 @@ import {
   DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
   DiagnosticsHealthSchema,
   DiagnosticsExportSupportBundleRequestSchema,
   DiagnosticsExportSupportBundleResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
   DiagnosticsWorkflowSummarySchema,
@@ -3484,6 +3489,13 @@ const api: PigeDesktopApi = {
       DiagnosticsSupportBundleMutationResultSchema.parse(await ipcRenderer.invoke(
         DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
         DiagnosticsSupportBundleMutationRequestSchema.parse(request)
+      )),
+    revealSupportBundle: async (
+      request: DiagnosticsRevealSupportBundleRequest
+    ): Promise<DiagnosticsRevealSupportBundleResult> =>
+      DiagnosticsRevealSupportBundleResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsRevealSupportBundleRequestSchema.parse(request)
       ))
   },
   models: {

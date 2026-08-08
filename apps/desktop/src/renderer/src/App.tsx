@@ -8245,7 +8245,7 @@ export function SystemSettingsPanel(props: {
   readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "clear" | null>(null);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null);
@@ -8254,6 +8254,9 @@ export function SystemSettingsPanel(props: {
   const clearInFlightRef = useRef(false);
   const clearTriggerRef = useRef<HTMLButtonElement | null>(null);
   const clearCancelRef = useRef<HTMLButtonElement | null>(null);
+  const revealInFlightRef = useRef(false);
+  const revealTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreRevealFocusRef = useRef(false);
   const previewSupportBundleRef = useRef<(() => Promise<void>) | null>(null);
   const restoreClearFocusRef = useRef(false);
   const updateSummaryRevisionRef = useRef(-1);
@@ -8326,6 +8329,12 @@ export function SystemSettingsPanel(props: {
     restoreClearFocusRef.current = false;
     clearTriggerRef.current?.focus();
   }, [clearConfirming]);
+
+  useEffect(() => {
+    if (diagnosticsBusy !== null || !restoreRevealFocusRef.current) return;
+    restoreRevealFocusRef.current = false;
+    revealTriggerRef.current?.focus();
+  }, [diagnosticsBusy]);
 
   const restoreClearFocus = (): void => {
     restoreClearFocusRef.current = true;
@@ -8458,6 +8467,42 @@ export function SystemSettingsPanel(props: {
     } catch {
       setNotice({ kind: "error", key: "support.exportFailed" });
     } finally {
+      setDiagnosticsBusy(null);
+    }
+  };
+
+  const revealSupportBundle = async (): Promise<void> => {
+    const workflow = diagnosticsWorkflow;
+    if (!workflow?.job?.canReveal || diagnosticsBusy || revealInFlightRef.current) return;
+    revealInFlightRef.current = true;
+    const requestId = `diagrevealsupportreq_${crypto.randomUUID().replaceAll("-", "")}`;
+    setDiagnosticsBusy("reveal");
+    setNotice(null);
+    try {
+      const result = await window.pige.diagnostics.revealSupportBundle({
+        apiVersion: 1,
+        requestId,
+        jobId: workflow.job.jobId,
+        scopeContextId: workflow.scopeContextId,
+        expectedRevision: workflow.revision
+      });
+      if (result.requestId !== requestId) throw new Error("diagnostics_reveal_identity_mismatch");
+      if (result.status !== "failed") setDiagnosticsWorkflow(result.workflow);
+      const notice = result.status === "revealed"
+        ? { kind: "success" as const, key: "system.revealSupportBundleRevealed" }
+        : result.status === "stale"
+          ? { kind: "error" as const, key: "system.revealSupportBundleStale" }
+          : result.status === "not_found"
+            ? { kind: "error" as const, key: "system.revealSupportBundleNotFound" }
+            : result.status === "ineligible"
+              ? { kind: "error" as const, key: "system.revealSupportBundleIneligible" }
+              : { kind: "error" as const, key: "system.revealSupportBundleFailed" };
+      setNotice(notice);
+    } catch {
+      setNotice({ kind: "error", key: "system.revealSupportBundleFailed" });
+    } finally {
+      revealInFlightRef.current = false;
+      restoreRevealFocusRef.current = true;
       setDiagnosticsBusy(null);
     }
   };
@@ -8774,6 +8819,8 @@ export function SystemSettingsPanel(props: {
             busy={Boolean(diagnosticsBusy)}
             onCancel={() => void cancelSupportBundleExport()}
             onRetry={() => void retrySupportBundleExport()}
+            onReveal={() => void revealSupportBundle()}
+            revealTriggerRef={revealTriggerRef}
             onChooseDestination={() => void previewSupportBundleRef.current?.()}
             t={props.t}
           />

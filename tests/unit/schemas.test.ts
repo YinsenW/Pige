@@ -119,6 +119,8 @@ import {
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
   DiagnosticsPreviewSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleRequestSchema,
+  DiagnosticsRevealSupportBundleResultSchema,
   SupportBundlePreviewSchema,
   ExternalWebSkillHttpsOriginSchema,
   ExternalWebSkillReadRequestSchema,
@@ -469,6 +471,35 @@ describe("schemas", () => {
       selectedOptionalCategories: excerptRequest.optionalCategories,
       reviewedPrivateExcerpt: { text: "A short support passage", redactionApplied: false }
     }).reviewedPrivateExcerpt?.text).toBe("A short support passage");
+  });
+
+  it("keeps support-bundle reveal pathless and revision-bound", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "diagrevealsupportreq_abcdefghijklmnop",
+      jobId: "job_20260801_abcdefghijklmnop",
+      scopeContextId: `diagctx_${"a".repeat(48)}`,
+      expectedRevision: 9
+    } as const;
+    const workflow = {
+      apiVersion: 1 as const,
+      revision: 9,
+      scopeContextId: request.scopeContextId,
+      activeVaultId: null,
+      localOnly: true as const,
+      ownedArtifactCount: 1
+    };
+    expect(DiagnosticsRevealSupportBundleRequestSchema.parse(request)).toEqual(request);
+    expect(DiagnosticsRevealSupportBundleResultSchema.parse({ ...request, status: "revealed", workflow }))
+      .toEqual({ ...request, status: "revealed", workflow });
+    for (const status of ["stale", "not_found", "ineligible"] as const) {
+      expect(DiagnosticsRevealSupportBundleResultSchema.parse({ ...request, status, workflow }))
+        .toEqual({ ...request, status, workflow });
+    }
+    expect(DiagnosticsRevealSupportBundleResultSchema.parse({ ...request, status: "failed" }))
+      .toEqual({ ...request, status: "failed" });
+    expect(() => DiagnosticsRevealSupportBundleRequestSchema.parse({ ...request, outputPath: "/private/out.json" }))
+      .toThrow();
   });
 
   it("requires the exact model-settings revision when choosing the global default", () => {

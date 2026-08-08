@@ -5260,6 +5260,7 @@ export const DIAGNOSTICS_PREVIEW_SUPPORT_BUNDLE_CHANNEL = "diagnostics.previewSu
 export const DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL = "diagnostics.exportSupportBundle" as const;
 export const DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.cancelSupportBundleExport" as const;
 export const DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL = "diagnostics.retrySupportBundleExport" as const;
+export const DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL = "diagnostics.revealSupportBundle" as const;
 export const DiagnosticsClearRequestIdSchema = z.string()
   .regex(/^diagclearreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsWorkflowRequestIdSchema = z.string()
@@ -5270,6 +5271,8 @@ export const DiagnosticsExportRequestIdSchema = z.string()
   .regex(/^diagexportreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsMutationRequestIdSchema = z.string()
   .regex(/^diag(?:cancel|retry)req_[a-z0-9]{16,64}$/u);
+export const DiagnosticsRevealRequestIdSchema = z.string()
+  .regex(/^diagrevealsupportreq_[a-z0-9]{16,64}$/u);
 export const DiagnosticsScopeContextIdSchema = z.string()
   .regex(/^diagctx_[a-f0-9]{32,64}$/u);
 export const SupportBundlePreviewIdSchema = z.string()
@@ -5353,6 +5356,7 @@ export const DiagnosticsSupportBundleJobSummarySchema = z.object({
   finishedAt: z.string().datetime({ offset: true }).optional(),
   canCancel: z.boolean(),
   canRetry: z.boolean(),
+  canReveal: z.boolean(),
   repairAction: z.enum(["none", "retry", "choose_destination", "clear"]),
   error: z.lazy(() => PigeErrorSummarySchema).optional()
 }).strict();
@@ -5455,6 +5459,21 @@ export const DiagnosticsSupportBundleMutationResultSchema = z.discriminatedUnion
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("not_found"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("ineligible"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
   DiagnosticsSupportBundleMutationIdentitySchema.extend({ status: z.literal("failed") }).strict()
+]);
+export const DiagnosticsRevealSupportBundleRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: DiagnosticsRevealRequestIdSchema,
+  scopeContextId: DiagnosticsScopeContextIdSchema,
+  expectedRevision: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  jobId: JobIdSchema
+}).strict();
+const DiagnosticsRevealSupportBundleIdentitySchema = DiagnosticsRevealSupportBundleRequestSchema;
+export const DiagnosticsRevealSupportBundleResultSchema = z.discriminatedUnion("status", [
+  DiagnosticsRevealSupportBundleIdentitySchema.extend({ status: z.literal("revealed"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsRevealSupportBundleIdentitySchema.extend({ status: z.literal("stale"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsRevealSupportBundleIdentitySchema.extend({ status: z.literal("not_found"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsRevealSupportBundleIdentitySchema.extend({ status: z.literal("ineligible"), workflow: DiagnosticsWorkflowSummarySchema }).strict(),
+  DiagnosticsRevealSupportBundleIdentitySchema.extend({ status: z.literal("failed") }).strict()
 ]);
 export const DiagnosticsClearLocalRequestSchema = z.object({
   apiVersion: z.literal(1),
@@ -13908,6 +13927,7 @@ export type SettingsProfileImportPreviewResult = z.infer<typeof SettingsProfileI
 export type SettingsProfileImportApplyRequest = z.infer<typeof SettingsProfileImportApplyRequestSchema>;
 export type SettingsProfileImportApplyResult = z.infer<typeof SettingsProfileImportApplyResultSchema>;
 export type DiagnosticsWorkflowRequestId = z.infer<typeof DiagnosticsWorkflowRequestIdSchema>;
+export type DiagnosticsRevealRequestId = z.infer<typeof DiagnosticsRevealRequestIdSchema>;
 export type DiagnosticsScopeContextId = z.infer<typeof DiagnosticsScopeContextIdSchema>;
 export type DiagnosticsEventId = z.infer<typeof DiagnosticsEventIdSchema>;
 export type DiagnosticsEventSelectionRevision = z.infer<typeof DiagnosticsEventSelectionRevisionSchema>;
@@ -13924,6 +13944,8 @@ export type DiagnosticsExportSupportBundleRequest = z.infer<typeof DiagnosticsEx
 export type DiagnosticsExportSupportBundleResult = z.infer<typeof DiagnosticsExportSupportBundleResultSchema>;
 export type DiagnosticsSupportBundleMutationRequest = z.infer<typeof DiagnosticsSupportBundleMutationRequestSchema>;
 export type DiagnosticsSupportBundleMutationResult = z.infer<typeof DiagnosticsSupportBundleMutationResultSchema>;
+export type DiagnosticsRevealSupportBundleRequest = z.infer<typeof DiagnosticsRevealSupportBundleRequestSchema>;
+export type DiagnosticsRevealSupportBundleResult = z.infer<typeof DiagnosticsRevealSupportBundleResultSchema>;
 export type UpdateCapability = z.infer<typeof UpdateCapabilitySchema>;
 export type UpdateChannel = z.infer<typeof UpdateChannelSchema>;
 export type UpdateCheckRequest = z.infer<typeof UpdateCheckRequestSchema>;

@@ -4162,6 +4162,9 @@ registerDiagnosticsIpc({
   start: (request, destinationPath) => getDiagnosticsLifecycleService().start(request, destinationPath),
   cancel: (request) => getDiagnosticsLifecycleService().cancel(request),
   retry: (request) => getDiagnosticsLifecycleService().retry(request),
+  reveal: (request) => getDiagnosticsLifecycleService().reveal(request, (destinationPath) => {
+    shell.showItemInFolder(destinationPath);
+  }),
   clear: (request) => {
     const result = getDiagnosticsLifecycleService().clear(request);
     if (result.status === "cleared") {

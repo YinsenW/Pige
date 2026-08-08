@@ -19,6 +19,13 @@ const exportRequest = {
   scopeContextId: workflow.scopeContextId,
   expectedRevision: workflow.revision
 };
+const revealRequest = {
+  apiVersion: 1 as const,
+  requestId: "diagrevealsupportreq_abcdefghijklmnop",
+  jobId: "job_20260730_abcdefghijklmnop",
+  scopeContextId: workflow.scopeContextId,
+  expectedRevision: workflow.revision
+};
 
 function harness(options: { trusted?: boolean; destination?: string; revision?: number; replay?: boolean } = {}) {
   const handlers = new Map<string, Handler>();
@@ -26,6 +33,7 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
   const selected = options.destination;
   const summary = { ...workflow, revision: options.revision ?? workflow.revision };
   const start = vi.fn((request: typeof exportRequest) => ({ ...request, status: "started" as const, workflow: summary }));
+  const reveal = vi.fn((request: typeof revealRequest) => ({ ...request, status: "revealed" as const, workflow: summary }));
   const chooseDestination = vi.fn(async () => selected);
   registerDiagnosticsIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) } as Pick<IpcMain, "handle">,
@@ -45,11 +53,12 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
     start,
     cancel: (request) => ({ ...request, status: "accepted", workflow: summary }),
     retry: (request) => ({ ...request, status: "accepted", workflow: summary }),
+    reveal,
     clear: (request) => ({ ...request, status: "busy", workflow: summary,
       health: { status: "ok", checkedAt: "2026-07-30T00:00:00.000Z", localOnly: true, recentErrorCount: 0, checks: [] } })
   });
   const event = { sender } as IpcMainInvokeEvent;
-  return { handlers, event, start, chooseDestination };
+  return { handlers, event, start, chooseDestination, reveal };
 }
 
 describe("diagnostics IPC", () => {
@@ -87,5 +96,17 @@ describe("diagnostics IPC", () => {
     expect(await untrusted.handlers.get("diagnostics.exportSupportBundle")!(untrusted.event, exportRequest))
       .toEqual({ ...exportRequest, status: "failed" });
     expect(untrusted.chooseDestination).not.toHaveBeenCalled();
+  });
+
+  it("keeps reveal path ownership in Main and rejects untrusted reveal requests", async () => {
+    const app = harness();
+    const result = await app.handlers.get("diagnostics.revealSupportBundle")!(app.event, revealRequest);
+    expect(result).toEqual({ ...revealRequest, status: "revealed", workflow });
+    expect(app.reveal).toHaveBeenCalledWith(revealRequest);
+
+    const untrusted = harness({ trusted: false });
+    expect(await untrusted.handlers.get("diagnostics.revealSupportBundle")!(untrusted.event, revealRequest))
+      .toEqual({ ...revealRequest, status: "failed" });
+    expect(untrusted.reveal).not.toHaveBeenCalled();
   });
 });
