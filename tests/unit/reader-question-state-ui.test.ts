@@ -70,14 +70,24 @@ describe("ReaderQuestionStateControl", () => {
     const onCommitted = vi.fn();
     const harness = await mount(questionRender(), onSetState, onCommitted);
     const oldSelect = harness.container.querySelector("select")!;
+    harness.dom.window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+      harness.dom.window.setTimeout(() => callback(0), 0);
+      return 1;
+    };
     await act(async () => {
       choose(harness.dom, oldSelect, "answered");
       await settle(harness.dom);
       harness.root.render(createElement(ReaderQuestionStateControl, props(
         questionRender("open", "c", "page_20260801_question2"), onSetState, onCommitted
       )));
-      await settle(harness.dom);
     });
+    for (let i = 0; i < 5; i += 1) {
+      await act(async () => { await settle(harness.dom); });
+    }
+    const replacementSelect = harness.container.querySelector("select")! as HTMLSelectElement;
+    expect(replacementSelect.value).toBe("open");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     const request = onSetState.mock.calls[0]![0];
     await act(async () => {
       pending.resolve({ ...request, status: "committed", operationId: "op_20260801_questionstate1",
@@ -86,7 +96,9 @@ describe("ReaderQuestionStateControl", () => {
       await settle(harness.dom);
     });
     expect(onCommitted).not.toHaveBeenCalled();
-    expect((harness.container.querySelector("select") as HTMLSelectElement).value).toBe("open");
+    expect(replacementSelect.value).toBe("open");
+    expect(replacementSelect.disabled).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacementSelect);
     await harness.unmount();
   });
 });
