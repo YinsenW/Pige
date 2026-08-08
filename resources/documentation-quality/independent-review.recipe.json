@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T08:48:00.000Z",
+  "reviewedAt": "2026-08-08T13:33:58.793Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review bounded Reader Entity identifier and directed Claim support/supersession corrections, local audio/video evidence preservation, and revalidated rollback replacement preview; each reuses existing durable records without exposing bodies or paths.",
+    "scope": "Review Main-owned referenced-original reconnect with changed-content preview, explicit confirmation or cancellation, source-refresh publication, post-commit same-Job resume, and private receipt recovery without renderer path or body authority.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "e9586dc73307a3178a136cd3583d327d2f6586ac2c46b9819427b109cd99c605"
+    "reviewedSha256": "b2699fecf10278d490c219ec5d18b720309f9512353e97a5eab98dbe9c0a7640"
   },
   "reviewers": [
     {
-      "reviewerId": "entity-identifier-review",
-      "task": "Review Entity identifier and Claim support/supersession correction plus rollback replacement preview",
+      "reviewerId": "source-reconnect-refresh-review",
+      "task": "Review changed referenced-original preview, refresh, and same-Job recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,101 +70,71 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Entity and Claim frontmatter bounds, current-page CAS, directed-cycle rejection, rebuildable support/supersession projection, Activity recovery, and latest replacement/archive identity before a sender-local preview separately from implementation authorship."
-    },
-    {
-      "reviewerId": "media-evidence-capture-review",
-      "task": "Review local media evidence capture without transcription",
-      "independentDimensions": [
-        "navigation_and_resource_lifecycle",
-        "cross_document_contract_consistency",
-        "continuous_traceability_and_acceptance"
-      ],
-      "independence": "Project review checks local preservation, pathless Source projection, waiting capability recovery, and no-model/no-egress boundaries separately from implementation authorship."
+      "independence": "Project review checks Main-owned selection, preview receipt identity, source-record and page currentness, durable refresh publication, exact waiting-Job resume, and body/path-free renderer projection separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "source-reconnect-refresh-review",
       "blockerCount": 0,
-      "summary": "Main preserves media and keeps paths and bytes private; the Source Page and waiting result expose only safe capability facts."
+      "summary": "Main alone chooses the file, keeps the preview receipt private, and exposes only safe changed-source facts until an explicit confirmation publishes the refresh."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "source-reconnect-refresh-review",
       "blockerCount": 0,
-      "summary": "Capture, Source Page, Job, and restart owners agree that unavailable transcription is a durable no-model wait, not a parser or Agent route."
+      "summary": "Reconnect, refresh, Job, Source Page, and IPC owners agree that changed bytes cannot alter durable truth or resume a wait before the confirmed refresh commits."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "source-reconnect-refresh-review",
       "blockerCount": 0,
-      "summary": "PIGE-CAP-001 gains exact local media preservation evidence while it remains partial for its broader capture boundary."
+      "summary": "Trace adds exact changed-source service, IPC, and Settings evidence without changing any requirement or exit status."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "source-reconnect-refresh-review",
       "blockerCount": 0,
-      "summary": "Claim support/supersession and rollback-preview owners only delegate durable writes to established page-edit or Restore Operation/recovery paths while Claim edges rebuild from Markdown."
+      "summary": "The refresh owner retains the existing Operation, Activity, Undo, and restart paths; reconnect adds no second mutation owner."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "source-reconnect-refresh-review",
       "blockerCount": 0,
-      "summary": "Knowledge-model and trace documents record bounded identifier and Claim support/supersession corrections without adding a design document or duplicating durable rules."
+      "summary": "The bind adds only trace, acceptance, review, and service-inventory facts; durable source rules remain in their existing owners."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/entity-identifier-service.test.ts tests/unit/reader-entity-identifiers-ui.test.ts",
+      "command": "npx vitest run tests/unit/source-original-reconnect-service.test.ts tests/unit/register-source-reconnect-ipc.test.ts tests/unit/referenced-original-connections-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused service and Reader tests prove one exact Entity identifier update with bounded projection and a stale-preserving UI path."
+      "evidence": "Focused service, IPC, and Settings tests prove explicit changed-content confirmation, private receipt cleanup, restart/tamper failure, and post-publication same-Job resume."
     },
     {
-      "command": "npm run verify:architecture-reset && npm run verify:change",
+      "command": "npm run verify:traceability && npm run verify:boundaries",
       "status": "passed",
-      "evidence": "The dedicated Entity identifier owner keeps existing Reader and Notes owners within frozen budgets while architecture and change rules remain enforced."
+      "evidence": "Trace, canonical acceptance evidence, and the protected service inventory agree with the frozen product owner facts."
     },
     {
-      "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
+      "command": "npm run verify:docs",
       "status": "passed",
-      "evidence": "Pi and Job contracts, trace text and the review snapshot agree while requirements remain partial."
-    },
-    {
-      "command": "npx vitest run tests/unit/claim-support-service.test.ts tests/unit/reader-claim-supports-ui.test.ts tests/unit/local-database-service.test.ts",
-      "status": "passed",
-      "evidence": "Focused Claim tests prove directed source-backed support, rebuildable related-page projection, exact page update and stale-preserving Reader confirmation."
-    },
-    {
-      "command": "npx vitest run tests/unit/claim-supersession-service.test.ts tests/unit/reader-claim-supersessions-ui.test.ts tests/unit/local-database-service.test.ts",
-      "status": "passed",
-      "evidence": "Focused Claim tests prove directed source-backed supersession, rebuildable related-page projection, exact page update and stale-preserving Reader confirmation."
-    },
-    {
-      "command": "npx vitest run tests/unit/home-agent-media-capture-service.test.ts tests/unit/capture-service.test.ts tests/unit/home-agent-attachment-service.test.ts --maxWorkers=1",
-      "status": "passed",
-      "evidence": "Focused capture tests prove typed local media preservation, deterministic Source Page projection, and a no-model/no-egress unavailable transcription wait."
-    },
-    {
-      "command": "npx vitest run tests/unit/restore-coordinator-service.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/restore-ui.test.ts --maxWorkers=1",
-      "status": "passed",
-      "evidence": "Focused Restore tests prove current replacement rollback proof, a pathless replace-only preview, and reuse of the ordinary confirmation path."
+      "evidence": "The focused trace wording remains mapped, linked, and structurally valid without changing source-owner contracts."
     }
   ],
   "coordination": {
-    "taskId": "entity-claim-supersession-media-and-rollback-preview-20260808",
-    "taskTitle": "Entity identifier, Claim support/supersession, local media, and rollback restore preview",
+    "taskId": "source-reconnect-refresh-bind-20260808",
+    "taskTitle": "Changed referenced-original reconnect and refresh bind",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Entity, Claim confidence/evidence/contradiction, capture, parser/OCR, Agent, Source Page, Restore confirmation, and durable Job semantics remain unchanged; directed support and supersession actions each use one existing proof-bound page update while rollback only prepares an existing replacement preview.",
-    "acknowledgement": "PIGE-KNOW-003 gains bounded identifier and Claim support/supersession evidence, PIGE-CAP-001 gains bounded media evidence, and their broader requirements remain partial; verified PIGE-BACKUP-004 gains exact rollback-preview evidence."
+    "compatibility": "Main re-proves the selected original and current source identity; changed content passes only through the existing refresh/Operation/recovery owner, and matching waiting Jobs resume only after that publication.",
+    "acknowledgement": "PIGE-VAULT-006, PIGE-JOB-004, and PIGE-INGEST-003 remain partial; this bind records only the added changed-reconnect evidence."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []
