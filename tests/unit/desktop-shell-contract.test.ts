@@ -2545,7 +2545,7 @@ describe("desktop shell build contract", () => {
       "utf8"
     );
 
-    expect(captureDropZoneSource).toContain(".csv,.xlsx,.sqlite,.sqlite3,.db");
+    expect(captureDropZoneSource).toContain(".csv,.xlsx,.zip,.sqlite,.sqlite3,.db");
     expect(rendererSource).toContain("function DatasetAnswerResult");
     expect(mainSource).toContain("new DatasetService(new DatasetIngestWorkerService())");
     expect(mainSource).toContain("new DatasetQueryService()");

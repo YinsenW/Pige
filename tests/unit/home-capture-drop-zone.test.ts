@@ -35,6 +35,7 @@ describe("Home capture drop zone", () => {
 
     const trigger = button(dom, "Drop files here or choose files");
     const input = dom.window.document.querySelector<HTMLInputElement>('input[type="file"]')!;
+    expect(input.accept).toContain(".zip");
     const openPicker = vi.spyOn(input, "click").mockImplementation(() => undefined);
     trigger.focus();
     expect(dom.window.document.activeElement).toBe(trigger);

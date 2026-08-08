@@ -1,7 +1,7 @@
 import { useRef, useState, type DragEvent } from "react";
 import type { CaptureFileRejection, CaptureFileRejectionReason } from "@pige/contracts";
 
-const ACCEPTED_FILE_TYPES = ".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*";
+const ACCEPTED_FILE_TYPES = ".md,.markdown,.txt,.pdf,.docx,.pptx,.csv,.xlsx,.zip,.sqlite,.sqlite3,.db,.png,.jpg,.jpeg,.webp,.gif,.tif,.tiff,.bmp,text/plain,text/markdown,image/*";
 
 export type HomeCaptureBatchStatus = {
   readonly status: "submitting" | "queued" | "partially_queued" | "rejected" | "failed";
