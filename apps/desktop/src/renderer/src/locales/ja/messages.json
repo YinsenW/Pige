@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "ポリシーを編集",
   "pigePolicy.noVault": "Vault を開くと Agent ポリシーを確認できます。",
   "pigePolicy.loading": "ポリシーを読み込み中…",
+  "pigePolicy.loadFailed": "Agent ポリシーを読み込めませんでした。",
+  "pigePolicy.retry": "再試行",
   "pigePolicy.editorLabel": "PIGE.md ポリシー",
   "pigePolicy.requiredSections": "必須セクション",
   "pigePolicy.cancel": "キャンセル",

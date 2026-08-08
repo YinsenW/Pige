@@ -14,6 +14,8 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
   const api = props.api ?? window.pige.settings;
   const [summary, setSummary] = useState<PigePolicySummary | null>(null);
   const [readState, setReadState] = useState<"idle" | "loading" | "ready" | "failed">("idle");
+  const [readAttempt, setReadAttempt] = useState(0);
+  const [retryFocusPending, setRetryFocusPending] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [statusKey, setStatusKey] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
   const activeVaultRef = useRef(props.activeVaultId);
   const requestSequenceRef = useRef(0);
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const retryButtonRef = useRef<HTMLButtonElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   activeVaultRef.current = props.activeVaultId;
 
@@ -29,6 +32,7 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
     requestSequenceRef.current += 1;
     setSummary(null);
     setDraft(null);
+    setRetryFocusPending(false);
     setSaving(false);
     setStatusKey(null);
     setIssues([]);
@@ -46,7 +50,13 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
       if (current && activeVaultRef.current === vaultId) setReadState("failed");
     });
     return () => { current = false; };
-  }, [api, props.activeVaultId]);
+  }, [api, props.activeVaultId, readAttempt]);
+
+  useEffect(() => {
+    if (readState !== "failed" || !retryFocusPending) return;
+    setRetryFocusPending(false);
+    retryButtonRef.current?.focus({ preventScroll: true });
+  }, [readState, retryFocusPending]);
 
   useEffect(() => {
     if (draft !== null) window.requestAnimationFrame(() => textareaRef.current?.focus());
@@ -65,6 +75,12 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
     setStatusKey(null);
     setIssues([]);
     window.requestAnimationFrame(() => editButtonRef.current?.focus());
+  };
+
+  const retryLoad = (): void => {
+    if (readState === "loading" || !props.activeVaultId) return;
+    setRetryFocusPending(true);
+    setReadAttempt((attempt) => attempt + 1);
   };
 
   const save = async (): Promise<void> => {
@@ -125,7 +141,12 @@ export function PigePolicySettingsPanel(props: PigePolicySettingsPanelProps): Re
     </div>
     {readState === "idle" ? <p className="settings-muted">{props.t("pigePolicy.noVault")}</p> : null}
     {readState === "loading" ? <p className="settings-muted" role="status">{props.t("pigePolicy.loading")}</p> : null}
-    {readState === "failed" ? <p className="settings-warning" role="alert">{props.t("pigePolicy.failed")}</p> : null}
+    {readState === "failed" ? <div className="settings-warning" role="alert">
+      <span>{props.t("pigePolicy.loadFailed")}</span>
+      <button ref={retryButtonRef} className="settings-button" type="button" onClick={retryLoad}>
+        {props.t("pigePolicy.retry")}
+      </button>
+    </div> : null}
     {summary && draft === null ? <pre className="settings-code-preview" tabIndex={0}>{summary.markdown}</pre> : null}
     {summary && draft !== null ? <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <label className="settings-field">

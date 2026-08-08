@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "Edit policy",
   "pigePolicy.noVault": "Open a vault to review its Agent policy.",
   "pigePolicy.loading": "Loading policy…",
+  "pigePolicy.loadFailed": "Pige could not load the Agent policy.",
+  "pigePolicy.retry": "Try again",
   "pigePolicy.editorLabel": "PIGE.md policy",
   "pigePolicy.requiredSections": "Required sections",
   "pigePolicy.cancel": "Cancel",

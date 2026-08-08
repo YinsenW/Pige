@@ -35,12 +35,14 @@ import type {
   VaultMigrationPreview,
   VaultRevealResult,
   VaultRevealTarget,
-  VaultSummary
+  VaultSummary,
+  PigeDesktopApi
 } from "@pige/contracts";
 import {
   BackupContinueIncompleteAction,
   ManagedCopyRootSelectionAction
 } from "../../apps/desktop/src/renderer/src/components/VaultBackupSettingsPanel";
+import { PigePolicySettingsPanel } from "../../apps/desktop/src/renderer/src/components/PigePolicySettingsPanel";
 
 const globalKeys = [
   "window",
@@ -396,6 +398,51 @@ describe("First-run onboarding UI", () => {
     ].sort());
     expect(harness.migrationRequests[0]).toMatchObject({ vaultId: recent.vaultId, previewId: preview.previewId });
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+});
+
+describe("Agent policy UI", () => {
+  it("retries a failed policy read and restores retry focus when the retry fails", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.querySelector<HTMLElement>("#root"));
+    let reads = 0;
+    const api = {
+      pigePolicy: async () => {
+        reads += 1;
+        if (reads < 3) throw new Error("policy read failed");
+        return {
+          apiVersion: 1 as const,
+          activeVaultId: "vault_policy_quality",
+          revision: `pigepolicyrev_${"a".repeat(64)}`,
+          markdown: "# PIGE\n\nPolicy is available.",
+          requiredSections: ["Goals"],
+          canEdit: true as const
+        };
+      }
+    } as unknown as PigeDesktopApi["settings"];
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(PigePolicySettingsPanel, {
+        activeVaultId: "vault_policy_quality",
+        api,
+        t: (key: string) => ({
+          "pigePolicy.loadFailed": "Policy could not be loaded.",
+          "pigePolicy.retry": "Try again",
+          "pigePolicy.loading": "Loading policy…"
+        }[key] ?? key)
+      }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => container.textContent?.includes("Policy could not be loaded.") === true);
+    await click(dom, button(container, "Try again"));
+    await waitFor(dom, () => container.textContent?.includes("Policy could not be loaded.") === true && reads === 2);
+    await waitFor(dom, () => dom.window.document.activeElement === button(container, "Try again"));
+    await click(dom, button(container, "Try again"));
+    await waitFor(dom, () => container.textContent?.includes("Policy is available.") === true);
+    expect(reads).toBe(3);
     await act(async () => root.unmount());
     dom.window.close();
   });

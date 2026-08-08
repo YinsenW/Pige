@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "Richtlinie bearbeiten",
   "pigePolicy.noVault": "Öffnen Sie einen Vault, um seine Agent-Richtlinie zu prüfen.",
   "pigePolicy.loading": "Richtlinie wird geladen…",
+  "pigePolicy.loadFailed": "Die Agent-Richtlinie konnte nicht geladen werden.",
+  "pigePolicy.retry": "Erneut versuchen",
   "pigePolicy.editorLabel": "PIGE.md-Richtlinie",
   "pigePolicy.requiredSections": "Erforderliche Abschnitte",
   "pigePolicy.cancel": "Abbrechen",

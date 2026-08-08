@@ -2719,6 +2719,8 @@
   "pigePolicy.edit": "编辑策略",
   "pigePolicy.noVault": "打开仓库后即可查看 Agent 策略。",
   "pigePolicy.loading": "正在加载策略…",
+  "pigePolicy.loadFailed": "无法加载 Agent 策略。",
+  "pigePolicy.retry": "重试",
   "pigePolicy.editorLabel": "PIGE.md 策略",
   "pigePolicy.requiredSections": "必需章节",
   "pigePolicy.cancel": "取消",
