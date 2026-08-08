@@ -38,7 +38,8 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import {
   PiAgentRuntimeAdapter,
-  type PiAgentRunRequest
+  type PiAgentRunRequest,
+  type PiAgentRunResult
 } from "../../apps/desktop/src/main/services/pi-agent-runtime-adapter";
 import {
   createVaultOnDisk,
@@ -695,6 +696,90 @@ describe("Unified Agent ingress", () => {
       expect.objectContaining({ kind: "source", id: preserved.sourceIds[0], role: "agent_turn_source" })
     ]));
     expect(listFiles(path.join(fixture.vaultPath, "wiki", "generated"), ".md")).toHaveLength(1);
+  });
+
+  it("adopts a completed Pi provider continuation after a crash before assistant publication", async () => {
+    const fixture = makeVault();
+    const models = createMutableModels(true);
+    let firstRuntimeCalls = 0;
+    const firstRuntime = {
+      run: async (request: PiAgentRunRequest): Promise<PiAgentRunResult> => {
+        firstRuntimeCalls += 1;
+        return new PiAgentRuntimeAdapter({
+          fauxResponses: [{ kind: "text", text: "The provider result survives the restart boundary." }]
+        }).run(request);
+      }
+    };
+    const jobs = new JobsService(fixture.vaultPort);
+    const home = new HomeAgentService(fixture.vaultPort, models, neverRetrieval, jobs, firstRuntime);
+    let crashPending = true;
+    const originalMarkDurableBoundary = JobExecutionCoordinator.prototype.markDurableBoundary;
+    vi.spyOn(JobExecutionCoordinator.prototype, "markDurableBoundary").mockImplementation(function (
+      snapshot,
+      input
+    ) {
+      if (crashPending && input.checkpointId === "agent_turn_assistant_event_publication_started") {
+        throw new Error("synthetic crash after provider continuation commit");
+      }
+      return originalMarkDurableBoundary.call(this, snapshot, input);
+    });
+    const originalSettle = JobExecutionCoordinator.prototype.settle;
+    vi.spyOn(JobExecutionCoordinator.prototype, "settle").mockImplementation(function (snapshot, input) {
+      if (crashPending) throw new Error("synthetic process exit before Job settlement");
+      return originalSettle.call(this, snapshot, input);
+    });
+
+    const first = await home.submitTurn({
+      text: "Answer once across a restart.",
+      inputKind: "typed_text",
+      locale: "en",
+      clientTurnId: "turn_20260808_providercontinuation01"
+    });
+    expect(first.state).toBe("failed");
+    expect(firstRuntimeCalls).toBe(1);
+    const interrupted = requireValue(jobs.list({ classes: ["agent_turn"], limit: 5 }).jobs[0]);
+    expect(interrupted.state).toBe("running");
+    expect(interrupted.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "agent_turn_provider_call_completed",
+        state: "done",
+        providerCall: expect.objectContaining({
+          state: "completed",
+          continuation: expect.objectContaining({
+            answer: expect.objectContaining({ answer: "The provider result survives the restart boundary." })
+          })
+        })
+      })
+    ]));
+
+    crashPending = false;
+    let restartedRuntimeCalls = 0;
+    const restartedJobs = new JobsService(fixture.vaultPort);
+    expect(restartedJobs.recoverInterruptedJobs()).toEqual({ requeued: 1, failedRetryable: 0 });
+    const restarted = new HomeAgentService(
+      fixture.vaultPort,
+      models,
+      neverRetrieval,
+      restartedJobs,
+      { run: async () => {
+        restartedRuntimeCalls += 1;
+        throw new Error("A completed provider continuation must not replay Pi.");
+      } }
+    );
+    expect(await restarted.resumeWaitingTurns(20)).toEqual({
+      requeued: 0,
+      processed: 1,
+      completed: 1,
+      waiting: 0,
+      failed: 0
+    });
+    expect(restartedRuntimeCalls).toBe(0);
+    const conversation = restarted.conversation({ conversationId: first.conversationId! });
+    expect(conversation.messages.filter((message) => message.role === "assistant")).toHaveLength(1);
+    expect(conversation.messages.at(-1)).toMatchObject({
+      role: "assistant",
+      answer: { answer: "The provider result survives the restart boundary." }
+    });
   });
 
   it("keeps the same dropped-source ingress unpublished when Pi omits its evidence ref", async () => {

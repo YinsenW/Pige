@@ -85,6 +85,16 @@ import {
 import { OcrLanguagePreferenceService } from "./ocr-language-preference-service";
 import { AgentTurnConversationStore } from "./agent-turn-conversation-store";
 import {
+  AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID,
+  assertAgentTurnProviderCheckpointBinding,
+  createAgentTurnProviderCheckpoint,
+  createStartedAgentTurnProviderCheckpoint,
+  readAgentTurnProviderCheckpoint,
+  type AgentTurnProviderCallBinding,
+  type AgentTurnProviderAdoption,
+  type AgentTurnProviderContinuation
+} from "./agent-turn-provider-checkpoint";
+import {
   compoundEffectCheckpointIds,
   compoundEffectConflict,
   isCompoundEffectCheckpointId
@@ -1555,6 +1565,66 @@ export class JobsService {
     const snapshot = this.#requireAgentTurnSnapshot(expected);
     return this.#jobExecutionCoordinator(this.#requireActiveVaultPath())
       .adoptDurableCompletion(snapshot, input).job;
+  }
+
+  checkpointAgentTurnProviderCall(
+    expected: JobRecord,
+    input: AgentTurnProviderCallBinding & {
+      readonly result: import("./pi-agent-runtime-adapter").PiAgentRunResult;
+      readonly continuation: AgentTurnProviderContinuation;
+    }
+  ): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    const { result, continuation, ...binding } = input;
+    const existingCheckpoint = assertAgentTurnProviderCheckpointBinding(snapshot.job, binding);
+    if (existingCheckpoint?.state === "done") {
+      const existing = readAgentTurnProviderCheckpoint(snapshot.job, binding);
+      if (!existing) throw new PigeDomainError("agent_runtime.turn_changed", "The completed provider checkpoint disappeared.");
+      if (!isDeepStrictEqual(existing.result, result) || !isDeepStrictEqual(existing.answer, continuation.answer) || !isDeepStrictEqual(existing.sourceIds, continuation.sourceIds)) {
+        throw new PigeDomainError(
+          "agent_runtime.turn_changed",
+          "The Agent Job already contains a different completed provider continuation."
+        );
+      }
+      return snapshot.job;
+    }
+    const checkpoint = createAgentTurnProviderCheckpoint({
+      job: snapshot.job,
+      binding,
+      result,
+      continuation,
+      ...(existingCheckpoint?.startedAt ? { startedAt: existingCheckpoint.startedAt } : {})
+    });
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).markDurableBoundary(snapshot, {
+      checkpointId: AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID,
+      message: "The completed Pi provider transcript is durably bound before assistant publication.",
+      facts: { checkpoints: [checkpoint] }
+    }).job;
+  }
+
+  beginAgentTurnProviderCall(
+    expected: JobRecord,
+    binding: AgentTurnProviderCallBinding
+  ): JobRecord {
+    const snapshot = this.#requireAgentTurnSnapshot(expected);
+    const existing = assertAgentTurnProviderCheckpointBinding(snapshot.job, binding);
+    if (existing) return snapshot.job;
+    const checkpoint = createStartedAgentTurnProviderCheckpoint({
+      job: snapshot.job,
+      binding
+    });
+    return this.#jobExecutionCoordinator(this.#requireActiveVaultPath()).patch(snapshot, {
+      stage: "waiting_for_model",
+      checkpoints: [checkpoint],
+      message: "The exact Pi provider call is in flight; its result is protected from replay."
+    }).job;
+  }
+
+  readAgentTurnProviderCall(
+    job: JobRecord,
+    binding: AgentTurnProviderCallBinding
+  ): AgentTurnProviderAdoption | undefined {
+    return readAgentTurnProviderCheckpoint(job, binding);
   }
 
   testOnlyWriteAgentTurnJob(expected: JobRecord, job: JobRecord): JobRecord {

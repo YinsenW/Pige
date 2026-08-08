@@ -104,6 +104,7 @@ import {
   type PigeAgentToolDefinition,
   type PigeAgentToolResult
 } from "./pi-agent-runtime-adapter";
+import type { AgentTurnProviderContinuation } from "./agent-turn-provider-checkpoint";
 import {
   createRetrievalEvidencePrivacyHash,
   readCurrentNoteEvidenceBinding,
@@ -313,6 +314,50 @@ export interface HomeAgentJobPort {
       readonly markDurableCheckpoint: (checkpointId: string) => void;
     }) => Promise<T>
   ): Promise<T>;
+  beginAgentTurnProviderCall(
+    expected: JobRecord,
+    binding: {
+      readonly jobId: string;
+      readonly conversationEventId: string;
+      readonly inputHash: string;
+      readonly conversationContextHash: string;
+      readonly toolCatalogHash: string;
+      readonly contextPackHash?: string;
+      readonly providerProfileId: string;
+      readonly modelProfileId: string;
+      readonly modelId: string;
+    }
+  ): JobRecord;
+  checkpointAgentTurnProviderCall(
+    expected: JobRecord,
+    input: {
+      readonly jobId: string;
+      readonly conversationEventId: string;
+      readonly inputHash: string;
+      readonly conversationContextHash: string;
+      readonly toolCatalogHash: string;
+      readonly contextPackHash?: string;
+      readonly providerProfileId: string;
+      readonly modelProfileId: string;
+      readonly modelId: string;
+      readonly continuation: AgentTurnProviderContinuation;
+      readonly result: PiAgentRunResult;
+    }
+  ): JobRecord;
+  readAgentTurnProviderCall(
+    job: JobRecord,
+    binding: {
+      readonly jobId: string;
+      readonly conversationEventId: string;
+      readonly inputHash: string;
+      readonly conversationContextHash: string;
+      readonly toolCatalogHash: string;
+      readonly contextPackHash?: string;
+      readonly providerProfileId: string;
+      readonly modelProfileId: string;
+      readonly modelId: string;
+    }
+  ): AgentTurnProviderContinuation | undefined;
   attachAgentTurnSource(jobId: string, sourceId: string): JobRecord;
   attachAgentTurnSources(jobId: string, sourceIds: readonly string[], attachmentSetHash: string): JobRecord;
   failAgentTurnSourcePreservation(jobId: string): JobRecord | undefined;
@@ -898,6 +943,7 @@ export class HomeAgentService {
             activeSession,
             runtimeBinding.model,
             runtimeBinding.provider,
+            conversationContextHash,
             history,
             jobExecution.signal,
             assertConversationCurrent,
@@ -1213,6 +1259,7 @@ export class HomeAgentService {
             session,
             currentBinding.model,
             currentBinding.provider,
+            conversationContextHash,
             history,
             jobExecution.signal,
             assertConversationCurrent,
@@ -1308,6 +1355,7 @@ export class HomeAgentService {
     session: HomeAgentJobSession,
     defaultModel: ModelProfileSummary,
     defaultProvider: ProviderProfileSummary,
+    conversationContextHash: string,
     history: readonly PiAgentHistoryMessage[] = [],
     signal?: AbortSignal,
     assertConversationCurrent?: () => void,
@@ -2029,7 +2077,31 @@ export class HomeAgentService {
     ];
     toolCatalogHash = createPigeAgentToolCatalogHash(tools);
     sourceSession?.bindCatalog(toolCatalogHash);
+    const providerCallBinding = {
+      jobId,
+      conversationEventId: request.sourceEventId,
+      inputHash: request.sourceTurn.inputHash,
+      conversationContextHash,
+      toolCatalogHash,
+      ...(contextPackBinding ? { contextPackHash: contextPackBinding.contextPackHash } : {}),
+      providerProfileId: runtimeConfig.provider.id,
+      modelProfileId: runtimeConfig.model.id,
+      modelId: runtimeConfig.model.modelId
+    } as const;
+    const adoptedProviderContinuation = this.#jobs.readAgentTurnProviderCall(
+      session.current,
+      providerCallBinding
+    );
+    if (adoptedProviderContinuation) {
+      session.modelInvocationStarted = true;
+      return {
+        answer: adoptedProviderContinuation.answer,
+        sourceIds: adoptedProviderContinuation.sourceIds,
+        ...(currentNoteScope ? { assertPublicationCurrent: assertCurrentNotePublicationCurrent } : {})
+      };
+    }
     let runtimeResult: PiAgentRunResult;
+    session.current = this.#jobs.beginAgentTurnProviderCall(session.current, providerCallBinding);
     try {
       runtimeResult = await this.#runtime.run({
         runtimeConfig,
@@ -2146,15 +2218,24 @@ export class HomeAgentService {
       ...(datasetResult?.evidence.sourceIds ?? []), ...(sourceResult && session.current.sourceId ? [session.current.sourceId] : []),
       ...capturedAuthoredTextSourceIds
     ]));
+    const answer: AgentTurnAnswer = {
+      ...groundedAnswer,
+      ...(searchResult ? { retrieval: searchResult } : {}),
+      ...(datasetResult ? { datasetResult: datasetResult.preview } : {}),
+      ...(recalledMemories.length > 0 ? {
+        memoryContext: { kind: "vault_memory" as const, count: recalledMemories.length }
+      } : {})
+    };
+    session.current = this.#jobs.checkpointAgentTurnProviderCall(session.current, {
+      ...providerCallBinding,
+      providerProfileId: runtimeResult.providerProfileId,
+      modelProfileId: runtimeResult.modelProfileId,
+      modelId: runtimeResult.modelId,
+      result: runtimeResult,
+      continuation: { answer, sourceIds }
+    });
     return {
-      answer: {
-        ...groundedAnswer,
-        ...(searchResult ? { retrieval: searchResult } : {}),
-        ...(datasetResult ? { datasetResult: datasetResult.preview } : {}),
-        ...(recalledMemories.length > 0 ? {
-          memoryContext: { kind: "vault_memory" as const, count: recalledMemories.length }
-        } : {})
-      },
+      answer,
       sourceIds,
       ...(currentNoteAppendPublication ? { currentNoteAppendPublication } : {}),
       ...(currentNoteScope ? { assertPublicationCurrent: assertCurrentNotePublicationCurrent } : {})
