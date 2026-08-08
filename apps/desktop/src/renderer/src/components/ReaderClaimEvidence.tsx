@@ -17,14 +17,25 @@ export function ReaderClaimEvidence(props: {
   const summary = props.note.claimEvidence, context = props.note.renderContextId;
   const owner = `${props.activeVaultId}:${props.note.summary.pageId}:${context ?? ""}:${summary?.revision ?? ""}`;
   const ownerRef = useRef(owner); ownerRef.current = owner;
-  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), sectionRef = useRef<HTMLElement>(null);
+  const busyRef = useRef(false), focusRef = useRef<HTMLElement | null>(null), restoreOwnerFocusRef = useRef(false), sectionRef = useRef<HTMLElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null), restoreIntentFocusRef = useRef(false);
   const [query, setQuery] = useState(""), [results, setResults] = useState<readonly NoteClaimEvidenceItem[]>([]);
   const [intent, setIntent] = useState<Intent | null>(null), [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
+    const wasBusy = busyRef.current;
+    const wasFocused = focusRef.current?.isConnected === true && document.activeElement === focusRef.current;
     setQuery(""); setResults([]); setIntent(null); setPending(false); setNotice(null); busyRef.current = false;
+    if (wasBusy || wasFocused) restoreOwnerFocusRef.current = true;
   }, [owner]);
+  useEffect(() => {
+    if (pending || !restoreOwnerFocusRef.current) return;
+    restoreOwnerFocusRef.current = false;
+    requestAnimationFrame(() => {
+      const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [pending]);
   useEffect(() => {
     if (intent) confirmRef.current?.focus();
     else if (restoreIntentFocusRef.current) {
