@@ -83,6 +83,12 @@ import {
   type QueuedOcrJob
 } from "./ocr-job-executor";
 import { OcrLanguagePreferenceService } from "./ocr-language-preference-service";
+import { AgentTurnConversationStore } from "./agent-turn-conversation-store";
+import {
+  compoundEffectCheckpointIds,
+  compoundEffectConflict,
+  isCompoundEffectCheckpointId
+} from "./agent-compound-effect-service";
 import {
   JobCancellationError,
   type JobCancellationBoundary,
@@ -264,6 +270,7 @@ export class JobsService {
   readonly #legacyAgentIngestExecutor: LegacyAgentIngestJobExecutor;
   readonly #ocrExecutor: OcrJobExecutor;
   readonly #ocrLanguagePreferences: OcrLanguagePreferenceService;
+  readonly #conversations: AgentTurnConversationStore;
   readonly #jobRecordStores = new Map<string, JobRecordStore>();
   readonly #jobExecutionCoordinators = new Map<string, JobExecutionCoordinator>();
   readonly #activeExecutions = new Map<string, AbortController>();
@@ -280,7 +287,8 @@ export class JobsService {
     sourcePages: SourcePageService = new SourcePageService(),
     ingressSnapshots: IngressSnapshotService = ingressSnapshotService,
     semanticIndex?: ConstructorParameters<typeof IndexRebuildJobExecutor>[2],
-    ocrLanguagePreferences: OcrLanguagePreferenceService = new OcrLanguagePreferenceService()
+    ocrLanguagePreferences: OcrLanguagePreferenceService = new OcrLanguagePreferenceService(),
+    conversations: AgentTurnConversationStore = new AgentTurnConversationStore()
   ) {
     this.#vaults = vaults;
     this.#sourcePages = sourcePages;
@@ -289,6 +297,7 @@ export class JobsService {
     this.#documentParser = documentParser;
     this.#ocr = ocr;
     this.#ocrLanguagePreferences = ocrLanguagePreferences;
+    this.#conversations = conversations;
     this.#datasets = datasets;
     this.#executors = executors;
     this.#ingressSnapshots = ingressSnapshots;
@@ -978,6 +987,7 @@ export class JobsService {
         "The source-bearing Agent turn is missing its exact Source Page binding."
       );
     }
+    const durableUserTurn = readAgentTurnUserTurn(this.#conversations, vaultPath, job);
     const prepare = async (sourceFile: NonNullable<(typeof sourceFiles)[number]>): Promise<AgentSourceToolSession> =>
       this.#agentIngest!.prepareSourceToolSession(vaultPath, sourceFile.sourceRecord, {
         ...job,
@@ -1069,7 +1079,8 @@ export class JobsService {
           proposalResult.pagePath
         );
       },
-      signal: control.signal
+      signal: control.signal,
+      ...(durableUserTurn ? { userTurn: durableUserTurn } : {})
     });
     const sessions = await Promise.all(sourceFiles.map((sourceFile) => prepare(sourceFile!)));
     if (sessions.length === 1) return sessions[0]!;
@@ -4578,6 +4589,39 @@ function assertProposalParentJob(
   }
 }
 
+function readAgentTurnUserTurn(
+  conversations: AgentTurnConversationStore,
+  vaultPath: string,
+  job: JobRecord
+): {
+  readonly text: string;
+  readonly authoredTaskIntent?: "explicit_user_task" | "neutral_attachment";
+  readonly locale?: "en" | "de" | "fr" | "ja" | "ko" | "zh-Hans";
+} | undefined {
+  if (!job.conversationEventId) return undefined;
+  const userRef = job.inputRefs?.find(
+    (ref) => ref.kind === "conversation" && ref.role === "agent_turn_user_event"
+  );
+  if (!userRef?.locator || !userRef.checksum) return undefined;
+  try {
+    const turn = conversations.readUserTurn(
+      vaultPath,
+      userRef.locator,
+      job.conversationEventId,
+      userRef.checksum
+    );
+    const text = turn.event.text;
+    if (turn.event.type !== "user_message" || typeof text !== "string" || !text.trim()) return undefined;
+    return {
+      text,
+      ...(turn.metadata?.authoredTaskIntent ? { authoredTaskIntent: turn.metadata.authoredTaskIntent } : {}),
+      ...(turn.metadata?.locale ? { locale: turn.metadata.locale } : {})
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function recordAgentNotePublicationCheckpoint(
   store: JobRecordStore,
   coordinator: JobExecutionCoordinator,
@@ -4690,7 +4734,7 @@ function recordAgentPageUpdateCheckpoint(
   const snapshot = store.read(jobPath);
   const current = snapshot.job;
   if (
-    checkpointId !== "agent_existing_note_update_started" ||
+    !isCompoundEffectCheckpointId(checkpointId) ||
     !current ||
     !["running", "awaiting_review"].includes(current.state) ||
     current.sourceId !== binding.sourceId ||
@@ -4938,15 +4982,36 @@ function completeAgentNotePublicationCheckpoint(
       "The Agent Job disappeared before its generated-note checkpoint completed."
     );
   }
-  const checkpointId = publication.mutationKind === "update_page"
-    ? "agent_existing_note_update_started"
-    : "agent_note_publication_started";
-  const pageRole = publication.mutationKind === "update_page"
-    ? "expected_updated_note"
-    : "expected_generated_note";
-  const operationRole = publication.mutationKind === "update_page"
-    ? "expected_update_operation"
-    : "expected_create_operation";
+  if (publication.mutationKind === "update_page") {
+    const checkpointIds = compoundEffectCheckpointIds(current.checkpoints);
+    const checkpoints = current.checkpoints?.filter((checkpoint) => checkpointIds.includes(checkpoint.id)) ?? [];
+    if (checkpoints.length === 0) return;
+    const operationIds = new Set(publication.operationIds);
+    const now = new Date().toISOString();
+    const completed = checkpoints.map((checkpoint) => {
+      const pageRef = checkpoint.outputRefs.find((ref) => ref.role === "expected_updated_note");
+      const operationRef = checkpoint.outputRefs.find((ref) => ref.role === "expected_update_operation");
+      if (
+        checkpoint.checksumAfter === undefined ||
+        pageRef?.kind !== "page" ||
+        !pageRef.id ||
+        pageRef.checksum !== checkpoint.checksumAfter ||
+        operationRef?.kind !== "operation" ||
+        !operationRef.id ||
+        !operationIds.has(operationRef.id)
+      ) {
+        throw compoundEffectConflict("A compound existing-note checkpoint changed before Job completion.");
+      }
+      return checkpoint.state === "done"
+        ? checkpoint
+        : { ...checkpoint, state: "done" as const, finishedAt: checkpoint.finishedAt ?? now };
+    });
+    coordinator.patch(snapshot, { checkpoints: completed });
+    return;
+  }
+  const checkpointId = "agent_note_publication_started";
+  const pageRole = "expected_generated_note";
+  const operationRole = "expected_create_operation";
   const matches = current.checkpoints?.filter((checkpoint) => checkpoint.id === checkpointId) ?? [];
   if (matches.length === 0) return;
   const checkpoint = matches[0];
@@ -4960,11 +5025,9 @@ function completeAgentNotePublicationCheckpoint(
     pageRef.id !== publication.pageId ||
     pageRef.path !== publication.pagePath ||
     pageRef.checksum !== checkpoint.checksumAfter ||
-    (publication.mutationKind === "update_page" && (
-      !publication.operationId ||
-      operationRef?.kind !== "operation" ||
-      operationRef.id !== publication.operationId
-    ))
+    !publication.operationId ||
+    operationRef?.kind !== "operation" ||
+    operationRef.id !== publication.operationId
   ) {
     throw new PigeDomainError(
       "agent_ingest.page_conflict",

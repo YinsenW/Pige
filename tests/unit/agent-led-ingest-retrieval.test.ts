@@ -38,6 +38,7 @@ import {
   recoverAgentPageUpdate,
   type AgentPageUpdatePublicationBinding
 } from "../../apps/desktop/src/main/services/agent-page-update-service";
+import { hasExplicitAgentCompoundEffectIntent } from "../../apps/desktop/src/main/services/agent-compound-effect-service";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import {
   allowCurrentAgentIngestTools,
@@ -148,6 +149,31 @@ afterEach(() => {
 });
 
 describe("Agent-selected ingest retrieval tool", () => {
+  it("requires a direct authored compound command and rejects quoted or explanatory mentions", () => {
+    expect(hasExplicitAgentCompoundEffectIntent({
+      text: "Update the launch note and tag the supporting note.",
+      authoredTaskIntent: "explicit_user_task",
+      locale: "en"
+    })).toBe(true);
+    for (const text of [
+      '"Update the launch note and tag the supporting note."',
+      "The source says: update the launch note and tag the supporting note.",
+      "Explain why update and link effects should be reviewed.",
+      "Do not update the launch note and link the supporting note."
+    ]) {
+      expect(hasExplicitAgentCompoundEffectIntent({
+        text,
+        authoredTaskIntent: "explicit_user_task",
+        locale: "en"
+      })).toBe(false);
+    }
+    expect(hasExplicitAgentCompoundEffectIntent({
+      text: "Update the launch note and tag the supporting note.",
+      authoredTaskIntent: "neutral_attachment",
+      locale: "en"
+    })).toBe(false);
+  });
+
   it("registers six ordered opaque source citation candidates and revalidates their bindings", async () => {
     const fixture = makeVault();
     const prepared = prepareAgentSource(fixture, "Inspect this source before selecting related knowledge.");
@@ -666,10 +692,7 @@ describe("Agent-selected ingest retrieval tool", () => {
       toolCall("pige_search_knowledge", "search_link", { query: "connect managed knowledge" }),
       toolCall("pige_link_knowledge_notes", "link_notes", existingNoteLinkInput())
     ]);
-    const retrieval = new RecordingRetrievalPort(
-      fixture,
-      (request) => makeLinkSearchResult(fixture, request.query)
-    );
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeLinkSearchResult(fixture, request.query));
     const jobs = new JobsService(
       fixture.vaultPort,
       new AgentIngestService(modelPort(), runtime, undefined, undefined, undefined, retrieval)
@@ -760,10 +783,7 @@ describe("Agent-selected ingest retrieval tool", () => {
       }, "link_review");
       return runtimeResult(request, ["pige_inspect_source", "pige_search_knowledge", "pige_link_knowledge_notes"]);
     });
-    const retrieval = new RecordingRetrievalPort(
-      fixture,
-      (request) => makeLinkSearchResult(fixture, request.query)
-    );
+    const retrieval = new RecordingRetrievalPort(fixture, (request) => makeLinkSearchResult(fixture, request.query));
     const agentIngest = new AgentIngestService(
       modelPort(),
       runtime,
@@ -2113,6 +2133,232 @@ describe("Agent-selected ingest retrieval tool", () => {
     }
   );
 
+  it("applies two distinct page effects only for an explicit authored compound request", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    writeLinkTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Update the launch note and tag the supporting note.");
+    const retrieval = new RecordingRetrievalPort(fixture, (request) =>
+      retrieval.calls.length === 1
+        ? makeLinkSearchResult(fixture, request.query)
+        : makeLinkOnlySearchResult(fixture, request.query)
+    );
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_compound");
+      await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "launch notes" },
+        "search_compound_update"
+      );
+      await request.beforeModelTurn?.();
+      await invokeTool(
+        request,
+        "pige_update_knowledge_note",
+        existingNoteUpdateInput(),
+        "update_compound_first"
+      );
+      const secondSearch = await invokeTool(
+        request,
+        "pige_search_knowledge",
+        { query: "supporting notes" },
+        "search_compound_tags"
+      );
+      expect(readPiToolText(secondSearch)).not.toContain('"status":"unavailable"');
+      await request.beforeModelTurn?.();
+      const tagged = await invokeTool(
+        request,
+        "pige_add_knowledge_tags",
+        { ...existingNoteTagInput(), targetPageRef: "related_01" },
+        "tags_compound_second"
+      );
+      expect(readPiToolText(tagged)).toContain('"status":"tags_added"');
+      return runtimeResult(request, [], "Both requested knowledge effects completed.");
+    });
+
+    const result = await new AgentIngestService(
+      modelPort(),
+      runtime,
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent, {
+      userTurn: {
+        text: "Update the launch note and tag the supporting note.",
+        authoredTaskIntent: "explicit_user_task",
+        locale: "en"
+      }
+    });
+
+    expect(result).toMatchObject({
+      outcome: "published",
+      pageId: LINK_TARGET_PAGE_ID,
+      operationIds: expect.arrayContaining([
+        expect.stringMatching(/^op_/u),
+        expect.stringMatching(/^op_/u)
+      ])
+    });
+    expect(new Set(result.operationIds)).toHaveLength(2);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(2);
+    const linkAfter = fs.readFileSync(path.join(fixture.vaultPath, ...LINK_TARGET_PAGE_PATH.split("/")), "utf8");
+    expect(requireValue(parsePigeFrontmatter(linkAfter)).frontmatter.tags
+      .map((tag) => String(tag).toLowerCase())).toContain("research");
+  });
+
+  it("keeps cross-page effects exclusive without explicit authored compound intent", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    writeLinkTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "The model must not invent a second page mutation.");
+    const retrieval = new RecordingRetrievalPort(fixture, (request) =>
+      retrieval.calls.length === 1
+        ? makeLinkSearchResult(fixture, request.query)
+        : makeLinkOnlySearchResult(fixture, request.query)
+    );
+    let blockedCode = "";
+    const runtime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_no_compound");
+      await invokeTool(request, "pige_search_knowledge", { query: "launch notes" }, "search_no_compound");
+      await request.beforeModelTurn?.();
+      await invokeTool(request, "pige_update_knowledge_note", existingNoteUpdateInput(), "update_no_compound");
+      const secondSearch = await invokeTool(request, "pige_search_knowledge", { query: "supporting notes" }, "search_no_compound_second");
+      expect(readPiToolText(secondSearch)).not.toContain('"status":"unavailable"');
+      await request.beforeModelTurn?.();
+      try {
+        await invokeTool(
+          request,
+          "pige_add_knowledge_tags",
+          { ...existingNoteTagInput(), targetPageRef: "related_01" },
+          "tags_no_compound"
+        );
+      } catch (caught) {
+        blockedCode = (caught as { readonly code?: string }).code ?? "";
+      }
+      return runtimeResult(request, [], "The first page effect remains authoritative.");
+    });
+
+    await new AgentIngestService(modelPort(), runtime, undefined, undefined, undefined, retrieval)
+      .ingestSource(fixture.vaultPath, prepared.source, prepared.parent);
+
+    expect(blockedCode).toBe("agent_ingest.page_conflict");
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(1);
+    const linkAfter = fs.readFileSync(path.join(fixture.vaultPath, ...LINK_TARGET_PAGE_PATH.split("/")), "utf8");
+    expect(requireValue(parsePigeFrontmatter(linkAfter)).frontmatter.tags).not.toContain("research");
+  });
+
+  it("adopts both distinct page checkpoints after restart without another runtime", async () => {
+    const fixture = makeVault();
+    writeUpdateTargetPage(fixture.vaultPath);
+    writeLinkTargetPage(fixture.vaultPath);
+    const prepared = prepareAgentSource(fixture, "Update the launch note and tag the supporting note.");
+    const retrieval = new RecordingRetrievalPort(fixture, (request) =>
+      retrieval.calls.length === 1
+        ? makeLinkSearchResult(fixture, request.query)
+        : makeLinkOnlySearchResult(fixture, request.query)
+    );
+    const bindings = new Map<string, AgentPageUpdatePublicationBinding>();
+    const firstRuntime = new FunctionalRuntime(async (request) => {
+      await invokeTool(request, "pige_inspect_source", {}, "inspect_compound_restart");
+      await invokeTool(request, "pige_search_knowledge", { query: "launch notes" }, "search_compound_restart_first");
+      await request.beforeModelTurn?.();
+      await invokeTool(request, "pige_update_knowledge_note", existingNoteUpdateInput(), "update_compound_restart_first");
+      await invokeTool(request, "pige_search_knowledge", { query: "supporting notes" }, "search_compound_restart_second");
+      await request.beforeModelTurn?.();
+      await invokeTool(
+        request,
+        "pige_add_knowledge_tags",
+        { ...existingNoteTagInput(), targetPageRef: "related_01" },
+        "tags_compound_restart_second"
+      );
+      return runtimeResult(request, [], "Both requested knowledge effects completed.");
+    });
+    let operationTempOpens = 0;
+    const originalOpen = fs.openSync.bind(fs);
+    const openSpy = vi.spyOn(fs, "openSync").mockImplementation((filePath, flags, mode) => {
+      const candidate = String(filePath);
+      if (
+        candidate.includes(`${path.sep}.pige${path.sep}operations${path.sep}`) &&
+        path.basename(candidate).startsWith(".op_") &&
+        candidate.endsWith(".tmp")
+      ) {
+        operationTempOpens += 1;
+        if (operationTempOpens === 2) throw new Error("synthetic crash before second compound Operation commit");
+      }
+      return originalOpen(filePath, flags, mode);
+    });
+    try {
+      await expect(new AgentIngestService(
+        modelPort(),
+        firstRuntime,
+        undefined,
+        undefined,
+        undefined,
+        retrieval
+      ).ingestSource(fixture.vaultPath, prepared.source, prepared.parent, {
+        userTurn: {
+          text: "Update the launch note and tag the supporting note.",
+          authoredTaskIntent: "explicit_user_task",
+          locale: "en"
+        },
+        onPublicationStart: (checkpointId, binding) => {
+          if (binding) bindings.set(checkpointId, binding);
+        }
+      })).rejects.toThrow(PigeDomainError);
+    } finally {
+      openSpy.mockRestore();
+    }
+    expect(operationTempOpens).toBe(2);
+    const first = requireValue(bindings.get(AGENT_PAGE_UPDATE_CHECKPOINT_ID));
+    const second = requireValue(bindings.get(`${AGENT_PAGE_UPDATE_CHECKPOINT_ID}:2`));
+    let runtimeCalls = 0;
+    const restarted = new AgentIngestService(
+      unavailableModelPort(),
+      new FunctionalRuntime(async () => {
+        runtimeCalls += 1;
+        throw new Error("Compound recovery must not enter Pi.");
+      }),
+      undefined,
+      undefined,
+      undefined,
+      retrieval
+    );
+    const recovered = await restarted.ingestSource(
+      fixture.vaultPath,
+      prepared.source,
+      JobRecordSchema.parse({
+        ...prepared.parent,
+        state: "running",
+        policyContextId: first.policyContextId,
+        policyHash: first.policyHash,
+        checkpoints: [
+          createUpdateCheckpoint(first),
+          createUpdateCheckpoint(second, `${AGENT_PAGE_UPDATE_CHECKPOINT_ID}:2`)
+        ]
+      }),
+      {
+        userTurn: {
+          text: "Update the launch note and tag the supporting note.",
+          authoredTaskIntent: "explicit_user_task",
+          locale: "en"
+        }
+      }
+    );
+
+    expect(runtimeCalls).toBe(0);
+    expect(recovered).toMatchObject({ outcome: "published", operationIds: expect.any(Array) });
+    expect(new Set(recovered.operationIds)).toHaveLength(2);
+    expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "update_page"))
+      .toHaveLength(2);
+    const updateAfter = fs.readFileSync(path.join(fixture.vaultPath, ...UPDATE_PAGE_PATH.split("/")), "utf8");
+    const linkAfter = fs.readFileSync(path.join(fixture.vaultPath, ...LINK_TARGET_PAGE_PATH.split("/")), "utf8");
+    expect(updateAfter).toContain("The newly preserved source adds one verified fact");
+    expect(requireValue(parsePigeFrontmatter(linkAfter)).frontmatter.tags
+      .map((tag) => String(tag).toLowerCase())).toContain("research");
+  });
+
   it("adopts only the exact generated-page intent and rejects changed content", async () => {
     const fixture = makeVault();
     const prepared = prepareAgentSource(fixture, "Exact generated-page intent owns adoption.");
@@ -3312,6 +3558,18 @@ function makeLinkSearchResult(
   };
 }
 
+function makeLinkOnlySearchResult(
+  fixture: ReturnType<typeof makeVault>,
+  query: string
+): RetrievalSearchResult {
+  const result = makeLinkSearchResult(fixture, query);
+  return {
+    ...result,
+    total: 1,
+    results: [requireValue(result.results.find((item) => item.summary.pageId === LINK_TARGET_PAGE_ID))]
+  };
+}
+
 function writeUpdateTargetPage(vaultPath: string): void {
   const filePath = path.join(vaultPath, ...UPDATE_PAGE_PATH.split("/"));
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -3480,10 +3738,13 @@ function createNoLinkCatalogHash(jobId: string, sourceId: string): string {
   }));
 }
 
-function createUpdateCheckpoint(binding: AgentPageUpdatePublicationBinding) {
+function createUpdateCheckpoint(
+  binding: AgentPageUpdatePublicationBinding,
+  checkpointId = AGENT_PAGE_UPDATE_CHECKPOINT_ID
+) {
   return {
-    id: AGENT_PAGE_UPDATE_CHECKPOINT_ID,
-    step: AGENT_PAGE_UPDATE_CHECKPOINT_ID,
+    id: checkpointId,
+    step: checkpointId,
     state: "running" as const,
     startedAt: "2026-07-12T02:00:00.000Z",
     inputRefs: [

@@ -387,8 +387,13 @@ One submission owns one durable Job and may contain multiple Pi turns/tool calls
   `completion_invalid` are retired from new ordinary Agent turns.
 
 Upstream Pi continuation includes post-effect model/inspect/search/parse/OCR without Host
-`already_*`/terminal substitution. Exact owners reject conflicting mutations; AR3 owns
-aggregation. Pige supplies typed feedback/Job checkpoints; Pi retains semantic control.
+`already_*`/terminal substitution. Exact owners reject conflicting mutations. AR3 permits
+at most two distinct existing-page effects only for an exact direct authored command; each
+records its own tool/input hash, durable checkpoint and Operation, and restart adopts
+committed work without Pi/runtime replay. Same-page update plus bounded tags remains one
+Operation; the compound path fails closed for non-authored, quoted, explanatory, same-page,
+over-limit, or drifted requests. Pige supplies typed feedback/Job checkpoints; Pi retains
+semantic control.
 
 ## 12. Sessions, Memory, And Durable State
 
