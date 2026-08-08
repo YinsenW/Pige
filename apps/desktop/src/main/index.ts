@@ -1266,10 +1266,10 @@ const recoverReadyLocalCapabilities = (targetJobId?: string): ToolchainHealth =>
     requeueWaitingDatasetImports: () => getJobsService().requeueWaitingDatasetImports(),
     requeueWaitingOcr: () => getJobsService().requeueWaitingOcr(),
     requeueWaitingAgentIngest: () => getJobsService().requeueWaitingAgentIngest(),
-    scheduleParseProcessing,
-    scheduleDatasetImportProcessing,
-    scheduleOcrProcessing,
-    scheduleAgentIngestProcessing,
+    scheduleParseProcessing: () => scheduleParseProcessing(targetJobId),
+    scheduleDatasetImportProcessing: () => scheduleDatasetImportProcessing(targetJobId),
+    scheduleOcrProcessing: () => scheduleOcrProcessing(targetJobId),
+    scheduleAgentIngestProcessing: () => scheduleAgentIngestProcessing(targetJobId),
     onRecoveryFailure: (owner) => recordBackgroundFailure(
       `toolchain.${owner}.recovery_failed`,
       "Preserved work could not be resumed after the local toolchain became ready."
@@ -2800,7 +2800,14 @@ const scheduleCaptureProcessing = (): void => {
   captureDrainer.schedule();
 };
 
-const scheduleParseProcessing = (): void => {
+const scheduleParseProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getDocumentParseJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "parser.document.background_failed",
+      "Background document parsing failed."
+    ));
+    return;
+  }
   parseDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getDocumentParseJobExecutor().process({ limit: 20 }),
     onBatch: (result) => {
@@ -2815,7 +2822,14 @@ const scheduleParseProcessing = (): void => {
   parseDrainer.schedule();
 };
 
-const scheduleDatasetImportProcessing = (): void => {
+const scheduleDatasetImportProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getDatasetImportJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "dataset.import.background_failed",
+      "Background Dataset materialization failed."
+    ));
+    return;
+  }
   datasetImportDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getDatasetImportJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
@@ -2826,7 +2840,14 @@ const scheduleDatasetImportProcessing = (): void => {
   datasetImportDrainer.schedule();
 };
 
-const scheduleOcrProcessing = (): void => {
+const scheduleOcrProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getOcrJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "ocr.image.background_failed",
+      "Background image OCR failed."
+    ));
+    return;
+  }
   ocrDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getOcrJobExecutor().process({ limit: 20 }),
     onBatch: (result) => {
@@ -2840,7 +2861,14 @@ const scheduleOcrProcessing = (): void => {
   ocrDrainer.schedule();
 };
 
-const scheduleAgentIngestProcessing = (): void => {
+const scheduleAgentIngestProcessing = (targetJobId?: string): void => {
+  if (targetJobId) {
+    void getLegacyAgentIngestJobExecutor().process({ jobIds: [targetJobId] }).catch(() => recordBackgroundFailure(
+      "agent_ingest.background_failed",
+      "Background Agent ingest failed."
+    ));
+    return;
+  }
   agentIngestDrainer ??= new CoalescedBatchDrainer({
     runBatch: () => getLegacyAgentIngestJobExecutor().process({ limit: 20 }),
     onError: () => recordBackgroundFailure(
