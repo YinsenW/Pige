@@ -234,6 +234,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
   ownerIdentityRef.current = props.ownerIdentity;
 
   useEffect(() => {
+    const hadOpenAction = menuOpen || confirmAction !== null || mergeOpen || relateOpen || tagOpen || renameOpen || aliasOpen;
     requestSequenceRef.current += 1;
     requestActiveRef.current = false;
     setMenuOpen(false);
@@ -245,6 +246,7 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
     setAliasOpen(false);
     setPending(false);
     setFailed(false);
+    if (hadOpenAction) window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
   }, [props.ownerIdentity, props.canMoveToTrash, props.canMerge, canArchive, canRestore, canRelate, canManageTags, canRename, canManageAliases]);
 
   useEffect(() => {
