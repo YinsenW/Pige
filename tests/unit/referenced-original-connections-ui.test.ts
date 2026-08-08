@@ -136,18 +136,62 @@ describe("referenced original Connections settings", () => {
     await waitFor(harness.dom, () => harness.container.textContent?.includes("All originals are connected.") === true);
     await harness.unmount();
   });
+
+  it("sends explicit changed-preview cancellation to Main and keeps the source available", async () => {
+    const preview = {
+      previewId: `sourcerelinkpreview_${"f".repeat(32)}`,
+      expectedSourceRevision: candidate.sourceRevision,
+      displayName: candidate.displayName,
+      sourceKind: candidate.sourceKind,
+      previousSize: candidate.expectedSize,
+      currentSize: 42,
+      affectedArtifactCount: 1,
+      refreshesSourcePage: true
+    };
+    const reconnectOriginal = vi.fn(async (request: Record<string, unknown>) => ({
+      ...request,
+      status: "changed" as const,
+      preview
+    }));
+    const cancelReconnectPreview = vi.fn(async (request: Record<string, unknown>) => ({
+      ...request,
+      status: "cancelled" as const
+    }));
+    const reconnectableOriginals = vi.fn(async (request: Record<string, unknown>) => ({
+      ...request,
+      status: "ready" as const,
+      sources: [candidate],
+      truncated: false
+    }));
+    const harness = await mount({ reconnectableOriginals, reconnectOriginal, cancelReconnectPreview, onRefresh: async () => undefined });
+    await waitFor(harness.dom, () => harness.container.textContent?.includes(candidate.displayName) === true);
+    await act(async () => { button(harness.container, "Reconnect").click(); await settle(harness.dom); });
+    await waitFor(harness.dom, () => harness.container.querySelector('[role="dialog"]') !== null);
+    await act(async () => { button(harness.container, "Keep saved source").click(); await settle(harness.dom); });
+    await waitFor(harness.dom, () => harness.container.querySelector('[role="dialog"]') === null);
+    expect(cancelReconnectPreview).toHaveBeenCalledOnce();
+    expect(cancelReconnectPreview.mock.calls[0]?.[0]).toMatchObject({ previewId: preview.previewId });
+    expect(reconnectOriginal).toHaveBeenCalledOnce();
+    expect(harness.container.textContent).toContain(candidate.displayName);
+    await harness.unmount();
+  });
 });
 
 async function mount(input: {
   readonly reconnectableOriginals: (...args: never[]) => Promise<unknown>;
   readonly reconnectOriginal: (...args: never[]) => Promise<unknown>;
+  readonly cancelReconnectPreview?: (...args: never[]) => Promise<unknown>;
   readonly onRefresh: () => Promise<void>;
 }) {
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: "http://localhost/" });
   installDom(dom);
   Object.defineProperty(dom.window, "pige", {
     configurable: true,
-    value: { sources: { reconnectableOriginals: input.reconnectableOriginals, reconnectOriginal: input.reconnectOriginal } }
+    value: { sources: {
+      reconnectableOriginals: input.reconnectableOriginals,
+      reconnectOriginal: input.reconnectOriginal,
+      cancelReconnectPreview: input.cancelReconnectPreview
+    } }
   });
   let ordinal = 0;
   Object.defineProperty(dom.window.crypto, "randomUUID", {

@@ -10,7 +10,7 @@ import {
   type IngressSnapshotReadLease
 } from "./ingress-snapshot-service";
 import { createVaultRelativePathResolver, readVaultManifest } from "./vault-layout";
-import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
+import { createVerifiedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
 
 export interface ManagedCopyLocatorLease {
   readonly absolutePath: string;
@@ -47,6 +47,71 @@ export interface VerifiedSourceFileSnapshot extends VerifiedSourceFile {
 export interface VerifiedSourceTextPrefix {
   readonly text: string;
   readonly complete: boolean;
+}
+
+export interface ReferencedOriginalFileIdentity {
+  readonly path: string;
+  readonly parentRealPath: string;
+  readonly parentDev: number;
+  readonly parentIno: number;
+  readonly fileDev: number;
+  readonly fileIno: number;
+  readonly size: number;
+  readonly mtimeMs: number;
+  readonly ctimeMs: number;
+}
+
+export interface ReferencedOriginalReplacementVerificationInput {
+  readonly replacementOriginal: {
+    readonly path: string;
+    readonly selectedIdentity: ReferencedOriginalFileIdentity;
+  };
+  readonly snapshot: VerifiedFileSnapshot;
+}
+
+export async function reverifyReferencedOriginalReplacement(
+  input: ReferencedOriginalReplacementVerificationInput
+): Promise<void> {
+  const replacement = input.replacementOriginal;
+  if (!path.isAbsolute(replacement.path) || replacement.path.includes("\0")) {
+    throw new PigeDomainError("source.reconnect_invalid", "The selected referenced original path is invalid.");
+  }
+  const selectedPath = path.resolve(replacement.path);
+  const parent = path.dirname(selectedPath);
+  const selectedStat = fs.lstatSync(selectedPath);
+  const parentRealPath = fs.realpathSync.native(parent);
+  const parentStat = fs.lstatSync(parentRealPath);
+  const realPath = fs.realpathSync.native(selectedPath);
+  if (!selectedStat.isFile() || selectedStat.isSymbolicLink() || selectedStat.nlink !== 1 ||
+      realPath !== selectedPath || !parentStat.isDirectory() || parentStat.isSymbolicLink() ||
+      path.dirname(realPath) !== parentRealPath ||
+      replacement.selectedIdentity.path !== realPath ||
+      replacement.selectedIdentity.parentRealPath !== parentRealPath ||
+      replacement.selectedIdentity.parentDev !== parentStat.dev ||
+      replacement.selectedIdentity.parentIno !== parentStat.ino ||
+      replacement.selectedIdentity.fileDev !== selectedStat.dev ||
+      replacement.selectedIdentity.fileIno !== selectedStat.ino ||
+      replacement.selectedIdentity.size !== selectedStat.size ||
+      replacement.selectedIdentity.mtimeMs !== selectedStat.mtimeMs ||
+      replacement.selectedIdentity.ctimeMs !== selectedStat.ctimeMs) {
+    throw new PigeDomainError("source.reconnect_invalid", "The selected referenced original is no longer a private regular file.");
+  }
+  const verified = await createVerifiedFileSnapshot({
+    sourcePath: input.snapshot.absolutePath,
+    expectedChecksum: input.snapshot.checksum,
+    expectedSize: input.snapshot.size,
+    unavailableCode: "source.snapshot_unavailable",
+    integrityCode: "source.snapshot_tampered"
+  });
+  await verified.dispose();
+  const selected = await createVerifiedFileSnapshot({
+    sourcePath: selectedPath,
+    expectedChecksum: input.snapshot.checksum,
+    expectedSize: input.snapshot.size,
+    unavailableCode: "source.external_unavailable",
+    integrityCode: "source.checksum_mismatch"
+  });
+  await selected.dispose();
 }
 
 export interface CurrentSourceRecordSnapshot {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { JobSummary } from "@pige/contracts";
 import {
   JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL,
+  SOURCE_RECONNECT_CANCEL_CHANNEL,
   SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
   SOURCE_RECONNECT_ORIGINAL_CHANNEL
 } from "@pige/schemas";
@@ -58,7 +59,11 @@ const resumedJob: JobSummary = {
   updatedAt: "2026-07-29T08:00:02.000Z"
 };
 
-function harness(input: { readonly canceled?: boolean; readonly candidate?: OriginalSourceReconnectCandidate } = {}) {
+function harness(input: {
+  readonly canceled?: boolean;
+  readonly ambiguous?: boolean;
+  readonly candidate?: OriginalSourceReconnectCandidate;
+} = {}) {
   const handlers = new Map<string, (event: { sender: { id: number } }, request: unknown) => unknown>();
   const currentCandidate = input.candidate === undefined ? candidate : input.candidate;
   const jobs = {
@@ -79,10 +84,13 @@ function harness(input: { readonly canceled?: boolean; readonly candidate?: Orig
   const confirmChanged = vi.fn(async (_binding: unknown, assertCurrent: () => boolean) => assertCurrent()
     ? { status: "reconnected" as const, operationId: "op_20260729_changedrelink", contentState: "changed" as const }
     : { status: "stale" as const });
+  const cancelChanged = vi.fn(() => "cancelled" as const);
   const acknowledge = vi.fn();
   const showOpenDialog = vi.fn(async () => input.canceled
     ? { canceled: true, filePaths: [] }
-    : { canceled: false, filePaths: ["/private/selected.txt"] });
+    : input.ambiguous
+      ? { canceled: false, filePaths: ["/private/selected-a.txt", "/private/selected-b.txt"] }
+      : { canceled: false, filePaths: ["/private/selected.txt"] });
   const resumeBackgroundJobs = vi.fn();
   const onSourceReconnected = vi.fn();
   registerSourceReconnectIpc({
@@ -92,12 +100,12 @@ function harness(input: { readonly canceled?: boolean; readonly candidate?: Orig
     getWindow: () => ({}) as never,
     showOpenDialog,
     getJobs: () => jobs as unknown as JobsService,
-    getReconnectService: () => ({ reconnect, confirmChanged, acknowledge, candidate: sourceCandidate, listUnavailable }) as unknown as SourceOriginalReconnectService,
+    getReconnectService: () => ({ reconnect, confirmChanged, cancelChanged, acknowledge, candidate: sourceCandidate, listUnavailable }) as unknown as SourceOriginalReconnectService,
     resumeBackgroundJobs,
     onSourceReconnected
   });
   return { handlers, jobs, reconnect, confirmChanged, acknowledge, sourceCandidate, listUnavailable, showOpenDialog,
-    resumeBackgroundJobs, onSourceReconnected };
+    cancelChanged, resumeBackgroundJobs, onSourceReconnected };
 }
 
 describe("source reconnect IPC", () => {
@@ -117,6 +125,14 @@ describe("source reconnect IPC", () => {
     await expect(value.handlers.get(JOB_RECONNECT_ORIGINAL_SOURCE_CHANNEL)!({ sender: { id: 1 } }, request))
       .resolves.toMatchObject({ status: "stale" });
     expect(value.showOpenDialog).not.toHaveBeenCalled();
+    expect(value.reconnect).not.toHaveBeenCalled();
+  });
+
+  it("rejects an ambiguous Main picker result without handing any path to reconnect", async () => {
+    const value = harness({ ambiguous: true });
+    await expect(value.handlers.get(SOURCE_RECONNECT_ORIGINAL_CHANNEL)!({ sender: { id: 1 } }, directRequest))
+      .resolves.toMatchObject({ ...directRequest, status: "stale" });
+    expect(value.showOpenDialog).toHaveBeenCalledOnce();
     expect(value.reconnect).not.toHaveBeenCalled();
   });
 
@@ -177,5 +193,21 @@ describe("source reconnect IPC", () => {
     expect(value.reconnect).not.toHaveBeenCalled();
     expect(value.confirmChanged).toHaveBeenCalledWith(expect.objectContaining({ previewId }), expect.any(Function));
     expect(value.jobs.resumeOriginalSourceReconnect).toHaveBeenCalledOnce();
+  });
+
+  it("cancels a reviewed Settings preview through Main without reopening the picker", async () => {
+    const value = harness();
+    const previewId = `sourcerelinkpreview_${"e".repeat(32)}`;
+    const result = await value.handlers.get(SOURCE_RECONNECT_CANCEL_CHANNEL)!({ sender: { id: 1 } }, {
+      ...directRequest,
+      previewId
+    });
+    expect(result).toMatchObject({
+      ...directRequest,
+      previewId,
+      status: "cancelled"
+    });
+    expect(value.cancelChanged).toHaveBeenCalledWith(expect.objectContaining({ previewId }));
+    expect(value.showOpenDialog).not.toHaveBeenCalled();
   });
 });

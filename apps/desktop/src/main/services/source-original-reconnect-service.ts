@@ -7,12 +7,14 @@ import { PigeDomainError } from "@pige/domain";
 import {
   OperationRecordSchema,
   ReferencedOriginalReconnectCandidateSchema,
+  SourceReconnectPreviewReceiptSchema,
   SourceRecordSchema,
   type OperationRecord,
+  type SourceReconnectPreviewReceipt,
   type SourceRecord
 } from "@pige/schemas";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
-import { verifyRevealableSourceFile } from "./source-file-access";
+import { verifyRevealableSourceFile, type ReferencedOriginalFileIdentity } from "./source-file-access";
 import type { ReferencedOriginalReplacementInput } from "./source-refresh-service";
 
 const MAX_SOURCE_RECORD_BYTES = 2 * 1024 * 1024;
@@ -20,6 +22,8 @@ const MAX_RECONNECTABLE_SOURCES = 20;
 const MAX_RECONNECT_INPUT_BYTES = 2 * 1024 * 1024 * 1024;
 const CHANGED_PREVIEW_TTL_MS = 10 * 60 * 1000;
 const MAX_CHANGED_PREVIEWS = 8;
+
+export const SOURCE_ORIGINAL_RECONNECT_WORKFLOW_VERSION = 1;
 
 export interface SourceOriginalReconnectVaultPort {
   current(): VaultSummary | undefined;
@@ -90,6 +94,7 @@ interface SelectedFileIdentity {
 }
 
 interface PendingChangedReconnect {
+  readonly vaultPath: string;
   readonly binding: SourceOriginalReconnectBinding;
   readonly recordChecksum: string;
   readonly record: SourceRecord;
@@ -189,14 +194,22 @@ export class SourceOriginalReconnectService {
       }
       if (this.#changedPreviews.size >= MAX_CHANGED_PREVIEWS) this.#disposeOldestChangedPreview();
       const previewId = `sourcerelinkpreview_${randomUUID().replaceAll("-", "")}`;
-      this.#changedPreviews.set(previewId, {
+      const pending: PendingChangedReconnect = {
+        vaultPath: active.vaultPath,
         binding,
         recordChecksum: snapshot.checksum,
         record: snapshot.record,
         selected,
         snapshot: observed,
-        createdAtMs: Date.now()
-      });
+        createdAtMs: this.#now().getTime()
+      };
+      try {
+        writePreviewReceipt(active.vaultPath, createPreviewReceipt(previewId, pending, this.#now()));
+        this.#changedPreviews.set(previewId, pending);
+      } catch {
+        await observed.dispose();
+        return { status: "failed" };
+      }
       return {
         status: "changed",
         preview: {
@@ -289,9 +302,12 @@ export class SourceOriginalReconnectService {
     const pending = this.#changedPreviews.get(binding.previewId);
     this.#changedPreviews.delete(binding.previewId);
     if (!pending) return { status: "stale" };
+    const pendingVaultPath = pending.vaultPath;
     try {
       const active = this.#activeBinding(binding.activeVaultId);
-      if (!active || !sameReconnectProof(pending.binding, binding) || !assertCurrent()) return { status: "stale" };
+      const receipt = active ? readPreviewReceipt(active.vaultPath, binding.previewId) : undefined;
+      if (!active || !receipt || !samePreviewReceipt(receipt, binding, pending) ||
+          !sameReconnectProof(pending.binding, binding) || !assertCurrent()) return { status: "stale" };
       const current = readSourceRecordSnapshot(active.vaultPath, binding.sourceId);
       const candidate = current ? reconnectCandidate(active.vaultPath, current) : undefined;
       if (!current) return { status: "not_found" };
@@ -315,12 +331,14 @@ export class SourceOriginalReconnectService {
         await observed.dispose();
       }
       if (!assertCurrent()) return { status: "stale" };
+      removePreviewReceipt(active.vaultPath, binding.previewId);
       const result = await this.#replacement.replaceReferencedOriginal({
         activeVaultId: binding.activeVaultId,
         requestId: binding.requestId,
         beforeRecord: pending.record,
         selectedPath: selected.path,
         selectedMtime: new Date(selected.mtimeMs).toISOString(),
+        selectedIdentity: selected as ReferencedOriginalFileIdentity,
         snapshot: pending.snapshot
       }, assertCurrent);
       return { status: "reconnected", operationId: result.operationId, contentState: "changed" };
@@ -328,6 +346,29 @@ export class SourceOriginalReconnectService {
       return { status: caught instanceof PigeDomainError && caught.code === "source.reconnect_stale" ? "stale" : "failed" };
     } finally {
       await pending.snapshot.dispose().catch(() => undefined);
+      if (pendingVaultPath) {
+        try { removePreviewReceipt(pendingVaultPath, binding.previewId); } catch { /* preserve fail-closed state */ }
+      }
+    }
+  }
+
+  cancelChanged(
+    binding: SourceOriginalReconnectBinding & { readonly previewId: string }
+  ): "cancelled" | "stale" | "not_found" | "failed" {
+    const pending = this.#changedPreviews.get(binding.previewId);
+    if (!pending) return "stale";
+    this.#changedPreviews.delete(binding.previewId);
+    try {
+      const active = this.#activeBinding(binding.activeVaultId);
+      const receipt = active ? readPreviewReceipt(active.vaultPath, binding.previewId) : undefined;
+      if (!active || !receipt || !samePreviewReceipt(receipt, binding, pending) ||
+          !sameReconnectProof(pending.binding, binding)) return "stale";
+      removePreviewReceipt(active.vaultPath, binding.previewId);
+      return "cancelled";
+    } catch {
+      return "failed";
+    } finally {
+      void pending.snapshot.dispose();
     }
   }
 
@@ -338,6 +379,7 @@ export class SourceOriginalReconnectService {
     let recovered = 0;
     let failed = 0;
     const relinkedSourceIds = new Set<string>();
+    recoverPreviewReceipts(vaultPath, this.#changedPreviews);
     for (const receiptPath of listReceiptPaths(vaultPath)) {
       try {
         const receipt = readReceipt(receiptPath);
@@ -370,9 +412,11 @@ export class SourceOriginalReconnectService {
   }
 
   #expireChangedPreviews(): void {
+    const nowMs = this.#now().getTime();
     for (const [id, preview] of this.#changedPreviews) {
-      if (Date.now() - preview.createdAtMs <= CHANGED_PREVIEW_TTL_MS) continue;
+      if (nowMs - preview.createdAtMs <= CHANGED_PREVIEW_TTL_MS) continue;
       this.#changedPreviews.delete(id);
+      try { removePreviewReceipt(preview.vaultPath, id); } catch { /* preserve fail-closed state */ }
       void preview.snapshot.dispose();
     }
   }
@@ -381,6 +425,7 @@ export class SourceOriginalReconnectService {
     const oldest = [...this.#changedPreviews.entries()].sort((left, right) => left[1].createdAtMs - right[1].createdAtMs)[0];
     if (!oldest) return;
     this.#changedPreviews.delete(oldest[0]);
+    try { removePreviewReceipt(oldest[1].vaultPath, oldest[0]); } catch { /* preserve fail-closed state */ }
     void oldest[1].snapshot.dispose();
   }
 }
@@ -598,6 +643,181 @@ function createRelinkOperation(
 
 function receiptRoot(vaultPath: string): string {
   return path.join(vaultPath, ".pige", "private", "source-reconnect-receipts");
+}
+
+function previewRoot(vaultPath: string): string {
+  return path.join(vaultPath, ".pige", "private", "source-reconnect-previews");
+}
+
+function previewPath(vaultPath: string, previewId: string): string {
+  if (!/^sourcerelinkpreview_[a-f0-9]{32}$/u.test(previewId)) {
+    throw new PigeDomainError("source.reconnect_invalid", "The source preview identity is invalid.");
+  }
+  return path.join(previewRoot(vaultPath), `${previewId}.json`);
+}
+
+function createPreviewReceipt(
+  previewId: string,
+  pending: PendingChangedReconnect,
+  now: Date
+): SourceReconnectPreviewReceipt {
+  return SourceReconnectPreviewReceiptSchema.parse({
+    schemaVersion: 1,
+    workflowVersion: SOURCE_ORIGINAL_RECONNECT_WORKFLOW_VERSION,
+    previewId,
+    activeVaultId: pending.binding.activeVaultId,
+    requestId: pending.binding.requestId,
+    sourceId: pending.binding.sourceId,
+    sourceKind: pending.binding.sourceKind,
+    sourceRevision: pending.binding.sourceRevision,
+    expectedAvailability: pending.binding.expectedAvailability,
+    expectedChecksum: pending.binding.expectedChecksum,
+    expectedSize: pending.binding.expectedSize,
+    formatIdentity: pending.binding.formatIdentity,
+    recordChecksum: pending.recordChecksum,
+    selectedPath: pending.selected.path,
+    selectedIdentity: pending.selected,
+    observedChecksum: pending.snapshot.checksum,
+    observedSize: pending.snapshot.size,
+    createdAt: now.toISOString()
+  });
+}
+
+function samePreviewReceipt(
+  receipt: SourceReconnectPreviewReceipt,
+  binding: SourceOriginalReconnectBinding & { readonly previewId: string },
+  pending: PendingChangedReconnect
+): boolean {
+  return receipt.previewId === binding.previewId && receipt.activeVaultId === binding.activeVaultId &&
+    receipt.requestId === pending.binding.requestId && receipt.sourceId === binding.sourceId &&
+    receipt.sourceKind === binding.sourceKind && receipt.sourceRevision === binding.sourceRevision &&
+    receipt.expectedAvailability === binding.expectedAvailability &&
+    receipt.expectedChecksum === binding.expectedChecksum && receipt.expectedSize === binding.expectedSize &&
+    receipt.formatIdentity === binding.formatIdentity && receipt.recordChecksum === pending.recordChecksum &&
+    receipt.selectedPath === pending.selected.path && sameSelectedFileIdentity(receipt.selectedIdentity, pending.selected) &&
+    receipt.observedChecksum === pending.snapshot.checksum && receipt.observedSize === pending.snapshot.size;
+}
+
+function writePreviewReceipt(vaultPath: string, receipt: SourceReconnectPreviewReceipt): void {
+  const root = ensurePreviewRoot(vaultPath);
+  const filePath = previewPath(vaultPath, receipt.previewId);
+  assertPrivateFilePath(root, filePath, false);
+  const bytes = Buffer.from(`${JSON.stringify(SourceReconnectPreviewReceiptSchema.parse(receipt), null, 2)}\n`, "utf8");
+  if (fs.existsSync(filePath)) {
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || !fs.readFileSync(filePath).equals(bytes)) {
+      throw new PigeDomainError("source.reconnect_stale", "The source preview receipt conflicts with durable state.");
+    }
+    return;
+  }
+  writeExclusive(filePath, bytes);
+}
+
+function readPreviewReceipt(vaultPath: string, previewId: string): SourceReconnectPreviewReceipt | undefined {
+  try {
+    const filePath = previewPath(vaultPath, previewId);
+    const root = previewRoot(vaultPath);
+    assertPrivateFilePath(root, filePath, false);
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 64 * 1024) return undefined;
+    return SourceReconnectPreviewReceiptSchema.parse(JSON.parse(fs.readFileSync(filePath, "utf8")));
+  } catch (caught) {
+    if ((caught as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    return undefined;
+  }
+}
+
+function removePreviewReceipt(vaultPath: string, previewId: string): void {
+  try {
+    const filePath = previewPath(vaultPath, previewId);
+    const root = previewRoot(vaultPath);
+    assertPrivateFilePath(root, filePath, false);
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) return;
+    fs.unlinkSync(filePath);
+    flushDirectory(root);
+  } catch (caught) {
+    if ((caught as NodeJS.ErrnoException).code !== "ENOENT") throw caught;
+  }
+}
+
+function recoverPreviewReceipts(
+  vaultPath: string,
+  pending: Map<string, PendingChangedReconnect>
+): void {
+  for (const filePath of listPreviewReceiptPaths(vaultPath)) {
+    const previewId = path.basename(filePath, ".json");
+    const inMemory = pending.get(previewId);
+    const receipt = readPreviewReceipt(vaultPath, previewId);
+    if (!inMemory || !receipt || !samePreviewReceipt(receipt, { ...inMemory.binding, previewId }, inMemory)) {
+      pending.delete(previewId);
+      if (inMemory) void inMemory.snapshot.dispose();
+      removePreviewReceipt(vaultPath, previewId);
+    }
+  }
+}
+
+function listPreviewReceiptPaths(vaultPath: string): string[] {
+  const root = previewRoot(vaultPath);
+  try {
+    assertPrivateFilePath(path.dirname(root), root, true);
+    return fs.readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && /^sourcerelinkpreview_[a-f0-9]{32}\.json$/u.test(entry.name))
+      .map((entry) => path.join(root, entry.name));
+  } catch (caught) {
+    return (caught as NodeJS.ErrnoException).code === "ENOENT" ? [] : [];
+  }
+}
+
+function ensurePreviewRoot(vaultPath: string): string {
+  const root = path.resolve(vaultPath);
+  const rootStat = fs.lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new PigeDomainError("source.reconnect_invalid", "The active vault root is unsafe.");
+  }
+  const target = previewRoot(vaultPath);
+  const relative = path.relative(root, target);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new PigeDomainError("source.reconnect_invalid", "The source preview root escapes the active vault.");
+  }
+  let current = root;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    try {
+      const stat = fs.lstatSync(current);
+      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new PigeDomainError("source.reconnect_invalid", "The source preview root is unsafe.");
+    } catch (caught) {
+      if ((caught as NodeJS.ErrnoException).code !== "ENOENT") throw caught;
+      fs.mkdirSync(current, { mode: 0o700 });
+    }
+  }
+  return current;
+}
+
+function assertPrivateFilePath(root: string, filePath: string, allowDirectory: boolean): void {
+  const resolvedRoot = path.resolve(root);
+  const resolvedFilePath = path.resolve(filePath);
+  const rootStat = fs.lstatSync(resolvedRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new PigeDomainError("source.reconnect_invalid", "The source preview root is unsafe.");
+  }
+  const relative = path.relative(resolvedRoot, resolvedFilePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new PigeDomainError("source.reconnect_invalid", "The source preview path escapes its private root.");
+  }
+  let current = resolvedRoot;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    let stat: fs.Stats;
+    try { stat = fs.lstatSync(current); } catch (caught) {
+      if ((caught as NodeJS.ErrnoException).code === "ENOENT" && current === resolvedFilePath && !allowDirectory) return;
+      throw caught;
+    }
+    if (stat.isSymbolicLink() || (current !== resolvedFilePath && !stat.isDirectory()) ||
+        (current === resolvedFilePath && allowDirectory && !stat.isDirectory())) {
+      throw new PigeDomainError("source.reconnect_invalid", "The source preview path is unsafe.");
+    }
+  }
 }
 
 function receiptPath(vaultPath: string, operationId: string): string {

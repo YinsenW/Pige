@@ -23,7 +23,11 @@ import {
 import type { DocumentParserPort } from "./document-parser-service";
 import type { KnowledgeActivityRecoveryResult } from "./knowledge-activity-service";
 import type { OcrPort } from "./ocr-service";
-import { acquireSourceRefreshLocator, readCurrentSourceRecordSnapshot } from "./source-file-access";
+import {
+  acquireSourceRefreshLocator,
+  readCurrentSourceRecordSnapshot,
+  reverifyReferencedOriginalReplacement
+} from "./source-file-access";
 import {
   hashSourceRefreshFile,
   includeCurrentRefreshOutputs,
@@ -37,6 +41,7 @@ import {
 import { SourcePageService } from "./source-page-service";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
 import { createChangedSourceRelinkOperation } from "./source-relink-operation";
+import type { ReferencedOriginalFileIdentity } from "./source-file-access";
 import {
   sourceRefreshDisplayName as safeDisplayName,
   sourceRefreshFingerprint as sourceFingerprint,
@@ -70,6 +75,7 @@ interface PendingPreview {
     readonly path: string;
     readonly lastKnownMtime: string;
     readonly requestId: string;
+    readonly selectedIdentity: ReferencedOriginalFileIdentity;
   };
   readonly createdAtMs: number;
 }
@@ -103,6 +109,7 @@ export interface ReferencedOriginalReplacementInput {
   readonly beforeRecord: SourceRecord;
   readonly selectedPath: string;
   readonly selectedMtime: string;
+  readonly selectedIdentity: ReferencedOriginalFileIdentity;
   readonly snapshot: VerifiedFileSnapshot;
 }
 
@@ -189,7 +196,8 @@ export class SourceRefreshService {
         uri: pathToFileURL(input.selectedPath).href,
         path: input.selectedPath,
         lastKnownMtime: input.selectedMtime,
-        requestId: input.requestId
+        requestId: input.requestId,
+        selectedIdentity: input.selectedIdentity
       },
       createdAtMs: Date.now()
     };
@@ -449,10 +457,19 @@ export class SourceRefreshService {
     const seed = createHash("sha256").update(`${beforeRecord.id}:${pending.snapshot.checksum}:${randomUUID()}`).digest("hex");
     const operationId = `op_${dateKey}_${seed.slice(0, 12)}`;
     const jobId = `job_${dateKey}_${seed.slice(12, 24)}`;
+    if (pending.replacementOriginal && !this.#sameScope(scope)) {
+      throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+    }
     const receiptRoot = receiptDirectory(scope.vaultPath, operationId);
     ensurePrivateDirectory(receiptRoot);
     const inputExtension = safeExtension(pending.snapshot.absolutePath);
     const inputPath = path.join(receiptRoot, `input${inputExtension}`);
+    if (pending.replacementOriginal) {
+      await reverifyReferencedOriginalReplacement({
+        replacementOriginal: pending.replacementOriginal,
+        snapshot: pending.snapshot
+      });
+    }
     fs.copyFileSync(pending.snapshot.absolutePath, inputPath, fs.constants.COPYFILE_EXCL);
     if (process.platform !== "win32") fs.chmodSync(inputPath, 0o400);
     const relativeInputPath = toSourceRefreshVaultRelative(scope.vaultPath, inputPath);
@@ -510,6 +527,9 @@ export class SourceRefreshService {
       updatedAt: now
     });
     try {
+      if (pending.replacementOriginal && !this.#sameScope(scope)) {
+        throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+      }
       writeSourceRecord(scope.vaultPath, beforeRecord.id, intermediate, recordFileChecksum(scope.vaultPath, beforeRecord.id));
       let sourcePageConflict = false;
       if (intermediate.kind === "image_file") {
@@ -565,6 +585,15 @@ export class SourceRefreshService {
       if (!published || published.metadata.sourceRefreshInFlight !== operationId) {
         throw new PigeDomainError("source.refresh_target_changed", "The source changed during refresh publication.");
       }
+      if (pending.replacementOriginal && !this.#sameScope(scope)) {
+        throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+      }
+      if (pending.replacementOriginal) {
+        await reverifyReferencedOriginalReplacement({
+          replacementOriginal: pending.replacementOriginal,
+          snapshot: pending.snapshot
+        });
+      }
       const finalRecord = SourceRecordSchema.parse({
         ...published,
         metadata: {
@@ -590,6 +619,9 @@ export class SourceRefreshService {
         sourcePageConflict
       };
       writeReceipt(scope.vaultPath, receipt);
+      if (pending.replacementOriginal && !this.#sameScope(scope)) {
+        throw new PigeDomainError("source.reconnect_stale", "The source reconnect owner changed.");
+      }
       writeSourceRecord(scope.vaultPath, beforeRecord.id, finalRecord, recordFileChecksum(scope.vaultPath, beforeRecord.id));
       writeOperation(scope.vaultPath, createRefreshOperation(receipt));
       if (receipt.relinkOperation) writeOperation(scope.vaultPath, receipt.relinkOperation);
@@ -636,8 +668,9 @@ export class SourceRefreshService {
   }
 
   #expirePreviews(): void {
+    const nowMs = Date.now();
     for (const [id, preview] of this.#previews) {
-      if (Date.now() - preview.createdAtMs <= PREVIEW_TTL_MS) continue;
+      if (nowMs - preview.createdAtMs <= PREVIEW_TTL_MS) continue;
       this.#previews.delete(id);
       void preview.snapshot.dispose();
     }
@@ -709,6 +742,7 @@ function recordFileChecksum(vaultPath: string, sourceId: string): string {
 function writeSourceRecord(vaultPath: string, sourceId: string, record: SourceRecord, expectedChecksum: string): void {
   const target = sourceRecordPath(vaultPath, sourceId);
   const root = path.resolve(vaultPath, ".pige", "source-records");
+  assertSourceRecordPath(vaultPath, target);
   if (!target.startsWith(`${root}${path.sep}`) || hashSourceRefreshFile(target) !== expectedChecksum) {
     throw new PigeDomainError("source.refresh_target_changed", "The Source Record changed before refresh could commit.");
   }
@@ -729,7 +763,30 @@ function writeSourceRecord(vaultPath: string, sourceId: string, record: SourceRe
     fs.rmSync(temporary, { force: true });
     throw new PigeDomainError("source.refresh_target_changed", "The Source Record changed during refresh commit.");
   }
+  assertSourceRecordPath(vaultPath, target);
   fs.renameSync(temporary, target);
+}
+
+function assertSourceRecordPath(vaultPath: string, filePath: string): void {
+  const vaultRealPath = fs.realpathSync.native(vaultPath);
+  const resolvedVaultPath = path.resolve(vaultPath);
+  const resolvedFilePath = path.resolve(filePath);
+  const relative = path.relative(resolvedVaultPath, resolvedFilePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new PigeDomainError("source.refresh_target_changed", "The Source Record escapes the active vault.");
+  }
+  let current = resolvedVaultPath;
+  for (const segment of path.relative(resolvedVaultPath, path.dirname(resolvedFilePath)).split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    const stat = fs.lstatSync(current);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new PigeDomainError("source.refresh_target_changed", "The Source Record parent is unsafe.");
+    }
+  }
+  const parentRealPath = fs.realpathSync.native(path.dirname(resolvedFilePath));
+  if (parentRealPath !== vaultRealPath && !parentRealPath.startsWith(`${vaultRealPath}${path.sep}`)) {
+    throw new PigeDomainError("source.refresh_target_changed", "The Source Record escapes the active vault.");
+  }
 }
 
 function consumeImageRefreshOcrOperation(

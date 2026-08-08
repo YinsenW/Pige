@@ -288,6 +288,8 @@ import type {
   SourceRefreshConflictResolveResult,
   SourceReconnectListRequest,
   SourceReconnectListResult,
+  SourceReconnectCancelRequest,
+  SourceReconnectCancelResult,
   SourceReconnectRequest,
   SourceReconnectResult,
   SourceTrashRequest,
@@ -976,7 +978,10 @@ import {
   SourceRefreshConflictResolveRequestSchema,
   SourceRefreshConflictResolveResultSchema,
   SOURCE_RECONNECTABLE_ORIGINALS_CHANNEL,
+  SOURCE_RECONNECT_CANCEL_CHANNEL,
   SOURCE_RECONNECT_ORIGINAL_CHANNEL,
+  SourceReconnectCancelRequestSchema,
+  SourceReconnectCancelResultSchema,
   SourceReconnectListRequestSchema,
   SourceReconnectListResultSchema,
   SourceReconnectRequestSchema,
@@ -2357,6 +2362,13 @@ const api: PigeDesktopApi = {
       SourceReconnectResultSchema.parse(await ipcRenderer.invoke(
         SOURCE_RECONNECT_ORIGINAL_CHANNEL,
         SourceReconnectRequestSchema.parse(request)
+      )),
+    cancelReconnectPreview: async (
+      request: SourceReconnectCancelRequest
+    ): Promise<SourceReconnectCancelResult> =>
+      SourceReconnectCancelResultSchema.parse(await ipcRenderer.invoke(
+        SOURCE_RECONNECT_CANCEL_CHANNEL,
+        SourceReconnectCancelRequestSchema.parse(request)
       )),
     trash: async (request: SourceTrashRequest): Promise<SourceTrashResult> =>
       SourceTrashResultSchema.parse(await ipcRenderer.invoke(

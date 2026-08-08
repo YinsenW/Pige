@@ -468,6 +468,8 @@ import type {
   SourceReconnectListResult,
   SourceReconnectRequest,
   SourceReconnectResult,
+  SourceReconnectCancelRequest,
+  SourceReconnectCancelResult,
   SourceTrashEligibility,
   SourceTrashRequest,
   SourceTrashResult,
@@ -1026,6 +1028,8 @@ export type {
   SourceReconnectListResult,
   SourceReconnectRequest,
   SourceReconnectResult,
+  SourceReconnectCancelRequest,
+  SourceReconnectCancelResult,
   SourceTrashEligibility,
   SourceTrashRequest,
   SourceTrashResult,
@@ -2558,6 +2562,9 @@ export interface PigeDesktopApi {
     readonly reconnectOriginal: (
       request: SourceReconnectRequest
     ) => Promise<SourceReconnectResult>;
+    readonly cancelReconnectPreview: (
+      request: SourceReconnectCancelRequest
+    ) => Promise<SourceReconnectCancelResult>;
     readonly trash: (request: SourceTrashRequest) => Promise<SourceTrashResult>;
     readonly listTrash: (request: SourceTrashListRequest) => Promise<SourceTrashListResult>;
     readonly restoreTrash: (

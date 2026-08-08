@@ -180,6 +180,84 @@ describe("source original reconnect service", () => {
       recovered: 0, failed: 0, relinkedSourceIds: [value.sourceId]
     });
     expect(service.candidate(value.vault.vaultId, value.sourceId)).toBeUndefined();
+
+    const updateOperation = listJsonFiles(path.join(value.vaultPath, ".pige", "operations"))
+      .map((file) => JSON.parse(fs.readFileSync(file, "utf8")) as { id: string; kind: string })
+      .find((operation) => operation.kind === "update_source_record");
+    if (!updateOperation) throw new Error("Expected the Activity source-update Operation.");
+    expect(refresh.activitySummary(updateOperation as never)).toMatchObject({
+      kind: "update_source_record",
+      status: "applied",
+      canUndo: true
+    });
+    expect(refresh.undo(updateOperation as never)).toMatchObject({ status: "undone", operationId: updateOperation.id });
+    const undone = SourceRecordSchema.parse(JSON.parse(fs.readFileSync(value.recordPath, "utf8")));
+    expect(undone.id).toBe(value.sourceId);
+    expect(undone.original?.path).toBe(value.oldPath);
+  });
+
+  it("keeps changed previews private and fails closed on cancel, restart, or selected-file tamper", async () => {
+    const value = fixture();
+    const replacement = path.join(value.root, "replacement.txt");
+    fs.writeFileSync(replacement, "changed source revision\n", "utf8");
+    const refresh = new SourceRefreshService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    }, { canParse: () => false, parseSource: async () => { throw new Error("not used for text"); } });
+    const service = new SourceOriginalReconnectService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    }, () => new Date("2026-07-31T08:00:00.000Z"), refresh);
+    const proof = service.candidate(value.vault.vaultId, value.sourceId);
+    if (!proof) throw new Error("Expected repair proof.");
+    const before = fs.readFileSync(value.recordPath, "utf8");
+    const preview = await service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_previewreceipt",
+      ...proof
+    }, replacement);
+    if (preview.status !== "changed") throw new Error("Expected changed preview.");
+    const previewRoot = path.join(value.vaultPath, ".pige/private/source-reconnect-previews");
+    expect(fs.readdirSync(previewRoot)).toHaveLength(1);
+    expect(fs.readFileSync(previewRoot + "/" + fs.readdirSync(previewRoot)[0]!, "utf8"))
+      .not.toContain("changed source revision");
+    expect(service.cancelChanged({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_cancelpreview",
+      ...proof,
+      previewId: preview.preview.previewId
+    })).toBe("cancelled");
+    expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
+    expect(fs.readdirSync(previewRoot)).toEqual([]);
+
+    const second = await service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_previewrestart",
+      ...proof
+    }, replacement);
+    if (second.status !== "changed") throw new Error("Expected second changed preview.");
+    const restarted = new SourceOriginalReconnectService({
+      current: () => value.vault,
+      activeVaultPath: () => value.vaultPath
+    });
+    expect(restarted.recoverIncompleteOperations()).toMatchObject({ recovered: 0, failed: 0 });
+    expect(fs.readdirSync(previewRoot)).toEqual([]);
+    expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
+
+    const third = await service.reconnect({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_previewtamper",
+      ...proof
+    }, replacement);
+    if (third.status !== "changed") throw new Error("Expected third changed preview.");
+    fs.writeFileSync(replacement, "tampered source revision\n", "utf8");
+    await expect(service.confirmChanged({
+      activeVaultId: value.vault.vaultId,
+      requestId: "sourcereconnectdirect_confirmtamper",
+      ...proof,
+      previewId: third.preview.previewId
+    })).resolves.toEqual({ status: "stale" });
+    expect(fs.readFileSync(value.recordPath, "utf8")).toBe(before);
   });
 
   it("removes its private receipt when the bound owner becomes stale after selection", async () => {
