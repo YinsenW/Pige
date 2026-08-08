@@ -831,6 +831,11 @@ Durable execution gates:
   and an exact machine-binding CAS; it retains the old physical folder unregistered.
   Its stable child resumes checkpoint digests, never a ZIP alone. `clone_as_new` mints
   identity and lineage.
+- Only the latest completed current-vault `replace_existing` Restore may reopen its private
+  deterministic rollback archive as one sender-local, pathless `replace_existing` preview.
+  Candidate/prepare reread the Restore Job, binding and archive identity; stale, absent or
+  invalid proof writes nothing. The ordinary `restore.apply` confirmation, replacement Backup,
+  `restore_applied` Operation and checkpoint adoption remain the sole effect owner.
 
 Legacy format-v1 stays readable per `docs/SYNC_CONFLICT_AND_MIGRATION.md`. Current
 backup/restore checkpoint delivery and residual transport/restart/platform work live in
