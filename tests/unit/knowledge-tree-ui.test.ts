@@ -450,6 +450,7 @@ describe("Knowledge Tree renderer", () => {
       async (pageId) => relatedResult(pageId, "Related note")
     );
     const selected = treeItemNamed(mount.container, "Local-first");
+    expect(selected.getAttribute("focusable")).toBe("true");
     await waitFor(dom, () => buttonNamed(mount.container, "Open: Related note") !== undefined);
     await click(dom, buttonNamed(mount.container, "Open: Related note"));
     await waitFor(dom, () => openCalls === 1 && dom.window.document.activeElement === selected);

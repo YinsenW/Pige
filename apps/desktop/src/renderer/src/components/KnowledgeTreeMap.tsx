@@ -595,6 +595,7 @@ export function KnowledgeTreeMap(props: {
                     }}
                     className={`knowledge-map-node level-${Math.min(node.level, 4)} density-${densityBand}${node.status === "needs_review" ? " needs-review" : ""}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
                     role="treeitem"
+                    focusable="true"
                     aria-level={node.level + 1}
                     aria-posinset={node.siblingIndex + 1}
                     aria-setsize={node.siblingCount}
