@@ -17,9 +17,19 @@ export function AgentMemoryTrashRestorePanel(props: {
   const [reload, setReload] = useState(0);
   const activeVaultIdRef = useRef(props.activeVaultId);
   const restoreRefs = useRef(new Map<string, HTMLButtonElement>());
+  const trashHeadingRef = useRef<HTMLElement>(null);
+  const restoreFocusOperationRef = useRef<string | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
 
   useEffect(() => setStatusKey(null), [props.activeVaultId]);
+
+  useEffect(() => {
+    const operationId = restoreFocusOperationRef.current;
+    if (!operationId) return;
+    restoreFocusOperationRef.current = null;
+    const trigger = restoreRefs.current.get(operationId);
+    (trigger?.isConnected ? trigger : trashHeadingRef.current)?.focus({ preventScroll: true });
+  }, [trash]);
 
   useEffect(() => {
     const activeVaultId = props.activeVaultId;
@@ -57,14 +67,14 @@ export function AgentMemoryTrashRestorePanel(props: {
         expectedRevision: current.revision
       });
       if (activeVaultIdRef.current !== activeVaultId || result.activeVaultId !== activeVaultId) return;
+      restoreFocusOperationRef.current = record.trashOperationId;
       setTrash(result.trash);
-      props.onCommitted(result.summary);
+      if (result.status === "committed") props.onCommitted(result.summary);
       setStatusKey(result.status === "committed"
         ? "memory.trashRestoreCompleted"
         : result.status === "stale"
           ? "memory.trashRestoreStale"
           : "memory.trashRestoreNotFound");
-      window.setTimeout(() => restoreRefs.current.get(record.trashOperationId)?.focus(), 0);
     } catch {
       if (activeVaultIdRef.current === activeVaultId) setStatusKey("memory.trashRestoreFailed");
     } finally {
@@ -75,7 +85,7 @@ export function AgentMemoryTrashRestorePanel(props: {
   return (
     <div className="settings-card" aria-labelledby="memory-trash-title" data-memory-trash-revision={trash?.revision}>
       <div className="settings-row-copy">
-        <strong id="memory-trash-title">{props.t("memory.trashTitle")}</strong>
+        <strong ref={trashHeadingRef} id="memory-trash-title" tabIndex={-1}>{props.t("memory.trashTitle")}</strong>
         <span>{props.t("memory.trashDescription")}</span>
       </div>
       {state === "loading" ? <span role="status">{props.t("memory.trashLoading")}</span> : null}
