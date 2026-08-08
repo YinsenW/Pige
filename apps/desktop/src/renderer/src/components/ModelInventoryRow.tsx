@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ModelProfileSummary } from "@pige/contracts";
 
 export function ModelInventoryRow(props: {
@@ -15,6 +15,24 @@ export function ModelInventoryRow(props: {
   const [displayName, setDisplayName] = useState(initialName);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [removeFailed, setRemoveFailed] = useState(false);
+  const removeTriggerRef = useRef<HTMLButtonElement>(null);
+  const confirmKeepRef = useRef<HTMLButtonElement>(null);
+  const confirmRemoveRef = useRef<HTMLButtonElement>(null);
+  const restoreRemoveFocusRef = useRef(false);
+  const focusInFrame = (element: HTMLElement | null): void => {
+    const focus = (): void => element?.focus();
+    if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(focus);
+    else focus();
+  };
+  useEffect(() => {
+    if (confirmingRemoval) {
+      focusInFrame(confirmKeepRef.current);
+      return;
+    }
+    if (!restoreRemoveFocusRef.current) return;
+    restoreRemoveFocusRef.current = false;
+    focusInFrame(removeTriggerRef.current);
+  }, [confirmingRemoval]);
   const removeManualModel = async (): Promise<void> => {
     setRemoveFailed(false);
     if (await props.onDeleteManual(props.model.id)) {
@@ -22,6 +40,7 @@ export function ModelInventoryRow(props: {
       return;
     }
     setRemoveFailed(true);
+    focusInFrame(confirmRemoveRef.current);
   };
   return (
     <div className="settings-row model-row">
@@ -65,9 +84,11 @@ export function ModelInventoryRow(props: {
           <button
             type="button"
             className="settings-button"
+            ref={removeTriggerRef}
             disabled={props.busy}
             onClick={() => {
               setRemoveFailed(false);
+              restoreRemoveFocusRef.current = true;
               setConfirmingRemoval(true);
             }}
           >
@@ -84,6 +105,7 @@ export function ModelInventoryRow(props: {
           <button
             type="button"
             className="settings-button"
+            ref={confirmKeepRef}
             disabled={props.busy}
             onClick={() => {
               setRemoveFailed(false);
@@ -95,6 +117,7 @@ export function ModelInventoryRow(props: {
           <button
             type="button"
             className="settings-button"
+            ref={confirmRemoveRef}
             disabled={props.busy}
             onClick={() => void removeManualModel()}
           >
