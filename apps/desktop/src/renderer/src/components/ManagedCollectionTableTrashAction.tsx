@@ -15,13 +15,24 @@ export function ManagedCollectionTableTrashAction(props: {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const wasConfirmingRef = useRef(false);
+  const submitInFlightRef = useRef(false);
   const ownerRef = useRef(ownerKey(props));
   ownerRef.current = ownerKey(props);
-  useLayoutEffect(() => { if (!confirming && !busy) triggerRef.current?.focus(); }, [confirming, busy]);
+  useLayoutEffect(() => {
+    if (confirming && !wasConfirmingRef.current) {
+      cancelRef.current?.focus({ preventScroll: true });
+    } else if (!confirming && wasConfirmingRef.current && !busy) {
+      triggerRef.current?.focus({ preventScroll: true });
+    }
+    wasConfirmingRef.current = confirming;
+  }, [busy, confirming]);
   if (!props.snapshot.canTrashTable) return null;
 
   const submit = async (): Promise<void> => {
-    if (busy || props.blocked) return;
+    if (submitInFlightRef.current || busy || props.blocked) return;
+    submitInFlightRef.current = true;
     const request: CollectionTrashTableRequest = { apiVersion: 1, requestId: createRequestId(),
       activeVaultId: props.activeVaultId, datasetId: props.snapshot.datasetId, tableId: props.snapshot.tableId,
       expectedRevisionId: props.snapshot.revisionId };
@@ -35,6 +46,7 @@ export function ManagedCollectionTableTrashAction(props: {
     } catch {
       if (ownerRef.current === owner) setStatus(props.t("collection.trashTable_failed"));
     } finally {
+      submitInFlightRef.current = false;
       if (ownerRef.current === owner) { setBusy(false); props.onBusyChange(false); }
     }
   };
@@ -44,13 +56,22 @@ export function ManagedCollectionTableTrashAction(props: {
       onClick={() => { setStatus(null); setConfirming(true); }}>
       {props.t("collection.trashTable")}
     </button>
-    {confirming ? <div className="settings-card settings-row tall" role="alertdialog" aria-label={props.t("collection.trashTable") }>
+    {confirming ? <div
+      className="settings-card settings-row tall"
+      role="group"
+      aria-label={props.t("collection.trashTable")}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape" || busy) return;
+        setConfirming(false);
+        setStatus(null);
+      }}
+    >
       <span>{props.t("collection.trashTable_confirm")}</span>
       <div className="settings-row-control">
         <button type="button" className="settings-button primary" disabled={busy} onClick={() => void submit()}>
           {props.t(busy ? "collection.trashingTable" : "collection.trashTable_confirmAction")}
         </button>
-        <button type="button" className="settings-button" disabled={busy} onClick={() => { setConfirming(false); setStatus(null); }}>
+        <button ref={cancelRef} type="button" className="settings-button" disabled={busy} onClick={() => { setConfirming(false); setStatus(null); }}>
           {props.t("collection.cancel")}
         </button>
       </div>
