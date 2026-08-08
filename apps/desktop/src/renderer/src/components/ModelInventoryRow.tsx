@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ModelProfileSummary } from "@pige/contracts";
 
 export function ModelInventoryRow(props: {
   readonly model: ModelProfileSummary;
   readonly busy: boolean;
   readonly onDeleteManual: (modelProfileId: string) => Promise<boolean>;
+  readonly onManualRemoved: () => void;
   readonly onSetEnabled: (modelProfileId: string, enabled: boolean) => Promise<void>;
   readonly onSetDisplayName: (modelProfileId: string, displayName: string | null) => Promise<void>;
   readonly t: (key: string) => string;
@@ -15,13 +16,32 @@ export function ModelInventoryRow(props: {
   const [displayName, setDisplayName] = useState(initialName);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [removeFailed, setRemoveFailed] = useState(false);
+  const [removalPending, setRemovalPending] = useState(false);
+  const removalInFlightRef = useRef(false);
+  const removeTriggerRef = useRef<HTMLButtonElement>(null);
+  const keepRemovalButtonRef = useRef<HTMLButtonElement>(null);
+  const restoreRemoveTrigger = (): void => {
+    window.setTimeout(() => removeTriggerRef.current?.focus({ preventScroll: true }), 0);
+  };
+  const focusRemovalConfirmation = (): void => {
+    window.setTimeout(() => keepRemovalButtonRef.current?.focus({ preventScroll: true }), 0);
+  };
   const removeManualModel = async (): Promise<void> => {
+    if (removalInFlightRef.current || props.busy) return;
+    removalInFlightRef.current = true;
+    setRemovalPending(true);
     setRemoveFailed(false);
-    if (await props.onDeleteManual(props.model.id)) {
-      setConfirmingRemoval(false);
-      return;
+    try {
+      if (await props.onDeleteManual(props.model.id)) {
+        setConfirmingRemoval(false);
+        props.onManualRemoved();
+        return;
+      }
+      setRemoveFailed(true);
+    } finally {
+      removalInFlightRef.current = false;
+      setRemovalPending(false);
     }
-    setRemoveFailed(true);
   };
   return (
     <div className="settings-row model-row">
@@ -63,12 +83,14 @@ export function ModelInventoryRow(props: {
         />
         {props.model.source === "manual" && !confirmingRemoval ? (
           <button
+            ref={removeTriggerRef}
             type="button"
             className="settings-button"
-            disabled={props.busy}
+            disabled={props.busy || removalPending}
             onClick={() => {
               setRemoveFailed(false);
               setConfirmingRemoval(true);
+              focusRemovalConfirmation();
             }}
           >
             {props.t("models.removeManualModel")}
@@ -76,18 +98,32 @@ export function ModelInventoryRow(props: {
         ) : null}
       </div>
       {props.model.source === "manual" && confirmingRemoval ? (
-        <div className="settings-row-control model-row-confirmation" role="group" aria-label={props.t("models.confirmRemoveManualModel")}>
+        <div
+          className="settings-row-control model-row-confirmation"
+          role="group"
+          aria-label={props.t("models.confirmRemoveManualModel")}
+          onKeyDown={(event) => {
+            if (event.key !== "Escape" || removalPending) return;
+            event.preventDefault();
+            setRemoveFailed(false);
+            setConfirmingRemoval(false);
+            restoreRemoveTrigger();
+          }}
+        >
           <span className="settings-row-copy">
             <strong>{props.t("models.confirmRemoveManualModel")}</strong>
             <span>{props.t("models.confirmRemoveManualModelDescription")}</span>
           </span>
           <button
+            ref={keepRemovalButtonRef}
             type="button"
             className="settings-button"
-            disabled={props.busy}
+            disabled={props.busy || removalPending}
             onClick={() => {
+              if (removalPending) return;
               setRemoveFailed(false);
               setConfirmingRemoval(false);
+              restoreRemoveTrigger();
             }}
           >
             {props.t("models.keepManualModel")}
@@ -95,7 +131,7 @@ export function ModelInventoryRow(props: {
           <button
             type="button"
             className="settings-button"
-            disabled={props.busy}
+            disabled={props.busy || removalPending}
             onClick={() => void removeManualModel()}
           >
             {props.t("models.removeManualModel")}
