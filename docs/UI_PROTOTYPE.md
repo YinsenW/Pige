@@ -827,8 +827,10 @@ rejects cycles, and adopts only Main's authoritative committed render. Child Top
 
 Settings > Index & Maintenance owns the report. Eligible broken links offer Remove/Retarget;
 eligible orphans offer explicit selection of one current parent; an exact two-topic duplicate
-offers a bounded choice of which topic survives before Merge. Commit reruns; other states preserve
-report/selection/focus. No guessed target, model/network repair, body, path or raw error.
+offers a bounded choice of which topic survives before Merge. An unsourced Claim offers a bounded
+current-source search and an explicit selected-source confirmation. Commit reruns; stale, unavailable,
+or failed states retain the report, selection, and focus. No guessed target, model/network repair,
+body, path or raw error.
 
 ## 13. Settings
 

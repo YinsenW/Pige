@@ -716,6 +716,7 @@ Recovery decisions:
 | `agent_turn` has a valid assistant event | Adopt its checksum-bound output refs and finish without another model call. |
 | Picker turn has the current conversation/tail pair | Adopt that conversation/client turn; tail drift cannot create a split conversation or effects. |
 | Generated-page create/update Undo is interrupted | Adopt page/private-image/trash/index/quarantine/Operation only when IDs/hashes agree; else preserve/fail closed, then rebuild. |
+| Knowledge Health unsourced-Claim citation is interrupted | Adopt only a private before/staged-after/pending receipt that matches the active vault, exact `update_page` Operation, page identity, and before/after hashes; otherwise preserve bytes and fail closed. |
 | Source copied, source record missing | Create repair proposal or source record if checksum/path proves source. |
 | Parse artifact exists, source page missing | Resume source page creation. |
 | Proposal ready, app crashed before display | Reconcile in Main; renderer review stays unavailable pending a bounded projection. |
