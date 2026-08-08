@@ -2,12 +2,46 @@ import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 import type { ConversationEvent } from "@pige/schemas";
 import {
+  compactConversationContext,
+  CONVERSATION_CONTEXT_COMPACTION_CONSUMER,
+  CONVERSATION_CONTEXT_COMPACTION_OWNER,
   MAX_CONVERSATION_CONTEXT_MESSAGES,
   MAX_CONVERSATION_CONTEXT_TEXT_BYTES,
   selectCompactedConversationContext
 } from "../../apps/desktop/src/main/services/conversation-context-compaction-service";
 
 describe("conversation context compaction", () => {
+  it("returns a Main-owned snapshot with full-history identity and output references only", () => {
+    const events = makeEvents();
+    events[1] = {
+      ...events[1],
+      outputRefs: [{ refId: "output_20260731_compaction01", checksum: `sha256:${"f".repeat(64)}` }]
+    } as ConversationEvent;
+    const result = compactConversationContext(events);
+
+    expect(result.snapshot).toMatchObject({
+      owner: CONVERSATION_CONTEXT_COMPACTION_OWNER,
+      consumer: CONVERSATION_CONTEXT_COMPACTION_CONSUMER,
+      compacted: true,
+      eventCount: events.length,
+      messageCount: 18,
+      omittedMessageCount: 3,
+      firstEventId: events[0]!.id,
+      lastEventId: events.at(-1)!.id,
+      contextHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+      referenceCounts: { Output: 2 }
+    });
+    expect(JSON.stringify(result.snapshot)).not.toContain("private early body");
+    expect(result.messages).toHaveLength(MAX_CONVERSATION_CONTEXT_MESSAGES);
+    expect(result.messages[0]!.text).toContain("output_20260731_compaction01");
+  });
+
+  it("fails closed when a caller supplies a token budget that cannot carry the reference summary", () => {
+    expect(() => compactConversationContext(makeEvents(), { maxTokens: 8 })).toThrowError(
+      expect.objectContaining({ code: "agent_runtime.turn_history_invalid" })
+    );
+  });
+
   it("keeps recent bodies and all omitted durable refs without mutating the transcript", () => {
     const events = makeEvents();
     const before = JSON.stringify(events);

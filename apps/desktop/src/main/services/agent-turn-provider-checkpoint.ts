@@ -112,8 +112,15 @@ export function createAgentTurnProviderCallBinding(input: {
   readonly modelId: string;
 }): AgentTurnProviderCallBinding {
   return {
-    ...input,
-    ...(input.contextPackHash ? { contextPackHash: input.contextPackHash } : {})
+    jobId: input.jobId,
+    conversationEventId: input.conversationEventId,
+    inputHash: input.inputHash,
+    conversationContextHash: input.conversationContextHash,
+    toolCatalogHash: input.toolCatalogHash,
+    ...(input.contextPackHash ? { contextPackHash: input.contextPackHash } : {}),
+    providerProfileId: input.providerProfileId,
+    modelProfileId: input.modelProfileId,
+    modelId: input.modelId
   };
 }
 

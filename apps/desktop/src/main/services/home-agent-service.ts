@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -67,10 +67,13 @@ import type {
   AgentSourceToolSession
 } from "./agent-ingest-service";
 import { HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME, type HomeAuthoredTextCaptureService } from "./home-authored-text-capture-service";
+import type { ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
 import {
-  captureReferenceTurnBinding,
-  type ConversationCaptureReferenceInput
-} from "./agent-conversation-capture-reference";
+  compactConversationContext,
+  createConversationContextHash,
+  readSafeConversationContextCompactionStatus,
+  type ConversationContextCompactionSnapshot
+} from "./conversation-context-compaction-service";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
@@ -500,6 +503,7 @@ export class HomeAgentService {
       : latestUserMessage
         ? this.#jobs.findAgentTurnJobByConversationEvent(latestUserMessage.id)
         : undefined;
+    const contextCompaction = job ? readSafeConversationContextCompactionStatus(this.#conversations, vaultPath, job) : undefined;
     return {
       kind: "initial",
       ...timeline,
@@ -510,6 +514,7 @@ export class HomeAgentService {
           userEventId: job.conversationEventId,
           state: job.state,
           updatedAt: job.updatedAt,
+          ...(contextCompaction ? { contextCompaction } : {}),
           ...(hasCurrentNoteAppendOperation(job) ? { currentNoteAppendApplied: true as const } : {}),
           ...(job.state === "awaiting_review" && job.proposalIds?.length === 1
             ? { proposalId: job.proposalIds[0] }
@@ -855,13 +860,15 @@ export class HomeAgentService {
         preservedTurn.event.id,
         preservedTurn.inputHash
       );
-      const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, activeTurn);
+      const conversationContextSnapshot = compactConversationContext(this.#conversations.readConversationEventsBeforeUserTurn(vaultPath, activeTurn));
+      const conversationContext = conversationContextSnapshot.messages;
       const history = toPiAgentHistory(conversationContext);
       const conversationContextHash = createConversationContextHash(
         this.#conversations,
         vaultPath,
         activeTurn,
-        conversationContext
+        conversationContext,
+        conversationContextSnapshot.snapshot
       );
       const assertConversationCurrent = (): void => {
         assertConversationContextCurrent(this.#conversations, vaultPath, activeTurn, conversationContextHash);
@@ -902,6 +909,7 @@ export class HomeAgentService {
             runtimeBinding.provider,
             conversationContextHash,
             history,
+            conversationContextSnapshot.snapshot,
             jobExecution.signal,
             assertConversationCurrent,
             publishDraft,
@@ -1182,13 +1190,15 @@ export class HomeAgentService {
         if (!currentBinding) throw createUnavailableRuntimeError(this.#models.summary().defaultBinding);
         const preservedText = preservedEvent.text;
         session.modelInvocationStarted = false;
-        const conversationContext = this.#conversations.readContextBeforeUserTurn(vaultPath, currentPreserved);
+        const conversationContextSnapshot = compactConversationContext(this.#conversations.readConversationEventsBeforeUserTurn(vaultPath, currentPreserved));
+        const conversationContext = conversationContextSnapshot.messages;
         const history = toPiAgentHistory(conversationContext);
         const conversationContextHash = createConversationContextHash(
           this.#conversations,
           vaultPath,
           currentPreserved,
-          conversationContext
+          conversationContext,
+          conversationContextSnapshot.snapshot
         );
         const assertConversationCurrent = (): void => assertConversationContextCurrent(
           this.#conversations,
@@ -1218,6 +1228,7 @@ export class HomeAgentService {
             currentBinding.provider,
             conversationContextHash,
             history,
+            conversationContextSnapshot.snapshot,
             jobExecution.signal,
             assertConversationCurrent,
             undefined,
@@ -1313,7 +1324,8 @@ export class HomeAgentService {
     defaultModel: ModelProfileSummary,
     defaultProvider: ProviderProfileSummary,
     conversationContextHash: string,
-    history: readonly PiAgentHistoryMessage[] = [],
+    history: readonly PiAgentHistoryMessage[],
+    contextSnapshot: ConversationContextCompactionSnapshot,
     signal?: AbortSignal,
     assertConversationCurrent?: () => void,
     publishDraft?: (text: string) => void,
@@ -1657,7 +1669,7 @@ export class HomeAgentService {
       ? this.#memory!.recall(vaultPath, 8).filter((memory) => allowedMemoryScopes.has(memory.kind)).slice(0, 8)
       : [];
     contextPackBinding = bindHomeAgentContextPack({ activeVaultId: activeVault.vaultId, job: session.current, conversationId: request.sourceConversationId, userEventId: request.sourceEventId,
-      policyContextId: policy.policyContextId, policyHash: policy.policyHash, history, memories: recalledMemories });
+      policyContextId: policy.policyContextId, policyHash: policy.policyHash, history, contextSnapshot, memories: recalledMemories });
     session.current = this.#jobs.patchAgentTurnJob(session.current, contextPackJobFacts(contextPackBinding));
     const capturedAuthoredTextSourceIds = new Set<string>(); const authoredTextCaptureTool = this.#authoredTextCapture?.toolForTurn({
       enabled: !currentNoteScope && request.inputKind === "typed_text" && request.authoredTaskIntent === "explicit_user_task",
@@ -3321,10 +3333,6 @@ function toHomeModelUsage(provider: ProviderProfileSummary): Exclude<HomeAgentMo
     : "cloud";
 }
 
-function hashValue(value: string): string {
-  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
 function collectPreparedAgentTurnSourceIds(job: JobRecord): readonly string[] {
   const sourceIds = (job.inputRefs ?? [])
     .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source" && ref.id)
@@ -3349,24 +3357,6 @@ function toPiAgentHistory(
   return messages.map(({ role, text, createdAt }) => ({ role, text, createdAt }));
 }
 
-function createConversationContextHash(
-  conversations: AgentTurnConversationStore,
-  vaultPath: string,
-  turn: PreservedAgentTurn,
-  history: readonly AgentTurnConversationContextMessage[]
-): string {
-  const binding = captureReferenceTurnBinding(conversations, vaultPath, turn);
-  return hashValue(JSON.stringify({
-    conversationId: turn.event.conversationId,
-    eventId: turn.event.id,
-    inputHash: turn.inputHash,
-    parentEventId: turn.event.parentEventId ?? null,
-    history,
-    tailEventId: binding.tailEventId,
-    captureReferences: binding.captureReferences
-  }));
-}
-
 function assertConversationContextCurrent(
   conversations: AgentTurnConversationStore,
   vaultPath: string,
@@ -3379,9 +3369,16 @@ function assertConversationContextCurrent(
     turn.event.id,
     turn.inputHash
   );
-  const currentContext = conversations.readContextBeforeUserTurn(vaultPath, currentTurn);
+  const currentContextSnapshot = compactConversationContext(conversations.readConversationEventsBeforeUserTurn(vaultPath, currentTurn));
+  const currentContext = currentContextSnapshot.messages;
   if (
-    createConversationContextHash(conversations, vaultPath, currentTurn, currentContext) !== expectedHash
+    createConversationContextHash(
+      conversations,
+      vaultPath,
+      currentTurn,
+      currentContext,
+      currentContextSnapshot.snapshot
+    ) !== expectedHash
   ) {
     throw new PigeDomainError("agent_runtime.turn_changed", "The durable conversation changed during the Agent turn.");
   }

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T14:29:37.552Z",
+  "reviewedAt": "2026-08-08T15:20:00.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review the Main-owned local ZIP Archive Source capture boundary: one preserved source/page, checked bounded private yauzl central-directory inventory, source reproof, retry/restart adoption, and no extraction, recursive import, execution, network, model, or renderer path authority.",
+    "scope": "Review Main-owned bounded conversation-context compaction and exact Pi provider checkpoint recovery: full JSONL remains durable, immutable context/reference hashes fence calls and restart adoption, completed publication clears provider result/continuation checkpoints, and renderer receives only safe compaction status.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "8e7158860e7dd7e56cc1fd4800119ee2ee7bcd7d552607af6b20da6aee4767f9"
+    "reviewedSha256": "23a8bf94f128c16511130c9936b71fafb860acfe0de23115276fd1d2f59e2317"
   },
   "reviewers": [
     {
-      "reviewerId": "zip-archive-capture-prefreeze-review",
-      "task": "Review implemented local ZIP Archive Source capture and bounded inventory evidence",
+      "reviewerId": "pi-context-compaction-review",
+      "task": "Review Main-owned conversation-context compaction and provider checkpoint publication recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,56 +70,56 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Main-owned source selection and reproof, bounded yauzl metadata handling, rejection and restart adoption, and body/path-free renderer projection separately from runtime implementation authorship."
+      "independence": "Project review checks immutable context/reference currentness, JSONL preservation, provider checkpoint clearing after durable publication, restart adoption, and safe renderer projection separately from runtime implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "pi-context-compaction-review",
       "blockerCount": 0,
-      "summary": "One user-selected ZIP remains one preserved Archive Source and Source Page; member data and paths cannot become navigation or filesystem authority."
+      "summary": "One bounded model context remains Main-owned and cannot become a history mutation, storage locator, or renderer body disclosure."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "pi-context-compaction-review",
       "blockerCount": 0,
-      "summary": "Source, parser, security, dependency, and Job owners match the implemented exact limits, source reproof, private metadata Artifact, and no extraction or recursive import."
+      "summary": "Context, Pi, Job, and Privacy owners agree on immutable snapshot/hash fencing, reference preservation, private checkpoint lifetime, and no Provider replay."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "pi-context-compaction-review",
       "blockerCount": 0,
-      "summary": "Trace records direct Capture Job, rejection, safe Source Page projection, and restart-adoption evidence while PIGE-CAP-001 remains partial."
+      "summary": "Trace records direct snapshot, restart, and safe-status evidence while the affected requirements remain partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "pi-context-compaction-review",
       "blockerCount": 0,
-      "summary": "The implemented private inventory owner reuses the existing capture/source/Job lifecycle and does not create child source/page, operation, IPC, or renderer mutation owners."
+      "summary": "The extracted context owner reuses conversation, Job, and Pi boundaries without adding a renderer mutation or a second conversation store."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "zip-archive-capture-prefreeze-review",
+      "reviewerId": "pi-context-compaction-review",
       "blockerCount": 0,
-      "summary": "The bind reuses existing product, parser, source, security, dependency, quality, trace, and review owners without a new dependency or design document."
+      "summary": "The bind reuses existing context, Job, Pi, Privacy, trace, and inventory owners without a new dependency or design document."
     }
   ],
   "verification": [
     {
       "command": "npm run verify:docs",
       "status": "passed",
-      "evidence": "The owner documents and linked local references remain structurally valid after the Archive Source contract freeze."
+      "evidence": "The bounded context, recovery, privacy, trace, and inventory owner references remain structurally valid."
     },
     {
       "command": "npm run verify:decisions",
       "status": "passed",
-      "evidence": "The accepted local ZIP inventory decision has complete owner references and does not create a vague phase or completion claim."
+      "evidence": "The bind does not introduce a decision or inflate completion status beyond the tested partial workflow."
     },
     {
       "command": "npm run verify:independent-documentation-review",
@@ -128,13 +128,13 @@
     }
   ],
   "coordination": {
-    "taskId": "zip-archive-capture-prefreeze-20260808",
-    "taskTitle": "Local ZIP Archive Source capture",
+    "taskId": "pi-context-compaction-20260808",
+    "taskTitle": "Bounded Pi conversation-context compaction",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Main re-proves one selected ZIP before inventory; only a bounded private metadata Artifact can adopt after exact source revision/checksum and limit-profile checks, while renderer projections remain aggregate and pathless.",
-    "acknowledgement": "PIGE-CAP-001 remains partial; direct implementation evidence now covers bounded ZIP inventory, rejection, safe projection, and restart adoption without a dependency or public-contract change."
+    "compatibility": "Main derives each bounded model context from the current durable JSONL and binds its reference/hash snapshot to the exact Provider call; restart adopts only a matching completed continuation and never rewrites history or replays Pi.",
+    "acknowledgement": "PIGE-JOB-002, PIGE-JOB-006, and PIGE-PI-001 remain partial; direct implementation evidence covers bounded context, safe projection, checkpoint clearing, and restart adoption without a new public channel."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

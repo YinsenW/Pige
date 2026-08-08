@@ -417,12 +417,22 @@ Long conversations and long jobs must compact context by reference.
 
 Rules:
 
-- Conversation compaction keeps source/page/job/proposal/operation refs, not duplicated bodies.
+- Per-turn conversation compaction is Main-owned. It creates one immutable `main.agent_context`
+  snapshot for the Pi Agent from the complete durable JSONL before invocation: at most 16 context
+  messages, 64 KiB UTF-8, and 16,384 approximate tokens. The snapshot binds the full event range,
+  deterministic context hash, and bounded reference counts into the Provider-call currentness proof.
+- Conversation compaction keeps source/page/job/proposal/operation/capture/citation/output/Dataset
+  and policy refs, not duplicated omitted bodies. If that reference summary cannot fit the bounded
+  context, the turn fails closed rather than silently dropping authority.
 - Compaction must not drop unresolved proposals, source IDs, page IDs, citation refs,
   policy hash, or a current high-risk decision.
 - Summaries should say what was omitted when omission affects answer confidence.
+- Compaction changes only the model context. It never rewrites or deletes the JSONL history; a
+  later restart re-derives the exact snapshot and rejects history or omitted-body drift.
 - Job checkpoints should keep enough context refs to resume or explain work after restart.
 - Raw prompt and provider response storage remains off by default.
+- Renderer receives only `not_needed | compacted` and an omitted-message count, never the
+  snapshot, context hash, event identities, history bodies, or storage location.
 
 ## 13. Settings And Policy Interaction
 
@@ -514,9 +524,10 @@ Current unified Home foundation:
   preferences as bounded lower-authority user context, never system policy. Disabled atoms
   leave the next assembly; current instruction, `PIGE.md`, settings and safety win. No full
   registry or private provenance enters the prompt.
-- Current follow-up uses at most 16 integrity-checked prior user/assistant messages and
-  64 KiB UTF-8. B7.09 compacts only retained successful Job execution detail; older
-  conversation events remain durable and any future event indexing is a separate owner.
+- Current follow-up derives a Main-owned model context from full durable JSONL with at most 16
+  integrity-checked prior user/assistant messages, 64 KiB UTF-8, and 16,384 approximate tokens.
+  Older message bodies may compact into an immutable reference/hash summary, while every
+  conversation event remains durable; B7.09 Job-detail compaction is a separate retention owner.
 - Diagnostic prompt-snapshot artifacts exclude Provider credentials and raw bodies; this
   export hygiene does not alter the Provider payload.
 - Context pack serialization works for future remote Agent backend and Mobile Lite clients without desktop-only objects.

@@ -20,6 +20,7 @@ import {
   AgentConversationSetTitleRequestSchema,
   AgentConversationSetTitleResultSchema,
   AgentConversationTitleSchema,
+  AgentConversationContextCompactionStatusSchema,
   AgentConversationTurnSummarySchema,
   AgentTurnAnswerSchema,
   AgentSubmitTurnResultSchema,
@@ -1056,6 +1057,27 @@ describe("schemas", () => {
       expectedRevision: 3,
       decision: "keep_current"
     })).toThrow();
+  });
+
+  it("exposes only a safe conversation compaction status through the turn summary", () => {
+    expect(AgentConversationContextCompactionStatusSchema.parse({
+      status: "compacted",
+      omittedMessageCount: 12
+    })).toEqual({ status: "compacted", omittedMessageCount: 12 });
+    expect(() => AgentConversationContextCompactionStatusSchema.parse({
+      status: "compacted",
+      omittedMessageCount: 0
+    })).toThrow();
+    expect(() => AgentConversationContextCompactionStatusSchema.parse({
+      status: "not_needed",
+      omittedMessageCount: 1
+    })).toThrow();
+    expect(AgentConversationTurnSummarySchema.parse({
+      jobId: "job_20260808_contextstatus01",
+      userEventId: "evt_20260808_contextstatus01",
+      state: "completed",
+      contextCompaction: { status: "compacted", omittedMessageCount: 12 }
+    })).toMatchObject({ contextCompaction: { status: "compacted", omittedMessageCount: 12 } });
   });
 
   it("bounds renderer-safe Agent memory context disclosure without accepting record details", () => {

@@ -8,6 +8,10 @@ import type { AgentTurnAnswer } from "@pige/contracts";
 import type { ConversationEvent } from "@pige/schemas";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 import { selectConversationTimelineMessages } from "../../apps/desktop/src/main/services/agent-conversation-pagination";
+import {
+  compactConversationContext,
+  conversationContextCompactionStatus
+} from "../../apps/desktop/src/main/services/conversation-context-compaction-service";
 import { readDurableAgentTurnAnswer } from "../../apps/desktop/src/main/services/durable-agent-turn-answer";
 
 const tempRoots: string[] = [];
@@ -826,7 +830,9 @@ describe("Agent turn conversation store", () => {
     const reader = new AgentTurnConversationStore();
     const transcriptPath = conversationPath(vaultPath, current.locator);
     const transcriptBefore = fs.readFileSync(transcriptPath, "utf8");
+    const compacted = compactConversationContext(reader.readConversationEventsBeforeUserTurn(vaultPath, current));
     const context = reader.readContextBeforeUserTurn(vaultPath, current);
+    const status = conversationContextCompactionStatus(compacted);
     const restartedContext = new AgentTurnConversationStore().readContextBeforeUserTurn(vaultPath, current);
     const exact = reader.readConversationTimeline(vaultPath, current.event.conversationId, 5);
     const latest = reader.readLatestConversationTimeline(vaultPath, 5);
@@ -835,6 +841,15 @@ describe("Agent turn conversation store", () => {
     expect(context.reduce((bytes, message) => bytes + Buffer.byteLength(message.text), 0)).toBeLessThanOrEqual(64 * 1024);
     expect(context.every((message) => ["user", "assistant"].includes(message.role))).toBe(true);
     expect(context[0]?.text).toContain("Earlier conversation context compacted by Pige");
+    expect(compacted.messages).toEqual(context);
+    expect(compacted.snapshot).toMatchObject({
+      owner: "main.agent_context",
+      consumer: "pi_agent",
+      compacted: true,
+      omittedMessageCount: expect.any(Number),
+      contextHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u)
+    });
+    expect(status).toEqual({ status: "compacted", omittedMessageCount: compacted.snapshot.omittedMessageCount });
     expect(restartedContext).toEqual(context);
     expect(fs.readFileSync(transcriptPath, "utf8")).toBe(transcriptBefore);
     expect(exact).toEqual(latest);

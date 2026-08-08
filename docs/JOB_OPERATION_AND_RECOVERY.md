@@ -455,10 +455,12 @@ Examples:
 - If a model call completed but the write did not apply, retry may call the model again only when no durable proposal or operation exists. A committed compatible Operation is
   reconciled before model-readiness checks; recovery must not require credentials or a
   replacement model turn merely to adopt an already durable effect.
-- A Pi provider call first records its exact Job, conversation-event, input, context, tool-catalog,
-  Provider, and model binding. A started checkpoint never replays after restart; only a matching
-  completed result and continuation may be adopted once before assistant publication. Duplicate,
-  tampered, or drifted bindings fail closed.
+- A Pi provider call first records its exact Job, conversation-event, input, immutable context
+  snapshot/hash, tool-catalog, Provider, and model binding. A started checkpoint never replays
+  after restart; only a matching completed result and continuation may be adopted once before
+  assistant publication. When that assistant or bounded review transition is durably published,
+  Main clears the provider result/continuation checkpoint and retains only typed output refs.
+  Duplicate, tampered, or drifted bindings fail closed.
 - If a wiki note already exists for the deterministic source-derived page ID, retry treats the note as existing rather than creating a duplicate.
 - Before an eligible Agent ingest publishes its first knowledge effect, Main re-proves the
   exact active Vault, immutable running Job identity, bound Source/capture identity, and
@@ -741,6 +743,9 @@ Successful job details can grow quickly. Pige should retain trust while controll
 
 Default v0.1 policy:
 
+- Per-turn model-context compaction is separate from this 90-day Job-detail lifecycle: Main
+  derives a bounded immutable context snapshot from full JSONL and preserves its refs/hash, but
+  never rewrites or deletes conversation history.
 - Unresolved, failed, waiting-dependency, and awaiting-review jobs are retained until resolved or explicitly cleared.
 - Successful jobs remain detailed for 90 days.
 - After 90 days, successful job records may compact to references, summaries, timings, warnings, and operation IDs.

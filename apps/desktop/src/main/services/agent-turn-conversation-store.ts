@@ -29,7 +29,9 @@ import {
 import { conversationLanguageContinuity } from "./durable-language";
 import { assertMatchingConversationCaptureReference, createConversationCaptureReference,
   type ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
-import { selectCompactedConversationContext } from "./conversation-context-compaction-service";
+import {
+  compactConversationContext
+} from "./conversation-context-compaction-service";
 const MAX_TURN_TEXT_BYTES = 64 * 1024, MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_TIMELINE_MESSAGES = 50, MAX_TIMELINE_MESSAGES = 100;
 const MAX_TIMELINE_TEXT_BYTES = 256 * 1024;
@@ -265,18 +267,17 @@ export class AgentTurnConversationStore {
 
   readContextBeforeUserTurn(
     vaultPath: string,
-    userTurn: PreservedAgentTurn
-  ): readonly AgentTurnConversationContextMessage[];
-  readContextBeforeUserTurn(
-    vaultPath: string,
-    locator: string,
-    userEventId: string
-  ): readonly AgentTurnConversationContextMessage[];
-  readContextBeforeUserTurn(
-    vaultPath: string,
     turnOrLocator: PreservedAgentTurn | string,
     eventId?: string
   ): readonly AgentTurnConversationContextMessage[] {
+    return compactConversationContext(this.readConversationEventsBeforeUserTurn(vaultPath, turnOrLocator, eventId)).messages;
+  }
+
+  readConversationEventsBeforeUserTurn(
+    vaultPath: string,
+    turnOrLocator: PreservedAgentTurn | string,
+    eventId?: string
+  ): readonly ConversationEvent[] {
     const locator = typeof turnOrLocator === "string" ? turnOrLocator : turnOrLocator.locator;
     const userEventId = typeof turnOrLocator === "string" ? eventId : turnOrLocator.event.id;
     if (!userEventId || !EVENT_ID_PATTERN.test(userEventId)) {
@@ -288,8 +289,7 @@ export class AgentTurnConversationStore {
     if (matchingIndexes.length !== 1 || matchingIndex === undefined || events[matchingIndex]?.type !== "user_message") {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent context boundary was not found.");
     }
-    const contextEvents = events.slice(0, matchingIndex);
-    return selectCompactedConversationContext(contextEvents);
+    return events.slice(0, matchingIndex);
   }
 
   readConversationTimeline(

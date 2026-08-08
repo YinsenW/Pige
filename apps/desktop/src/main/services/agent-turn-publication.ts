@@ -42,6 +42,7 @@ import {
   readReaderSelectionTransformBinding
 } from "./reader-selection-job-binding";
 import { readReaderSelectionCreateNoteBinding } from "./reader-selection-create-note-service";
+import { AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID } from "./agent-turn-provider-checkpoint";
 
 export interface HomeAgentJobSession {
   current: JobRecord;
@@ -376,6 +377,7 @@ export function settleJobAfterAssistant(input: {
         : "The Reader selection mutation requires bounded review before any note bytes are changed.",
       facts: {
         stage: "planning",
+        clearCheckpointIds: [AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID],
         outputRefs: [
           ...mergeAgentTurnOutputRefs(
             input.session.current,
@@ -425,6 +427,7 @@ export function completeJob(input: {
     message: completionMessage(input.result),
     facts: {
       stage: "planning",
+      clearCheckpointIds: [AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID],
       outputRefs: mergeAgentTurnOutputRefs(
         input.session.current,
         input.assistantEventId,
@@ -604,6 +607,7 @@ export function recoverDurableAssistantPublication(input: {
     checkpointId: "agent_turn_assistant_event_persisted",
     message: "Recovered the durable assistant result without another model call.",
     facts: {
+      clearCheckpointIds: [AGENT_TURN_PROVIDER_CALL_CHECKPOINT_ID],
       outputRefs: mergeAgentTurnOutputRefs(
         input.session.current,
         input.assistant.id,

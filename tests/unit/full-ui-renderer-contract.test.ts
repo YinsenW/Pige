@@ -299,6 +299,12 @@ describe("full production UI renderer contract", () => {
     }
   });
 
+  it("renders a safe preservation status when Main compacted model context", () => {
+    expect(appSource).toContain('data-conversation-context-status="compacted"');
+    expect(appSource).toContain('latestTurn?.contextCompaction?.status === "compacted"');
+    expect(enMessages["home.conversationContextCompacted"]).toContain("full conversation is preserved");
+  });
+
   it("keeps development entries local and Settings independent of native window sizing", () => {
     const developmentHandler = appSource.match(/const showDevelopmentCapability = \([\s\S]*?\n  };/)?.[0] ?? "";
     expect(developmentHandler).toContain("setDevelopmentNotice");

@@ -317,6 +317,7 @@
   "home.agentState.failed": "Agent はリクエストを完了できませんでした。",
   "home.agentState.running": "Pi Agent が処理しています。",
   "home.agentState.waiting": "Agent は設定または許可を待っています。",
+  "home.conversationContextCompacted": "このターンでは以前のコンテキストを短縮しました。完全な会話は保持されています。",
   "home.assistantMessage": "Pige",
   "home.memoryContextIncluded": "参照した保存済みメモリ:",
   "home.copyMessage": "回答をコピー",

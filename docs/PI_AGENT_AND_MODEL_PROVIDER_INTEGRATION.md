@@ -409,10 +409,12 @@ Rules:
 - Pi session files are not included in vault backup by default.
 - If Pi needs transient runtime state, store it in machine-local app data or job-scoped temp state, not as the knowledge source of truth.
 
-Home follow-up or paired composer `file_picker` creates fresh isolated Pi from at most 16
-checked prior messages/64 KiB; history cannot become the result. The pair changes durable
-identity, never Pi semantics. Pige events/Jobs, not Pi sessions, are authoritative;
-compaction/indexing and steer queues remain open.
+Home follow-up or paired composer `file_picker` creates fresh isolated Pi from a Main-owned
+immutable context snapshot of at most 16 checked prior messages, 64 KiB, and 16,384 approximate
+tokens. The snapshot binds full-history event range, reference counts, and context hash; it may
+replace older bodies with their bounded durable refs but never rewrites JSONL. The pair changes
+durable identity, never Pi semantics. Pige events/Jobs, not Pi sessions, are authoritative; drift
+in the complete history or snapshot fails before another Provider call.
 
 The Note Agent file picker may preserve a current-note scope beside bounded file attachments
 in that same isolated Pi turn. Host registers the exact current-note reader and source tools,
@@ -501,9 +503,11 @@ Rules:
 - Agent jobs refer to provider/model profiles by ID.
 - Model provider calls emit job events and diagnostics metadata without storing raw prompts/responses by default.
 - Before assistant publication, a provider call is durably bound to its exact Job, conversation
-  event, input, context, tool catalog, Provider, and model. Restart adopts only a matching
-  completed result/continuation once; a started, duplicate, tampered, or drifted checkpoint fails
-  closed without Pi/runtime replay. Existing Job projection remains the renderer authority.
+  event, input, immutable context snapshot/hash, tool catalog, Provider, and model. Restart adopts
+  only a matching completed result/continuation once; a started, duplicate, tampered, or drifted
+  checkpoint fails closed without Pi/runtime replay. Durable assistant/review publication then
+  clears the provider result/continuation checkpoint; completed Job and renderer projections retain
+  only safe typed output refs. Existing Job projection remains the renderer authority.
 
 ## 15. Tests
 

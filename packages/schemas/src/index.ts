@@ -11761,11 +11761,23 @@ export const AgentConversationMessageSchema = z.object({
     pageId: PageIdSchema.optional()
   }).strict()).max(8).readonly().optional()
 }).strict();
+export const AgentConversationContextCompactionStatusSchema = z.object({
+  status: z.enum(["not_needed", "compacted"]),
+  omittedMessageCount: z.number().int().nonnegative()
+}).strict().superRefine((value, context) => {
+  if (value.status === "compacted" && value.omittedMessageCount < 1) {
+    context.addIssue({ code: "custom", path: ["omittedMessageCount"], message: "A compacted context must omit at least one message." });
+  }
+  if (value.status === "not_needed" && value.omittedMessageCount !== 0) {
+    context.addIssue({ code: "custom", path: ["omittedMessageCount"], message: "An un-compacted context cannot omit messages." });
+  }
+});
 export const AgentConversationTurnSummarySchema = z.object({
   jobId: JobIdSchema,
   userEventId: ConversationEventIdSchema,
   state: JobStateSchema,
   updatedAt: z.string().datetime({ offset: true }).optional(),
+  contextCompaction: AgentConversationContextCompactionStatusSchema.optional(),
   proposalId: ProposalIdSchema.optional(),
   currentNoteAppendApplied: z.literal(true).optional(),
   error: PigeErrorSummarySchema.optional()
@@ -13711,6 +13723,7 @@ export type AgentSaveAnswerAsNoteRequest = z.input<typeof AgentSaveAnswerAsNoteR
 export type AgentSaveAnswerAsNoteResult = z.output<typeof AgentSaveAnswerAsNoteResultSchema>;
 export type AgentConversationMetadataManifest = z.output<typeof AgentConversationMetadataManifestSchema>;
 export type AgentConversationMessage = z.output<typeof AgentConversationMessageSchema>;
+export type AgentConversationContextCompactionStatus = z.output<typeof AgentConversationContextCompactionStatusSchema>;
 export type AgentConversationTurnSummary = z.output<typeof AgentConversationTurnSummarySchema>;
 export type AgentConversationInitialRequest = z.input<typeof AgentConversationInitialRequestSchema>;
 export type AgentConversationEarlierRequest = z.input<typeof AgentConversationEarlierRequestSchema>;
