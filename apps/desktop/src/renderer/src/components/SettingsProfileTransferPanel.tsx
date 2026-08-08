@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   SettingsProfileExportRequest,
   SettingsProfileExportResult,
@@ -27,29 +27,49 @@ export function SettingsProfileTransferPanel(props: {
   const [preview, setPreview] = useState<Extract<SettingsProfileImportPreviewResult, { status: "ready" }> | null>(null);
   const [notice, setNotice] = useState<"exported" | "committed" | "current" | "stale" | "failed" | null>(null);
   const busyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const operationSequenceRef = useRef(0);
   const importButtonRef = useRef<HTMLButtonElement>(null);
 
-  const run = async (action: () => Promise<void>): Promise<void> => {
+  useEffect(() => () => {
+    mountedRef.current = false;
+    operationSequenceRef.current += 1;
+  }, []);
+
+  const run = async (action: (sequence: number) => Promise<void>): Promise<void> => {
     if (busyRef.current) return;
+    const sequence = ++operationSequenceRef.current;
     busyRef.current = true;
     setBusy(true);
     setNotice(null);
-    try { await action(); } catch { setNotice("failed"); }
+    try {
+      await action(sequence);
+    } catch {
+      if (mountedRef.current && sequence === operationSequenceRef.current) setNotice("failed");
+    }
     finally {
-      busyRef.current = false;
-      setBusy(false);
+      if (mountedRef.current && sequence === operationSequenceRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
-  const exportProfile = (): void => { void run(async () => {
-    const result = await props.api.exportProfile({ apiVersion: 1, requestId: requestId() });
-    if (result.status === "exported") setNotice("exported");
+  const exportProfile = (): void => { void run(async (sequence) => {
+    const request = { apiVersion: 1 as const, requestId: requestId() };
+    const result = await props.api.exportProfile(request);
+    if (!mountedRef.current || sequence !== operationSequenceRef.current) return;
+    if (result.requestId !== request.requestId) setNotice("failed");
+    else if (result.status === "exported") setNotice("exported");
     else if (result.status === "failed") setNotice("failed");
   }); };
 
-  const previewImport = (): void => { void run(async () => {
-    const result = await props.api.previewImport({ apiVersion: 1, requestId: requestId() });
-    if (result.status === "ready") setPreview(result);
+  const previewImport = (): void => { void run(async (sequence) => {
+    const request = { apiVersion: 1 as const, requestId: requestId() };
+    const result = await props.api.previewImport(request);
+    if (!mountedRef.current || sequence !== operationSequenceRef.current) return;
+    if (result.requestId !== request.requestId) setNotice("failed");
+    else if (result.status === "ready") setPreview(result);
     else if (result.status === "current") setNotice("current");
     else if (result.status === "failed") setNotice("failed");
   }); };
@@ -63,13 +83,18 @@ export function SettingsProfileTransferPanel(props: {
     window.requestAnimationFrame(() => importButtonRef.current?.focus({ preventScroll: true }));
   };
 
-  const applyImport = (): void => { if (!preview) return; void run(async () => {
-    const result = await props.api.applyImport({
-      apiVersion: 1,
+  const applyImport = (): void => { if (!preview) return; void run(async (sequence) => {
+    const expectedPreview = preview;
+    const request = {
+      apiVersion: 1 as const,
       requestId: requestId(),
-      previewId: preview.previewId
-    });
-    if (result.status === "committed") {
+      previewId: expectedPreview.previewId
+    };
+    const result = await props.api.applyImport(request);
+    if (!mountedRef.current || sequence !== operationSequenceRef.current) return;
+    if (result.requestId !== request.requestId || result.previewId !== expectedPreview.previewId) {
+      setNotice("failed");
+    } else if (result.status === "committed") {
       setPreview(null);
       setNotice("committed");
       restoreImportFocus();
