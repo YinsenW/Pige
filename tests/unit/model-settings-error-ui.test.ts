@@ -4,6 +4,7 @@ import type { Root } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
+  ModelProfileSummary,
   ModelProviderSettingsSummary,
   ProviderConnectResult,
   ProviderProfileSummary
@@ -422,6 +423,45 @@ describe("Models error ownership", () => {
     }]);
     expect(mount.container.textContent).not.toContain("raw manual model deletion failure");
     expect(mount.container.textContent).toContain(enMessages["models.confirmRemoveManualModel"]);
+    expect(dom.window.document.activeElement).toBe(buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+
+    await unmount(dom, mount.root);
+  });
+
+  it("restores the manual-model removal trigger after cancellation and success", async () => {
+    const dom = createDom();
+    const model: ModelProfileSummary = {
+      id: "model_manual",
+      providerProfileId: "provider_fixture",
+      modelId: "manual-model",
+      source: "manual",
+      enabled: true,
+      isDefault: false,
+      createdAt: "2026-07-14T08:00:00.000Z",
+      updatedAt: "2026-07-14T08:00:00.000Z"
+    };
+    const mount = await mountModelRow(dom, model, async () => true);
+
+    const trigger = buttonNamed(mount.container, enMessages["models.removeManualModel"]);
+    trigger.focus();
+    await click(dom, trigger);
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(
+      mount.container,
+      enMessages["models.keepManualModel"]
+    ));
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.keepManualModel"]));
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(
+      mount.container,
+      enMessages["models.removeManualModel"]
+    ));
+
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    await click(dom, buttonNamed(mount.container, enMessages["models.removeManualModel"]));
+    await waitFor(dom, () => dom.window.document.activeElement === buttonNamed(
+      mount.container,
+      enMessages["models.removeManualModel"]
+    ));
 
     await unmount(dom, mount.root);
   });
@@ -750,6 +790,31 @@ async function mountPanel(
       onRefreshModels: callbacks.onRefreshModels ?? (async () => undefined),
       onRefreshAgentRuntimeStatus: callbacks.onRefreshAgentRuntimeStatus ?? (async () => undefined),
       onBusy: () => undefined,
+      t
+    }));
+    await settle(dom);
+  });
+  return { container, root };
+}
+
+async function mountModelRow(
+  dom: JSDOM,
+  model: ModelProfileSummary,
+  onDeleteManual: (modelProfileId: string) => Promise<boolean>
+): Promise<{ readonly container: HTMLElement; readonly root: Root }> {
+  const [{ createRoot }, { ModelInventoryRow }] = await Promise.all([
+    import("react-dom/client"),
+    import("../../apps/desktop/src/renderer/src/components/ModelInventoryRow")
+  ]);
+  const container = requireElement(dom.window.document.getElementById("root"));
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(createElement(ModelInventoryRow, {
+      model,
+      busy: false,
+      onDeleteManual,
+      onSetEnabled: async () => undefined,
+      onSetDisplayName: async () => undefined,
       t
     }));
     await settle(dom);

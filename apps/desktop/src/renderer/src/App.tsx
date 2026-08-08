@@ -9813,6 +9813,18 @@ function ProviderModelGroup(props: {
 }): React.JSX.Element {
   const [modelId, setModelId] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const modelListHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const modelListRef = useRef<HTMLDivElement | null>(null);
+
+  const focusAfterManualModelRemoval = (): void => {
+    window.setTimeout(() => {
+      const nextRemoveTrigger = modelListRef.current?.querySelector<HTMLButtonElement>(
+        '[data-model-remove-trigger="true"]'
+      );
+      (nextRemoveTrigger ?? modelListHeadingRef.current)?.focus();
+    }, 0);
+  };
+
   const addModel = async (): Promise<void> => {
     const added = await props.onAddCustom(modelId.trim(), displayName.trim());
     if (!added) return;
@@ -9821,7 +9833,12 @@ function ProviderModelGroup(props: {
   };
   return (
     <section className="provider-model-group" aria-labelledby={`provider-models-${props.providerId}`}>
-      <h3 className="visually-hidden" id={`provider-models-${props.providerId}`}>{props.providerName}</h3>
+      <h3
+        ref={modelListHeadingRef}
+        className="visually-hidden"
+        id={`provider-models-${props.providerId}`}
+        tabIndex={-1}
+      >{props.providerName}</h3>
       <div className="settings-row">
         <span className="settings-row-copy">
           <strong>{props.t("models.automaticSync")}</strong>
@@ -9832,13 +9849,17 @@ function ProviderModelGroup(props: {
         </button>
       </div>
       {props.models.length > 0 ? (
-        <div className="model-list">
+        <div ref={modelListRef} className="model-list">
           {props.models.map((model) => (
             <ModelInventoryRow
               key={model.id}
               model={model}
               busy={props.busy}
-              onDeleteManual={props.onDeleteManual}
+              onDeleteManual={async (modelProfileId) => {
+                const removed = await props.onDeleteManual(modelProfileId);
+                if (removed) focusAfterManualModelRemoval();
+                return removed;
+              }}
               onSetEnabled={props.onSetEnabled}
               onSetDisplayName={props.onSetDisplayName}
               t={props.t}
