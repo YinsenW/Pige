@@ -22,14 +22,26 @@ export function ReaderEntityMentions(props: {
   const ownerRef = useRef(owner); ownerRef.current = owner;
   const busyRef = useRef(false);
   const focusRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef(false);
   const sectionRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<readonly NoteEntityMentionItem[]>([]);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   useEffect(() => {
+    const wasBusy = busyRef.current;
+    const wasFocused = focusRef.current?.isConnected === true && document.activeElement === focusRef.current;
     setQuery(""); setResults([]); setPending(false); setNotice(null); busyRef.current = false;
+    if (wasBusy || wasFocused) restoreFocusRef.current = true;
   }, [owner]);
+  useEffect(() => {
+    if (pending || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    requestAnimationFrame(() => {
+      const target = focusRef.current?.isConnected ? focusRef.current : sectionRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [pending]);
   if (props.note.summary.pageType !== "entity" || !summary || !context) return null;
 
   const restoreFocus = (): void => {
