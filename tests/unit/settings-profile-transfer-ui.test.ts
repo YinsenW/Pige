@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import type { SettingsProfileImportPreviewRequest } from "@pige/contracts";
 import { SettingsProfileTransferPanel } from "../../apps/desktop/src/renderer/src/components/SettingsProfileTransferPanel";
 
 describe("SettingsProfileTransferPanel", () => {
@@ -40,9 +41,8 @@ describe("SettingsProfileTransferPanel", () => {
     const originals = installDom(dom);
     const api = {
       exportProfile: vi.fn(),
-      previewImport: vi.fn(async () => ({
-        apiVersion: 1 as const,
-        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
+      previewImport: vi.fn(async (request: SettingsProfileImportPreviewRequest) => ({
+        ...request,
         status: "ready" as const,
         previewId: "settingspreview_0123456789abcdef0123456789abcdef",
         changes: [
@@ -66,6 +66,7 @@ describe("SettingsProfileTransferPanel", () => {
       "settings.general.profileTransferImport": "Choose file",
       "settings.general.profileTransferApply": "Import",
       "settings.general.profileTransferCancel": "Cancel",
+      "settings.general.profileTransferFailed": "The preferences import could not be applied.",
       "settings.general.profileTransferPreviewReady": "Review changes",
       "settings.general.profileTransferChanges": "Preference changes",
       "settings.general.profileTransferKey.app_locale": "App language",
@@ -92,16 +93,15 @@ describe("SettingsProfileTransferPanel", () => {
       });
       expect(dom.window.document.activeElement).toBe(choose);
 
-      api.previewImport.mockResolvedValueOnce({
-        apiVersion: 1,
-        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
-        status: "ready",
+      api.previewImport.mockImplementationOnce(async (request: SettingsProfileImportPreviewRequest) => ({
+        ...request,
+        status: "ready" as const,
         previewId: "settingspreview_0123456789abcdef0123456789abcdef",
-        changes: [{ key: "app_locale", before: "en", after: "fr" }]
-      });
+        changes: [{ key: "app_locale" as const, before: "en" as const, after: "fr" as const }]
+      }));
       api.applyImport.mockResolvedValueOnce({
         apiVersion: 1,
-        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
+        requestId: "settingsprofilereq_ffffffffffffffffffffffffffffffff",
         previewId: "settingspreview_0123456789abcdef0123456789abcdef",
         status: "committed",
         keys: ["app_locale"]
@@ -114,14 +114,26 @@ describe("SettingsProfileTransferPanel", () => {
         await Promise.resolve();
         await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
       });
+      expect(container.querySelector("dl")).not.toBeNull();
+      expect(container.textContent).toContain("The preferences import could not be applied.");
+
+      api.applyImport.mockImplementationOnce(async (request) => ({
+        ...request,
+        status: "committed" as const,
+        keys: ["app_locale"] as const
+      }));
+      await act(async () => {
+        findButton(container, "Import").click();
+        await Promise.resolve();
+        await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+      });
       const restoredChoose = findButton(container, "Choose file");
       expect(dom.window.document.activeElement).toBe(restoredChoose);
 
-      api.previewImport.mockResolvedValueOnce({
-        apiVersion: 1,
-        requestId: "settingsprofilereq_0123456789abcdef0123456789abcdef",
-        status: "current"
-      });
+      api.previewImport.mockImplementationOnce(async (request: SettingsProfileImportPreviewRequest) => ({
+        ...request,
+        status: "current" as const
+      }));
       await act(async () => { choose.click(); await Promise.resolve(); });
       expect(container.textContent).toContain("settings.general.profileTransferCurrent");
       expect(container.querySelector("dl")).toBeNull();
