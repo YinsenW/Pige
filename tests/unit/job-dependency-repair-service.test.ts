@@ -23,14 +23,14 @@ describe("JobDependencyRepairService", () => {
     const result = new JobDependencyRepairService().prepare(job(), {
       activeVaultId: "vault_dependency_repair_01",
       jobId: "job_dependency_repair_01",
-      expectedJobUpdatedAt: "2026-08-09T00:01:00.000Z"
+      expectedUpdatedAt: "2026-08-09T00:01:00.000Z"
     });
 
     expect(result).toEqual({
       status: "ready",
       jobId: "job_dependency_repair_01",
       activeVaultId: "vault_dependency_repair_01",
-      expectedJobUpdatedAt: "2026-08-09T00:01:00.000Z",
+      expectedUpdatedAt: "2026-08-09T00:01:00.000Z",
       dependencyKind: "local_tool",
       requiredAction: "repair_tool",
       messageKey: "job.waiting.localTool"
@@ -43,10 +43,10 @@ describe("JobDependencyRepairService", () => {
     const request = {
       activeVaultId: "vault_dependency_repair_01",
       jobId: "job_dependency_repair_01",
-      expectedJobUpdatedAt: "2026-08-09T00:01:00.000Z"
+      expectedUpdatedAt: "2026-08-09T00:01:00.000Z"
     };
 
-    expect(service.prepare(job(), { ...request, expectedJobUpdatedAt: "2026-08-09T00:02:00.000Z" })).toEqual({ status: "stale" });
+    expect(service.prepare(job(), { ...request, expectedUpdatedAt: "2026-08-09T00:02:00.000Z" })).toEqual({ status: "stale" });
     expect(service.prepare(job({ state: "failed_retryable" }), request)).toEqual({ status: "ineligible" });
     expect(service.prepare(job({ waitingDependency: { dependencyKind: "runtime_capability", requiredAction: "unavailable", messageKey: "job.waiting.capability" } }), request)).toEqual({ status: "ineligible" });
     expect(service.prepare(undefined, request)).toEqual({ status: "not_found" });
@@ -57,7 +57,7 @@ describe("JobDependencyRepairService", () => {
     const request = {
       activeVaultId: "vault_dependency_repair_01",
       jobId: "job_dependency_repair_01",
-      expectedJobUpdatedAt: "2026-08-09T00:01:00.000Z"
+      expectedUpdatedAt: "2026-08-09T00:01:00.000Z"
     };
     const order: string[] = [];
     let current = job();

@@ -4483,7 +4483,7 @@ ipcMain.handle("updates.openManualDownload", async (_event, request: UpdateManua
     await getManualUpdateDownloadService().open(UpdateManualDownloadRequestSchema.parse(request))
   )
 );
-ipcMain.handle("system.toolchainHealth", recoverReadyLocalCapabilities);
+ipcMain.handle("system.toolchainHealth", () => recoverReadyLocalCapabilities());
 
 app.whenReady().then(async () => {
   if (!ownsAppInstanceLock) return;

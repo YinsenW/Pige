@@ -6,7 +6,7 @@ export type DependencyRepairPreparation =
       readonly status: "ready";
       readonly jobId: string;
       readonly activeVaultId: string;
-      readonly expectedJobUpdatedAt: string;
+      readonly expectedUpdatedAt: string;
       readonly dependencyKind: NonNullable<JobRecord["waitingDependency"]>["dependencyKind"];
       readonly requiredAction: NonNullable<JobRecord["waitingDependency"]>["requiredAction"];
       readonly messageKey: string;
@@ -16,7 +16,7 @@ export type DependencyRepairPreparation =
 export interface DependencyRepairRequest {
   readonly activeVaultId: string;
   readonly jobId: string;
-  readonly expectedJobUpdatedAt: string;
+  readonly expectedUpdatedAt: string;
 }
 
 export interface DependencyRepairExecution {
@@ -34,7 +34,7 @@ export interface DependencyRepairExecution {
 export class JobDependencyRepairService {
   prepare(job: JobRecord | undefined, request: DependencyRepairRequest): DependencyRepairPreparation {
     if (!job || job.id !== request.jobId) return { status: "not_found" };
-    if (job.activeVaultId !== request.activeVaultId || job.updatedAt !== request.expectedJobUpdatedAt) {
+    if (job.activeVaultId !== request.activeVaultId || job.updatedAt !== request.expectedUpdatedAt) {
       return { status: "stale" };
     }
     if (job.state !== "waiting_dependency" || !job.waitingDependency) {
@@ -47,7 +47,7 @@ export class JobDependencyRepairService {
       status: "ready",
       jobId: job.id,
       activeVaultId: request.activeVaultId,
-      expectedJobUpdatedAt: request.expectedJobUpdatedAt,
+      expectedUpdatedAt: request.expectedUpdatedAt,
       dependencyKind: job.waitingDependency.dependencyKind,
       requiredAction: job.waitingDependency.requiredAction,
       messageKey: job.waitingDependency.messageKey
