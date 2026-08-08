@@ -2282,6 +2282,8 @@
   "settings.general.startupLibrary": "Bibliothèque",
   "settings.general.startupStale": "La destination de démarrage enregistrée a changé. Votre choix est conservé ; réessayez pour l’enregistrer.",
   "settings.general.startupFailed": "Impossible d’enregistrer la destination de démarrage. Votre choix est conservé.",
+  "settings.general.startupLoadFailed": "Impossible de charger la destination de démarrage. Réessayez.",
+  "settings.general.startupRetry": "Réessayer",
   "settings.general.startupTitle": "Au démarrage",
   "settings.general.subtitle": "Choisissez le comportement au démarrage et consultez la gestion de la fenêtre par Pige.",
   "settings.general.title": "Général",

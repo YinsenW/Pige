@@ -23,21 +23,43 @@ export function GeneralSettingsPanel(props: {
   const [startupSummary, setStartupSummary] = useState<StartupDestinationSummary | null>(null);
   const [startupDraft, setStartupDraft] = useState<StartupDestination | null>(null);
   const [startupBusy, setStartupBusy] = useState(false);
-  const [startupNotice, setStartupNotice] = useState<"stale" | "failed" | null>(null);
+  const [startupLoadBusy, setStartupLoadBusy] = useState(false);
+  const [startupNotice, setStartupNotice] = useState<"stale" | "failed" | "load_failed" | null>(null);
   const startupRequestRef = useRef(false);
   const startupLoadSequenceRef = useRef(0);
   const startupSelectRef = useRef<HTMLSelectElement>(null);
-
-  useEffect(() => {
+  const restoreStartupFocusRef = useRef(false);
+  const loadStartupSummary = (): void => {
+    if (startupLoadBusy) return;
     const sequence = ++startupLoadSequenceRef.current;
+    setStartupLoadBusy(true);
     void props.startupDestinationApi.load().then((summary) => {
       if (sequence !== startupLoadSequenceRef.current) return;
       setStartupSummary(summary);
       setStartupDraft(summary.destination);
       setStartupNotice(null);
+      if (restoreStartupFocusRef.current) {
+        restoreStartupFocusRef.current = false;
+        const restoreFocus = (): void => startupSelectRef.current?.focus({ preventScroll: true });
+        if (typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => window.requestAnimationFrame(restoreFocus));
+        } else {
+          window.setTimeout(() => window.setTimeout(restoreFocus, 0), 0);
+        }
+      }
     }).catch(() => {
-      if (sequence === startupLoadSequenceRef.current) setStartupNotice("failed");
+      if (sequence === startupLoadSequenceRef.current) setStartupNotice("load_failed");
+    }).finally(() => {
+      if (sequence === startupLoadSequenceRef.current) setStartupLoadBusy(false);
     });
+  };
+  const retryStartupLoad = (): void => {
+    restoreStartupFocusRef.current = true;
+    loadStartupSummary();
+  };
+
+  useEffect(() => {
+    loadStartupSummary();
     return () => { startupLoadSequenceRef.current += 1; };
   }, [props.startupDestinationApi]);
 
@@ -90,7 +112,7 @@ export function GeneralSettingsPanel(props: {
               <strong>{props.t("settings.general.startupTitle")}</strong>
               <span id="settings-general-startup-description">{props.t("settings.general.startupDescription")}</span>
               {startupNotice ? <span role="status" aria-live="polite">
-                {props.t(`settings.general.startup${startupNotice === "stale" ? "Stale" : "Failed"}`)}
+                {props.t(`settings.general.startup${startupNotice === "stale" ? "Stale" : startupNotice === "load_failed" ? "LoadFailed" : "Failed"}`)}
               </span> : null}
             </div>
             <select
@@ -106,6 +128,11 @@ export function GeneralSettingsPanel(props: {
               <option value="home">{props.t("settings.general.startupHome")}</option>
               <option value="library">{props.t("settings.general.startupLibrary")}</option>
             </select>
+            {startupNotice === "load_failed" ? (
+              <button type="button" className="settings-button" disabled={startupLoadBusy} onClick={retryStartupLoad}>
+                {props.t("settings.general.startupRetry")}
+              </button>
+            ) : null}
           </div>
           <div className="settings-row">
             <div className="settings-row-copy">
