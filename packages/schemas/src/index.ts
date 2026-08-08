@@ -181,6 +181,44 @@ export const NoteOpenSourceReferenceResultSchema = z.discriminatedUnion("status"
     }).strict()
   )
 ]);
+export const NOTE_LIST_SOURCE_DERIVED_CHANNEL = "notes.listSourceDerived" as const;
+export const NoteSourceDerivedRequestIdSchema = z.string()
+  .regex(/^notesourcederived_[a-z0-9]{16,64}$/);
+export const NoteListSourceDerivedRequestSchema = z.object({
+  apiVersion: z.literal(1),
+  requestId: NoteSourceDerivedRequestIdSchema,
+  activeVaultId: VaultIdSchema,
+  currentPageId: PageIdSchema,
+  renderContextId: NoteRenderContextIdSchema,
+  sourceId: SourceIdSchema
+}).strict();
+export const NoteSourceDerivedPageSummarySchema = z.object({
+  pageId: PageIdSchema,
+  title: z.string().min(1).max(512),
+  pageType: z.enum(["source", "note", "concept", "entity", "topic", "claim", "question"]),
+  updatedAt: z.string().datetime({ offset: true })
+}).strict();
+export const NoteListSourceDerivedResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteSourceDerivedRequestIdSchema,
+    status: z.literal("ready"),
+    sourceId: SourceIdSchema,
+    pages: z.array(NoteSourceDerivedPageSummarySchema).max(32)
+  }).strict(),
+  ...(["not_found", "stale", "mismatch", "changed"] as const).map((status) =>
+    z.object({
+      apiVersion: z.literal(1),
+      requestId: NoteSourceDerivedRequestIdSchema,
+      status: z.literal(status)
+    }).strict()
+  ),
+  z.object({
+    apiVersion: z.literal(1),
+    requestId: NoteSourceDerivedRequestIdSchema,
+    status: z.literal("failed")
+  }).strict()
+]);
 export const NOTE_REVEAL_SOURCE_CHANNEL = "notes.revealSource" as const;
 export const NoteRevealSourceRequestIdSchema = z.string()
   .regex(/^notesourcereveal_[a-z0-9]{16,64}$/);
@@ -13993,6 +14031,10 @@ export type NoteResolveInlineReferenceResult = z.infer<typeof NoteResolveInlineR
 export type NoteSourceReferenceRequestId = z.infer<typeof NoteSourceReferenceRequestIdSchema>;
 export type NoteOpenSourceReferenceRequest = z.infer<typeof NoteOpenSourceReferenceRequestSchema>;
 export type NoteOpenSourceReferenceResult = z.infer<typeof NoteOpenSourceReferenceResultSchema>;
+export type NoteSourceDerivedRequestId = z.infer<typeof NoteSourceDerivedRequestIdSchema>;
+export type NoteListSourceDerivedRequest = z.infer<typeof NoteListSourceDerivedRequestSchema>;
+export type NoteSourceDerivedPageSummary = z.infer<typeof NoteSourceDerivedPageSummarySchema>;
+export type NoteListSourceDerivedResult = z.infer<typeof NoteListSourceDerivedResultSchema>;
 export type NoteRevealSourceRequestId = z.infer<typeof NoteRevealSourceRequestIdSchema>;
 export type NoteRevealSourceRequest = z.infer<typeof NoteRevealSourceRequestSchema>;
 export type NoteRevealSourceResult = z.infer<typeof NoteRevealSourceResultSchema>;

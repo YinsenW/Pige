@@ -9,6 +9,8 @@ import type {
   NoteEditorSaveRequest,
   NoteEditorSaveResult,
   NoteGetRequest,
+  NoteListSourceDerivedRequest,
+  NoteListSourceDerivedResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult, NoteOpenSearchMatchRequest, NoteOpenSearchMatchResult,
   NoteRevealSourceRequest,
@@ -39,6 +41,7 @@ import { NoteMarkdownEditorService } from "./note-markdown-editor-service";
 import { readReferencedOriginalReconnectCandidate } from "./source-original-reconnect-service";
 import { projectReaderSourceDetails } from "./note-source-metadata";
 import { readCurrentSourceRecordSnapshot } from "./source-file-access";
+import { SourceDerivedPageLocatorService, type SourceDerivedPageRenderContext } from "./source-derived-page-locator-service";
 import { projectSourceTrashEligibility, resolveNotesSourceTrashTarget, type NotesSourceTrashProjectionPort, type NotesSourceTrashResolution } from "./source-trash-service";
 import { isLifecycleKnowledgePage, isPigeGeneratedFrontmatter, isRenamableKnowledgePage, isRevisionHistoryKnowledgePage, isTaxonomyKnowledgePage, isTrashableKnowledgePage, resolveGeneratedNoteReveal, type NotesGeneratedRevealResolution } from "./reader-generated-note-reveal-service";
 import { readQuestionState } from "./question-state-service"; import { readClaimConfidence } from "./claim-confidence-service"; import { readEntityType } from "./entity-type-service"; import { projectEntityMentions } from "./entity-mention-service"; import { projectQuestionAnswers } from "./question-answer-service"; import { projectClaimContradictions } from "./claim-contradiction-service"; import { projectClaimSupports } from "./claim-support-service"; import { projectClaimEvidence } from "./claim-evidence-service"; import { projectConceptParents } from "./concept-parent-service"; import { projectTopicParents } from "./topic-parent-service"; import { openNoteSearchMatch } from "./note-search-match-service";
@@ -110,18 +113,9 @@ interface NoteEditorBinding {
   readonly privateRenderIdentity: string;
   readonly privateRevision: string;
 }
-
 type SourceReferenceResolution =
   | { readonly status: "resolved"; readonly pageId: string }
-  | {
-      readonly status:
-        | "source_unresolved"
-        | "index_unavailable"
-        | "not_found"
-        | "target_not_found"
-        | "mismatch"
-        | "changed";
-    };
+  | { readonly status: "source_unresolved" | "index_unavailable" | "not_found" | "target_not_found" | "mismatch" | "changed" };
 
 export class NotesService {
   readonly #vaults: NotesVaultPort;
@@ -376,54 +370,14 @@ export class NotesService {
     ownerId: string,
     request: NoteOpenSourceReferenceRequest
   ): NoteOpenSourceReferenceResult {
-    const initialVault = this.#vaults.current();
-    const vaultPath = this.#vaults.activeVaultPath();
-    if (!initialVault || !vaultPath || initialVault.vaultId !== request.activeVaultId) {
-      return sourceReferenceResult(request.requestId, "stale");
-    }
+    return this.#sourceDerivedLocator(ownerId, request.renderContextId).openSourceReference(request);
+  }
 
-    const context = this.#readRenderContext(ownerId, request.renderContextId);
-    if (
-      !context ||
-      context.vaultId !== request.activeVaultId ||
-      context.vaultPath !== vaultPath ||
-      context.pageId !== request.currentPageId ||
-      this.#ownerEpochs.get(ownerId) !== context.ownerEpoch
-    ) {
-      return sourceReferenceResult(request.requestId, "stale");
-    }
-    if (!context.sourceIds.has(request.sourceId)) {
-      return sourceReferenceResult(request.requestId, "mismatch");
-    }
-    if (!this.#matchesCurrentPage(context)) {
-      return sourceReferenceResult(request.requestId, "changed");
-    }
-    if (!this.#referenceIndex || !context.referenceIndexRevision) {
-      return sourceReferenceResult(request.requestId, "unresolved");
-    }
-
-    try {
-      const result = this.#resolveSourceReferenceTarget(context, request.sourceId);
-      if (!this.#matchesCurrentScope(context)) {
-        return sourceReferenceResult(request.requestId, "stale");
-      }
-      if (
-        this.#ownerEpochs.get(ownerId) !== context.ownerEpoch ||
-        !this.#matchesCurrentPage(context)
-      ) {
-        return sourceReferenceResult(request.requestId, "changed");
-      }
-      return result.status === "resolved"
-        ? {
-            apiVersion: 1,
-            requestId: request.requestId,
-            status: "resolved",
-            target: { pageId: result.pageId }
-          }
-        : sourceReferenceResult(request.requestId, projectSourceReferenceStatus(result.status));
-    } catch {
-      return sourceReferenceResult(request.requestId, "unresolved");
-    }
+  listSourceDerived(
+    ownerId: string,
+    request: NoteListSourceDerivedRequest
+  ): NoteListSourceDerivedResult {
+    return this.#sourceDerivedLocator(ownerId, request.renderContextId).listDerived(request);
   }
 
   resolveSourceReveal(
@@ -521,6 +475,18 @@ export class NotesService {
           this.#matchesCurrentPage(context);
       }
     };
+  }
+  #sourceDerivedLocator(ownerId: string, renderContextId: string): SourceDerivedPageLocatorService {
+    return new SourceDerivedPageLocatorService({
+      vault: this.#vaults.current(), vaultPath: this.#vaults.activeVaultPath(), ownerEpoch: this.#ownerEpochs.get(ownerId),
+      readContext: () => this.#readRenderContext(ownerId, renderContextId) as SourceDerivedPageRenderContext | undefined,
+      matchesCurrentScope: (context) => this.#matchesCurrentScope(context as NoteRenderContext),
+      matchesCurrentPage: (context) => this.#matchesCurrentPage(context as NoteRenderContext),
+      ...(this.#referenceIndex ? {
+        inlineReferenceCandidates: (vaultPath: string, request: { readonly normalizedKey: string; readonly expectedRevision: string; readonly exactPageId?: string }) =>
+          this.#referenceIndex?.inlineReferenceCandidates(vaultPath, request)
+      } : {})
+    });
   }
   resolveSelection(
     ownerId: string,
@@ -667,36 +633,21 @@ export class NotesService {
     };
   }
 
-  #resolveSourceReferenceTarget(
-    context: NoteRenderContext,
-    sourceId: string
-  ): SourceReferenceResolution {
+  #resolveSourceReferenceTarget(context: NoteRenderContext, sourceId: string): SourceReferenceResolution {
     const source = readCurrentSourceRecordSnapshot(context.vaultPath, sourceId);
     const pageId = source?.record.knowledgePageId;
     if (!source || !pageId) return { status: "source_unresolved" };
     const candidates = this.#referenceIndex?.inlineReferenceCandidates(context.vaultPath, {
-      normalizedKey: normalizeMarkdownPageReferenceKey(pageId),
-      expectedRevision: context.referenceIndexRevision!,
-      exactPageId: pageId
+      normalizedKey: normalizeMarkdownPageReferenceKey(pageId), expectedRevision: context.referenceIndexRevision!, exactPageId: pageId
     });
     if (!candidates) return { status: "index_unavailable" };
     if (candidates.length !== 1) return { status: "not_found" };
-    const candidate = candidates[0]!;
-    const current = readMarkdownPageByRelativePath(context.vaultPath, candidate.pagePath);
+    const candidate = candidates[0]!, current = readMarkdownPageByRelativePath(context.vaultPath, candidate.pagePath);
     if (!current) return { status: "target_not_found" };
-    if (
-      current.summary.pageId !== pageId ||
-      current.summary.pageType !== "source" ||
-      !current.summary.sourceIds.includes(sourceId) ||
-      (source.record.knowledgePagePath !== undefined && source.record.knowledgePagePath !== candidate.pagePath)
-    ) {
-      return { status: "mismatch" };
-    }
+    if (current.summary.pageId !== pageId || current.summary.pageType !== "source" || !current.summary.sourceIds.includes(sourceId) ||
+      (source.record.knowledgePagePath !== undefined && source.record.knowledgePagePath !== candidate.pagePath)) return { status: "mismatch" };
     const after = readCurrentSourceRecordSnapshot(context.vaultPath, sourceId);
-    if (!after || !sameFileIdentity(source.identity, after.identity)) {
-      return { status: "changed" };
-    }
-    return { status: "resolved", pageId };
+    return !after || !sameFileIdentity(source.identity, after.identity) ? { status: "changed" } : { status: "resolved", pageId };
   }
 
   #readStableDocument(pageId: string): StableNoteDocument {

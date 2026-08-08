@@ -18,6 +18,7 @@ import type {
   NoteUnlinkRelationResult,
   NoteImportMarkdownRequest,
   NoteImportMarkdownResult,
+  NoteListSourceDerivedRequest,
   NoteOpenSourceReferenceRequest,
   NoteReconnectOriginalSourceRequest,
   SourceRefreshPreviewRequest,
@@ -102,6 +103,9 @@ import {
   NOTE_IMPORT_MARKDOWN_CHANNEL,
   NoteImportMarkdownRequestSchema,
   NoteImportMarkdownResultSchema,
+  NOTE_LIST_SOURCE_DERIVED_CHANNEL,
+  NoteListSourceDerivedRequestSchema,
+  NoteListSourceDerivedResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
   NOTE_OPEN_SEARCH_MATCH_CHANNEL,
@@ -1074,6 +1078,18 @@ export function registerReaderIpc(options: RegisterReaderIpcOptions): void {
       ownerId === undefined
         ? { apiVersion: 1, requestId: parsed.requestId, status: "stale" }
         : options.getNotesService().openSourceReference(ownerId, parsed)
+    );
+  });
+  options.ipcMain.handle(NOTE_LIST_SOURCE_DERIVED_CHANNEL, (
+    event,
+    request: NoteListSourceDerivedRequest
+  ) => {
+    const parsed = NoteListSourceDerivedRequestSchema.parse(request);
+    const ownerId = notesTrackedSenders.get(event.sender.id);
+    return NoteListSourceDerivedResultSchema.parse(
+      ownerId === undefined || event.sender.isDestroyed()
+        ? { apiVersion: 1, requestId: parsed.requestId, status: "stale" }
+        : options.getNotesService().listSourceDerived(ownerId, parsed)
     );
   });
   options.ipcMain.handle("notes.revealSource", async (event, request: NoteRevealSourceRequest) => {

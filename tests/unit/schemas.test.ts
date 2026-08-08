@@ -246,6 +246,8 @@ import {
   NoteTrashPurgeResultSchema,
   NoteOpenSourceReferenceRequestSchema,
   NoteOpenSourceReferenceResultSchema,
+  NoteListSourceDerivedRequestSchema,
+  NoteListSourceDerivedResultSchema,
   NoteReconnectOriginalSourceRequestSchema,
   NoteReconnectOriginalSourceResultSchema,
   SourceReconnectListRequestSchema,
@@ -5027,6 +5029,31 @@ describe("schemas", () => {
       requestId: request.requestId,
       status: "not_found",
       sourceRecord: { path: "/private/source.json" }
+    })).toThrow();
+  });
+
+  it("keeps Source Page derived-note discovery currentness-bound and body-free", () => {
+    const request = {
+      apiVersion: 1,
+      requestId: "notesourcederived_abcdefghijklmnop",
+      activeVaultId: "vault_20260729_abcdefgh",
+      currentPageId: "page_20260729_source1234",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      sourceId: "src_20260729_source1234"
+    } as const;
+    expect(NoteListSourceDerivedRequestSchema.parse(request)).toEqual(request);
+    expect(() => NoteListSourceDerivedRequestSchema.parse({ ...request, artifactPath: "/private/artifact.txt" })).toThrow();
+    expect(NoteListSourceDerivedResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, status: "ready", sourceId: request.sourceId,
+      pages: [{ pageId: "page_20260729_derived123", title: "Derived note", pageType: "note", updatedAt: "2026-07-29T12:00:00.000Z" }]
+    })).toMatchObject({ status: "ready", sourceId: request.sourceId });
+    for (const status of ["not_found", "stale", "mismatch", "changed", "failed"] as const) {
+      expect(NoteListSourceDerivedResultSchema.parse({ apiVersion: 1, requestId: request.requestId, status }))
+        .toEqual({ apiVersion: 1, requestId: request.requestId, status });
+    }
+    expect(() => NoteListSourceDerivedResultSchema.parse({
+      apiVersion: 1, requestId: request.requestId, status: "ready", sourceId: request.sourceId,
+      pages: [{ pageId: "page_20260729_derived123", title: "Derived", pageType: "note", updatedAt: "2026-07-29T12:00:00.000Z", body: "private" }]
     })).toThrow();
   });
 

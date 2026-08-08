@@ -433,6 +433,8 @@ import type {
   NoteOpenSearchMatchResult,
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
+  NoteListSourceDerivedRequest,
+  NoteListSourceDerivedResult,
   NoteReconnectOriginalSourceRequest,
   NoteReconnectOriginalSourceResult,
   SourceRefreshPreviewRequest,
@@ -965,6 +967,10 @@ export type {
   NoteOpenSourceReferenceRequest,
   NoteOpenSourceReferenceResult,
   NoteSourceReferenceRequestId,
+  NoteSourceDerivedRequestId,
+  NoteListSourceDerivedRequest,
+  NoteListSourceDerivedResult,
+  NoteSourceDerivedPageSummary,
   NoteRevealSourceRequestId,
   NoteRevealSourceRequest,
   NoteRevealSourceResult,
@@ -2865,6 +2871,9 @@ export interface PigeDesktopApi {
     readonly openSourceReference: (
       request: NoteOpenSourceReferenceRequest
     ) => Promise<NoteOpenSourceReferenceResult>;
+    readonly listSourceDerived: (
+      request: NoteListSourceDerivedRequest
+    ) => Promise<NoteListSourceDerivedResult>;
     readonly revealSource: (
       request: NoteRevealSourceRequest
     ) => Promise<NoteRevealSourceResult>;
