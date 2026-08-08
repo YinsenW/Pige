@@ -7058,7 +7058,9 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Reset memory");
 
     await act(async () => {
-      buttonNamed(row, "Disable: Concise source summaries").click();
+      const disable = buttonNamed(row, "Disable: Concise source summaries");
+      disable.focus();
+      disable.click();
       await settle(dom);
     });
     expect(disable).toHaveBeenCalledWith(expect.objectContaining({
@@ -7070,6 +7072,7 @@ describe("full UI Settings surface", () => {
     expect(disable.mock.calls[0]?.[0].requestId).toMatch(/^memory_request_[a-z0-9]{16,64}$/u);
     expect(row.textContent).toContain("Disabled");
     expect(buttonNamed(row, "Enable: Concise source summaries").disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Enable: Concise source summaries"));
     expect(container.textContent).toContain("The memory is disabled for future Agent turns.");
 
     await act(async () => {
@@ -7103,7 +7106,9 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Memory was exported safely.");
 
     await act(async () => {
-      buttonNamed(container, "Delete: Concise source summaries").click();
+      const deleteButton = buttonNamed(container, "Delete: Concise source summaries");
+      deleteButton.focus();
+      deleteButton.click();
       await settle(dom);
     });
     expect(deleteMemory).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -7112,6 +7117,7 @@ describe("full UI Settings surface", () => {
     }));
     expect(container.querySelector("[data-memory-revision]")?.getAttribute("data-memory-revision")).toBe("7");
     expect(container.textContent).toContain("Memory changed. The latest list is shown.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Delete: Concise source summaries"));
 
     await act(async () => {
       buttonNamed(container, "Delete: Concise source summaries").click();
@@ -7120,6 +7126,7 @@ describe("full UI Settings surface", () => {
     expect(deleteMemory).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 7 }));
     expect(container.textContent).toContain("No saved memories");
     expect(container.textContent).toContain("The memory was removed. You can undo this from Activity.");
+    expect(dom.window.document.activeElement).toBe(container.querySelector("#settings-memory-title"));
 
     const resetTrigger = buttonNamed(container, "Reset memory...");
     await act(async () => {
