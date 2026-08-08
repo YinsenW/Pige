@@ -19,6 +19,7 @@ import type { DatasetIngestPlan } from "../../apps/desktop/src/main/services/dat
 import { KnowledgeActivityService } from "../../apps/desktop/src/main/services/knowledge-activity-service";
 import { ManagedCollectionService } from "../../apps/desktop/src/main/services/managed-collection-service";
 import { ManagedCollectionTableService } from "../../apps/desktop/src/main/services/managed-collection-table-service";
+import { ManagedCollectionTableRedoService } from "../../apps/desktop/src/main/services/managed-collection-table-redo-service";
 import { ManagedCollectionRevisionHistoryService } from "../../apps/desktop/src/main/services/managed-collection-revision-history-service";
 import { ManagedCollectionRedoService } from "../../apps/desktop/src/main/services/managed-collection-redo-service";
 import {
@@ -2138,10 +2139,41 @@ describe("ManagedCollectionService", () => {
     const undone = await activity.undo({ operationId: summary.operationId, expectedRevisionId: committed.revisionId });
     expect(undone).toMatchObject({ status: "undone", revisionId: expect.stringMatching(/^dataset_rev_/) });
     if (undone.status !== "undone") throw new Error("Collection table trash was not undone");
-    const restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    let restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
     expect(restored.revision.change).toMatchObject({ kind: "collection_table_trash_undo", tableId: table.id,
       name: "Archive", undoOfOperationId: committed.operationId });
     expect(readCollectionSnapshot(restored, table.id)?.rows).toHaveLength(1);
+
+    const undoOperation = OperationRecordSchema.parse(readJson(operationPathFor(fixture.vaultPath, undone.undoOperationId)));
+    const redo = new ManagedCollectionTableRedoService(port);
+    expect(redo.activityState(operation, undoOperation)).toEqual({ canRedo: true });
+    expect(redo.redo({ operationId: committed.operationId, expectedRevisionId: committed.revisionId }))
+      .toMatchObject({ status: "stale", currentRevisionId: undone.revisionId });
+    const redone = redo.redo({ operationId: committed.operationId, expectedRevisionId: undone.revisionId });
+    expect(redone).toMatchObject({ status: "redone", operationId: committed.operationId,
+      undoOperationId: undone.undoOperationId, redoOperationId: expect.stringMatching(/^op_/),
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    if (redone.status !== "redone") throw new Error("Collection table trash was not redone");
+    const afterRedo = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(afterRedo.schema.tables.map(({ id }) => id)).not.toContain(table.id);
+    expect(afterRedo.revision).toMatchObject({ change: { kind: "collection_table_trash", tableId: table.id },
+      redoOfOperationId: committed.operationId, undoOperationId: undone.undoOperationId });
+    const redoOperationPath = operationPathFor(fixture.vaultPath, redone.redoOperationId);
+    const redoOperation = OperationRecordSchema.parse(readJson(redoOperationPath));
+    expect(redoOperation.sourceRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "operation", id: committed.operationId }),
+      expect.objectContaining({ kind: "operation", id: undone.undoOperationId })
+    ]));
+    expect(redo.activityState(operation, undoOperation))
+      .toEqual({ canRedo: false, redoUnavailableReason: "already_redone" });
+    fs.rmSync(redoOperationPath);
+    expect(new ManagedCollectionTableRedoService(port).recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    const recoveredRedo = OperationRecordSchema.parse(readJson(redoOperationPath));
+    const reUndone = await restarted.undo(recoveredRedo, redone.revisionId);
+    expect(reUndone).toMatchObject({ status: "undone", operationId: redone.redoOperationId,
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    restored = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(restored.schema.tables.map(({ id }) => id)).toContain(table.id);
 
     const lastTable = required(restored.schema.tables.find((candidate) => candidate.id !== table.id));
     const afterUndo = await restarted.trash({ ...request, requestId: "collection_request_bbbbbbbbbbbbbbbb",

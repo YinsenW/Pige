@@ -52,7 +52,10 @@ interface VaultPort { current(): VaultSummary | undefined; activeVaultPath(): st
 interface RenameIdentity { readonly revisionId: string; readonly operationId: string; }
 interface RenameBinding { readonly bundle: BundleBinding; readonly revision: DatasetRevision; }
 interface TrashIdentity { readonly revisionId: string; readonly operationId: string; }
-interface TrashBinding { readonly bundle: BundleBinding; readonly revision: DatasetRevision; }
+export interface ManagedCollectionTableTrashBinding {
+  readonly bundle: BundleBinding;
+  readonly revision: DatasetRevision;
+}
 interface AddIdentity { readonly revisionId: string; readonly operationId: string; readonly tableId: string; readonly columnId: string; }
 interface AddBinding { readonly bundle: BundleBinding; readonly revision: DatasetRevision; }
 
@@ -139,7 +142,7 @@ export class ManagedCollectionTableService {
   findTrashUndoOperation(operation: OperationRecord, operations: readonly OperationRecord[]): OperationRecord | undefined {
     const binding = this.#readTrashActivityBinding(operation);
     if (!binding || binding.revision.change?.kind !== "collection_table_trash") return undefined;
-    const candidate = operations.find(({ id }) => id === trashUndoOperationId(operation.id));
+    const candidate = operations.find(({ id }) => id === createTableTrashUndoOperationId(operation.id));
     const undo = candidate ? this.#readTrashActivityBinding(candidate) : undefined;
     return undo?.revision.change?.kind === "collection_table_trash_undo" &&
       undo.revision.change.undoOfOperationId === operation.id ? candidate : undefined;
@@ -271,7 +274,7 @@ export class ManagedCollectionTableService {
       if (fs.existsSync(operationPath)) continue;
       try {
         const operation = bundle.revision.change.kind.startsWith("collection_table_trash")
-          ? createTrashOperation(bundle, bundle.revision) : bundle.revision.change.kind.startsWith("collection_table_add")
+          ? createTableTrashOperation(bundle, bundle.revision) : bundle.revision.change.kind.startsWith("collection_table_add")
             ? createAddOperation(bundle, bundle.revision) : createOperation(bundle, bundle.revision);
         writeJsonExclusive(operationPath, operation); recovered += 1;
       }
@@ -435,7 +438,7 @@ export class ManagedCollectionTableService {
       current = adopted;
     }
     if (current.schema.tables.some((table) => table.id === request.tableId)) throw requestConflict();
-    const expected = createTrashOperation(current, revision);
+    const expected = createTableTrashOperation(current, revision);
     if (fs.existsSync(operationPath)) {
       const actual = OperationRecordSchema.parse(readJsonBounded(operationPath, MAX_COLLECTION_JSON_BYTES));
       if (hashCanonical(actual) !== hashCanonical(expected)) throw requestConflict();
@@ -552,7 +555,7 @@ export class ManagedCollectionTableService {
     return { bundle: committed, revision };
   }
 
-  #commitTrash(binding: BundleBinding, identity: TrashIdentity, tableId: string): TrashBinding {
+  #commitTrash(binding: BundleBinding, identity: TrashIdentity, tableId: string): ManagedCollectionTableTrashBinding {
     const current = readBundle(binding.vaultPath, binding.manifest.datasetId);
     if (!current || current.manifest.activeRevision !== binding.manifest.activeRevision) throw commitUncertain();
     const table = current.schema.tables.find((candidate) => candidate.id === tableId);
@@ -583,11 +586,11 @@ export class ManagedCollectionTableService {
     const committed = readBundle(current.vaultPath, current.manifest.datasetId);
     if (!committed || committed.manifest.activeRevision !== revision.id ||
         committed.schema.tables.some((candidate) => candidate.id === tableId)) throw commitUncertain();
-    writeJsonExclusive(operationPathFor(current.vaultPath, identity.operationId), createTrashOperation(committed, revision));
+    writeJsonExclusive(operationPathFor(current.vaultPath, identity.operationId), createTableTrashOperation(committed, revision));
     return { bundle: committed, revision };
   }
 
-  #commitTrashUndo(binding: BundleBinding, identity: TrashIdentity, undoOfOperationId: string): TrashBinding {
+  #commitTrashUndo(binding: BundleBinding, identity: TrashIdentity, undoOfOperationId: string): ManagedCollectionTableTrashBinding {
     const current = readBundle(binding.vaultPath, binding.manifest.datasetId);
     if (!current || current.manifest.activeRevision !== binding.manifest.activeRevision ||
         current.revision.change?.kind !== "collection_table_trash" || !current.revision.parentRevisionId) throw commitUncertain();
@@ -618,7 +621,7 @@ export class ManagedCollectionTableService {
     const committed = readBundle(current.vaultPath, current.manifest.datasetId);
     if (!committed || committed.manifest.activeRevision !== revision.id ||
         !committed.schema.tables.some((candidate) => candidate.id === table.id)) throw commitUncertain();
-    writeJsonExclusive(operationPathFor(current.vaultPath, identity.operationId), createTrashOperation(committed, revision));
+    writeJsonExclusive(operationPathFor(current.vaultPath, identity.operationId), createTableTrashOperation(committed, revision));
     return { bundle: committed, revision };
   }
 
@@ -670,17 +673,8 @@ export class ManagedCollectionTableService {
     } catch { return undefined; }
   }
 
-  #readTrashActivityBinding(operation: OperationRecord): TrashBinding | undefined {
-    if (operation.kind !== "trash_collection_table") return undefined;
-    const vaultPath = this.#vaults.activeVaultPath();
-    const datasetId = operation.targetRefs.find((ref) => ref.kind === "dataset")?.id;
-    if (!vaultPath || !datasetId || !operation.after?.id) return undefined;
-    const bundle = readBundle(vaultPath, datasetId);
-    if (!bundle) return undefined;
-    try {
-      const revision = readRevisionById(bundle, operation.after.id);
-      return hashCanonical(createTrashOperation(bundle, revision)) === hashCanonical(operation) ? { bundle, revision } : undefined;
-    } catch { return undefined; }
+  #readTrashActivityBinding(operation: OperationRecord): ManagedCollectionTableTrashBinding | undefined {
+    return readTableTrashActivityBinding(this.#vaults.activeVaultPath(), operation);
   }
 
   #readAddActivityBinding(operation: OperationRecord): AddBinding | undefined {
@@ -740,7 +734,26 @@ function createOperation(binding: BundleBinding, revision: DatasetRevision): Ope
     reversible: "yes", warnings: [] });
 }
 
-function createTrashOperation(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
+export function readTableTrashActivityBinding(
+  vaultPath: string | undefined,
+  operation: OperationRecord
+): ManagedCollectionTableTrashBinding | undefined {
+  if (operation.kind !== "trash_collection_table") return undefined;
+  const datasetId = operation.targetRefs.find((ref) => ref.kind === "dataset")?.id;
+  if (!vaultPath || !datasetId || !operation.after?.id) return undefined;
+  const bundle = readBundle(vaultPath, datasetId);
+  if (!bundle) return undefined;
+  try {
+    const revision = readRevisionById(bundle, operation.after.id);
+    return hashCanonical(createTableTrashOperation(bundle, revision)) === hashCanonical(operation)
+      ? { bundle, revision }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function createTableTrashOperation(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
   const change = revision.change;
   if (!revision.parentRevisionId || (change?.kind !== "collection_table_trash" &&
       change?.kind !== "collection_table_trash_undo")) throw requestConflict();
@@ -750,17 +763,32 @@ function createTrashOperation(binding: BundleBinding, revision: DatasetRevision)
     path: `${binding.bundleRelativePath}/${beforePath}`, checksum: fileRef(binding.bundlePath, beforePath).checksum };
   const afterRef = { kind: "dataset_revision" as const, id: revision.id,
     path: `${binding.bundleRelativePath}/${afterPath}`, checksum: fileRef(binding.bundlePath, afterPath).checksum };
+  const redo = readTableTrashRedoFields(revision);
   return OperationRecordSchema.parse({ id: revision.operationId, schemaVersion: 1, createdAt: revision.createdAt,
     actor: { kind: "user", runtimeKind: "desktop_local", clientCapabilityTier: "desktop_full" },
     kind: "trash_collection_table",
     targetRefs: [{ kind: "dataset", id: revision.datasetId, path: binding.bundleRelativePath }, afterRef],
     sourceRefs: [beforeRef, ...(change.kind === "collection_table_trash_undo"
-      ? [{ kind: "operation" as const, id: change.undoOfOperationId }] : [])],
+      ? [{ kind: "operation" as const, id: change.undoOfOperationId }] : []),
+    ...(redo ? [{ kind: "operation" as const, id: redo.redoOfOperationId },
+      { kind: "operation" as const, id: redo.undoOperationId }] : [])],
     before: beforeRef, after: afterRef,
     summary: change.kind === "collection_table_trash"
       ? `Moved Collection table ${boundedLabel(change.name)} out of the current revision.`
       : `Restored Collection table ${boundedLabel(change.name)} through forward revision.`,
     reversible: "yes", warnings: [] });
+}
+
+function readTableTrashRedoFields(
+  revision: DatasetRevision
+): { readonly redoOfOperationId: string; readonly undoOperationId: string } | undefined {
+  const candidate = revision as DatasetRevision & {
+    readonly redoOfOperationId?: unknown;
+    readonly undoOperationId?: unknown;
+  };
+  return typeof candidate.redoOfOperationId === "string" && typeof candidate.undoOperationId === "string"
+    ? { redoOfOperationId: candidate.redoOfOperationId, undoOperationId: candidate.undoOperationId }
+    : undefined;
 }
 
 function createAddOperation(binding: BundleBinding, revision: DatasetRevision): OperationRecord {
@@ -827,9 +855,9 @@ function trashUndoIdentity(operationId: string, revisionId: string): TrashIdenti
   const date = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u.exec(revisionId)?.[1];
   if (!date) throw requestConflict();
   return { revisionId: `dataset_rev_${date}_${digest("pige:collection-table-trash-undo:v1", operationId).slice(0, 20)}`,
-    operationId: trashUndoOperationId(operationId) };
+    operationId: createTableTrashUndoOperationId(operationId) };
 }
-function trashUndoOperationId(operationId: string): string {
+export function createTableTrashUndoOperationId(operationId: string): string {
   const date = /^op_(\d{8})_[a-z0-9]{8,}$/u.exec(operationId)?.[1];
   if (!date) throw requestConflict();
   return `op_${date}_${digest("pige:collection-table-trash-undo-operation:v1", operationId).slice(0, 20)}`;
