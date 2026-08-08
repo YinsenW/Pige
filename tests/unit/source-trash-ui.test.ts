@@ -30,6 +30,23 @@ describe("source trash UI", () => {
     await harness.unmount();
   });
 
+  it("closes the source trash confirmation with Escape and restores trigger focus", async () => {
+    const harness = await mount();
+    await harness.render(createElement(ReaderSourceTrashAction, { activeVaultId: "vault_20260802_abcdefgh",
+      note: note(), onTrash: vi.fn(), onCommitted: vi.fn(), t }));
+    const trigger = required(harness.container.querySelector<HTMLButtonElement>("[data-reader-source-trash]"));
+    trigger.focus();
+    await act(async () => { trigger.click(); await settle(harness.dom); });
+    const dialog = required(harness.container.querySelector<HTMLElement>("[role=alertdialog]"));
+    await act(async () => {
+      dialog.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Escape" }));
+      await settle(harness.dom);
+    });
+    expect(harness.container.querySelector("[role=alertdialog]")).toBeNull();
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
+
   it("adopts one exact restore and focuses the section after the restored item disappears", async () => {
     const harness = await mount(), operationId = "op_20260802_abcdefghijklmnop";
     const listTrash = vi.fn(async (request) => ({ ...request, status: "ready" as const, sources: [{
