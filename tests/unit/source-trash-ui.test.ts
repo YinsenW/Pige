@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SourceTrashRequest, SourceTrashResult } from "@pige/contracts";
 import { ReaderSourceTrashAction } from "../../apps/desktop/src/renderer/src/components/ReaderSourceTrashAction";
 import { SourceTrashRestorePanel } from "../../apps/desktop/src/renderer/src/components/SourceTrashRestorePanel";
 
@@ -19,6 +20,8 @@ describe("source trash UI", () => {
     const trigger = required(harness.container.querySelector<HTMLButtonElement>("[data-reader-source-trash]"));
     trigger.focus();
     await act(async () => { trigger.click(); await settle(harness.dom); });
+    const dialog = required(harness.container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    expect(dialog.getAttribute("aria-describedby")).toBe("source-trash-description");
     const confirm = button(harness.container, "Move to Trash");
     await act(async () => { confirm.click(); confirm.click(); await settle(harness.dom); });
     expect(onTrash).toHaveBeenCalledOnce();
@@ -26,6 +29,38 @@ describe("source trash UI", () => {
       expectedSourceRevision: `sourcerev_${"a".repeat(64)}`, confirmation: "move_to_trash" }));
     expect(onCommitted).not.toHaveBeenCalled();
     expect(harness.container.querySelector("[role=alert]")?.textContent).toContain("remains available");
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await harness.unmount();
+  });
+
+  it("announces a pending move, traps confirmation focus, and dismisses quietly with Escape", async () => {
+    const harness = await mount(), pending = deferred<SourceTrashResult>();
+    let request!: SourceTrashRequest;
+    const onTrash = vi.fn(async (next: SourceTrashRequest) => { request = next; return pending.promise; });
+    await harness.render(createElement(ReaderSourceTrashAction, { activeVaultId: "vault_20260802_abcdefgh",
+      note: note(), onTrash, onCommitted: vi.fn(), t }));
+    const trigger = required(harness.container.querySelector<HTMLButtonElement>("[data-reader-source-trash]"));
+    trigger.focus();
+    await act(async () => { trigger.click(); await settle(harness.dom); });
+    const dialog = required(harness.container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    const cancel = button(dialog, "Cancel"), confirm = button(dialog, "Move to Trash");
+    cancel.focus();
+    await act(async () => { cancel.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true })); await settle(harness.dom); });
+    expect(harness.dom.window.document.activeElement).toBe(confirm);
+    await act(async () => { confirm.click(); await settle(harness.dom); });
+    expect(onTrash).toHaveBeenCalledOnce();
+    expect(dialog.getAttribute("aria-busy")).toBe("true");
+    expect(dialog.querySelector('[role="status"]')?.textContent).toContain("Moving");
+    await act(async () => {
+      pending.resolve({ ...request, status: "stale" });
+      await pending.promise;
+      await settle(harness.dom);
+    });
+    expect(harness.dom.window.document.activeElement).toBe(trigger);
+    await act(async () => { trigger.click(); await settle(harness.dom); });
+    const reopened = required(harness.container.querySelector<HTMLElement>('[role="alertdialog"]'));
+    await act(async () => { reopened.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await settle(harness.dom); });
+    expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
     expect(harness.dom.window.document.activeElement).toBe(trigger);
     await harness.unmount();
   });
@@ -78,3 +113,4 @@ async function mount() {
     unmount: async () => { await act(async () => root.unmount()); dom.window.close(); } };
 }
 async function settle(dom: JSDOM) { await Promise.resolve(); await new Promise<void>((resolve) => dom.window.requestAnimationFrame(() => dom.window.requestAnimationFrame(() => resolve()))); await Promise.resolve(); }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((next) => { resolve = next; }); return { promise, resolve }; }
