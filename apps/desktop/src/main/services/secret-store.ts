@@ -4,7 +4,12 @@ import path from "node:path";
 import { PigeDomainError } from "@pige/domain";
 import { z } from "zod";
 
-/** Retained only for source compatibility with older tests and callers; new storage never invokes it. */
+export type SecretStorageMode = "os_protected" | "portable" | "unavailable";
+
+/**
+ * Main supplies Electron safeStorage here. Keeping the bridge injected makes the durable
+ * file owner testable without giving renderer or provider code an Electron handle.
+ */
 export interface SecretCryptoAdapter {
   readonly isEncryptionAvailable: () => boolean;
   readonly encryptString: (value: string) => Buffer;
@@ -20,12 +25,16 @@ const SecretRecordIdentitySchema = z.object({
 const LocalSecretRecordSchema = SecretRecordIdentitySchema.extend({
   value: z.string().min(1).max(16_384)
 }).strict();
+const ProtectedSecretRecordSchema = SecretRecordIdentitySchema.extend({
+  storage: z.literal("os_protected"),
+  encryptedValue: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/u).min(1).max(131_072)
+}).strict();
 const LegacySecretRecordSchema = SecretRecordIdentitySchema.extend({
   legacyEncryptedValue: z.string().min(1)
 }).strict();
 const SecretStoreFileSchema = z.object({
   schemaVersion: z.literal(2),
-  secrets: z.array(z.union([LocalSecretRecordSchema, LegacySecretRecordSchema])).max(256)
+  secrets: z.array(z.union([LocalSecretRecordSchema, ProtectedSecretRecordSchema, LegacySecretRecordSchema])).max(256)
 }).strict();
 const LegacySecretStoreFileSchema = z.object({
   schemaVersion: z.literal(1),
@@ -34,7 +43,8 @@ const LegacySecretStoreFileSchema = z.object({
   }).strict()).max(256)
 }).strict();
 
-type SecretRecord = z.infer<typeof LocalSecretRecordSchema> | z.infer<typeof LegacySecretRecordSchema>;
+type SecretRecordIdentity = z.infer<typeof SecretRecordIdentitySchema>;
+type SecretRecord = z.infer<typeof LocalSecretRecordSchema> | z.infer<typeof ProtectedSecretRecordSchema> | z.infer<typeof LegacySecretRecordSchema>;
 type SecretStoreFile = z.infer<typeof SecretStoreFileSchema>;
 type SecretRootIdentity = { readonly dev: number; readonly ino: number };
 
@@ -45,8 +55,9 @@ export class JsonSecretStore {
   readonly #rootPath: string;
   readonly #rootIdentity: SecretRootIdentity;
   readonly #secretsPath: string;
+  readonly #crypto: SecretCryptoAdapter | undefined;
 
-  constructor(userDataPath: string, _retiredCrypto?: SecretCryptoAdapter) {
+  constructor(userDataPath: string, crypto?: SecretCryptoAdapter) {
     try {
       const resolved = path.resolve(userDataPath);
       fs.realpathSync.native(resolved);
@@ -55,6 +66,7 @@ export class JsonSecretStore {
       this.#rootPath = resolved;
       this.#rootIdentity = { dev: stat.dev, ino: stat.ino };
       this.#secretsPath = path.join(resolved, "secrets.json");
+      this.#crypto = crypto;
     } catch (caught) {
       if (caught instanceof PigeDomainError) throw caught;
       throw secretStoreInvalidError();
@@ -71,7 +83,7 @@ export class JsonSecretStore {
     }
     this.#write({
       schemaVersion: 2,
-      secrets: [{ ref, value, createdAt: now, updatedAt: now }, ...file.secrets]
+      secrets: [this.#recordForValue({ ref, createdAt: now, updatedAt: now }, value), ...file.secrets]
     });
     return ref;
   }
@@ -85,7 +97,7 @@ export class JsonSecretStore {
     const next: SecretStoreFile = {
       schemaVersion: 2,
       secrets: previous.secrets.map((secret): SecretRecord => secret.ref === ref
-        ? { ref, value, createdAt: secret.createdAt, updatedAt: new Date().toISOString() }
+        ? this.#recordForValue({ ref, createdAt: secret.createdAt, updatedAt: new Date().toISOString() }, value)
         : secret)
     };
     try {
@@ -120,20 +132,27 @@ export class JsonSecretStore {
   hasProviderSecret(refInput: string): boolean {
     const ref = parseSecretRef(refInput);
     const record = this.#read().secrets.find((secret) => secret.ref === ref);
-    return record !== undefined && "value" in record;
+    return record !== undefined && this.#readRecordValue(record) !== undefined;
   }
 
   readProviderSecret(refInput: string): string {
     const ref = parseSecretRef(refInput);
     const record = this.#read().secrets.find((secret) => secret.ref === ref);
     if (!record) throw new PigeDomainError("secret_missing", "Provider secret is missing.");
-    if (!("value" in record)) {
-      throw new PigeDomainError(
-        "secret_reconnect_required",
-        "This provider credential uses the retired keychain format and must be reconnected."
-      );
+    const value = this.#readRecordValue(record);
+    if (value === undefined) throw secretReconnectRequiredError();
+    return value;
+  }
+
+  storageMode(): SecretStorageMode {
+    try {
+      const file = this.#read();
+      if (file.secrets.some((secret) => "legacyEncryptedValue" in secret)) return "unavailable";
+      for (const secret of file.secrets) if ("encryptedValue" in secret) this.#readRecordValue(secret);
+      return this.#protectionMode();
+    } catch {
+      return "unavailable";
     }
-    return record.value;
   }
 
   deleteProviderSecret(refInput: string): void {
@@ -164,17 +183,32 @@ export class JsonSecretStore {
     if (typeof parsed === "object" && parsed !== null && "schemaVersion" in parsed && parsed.schemaVersion === 1) {
       const legacy = LegacySecretStoreFileSchema.safeParse(parsed);
       if (!legacy.success) throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
-      return SecretStoreFileSchema.parse({
+      return this.#migratePortableRecords(SecretStoreFileSchema.parse({
         schemaVersion: 2,
         secrets: legacy.data.secrets.map(({ encryptedValue, ...identity }) => ({
           ...identity,
           legacyEncryptedValue: encryptedValue
         }))
-      });
+      }));
     }
     const current = SecretStoreFileSchema.safeParse(parsed);
     if (!current.success) throw new PigeDomainError("secret_store_invalid", "Secret store is invalid.");
-    return current.data;
+    return this.#migratePortableRecords(current.data);
+  }
+
+  #migratePortableRecords(file: SecretStoreFile): SecretStoreFile {
+    if (this.#protectionMode() !== "os_protected" || !file.secrets.some((secret) => "value" in secret)) return file;
+    const migrated: SecretStoreFile = {
+      schemaVersion: 2,
+      secrets: file.secrets.map((secret): SecretRecord => "value" in secret
+        ? (() => {
+          const { value, ...identity } = secret;
+          return this.#recordForValue(identity, value);
+        })()
+        : secret)
+    };
+    this.#write(migrated);
+    return migrated;
   }
 
   #write(fileInput: SecretStoreFile): void {
@@ -205,6 +239,38 @@ export class JsonSecretStore {
       } catch {
         // Temporary cleanup cannot replace the primary persistence result.
       }
+    }
+  }
+
+  #recordForValue(identity: SecretRecordIdentity, value: string): SecretRecord {
+    const mode = this.#protectionMode();
+    if (mode === "portable") return { ...identity, value };
+    if (mode !== "os_protected" || !this.#crypto) throw secretProtectionUnavailableError();
+    try {
+      return { ...identity, storage: "os_protected", encryptedValue: this.#crypto.encryptString(value).toString("base64") };
+    } catch {
+      throw secretProtectionUnavailableError();
+    }
+  }
+
+  #readRecordValue(record: SecretRecord): string | undefined {
+    if ("value" in record) return record.value;
+    if ("legacyEncryptedValue" in record) return undefined;
+    if (this.#protectionMode() !== "os_protected" || !this.#crypto) throw secretProtectionUnavailableError();
+    try {
+      const value = this.#crypto.decryptString(Buffer.from(record.encryptedValue, "base64"));
+      return this.#validateSecretValue(value);
+    } catch {
+      throw secretProtectionUnavailableError();
+    }
+  }
+
+  #protectionMode(): SecretStorageMode {
+    if (!this.#crypto) return "portable";
+    try {
+      return this.#crypto.isEncryptionAvailable() ? "os_protected" : "portable";
+    } catch {
+      return "unavailable";
     }
   }
 
@@ -277,6 +343,20 @@ function secretUpdateRepairRequiredError(): PigeDomainError {
   return new PigeDomainError(
     "secret_update_repair_required",
     "Provider credential replacement could not restore the previous local value safely."
+  );
+}
+
+function secretReconnectRequiredError(): PigeDomainError {
+  return new PigeDomainError(
+    "secret_reconnect_required",
+    "This provider credential cannot be read and must be reconnected."
+  );
+}
+
+function secretProtectionUnavailableError(): PigeDomainError {
+  return new PigeDomainError(
+    "secret_protection_unavailable",
+    "OS-protected credential storage is unavailable."
   );
 }
 

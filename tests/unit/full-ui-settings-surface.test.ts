@@ -353,7 +353,9 @@ describe("full UI Settings surface", () => {
     Object.defineProperty(dom.window, "pige", { configurable: true, value: {
       activity: { list: search },
       notes: { listTrash: vi.fn(async (request: { apiVersion: 1; requestId: string; activeVaultId: string }) =>
-        ({ ...request, status: "ready", notes: [] })) }
+        ({ ...request, status: "ready", notes: [] })) },
+      sources: { listTrash: vi.fn(async (request: { apiVersion: 1; requestId: string; activeVaultId: string }) =>
+        ({ ...request, status: "ready", sources: [] })) }
     } });
     function Harness(): React.JSX.Element {
       const [activities, setActivities] = useState<readonly KnowledgeActivitySummary[]>([
@@ -4998,7 +5000,7 @@ describe("full UI Settings surface", () => {
     expect(container.textContent).toContain("Confirm each effect");
     expect(container.textContent).toContain("No standing authority");
     expect(container.textContent).toContain("Local app data");
-    expect(container.textContent).toContain("without the OS keychain");
+    expect(container.textContent).toContain("protected credential storage when available");
     expect(container.textContent).toContain("On this device");
     expect(container.textContent).not.toContain("Default mode");
     expect(container.textContent).not.toContain("Saved scoped grants");

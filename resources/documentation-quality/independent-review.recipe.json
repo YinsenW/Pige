@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "passed",
-  "reviewedAt": "2026-08-08T08:48:00.000Z",
+  "reviewedAt": "2026-08-08T09:39:41.000Z",
   "maxAgeDays": 30,
   "minimumDimensionScore": 9.5,
   "strictlyAboveMinimum": true,
@@ -52,17 +52,17 @@
       "scripts/verify/large-paste-boundary.mjs",
       "package.json"
     ],
-    "scope": "Review bounded Reader Entity identifier and directed Claim-support corrections, local audio/video evidence preservation, and revalidated rollback replacement preview; each reuses existing durable records without exposing bodies or paths.",
+    "scope": "Review Main-owned Provider credential protection: bounded app-data records, Electron safeStorage migration, safe Settings status, and no raw-secret projection.",
     "exclude": [
       "resources/documentation-quality/independent-review.recipe.json"
     ],
     "minimumFileCount": 35,
-    "reviewedSha256": "81c6765f164d01aba5783601028dadfe9d7b5869e5f111e0749b0175278c4321"
+    "reviewedSha256": "6b7285e664dda9f04d80d3903c0db4a6a7432f7c765e1ecffc0062ca281299a7"
   },
   "reviewers": [
     {
-      "reviewerId": "entity-identifier-review",
-      "task": "Review Entity identifier and Claim-support correction plus rollback replacement preview",
+      "reviewerId": "secret-store-security-review",
+      "task": "Review Provider credential protection, migration, and fail-closed recovery",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
@@ -70,96 +70,86 @@
         "ongoing_development_support",
         "documentation_leanness_and_maintainability"
       ],
-      "independence": "Project review checks Entity and Claim frontmatter bounds, current-page CAS, directed-cycle rejection, rebuildable relationship projection, Activity recovery, and latest replacement/archive identity before a sender-local preview separately from implementation authorship."
+      "independence": "Project review checks no-follow machine-app-data ownership, protected-record migration, decrypt failure, and renderer exclusion separately from implementation authorship."
     },
     {
-      "reviewerId": "media-evidence-capture-review",
-      "task": "Review local media evidence capture without transcription",
+      "reviewerId": "provider-secret-privacy-review",
+      "task": "Review Provider/Settings safe storage disclosure and public privacy consistency",
       "independentDimensions": [
         "navigation_and_resource_lifecycle",
         "cross_document_contract_consistency",
         "continuous_traceability_and_acceptance"
       ],
-      "independence": "Project review checks local preservation, pathless Source projection, waiting capability recovery, and no-model/no-egress boundaries separately from implementation authorship."
+      "independence": "Project review checks safe status DTOs, Provider-only credential resolution, backup exclusion, and public-copy alignment separately from implementation authorship."
     }
   ],
   "dimensions": [
     {
       "id": "navigation_and_resource_lifecycle",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "secret-store-security-review",
       "blockerCount": 0,
-      "summary": "Main preserves media and keeps paths and bytes private; the Source Page and waiting result expose only safe capability facts."
+      "summary": "Main retains the bounded no-follow app-data secret owner; ciphertext migration and decrypt failure remain private and fail closed."
     },
     {
       "id": "cross_document_contract_consistency",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "provider-secret-privacy-review",
       "blockerCount": 0,
-      "summary": "Capture, Source Page, Job, and restart owners agree that unavailable transcription is a durable no-model wait, not a parser or Agent route."
+      "summary": "Security, privacy, Provider, Settings, API, data, and architecture owners agree on safeStorage use, safe state projection, and no plaintext downgrade."
     },
     {
       "id": "continuous_traceability_and_acceptance",
       "score": 9.8,
-      "reviewerId": "media-evidence-capture-review",
+      "reviewerId": "provider-secret-privacy-review",
       "blockerCount": 0,
-      "summary": "PIGE-CAP-001 gains exact local media preservation evidence while it remains partial for its broader capture boundary."
+      "summary": "PIGE-SEC-001 and PIGE-SEC-006 gain migration, failure, Provider, and Settings evidence while release backup-exclusion qualification remains partial."
     },
     {
       "id": "ongoing_development_support",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "secret-store-security-review",
       "blockerCount": 0,
-      "summary": "Claim-support and rollback-preview owners only delegate durable writes to established page-edit or Restore Operation/recovery paths while Claim edges rebuild from Markdown."
+      "summary": "The injected secret-store adapter keeps Electron handles out of Provider and renderer code while preserving existing Provider behavior."
     },
     {
       "id": "documentation_leanness_and_maintainability",
       "score": 9.8,
-      "reviewerId": "entity-identifier-review",
+      "reviewerId": "secret-store-security-review",
       "blockerCount": 0,
-      "summary": "Knowledge-model and trace documents record bounded identifier and Claim-support corrections without adding a design document or duplicating durable rules."
+      "summary": "Existing owner documents replace stale no-keychain claims with one compact durable decision and exact safe-status contract."
     }
   ],
   "verification": [
     {
-      "command": "npx vitest run tests/unit/entity-identifier-service.test.ts tests/unit/reader-entity-identifiers-ui.test.ts",
+      "command": "npx vitest run tests/unit/secret-store.test.ts tests/unit/model-provider-registry.test.ts tests/unit/model-settings-error-ui.test.ts tests/unit/desktop-shell-contract.test.ts",
       "status": "passed",
-      "evidence": "Focused service and Reader tests prove one exact Entity identifier update with bounded projection and a stale-preserving UI path."
+      "evidence": "Focused tests prove schema-v2 migration/restart, portable and unavailable states, protected decrypt failure, Provider ciphertext resolution, and safe Settings projection."
     },
     {
       "command": "npm run verify:architecture-reset && npm run verify:change",
       "status": "passed",
-      "evidence": "The dedicated Entity identifier owner keeps existing Reader and Notes owners within frozen budgets while architecture and change rules remain enforced."
+      "evidence": "The existing secret-store owner grows only for injected protection and migration; architecture and change rules remain enforced."
     },
     {
       "command": "npm run verify:independent-documentation-review && npm run verify:traceability",
       "status": "passed",
-      "evidence": "Pi and Job contracts, trace text and the review snapshot agree while requirements remain partial."
+      "evidence": "Security, privacy, Provider, Settings, API, trace, and review facts agree while requirements remain partial."
     },
     {
-      "command": "npx vitest run tests/unit/claim-support-service.test.ts tests/unit/reader-claim-supports-ui.test.ts tests/unit/local-database-service.test.ts",
+      "command": "npx vitest run tests/unit/secret-store.test.ts tests/unit/model-provider-registry.test.ts tests/unit/model-settings-error-ui.test.ts --maxWorkers=1",
       "status": "passed",
-      "evidence": "Focused Claim tests prove directed source-backed support, rebuildable related-page projection, exact page update and stale-preserving Reader confirmation."
-    },
-    {
-      "command": "npx vitest run tests/unit/home-agent-media-capture-service.test.ts tests/unit/capture-service.test.ts tests/unit/home-agent-attachment-service.test.ts --maxWorkers=1",
-      "status": "passed",
-      "evidence": "Focused capture tests prove typed local media preservation, deterministic Source Page projection, and a no-model/no-egress unavailable transcription wait."
-    },
-    {
-      "command": "npx vitest run tests/unit/restore-coordinator-service.test.ts tests/unit/register-backup-restore-ipc.test.ts tests/unit/restore-ui.test.ts --maxWorkers=1",
-      "status": "passed",
-      "evidence": "Focused Restore tests prove current replacement rollback proof, a pathless replace-only preview, and reuse of the ordinary confirmation path."
+      "evidence": "Focused secret-store, Provider, and Settings tests prove no raw-secret projection or protected-record plaintext downgrade."
     }
   ],
   "coordination": {
-    "taskId": "entity-media-and-rollback-preview-20260808",
-    "taskTitle": "Entity identifier, Claim support, local media, and rollback restore preview",
+    "taskId": "provider-secret-protection-20260808",
+    "taskTitle": "Provider credential OS-protection and safe Settings disclosure",
     "planningCost": "Medium",
     "action": "Active-phase follow-up",
     "status": "acknowledged",
-    "compatibility": "Existing Entity, Claim confidence/evidence/contradiction, capture, parser/OCR, Agent, Source Page, Restore confirmation, and durable Job semantics remain unchanged; the directed support action uses one existing proof-bound page update while rollback only prepares an existing replacement preview.",
-    "acknowledgement": "PIGE-KNOW-003 gains bounded identifier and Claim-support evidence, PIGE-CAP-001 gains bounded media evidence, and their broader requirements remain partial; verified PIGE-BACKUP-004 gains exact rollback-preview evidence."
+    "compatibility": "Provider protocol, cloud-send, profiles, and renderer authority remain unchanged; Main alone injects safeStorage and resolves protected credential references.",
+    "acknowledgement": "PIGE-SEC-001 and PIGE-SEC-006 gain bounded evidence while their broader release qualification remains partial."
   },
   "resolvedBlockers": [],
   "nonBlockingRisks": []

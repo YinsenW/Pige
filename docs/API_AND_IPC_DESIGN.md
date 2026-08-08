@@ -979,7 +979,7 @@ type DefaultModelBindingSummary =
   | { state: "ready"; providerProfileId: string; modelProfileId: string }
   | { state: "configured_unusable"; providerProfileId?: string; modelProfileId?: string; error: PigeErrorSummary };
 
-type ModelProviderSettingsSummary = { revision?: string; presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean; defaultBinding: DefaultModelBindingSummary };
+type ModelProviderSettingsSummary = { revision?: string; credentialStorage?: { mode: "os_protected" | "portable" | "unavailable" }; presets: ProviderPresetSummary[]; providers: ProviderProfileSummary[]; models: ModelProfileSummary[]; defaultModelProfileId?: string; hasDefaultModel: boolean; defaultBinding: DefaultModelBindingSummary };
 
 type ProviderPresetSummary = { presetId: string; displayName: string; providerKind: ProviderKind; endpointProtocol: "openai_responses" | "openai_chat_completions" | "anthropic_messages"; fixedBaseUrl: string; authRequirement: "api_key" | "optional_api_key" | "none"; modelListStrategy: ModelListStrategy; cloudBoundary: CloudBoundary; apiKeyManagementUrl?: string };
 
@@ -1002,6 +1002,8 @@ Profiles persist protocol/auth/preset identity; `defaultBinding` carries safe ID
 Opaque `sha256:` `revision` fences credential replacement/deletion. Connect probes before
 all-or-restore commit; Refresh preserves inventory. Body-free session status separates
 configured, discovery verified, generation verified/failed; discovery is not chat proof.
+`credentialStorage` reports only the current `os_protected`, `portable`, or `unavailable`
+state; it carries no secret, record, ciphertext, path, or mutation authority.
 
 Secrets are passed only to the Settings and Secrets Service and are never echoed back.
 

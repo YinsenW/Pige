@@ -113,20 +113,22 @@ describe("desktop shell build contract", () => {
     }
   });
 
-  it("loads Provider credentials from app data without invoking the OS keychain", () => {
+  it("routes Provider credentials through Main-owned OS protection with a portable fallback", () => {
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
     const storeSource = fs.readFileSync(
       path.resolve("apps/desktop/src/main/services/secret-store.ts"),
       "utf8"
     );
 
-    expect(mainSource).not.toMatch(/\bsafeStorage\b/u);
-    expect(mainSource).toContain('new JsonSecretStore(app.getPath("userData"))');
+    expect(mainSource).toMatch(/\bsafeStorage\b/u);
+    expect(mainSource).toContain('new JsonSecretStore(app.getPath("userData"), safeStorage)');
     expect(storeSource).toContain("const resolved = path.resolve(userDataPath)");
     expect(storeSource).toContain('path.join(resolved, "secrets.json")');
     expect(storeSource).toContain("schemaVersion: z.literal(2)");
-    expect(storeSource).not.toContain(".encryptString(");
-    expect(storeSource).not.toContain(".decryptString(");
+    expect(storeSource).toContain("storage: z.literal(\"os_protected\")");
+    expect(storeSource).toContain(".encryptString(");
+    expect(storeSource).toContain(".decryptString(");
+    expect(storeSource).toContain("storageMode(): SecretStorageMode");
   });
 
   it("freezes one pathless current-note replacement proposal surface", () => {

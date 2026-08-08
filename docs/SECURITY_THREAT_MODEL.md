@@ -117,12 +117,16 @@ Threat:
 Mitigations:
 
 - Store secrets only in the machine-local Pige app-data credential file with local-user
-  file permissions where supported; never use the OS keychain.
+  file permissions where supported. When injected Electron `safeStorage` is available,
+  schema-v2 records use OS-protected ciphertext; its safe status is explicit.
 - Re-prove the credential root and bounded `secrets.json` as one owner-only, regular,
   single-link file before read, revision hashing, replacement, Provider use, or deletion;
   links, oversized files, identity drift, and malformed records fail closed.
 - Treat the credential file as non-portable machine state, exclude it from backup/export,
-  and disclose that another process running as the same OS user may read it.
+  and never project a credential record or raw key.
+- Migrate schema-v2 portable values to OS-protected ciphertext without changing their
+  references when protection becomes available. Protected decrypt/protection failure makes
+  the record unusable; it never downgrades the record to plaintext.
 - Secret scanning before memory persistence, diagnostics export, and support bundles.
 - Keep Pige-owned stored credentials out of prompt content and construct authentication
   only in the reviewed Provider adapter. Do not rewrite user-authored submitted content.
@@ -383,12 +387,14 @@ renderer/main, filesystem and prompt-injection controls remain independent.
 
 ## 8. Secret Storage Policy
 
-- Provider credentials use Pige's non-portable machine-local app-data store; Pige never
-  invokes an OS keychain.
+- Provider credentials use Pige's non-portable machine-local app-data store with Main-injected
+  Electron `safeStorage`. `os_protected` stores ciphertext; `portable` and `unavailable` are
+  safe status only, not renderer authority or credential data.
 - The file is restricted to the local OS user where supported and excluded from Vaults,
   logs, diagnostics, settings export, and default backups.
-- Settings discloses that another process running as the same OS user may read it.
-- Legacy keychain ciphertext remains inert and requires Provider reconnect.
+- Schema-v2 portable values migrate once to ciphertext when protection is available; failed
+  decrypts fail closed. Retired schema-v1 ciphertext remains inert and requires Provider
+  reconnect.
 
 ## 9. BYOK Security Policy
 
@@ -450,9 +456,10 @@ Before v0.1 public alpha:
 
 These v0.1 design choices are accepted. Implementation still must pin concrete versions, add tests, and record platform-specific behavior.
 
-- Secret storage: Pige writes API keys/tokens to schema-v2 machine-local app data with
-  owner-only POSIX file mode where supported. Legacy schema-v1 keychain ciphertext stays
-  inert and requires Provider reconnect; Pige never decrypts it or prompts for keychain access.
+- Secret storage: Main injects Electron `safeStorage`; schema-v2 machine-local app-data
+  records use OS-protected ciphertext when available, with owner-only POSIX mode where
+  supported. Schema-v2 portable records migrate on a protected read; protected decrypt
+  failure fails closed. Retired schema-v1 ciphertext stays inert and requires Provider reconnect.
 - Skill/package boundary: pure Skills are Markdown; executable packages use reviewed
   scoped adapters and inherit no first-party authority. Shell defaults denied; fixed bundled
   commands or declared exact high-risk effects retain preview, limits, cancellation and log.

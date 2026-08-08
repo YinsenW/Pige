@@ -1401,6 +1401,9 @@ export interface ModelProfileSummary {
 
 export interface ModelProviderSettingsSummary {
   readonly revision?: string;
+  readonly credentialStorage?: {
+    readonly mode: "os_protected" | "portable" | "unavailable";
+  };
   readonly presets: readonly ProviderPresetSummary[];
   readonly providers: readonly ProviderProfileSummary[];
   readonly models: readonly ModelProfileSummary[];

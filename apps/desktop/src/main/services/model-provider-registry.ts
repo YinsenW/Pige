@@ -97,8 +97,10 @@ export class ModelProviderRegistry {
     const effectiveDefaultModelId = defaultBinding.state === "ready"
       ? defaultBinding.modelProfileId
       : undefined;
+    const credentialStorage = { mode: this.#secrets.storageMode() } as const;
     return {
       revision: this.#revisionToken(),
+      credentialStorage,
       presets: listReviewedProviderPresets(),
       providers: providers.map((provider) => toProviderSummary(provider, this.#runtimeStatuses.get(provider.id))),
       models: modelFile.models.map((model) => toModelSummary(model, effectiveDefaultModelId)),

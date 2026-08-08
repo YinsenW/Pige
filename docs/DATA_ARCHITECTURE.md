@@ -238,7 +238,10 @@ Secrets include:
 Rule:
 
 - Storage is the machine-local Pige app-data credential file with local-user permissions
-  where supported. It never invokes the OS keychain and is not a portable mode.
+  where supported. Main uses Electron `safeStorage` for schema-v2 OS-protected ciphertext
+  when available; portable/unavailable are explicit safe states, not portable export modes.
+- A protected decrypt failure fails closed without plaintext downgrade. Schema-v2 portable
+  values migrate on an available protected read; retired schema-v1 ciphertext remains inert.
 - Secrets are excluded from vault backup by default.
 - Secrets never appear in Markdown, SQLite, logs, crash reports, prompt records, operation records, backups, diagnostics exports, or support bundles. A redacted support bundle may contain only placeholders, secret-reference IDs, and non-sensitive metadata; user initiation is not permission to include raw secrets.
 
