@@ -109,9 +109,13 @@ export function PermissionsPrivacySettingsPanel(props: {
       pending.trigger.focus();
       return;
     }
-    panelRef.current?.querySelector<HTMLElement>(
-      'button:not(:disabled), input[name="privacy-permission-mode"]:checked'
-    )?.focus();
+    const focusFallback = (): void => {
+      const target = panelRef.current?.querySelector<HTMLElement>(
+        'button:not(:disabled), input[name="privacy-permission-mode"]:checked'
+      );
+      target?.focus({ preventScroll: true });
+    };
+    focusFallback();
   }, [current, operation]);
 
   const finish = (
@@ -311,7 +315,7 @@ export function PermissionsPrivacySettingsPanel(props: {
         <h2 className="settings-section-title" id="privacy-high-risk-title">
           {props.t("privacy.highRiskTitle")}
         </h2>
-        <div className="settings-card">
+        <div className="settings-card" aria-busy={busy || undefined}>
           <div className="settings-row">
             <div className="settings-row-copy">
               <strong>{props.t("privacy.highRiskEffectsTitle")}</strong>
