@@ -27,11 +27,32 @@ describe("DiagnosticsRecentErrorsCard", () => {
     await act(async () => root.render(createElement(DiagnosticsRecentErrorsCard, {
       result: recentErrors(), failed: false, onPrepareSupport, t: (key: string) => key
     })));
+    const card = dom.window.document.querySelector("[data-diagnostics-recent-errors]");
+    expect(card?.classList.contains("diagnostics-recent-errors-card")).toBe(true);
+    expect(card?.getAttribute("aria-labelledby")).toBe("recent-errors-title");
+    expect(card?.getAttribute("aria-describedby")).toBe("recent-errors-description");
     expect(dom.window.document.querySelectorAll("details")).toHaveLength(1);
+    expect(dom.window.document.querySelector(".diagnostics-recent-error-heading strong")?.textContent).toBe("provider.failure");
+    expect(dom.window.document.querySelector("time")?.getAttribute("dateTime")).toBe("2026-08-08T11:00:00.000Z");
     expect(dom.window.document.body.textContent).toContain("provider.failure");
     expect(dom.window.document.body.textContent).not.toContain("/Users/alice");
-    (dom.window.document.querySelector("button") as HTMLButtonElement).click();
+    const prepareButton = dom.window.document.querySelector("button.settings-button.primary") as HTMLButtonElement;
+    expect(prepareButton.textContent).toContain("system.prepareSupportFromErrors");
+    prepareButton.click();
     expect(onPrepareSupport).toHaveBeenCalledOnce();
+    await act(async () => root.unmount());
+  });
+
+  it("gives the empty state its own status surface without inventing an action", async () => {
+    const dom = installDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => root.render(createElement(DiagnosticsRecentErrorsCard, {
+      result: { ...recentErrors(), errors: [] }, failed: false, onPrepareSupport: vi.fn(), t: (key: string) => key
+    })));
+    expect(dom.window.document.querySelector(".diagnostics-recent-errors-empty")?.getAttribute("role")).toBe("status");
+    expect(dom.window.document.querySelectorAll("details")).toHaveLength(0);
+    expect(dom.window.document.querySelectorAll("button")).toHaveLength(0);
+    expect(dom.window.document.body.textContent).toContain("system.noRecentErrors");
     await act(async () => root.unmount());
   });
 
@@ -41,7 +62,10 @@ describe("DiagnosticsRecentErrorsCard", () => {
     await act(async () => root.render(createElement(DiagnosticsRecentErrorsCard, {
       result: null, failed: true, onPrepareSupport: vi.fn(), t: (key: string) => key
     })));
-    expect(dom.window.document.querySelector("[role=alert]")?.textContent).toContain("system.recentErrorsUnavailable");
+    const failure = dom.window.document.querySelector("[role=alert]");
+    expect(failure?.classList.contains("diagnostics-recent-errors-card-failed")).toBe(true);
+    expect(failure?.querySelector("[role=status]")?.textContent).toContain("system.recentErrorsUnavailable");
+    expect(failure?.textContent).toContain("system.recentErrorsUnavailable");
     await act(async () => root.unmount());
   });
 });
