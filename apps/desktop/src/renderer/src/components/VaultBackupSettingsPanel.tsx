@@ -884,7 +884,7 @@ export function VaultBackupSettingsPanel(props: VaultBackupSettingsPanelProps): 
           restoreIdle={restore.restorePhase === "idle"}
           onPreview={restore.previewRestoreFrom}
           t={props.t} />
-        {activeBackupJob ? <div className="settings-row tall backup-job-status" role="status" aria-live="polite"><div className="settings-row-copy"><strong>{props.t("backup.currentJob")}</strong><span>{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
+        {activeBackupJob ? <div className="settings-row tall backup-job-status" aria-labelledby="backup-current-job-title"><div className="settings-row-copy"><strong id="backup-current-job-title">{props.t("backup.currentJob")}</strong><span role="status" aria-live="polite">{props.t(backupJobMessageKey(activeBackupJob))}</span></div><div className="settings-row-control">
           {activeBackupJob.state === "queued" || activeBackupJob.state === "running" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void cancelBackup()}>{props.t("home.cancelJob")}</button>
             : activeBackupJob.state === "failed_retryable" && activeBackupJob.error?.userAction === "retry" ? <button type="button" className="settings-button" disabled={backupBusy || relocationBusy} onClick={() => void retryBackup()}>{props.t("home.retryJob")}</button>
               : activeBackupJob.canReconnectDependency === true ? <button ref={reconnectButtonRef} type="button" className="settings-button" disabled={backupBusy || relocationBusy} aria-busy={reconnectRequestActiveRef.current || undefined} onClick={() => void reconnectDependency()}>{props.t("backup.reconnectManagedSource")}</button>
