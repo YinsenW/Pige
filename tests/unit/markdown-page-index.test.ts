@@ -17,7 +17,7 @@ describe("Markdown page index strict frontmatter boundary", () => {
     writePage(vault, "wiki/topic.md", page("topic", "topic001", "", { topics: ["page_20260709_topic002"] }));
     writePage(vault, "wiki/concept.md", page("concept", "concept1", 'concept:\n  canonical_name: "Local-first"\n  parent_concepts: ["page_20260709_concept2"]\n  child_concepts: []'));
     writePage(vault, "wiki/entity.md", page("entity", "entity01", 'entity:\n  entity_type: "product"\n  canonical_name: "Pige"\n  identifiers: ["pige"]'));
-    writePage(vault, "wiki/claim.md", page("claim", "claim001", 'claim:\n  confidence: "high"\n  evidence: ["src_20260709_schema001#p1"]\n  contradicts: ["page_20260709_claim002"]', { sourceIds: ["src_20260709_schema001"] }));
+    writePage(vault, "wiki/claim.md", page("claim", "claim001", 'claim:\n  confidence: "high"\n  evidence: ["src_20260709_schema001#p1"]\n  contradicts: ["page_20260709_claim002"]\n  supports: ["page_20260709_claim003"]', { sourceIds: ["src_20260709_schema001"] }));
     writePage(vault, "wiki/question.md", page("question", "question1", 'question:\n  state: "answered"\n  answered_by: ["page_20260709_note0001"]'));
     writePage(vault, "sources/source.md", page("source", "source001", sourceProjection, { sourceIds: ["src_20260709_schema001"] }));
 
@@ -28,6 +28,8 @@ describe("Markdown page index strict frontmatter boundary", () => {
     ]);
     expect(result.pages.find((entry) => entry.summary.pageType === "claim")?.knowledge.claimContradicts)
       .toEqual(["page_20260709_claim002"]);
+    expect(result.pages.find((entry) => entry.summary.pageType === "claim")?.knowledge.claimSupports)
+      .toEqual(["page_20260709_claim003"]);
     expect(result.pages.find((entry) => entry.summary.pageType === "question")?.knowledge.questionAnswers)
       .toEqual(["page_20260709_note0001"]);
     expect(result.pages.find((entry) => entry.summary.pageType === "concept")?.knowledge.conceptParents)

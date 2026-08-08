@@ -374,6 +374,12 @@ import type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteClaimSupportItem,
+  NoteClaimSupportsSummary,
+  NoteSearchClaimSupportsRequest,
+  NoteSearchClaimSupportsResult,
+  NoteChangeClaimSupportRequest,
+  NoteChangeClaimSupportResult,
   NoteClaimEvidenceItem,
   NoteClaimEvidenceSummary,
   NoteSearchClaimEvidenceRequest,
@@ -903,6 +909,12 @@ export type {
   NoteSearchClaimContradictionsResult,
   NoteChangeClaimContradictionRequest,
   NoteChangeClaimContradictionResult,
+  NoteClaimSupportItem,
+  NoteClaimSupportsSummary,
+  NoteSearchClaimSupportsRequest,
+  NoteSearchClaimSupportsResult,
+  NoteChangeClaimSupportRequest,
+  NoteChangeClaimSupportResult,
   NoteClaimEvidenceItem,
   NoteClaimEvidenceSummary,
   NoteSearchClaimEvidenceRequest,
@@ -1949,7 +1961,7 @@ export interface LibraryRelatedPageSummary {
 export interface LibraryRelatedPage {
   readonly summary: LibraryRelatedPageSummary;
   readonly relation: "outgoing" | "backlink";
-  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "answers" | "broader_than";
+  readonly relationType: "links_to" | "related_to" | "mentions_entity" | "contradicts" | "supports" | "answers" | "broader_than";
 }
 
 export interface LibraryRelatedResult {
@@ -2800,6 +2812,12 @@ export interface PigeDesktopApi {
     readonly changeClaimContradiction: (
       request: NoteChangeClaimContradictionRequest
     ) => Promise<NoteChangeClaimContradictionResult>;
+    readonly searchClaimSupports: (
+      request: NoteSearchClaimSupportsRequest
+    ) => Promise<NoteSearchClaimSupportsResult>;
+    readonly changeClaimSupport: (
+      request: NoteChangeClaimSupportRequest
+    ) => Promise<NoteChangeClaimSupportResult>;
     readonly searchClaimEvidence: (
       request: NoteSearchClaimEvidenceRequest
     ) => Promise<NoteSearchClaimEvidenceResult>;

@@ -182,9 +182,13 @@ describe("notes service", () => {
   it("projects exact mutable confidence only for a current valid Claim page", async () => {
     const { vaultPath, vault } = makeVault();
     const pageId = "page_20260801_claimconf1";
+    const supportedPageId = "page_20260801_claimconf3";
+    writePage({ vaultPath, fileName: "supported-claim.md", pageId: supportedPageId, title: "Supported Claim", pageType: "claim",
+      sourceIds: ["src_20260801_claimsource"] });
     writePage({
       vaultPath, fileName: "claim.md", pageId, title: "Claim", pageType: "claim",
-      extraFrontmatter: 'claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []'
+      sourceIds: ["src_20260801_claimsource"],
+      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []\n  supports: ["${supportedPageId}"]`
     });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId }, OWNER_ID);
@@ -192,6 +196,8 @@ describe("notes service", () => {
       confidence: "medium", canChange: true,
       revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
+    expect(rendered.claimSupports).toEqual({ canEdit: true, revision: rendered.claimConfidence!.revision,
+      items: [expect.objectContaining({ pageId: supportedPageId, title: "Supported Claim" })] });
     expect(notes.resolveManagedPageTarget(OWNER_ID, {
       activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId!,
       expectedRevision: rendered.claimConfidence!.revision

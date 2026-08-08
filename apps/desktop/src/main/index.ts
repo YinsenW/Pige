@@ -383,6 +383,7 @@ import { EntityIdentifierService } from "./services/entity-identifier-service";
 import { EntityMentionService } from "./services/entity-mention-service";
 import { QuestionAnswerService } from "./services/question-answer-service";
 import { ClaimContradictionService } from "./services/claim-contradiction-service";
+import { ClaimSupportService } from "./services/claim-support-service";
 import { ClaimEvidenceService } from "./services/claim-evidence-service";
 import { ConceptParentService } from "./services/concept-parent-service";
 import { TopicParentService } from "./services/topic-parent-service";
@@ -565,6 +566,7 @@ let entityIdentifierService: EntityIdentifierService | undefined;
 let entityMentionService: EntityMentionService | undefined;
 let questionAnswerService: QuestionAnswerService | undefined;
 let claimContradictionService: ClaimContradictionService | undefined;
+let claimSupportService: ClaimSupportService | undefined;
 let claimEvidenceService: ClaimEvidenceService | undefined;
 let conceptParentService: ConceptParentService | undefined;
 let topicParentService: TopicParentService | undefined;
@@ -2126,6 +2128,12 @@ const getClaimContradictionService = (): ClaimContradictionService => {
     () => getVaultService().activeVaultPath()
   );
   return claimContradictionService;
+};
+const getClaimSupportService = (): ClaimSupportService => {
+  claimSupportService ??= new ClaimSupportService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), getNoteMarkdownEditorActivityAdapter(), { allowClaim: true }),
+    () => getVaultService().activeVaultPath());
+  return claimSupportService;
 };
 const getClaimEvidenceService = (): ClaimEvidenceService => {
   claimEvidenceService ??= new ClaimEvidenceService(
@@ -3889,6 +3897,7 @@ registerReaderIpc({
   getEntityMentionService,
   getQuestionAnswerService,
   getClaimContradictionService,
+  getClaimSupportService,
   getClaimEvidenceService,
   getConceptParentService,
   getTopicParentService,
@@ -4497,6 +4506,9 @@ app.whenReady().then(async () => {
     }),
     () => getVaultService().activeVaultPath()
   );
+  claimSupportService = new ClaimSupportService(getNotesService(),
+    new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true }),
+    () => getVaultService().activeVaultPath());
   claimEvidenceService = new ClaimEvidenceService(
     getNotesService(),
     new NoteMarkdownEditorService(getVaultService(), noteMarkdownEditorActivityAdapter, { allowClaim: true }),

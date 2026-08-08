@@ -191,6 +191,7 @@ Claim rules:
 
 - Claims require citations unless explicitly marked `needs_review`.
 - `supports`, `contradicts`, `supersedes`, and `updates` relationships on claims require source evidence.
+- Reader support edits store only bounded stable Claim IDs in `claim.supports`: both Claims must still be active and source-backed, the current render/revision and target revision are re-proved, and cycles fail closed. Add/remove uses the existing `update_page` Operation, so Activity Undo and restart recovery restore the exact prior frontmatter.
 - Contradiction/supersession may apply while preserving both claims, citations, and history.
 
 ### 5.6 Grounded Home Agent Creation
@@ -218,7 +219,7 @@ Relationships can be derived from:
 - Body wiki links such as `[[Local RAG]]`.
 - Source citations such as `[source:src_20260709_120000_abcd#p3]`.
 - Frontmatter fields: `source_ids`, `topics`, `entities`, `related_page_ids`, `aliases`.
-- Page-type fields such as `concept.parent_concepts`, `claim.evidence`, and `claim.contradicts`.
+- Page-type fields such as `concept.parent_concepts`, `claim.evidence`, `claim.contradicts`, and `claim.supports`.
 - Pige-managed `## Related` or `## Evidence` sections.
 - Operation records for renames, merges, and accepted relationship proposals.
 
