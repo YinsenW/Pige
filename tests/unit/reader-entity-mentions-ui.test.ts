@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteRenderResult, NoteSearchEntityMentionsRequest, NoteSearchEntityMentionsResult } from "@pige/contracts";
 import { ReaderEntityMentions } from "../../apps/desktop/src/renderer/src/components/ReaderEntityMentions";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -19,6 +19,33 @@ afterEach(() => {
 });
 
 describe("ReaderEntityMentions", () => {
+  it("does not show entity candidates after the search query drifts while pending", async () => {
+    let resolveSearch: ((result: NoteSearchEntityMentionsResult) => void) | undefined;
+    const search = vi.fn((request: NoteSearchEntityMentionsRequest) => new Promise<NoteSearchEntityMentionsResult>((resolve) => {
+      resolveSearch = resolve;
+    }));
+    const harness = await mount(entityRender(), search, vi.fn(), vi.fn());
+    const input = harness.container.querySelector("input")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Related");
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Related", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    await act(async () => { [...harness.container.querySelectorAll("button")].find((button) => button.textContent === "note.entityMentions.search")!.click(); await Promise.resolve(); });
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(harness.dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, "Different");
+      input.dispatchEvent(new harness.dom.window.InputEvent("input", { bubbles: true, data: "Different", inputType: "insertText" }));
+      input.dispatchEvent(new harness.dom.window.Event("change", { bubbles: true }));
+      await settle(harness.dom);
+    });
+    const request = search.mock.calls[0]![0];
+    resolveSearch?.({ ...request, status: "ready", candidates: [mentionItem()] });
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.container.textContent).not.toContain("Related note");
+    await harness.unmount();
+  });
+
   it("searches and adds one exact current page while fencing duplicate activation", async () => {
     const search = vi.fn(async (request) => ({ ...request, status: "ready" as const, candidates: [mentionItem()] }));
     const change = vi.fn(async (request) => ({ ...request, status: "committed" as const,
