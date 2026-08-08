@@ -220,6 +220,12 @@ blocked by active export, and removes only Pige-owned machine diagnostics artifa
 Unsafe bodies, symlink/root/destination drift, redaction failure or changed payload fail closed.
 Final syscall windows, optional content and broader platform/path evidence remain open.
 
+A completed or completed-with-warnings bundle may be revealed only through a current
+scope/revision-bound, pathless request. Main rechecks the exact Job, active-vault binding and
+private destination before showing the unchanged local bundle in the OS file manager; it never
+returns a path, copies the bundle, or uploads it. Stale, missing, or ineligible requests have no
+reveal effect.
+
 The event-selection surface may select one to 32 items from at most 64 available
 renderer-safe redacted summaries. Main binds the selected IDs to an event-selection
 revision and revalidates that revision immediately before preview/export; the selected
