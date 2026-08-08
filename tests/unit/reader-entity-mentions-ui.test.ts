@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { NoteRenderResult } from "@pige/contracts";
+import type { NoteChangeEntityMentionResult, NoteRenderResult } from "@pige/contracts";
 import { ReaderEntityMentions } from "../../apps/desktop/src/renderer/src/components/ReaderEntityMentions";
 
 const keys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent", "requestAnimationFrame"] as const;
@@ -59,6 +59,39 @@ describe("ReaderEntityMentions", () => {
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });
+
+  it("restores the current mention action focus after owner drift", async () => {
+    const changeResult = deferred<NoteChangeEntityMentionResult>();
+    const change = vi.fn(async () => changeResult.promise);
+    const harness = await mount(entityRender([mentionItem()]), vi.fn(), change, vi.fn());
+    const oldRemove = [...harness.container.querySelectorAll("button")]
+      .find((button) => button.textContent === "note.entityMentions.remove")!;
+    oldRemove.focus();
+    Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true,
+      value: (callback: FrameRequestCallback) => { harness.dom.window.setTimeout(() => callback(0), 0); return 1; } });
+    await act(async () => {
+      oldRemove.click();
+      harness.root.render(createElement(ReaderEntityMentions, { activeVaultId: "vault_20260802_entity",
+        note: entityRender([mentionItem("page_20260802_note0002", "New related note")], "b"),
+        search: vi.fn(), change, onCommitted: vi.fn(), t: (key) => key }));
+      await settle(harness.dom);
+    });
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => { await settle(harness.dom); });
+    }
+    const replacement = [...harness.container.querySelectorAll("button")]
+      .find((button) => button.textContent === "note.entityMentions.remove")!;
+    expect(replacement).not.toBe(oldRemove);
+    expect(harness.container.textContent).not.toContain("Related note");
+    expect(harness.container.textContent).toContain("New related note");
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
+    const request = change.mock.calls[0]![0];
+    changeResult.resolve({ ...request, status: "stale" });
+    await act(async () => { await changeResult.promise; await settle(harness.dom); });
+    expect(harness.container.textContent).toContain("New related note");
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
+    await harness.unmount();
+  });
 });
 
 async function mount(note: NoteRenderResult, search: Parameters<typeof ReaderEntityMentions>[0]["search"],
@@ -87,8 +120,9 @@ function entityRender(items: readonly ReturnType<typeof mentionItem>[] = [], rev
     sourceIds: [] }, html: "<h1>Entity</h1>", byteSize: 64, renderContextId: `notectx_${revision.repeat(32)}`,
     entityMentions: { canEdit: true, revision: `noteeditrev_${revision.repeat(64)}`, items } };
 }
-function mentionItem() { return { pageId: "page_20260802_note0001", title: "Related note", pageType: "note" as const,
+function mentionItem(pageId = "page_20260802_note0001", title = "Related note") { return { pageId, title, pageType: "note" as const,
   updatedAt: "2026-08-02T11:00:00.000Z" }; }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }
 async function settle(dom: JSDOM): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
