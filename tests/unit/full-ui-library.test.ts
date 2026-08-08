@@ -68,6 +68,7 @@ import {
   submitReaderNoteArchive,
   submitReaderNoteRestore,
 } from "../../apps/desktop/src/renderer/src/components/ReaderDocumentActions";
+import { ReaderNoteRenameDialog } from "../../apps/desktop/src/renderer/src/components/ReaderNoteRenameDialog";
 import { submitReaderNoteRelation } from "../../apps/desktop/src/renderer/src/components/ReaderNoteRelateDialog";
 import type { ReaderInlineReferenceActivation } from "../../apps/desktop/src/renderer/src/components/ReaderInlineReferenceSurface";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -2099,6 +2100,34 @@ describe("full UI Library", () => {
     expect(buttonNamed(container, "Add alias").disabled).toBe(true);
     expect(buttonNamed(container, "Remove").disabled).toBe(false);
     expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Remove"));
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
+  it("keeps a new rename draft and focus after a late completion from the previous Reader owner", async () => {
+    const dom = createDom(), root = createRoot(dom.window.document.querySelector("#root")!);
+    const pending = deferred<{ readonly status: "retained" }>();
+    const onRename = vi.fn(async () => pending.promise);
+    const labels = { action: "Rename page", title: "Rename page", description: "Rename description", field: "Page title",
+      cancel: "Cancel", confirm: "Rename", pending: "Renaming", failed: "Rename failed" } as const;
+    const returnFocusRef = { current: null as HTMLButtonElement | null };
+    const renderDialog = (ownerIdentity: string, currentTitle: string): void => root.render(createElement(ReaderNoteRenameDialog, {
+      ownerIdentity, currentTitle, labels, returnFocusRef, onRename, onCancel: () => undefined, onCommitted: () => undefined
+    }));
+    await act(async () => { renderDialog("owner-a", "Original title"); await settle(dom); });
+    const firstInput = requireElement(dom.window.document.querySelector<HTMLInputElement>(".confirmation-dialog input"));
+    await inputText(dom, firstInput, "Old draft");
+    await clickButton(dom, buttonNamed(dom.window.document, "Rename"));
+    expect(onRename).toHaveBeenCalledTimes(1);
+    await act(async () => { renderDialog("owner-b", "Authoritative title"); await settle(dom); });
+    const nextInput = requireElement(dom.window.document.querySelector<HTMLInputElement>(".confirmation-dialog input"));
+    expect(nextInput.value).toBe("Authoritative title");
+    await inputText(dom, nextInput, "New draft");
+    nextInput.focus();
+    pending.resolve({ status: "retained" });
+    await act(async () => { await pending.promise; await settle(dom); await settle(dom); });
+    expect(nextInput.value).toBe("New draft");
+    expect(dom.window.document.activeElement).toBe(nextInput);
+    expect(dom.window.document.querySelector('[role="alert"]')).toBeNull();
     await act(async () => root.unmount()); dom.window.close();
   });
 
