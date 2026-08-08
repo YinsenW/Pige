@@ -59,6 +59,7 @@ export function ConversationHistoryPanel(props: {
   const activeVaultIdRef = useRef(props.activeVaultId);
   const historyRef = useRef(history);
   const historyTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const historyMoreTriggerRef = useRef<HTMLButtonElement | null>(null);
   activeVaultIdRef.current = props.activeVaultId;
   historyRef.current = history;
 
@@ -123,6 +124,12 @@ export function ConversationHistoryPanel(props: {
       if (sequence === requestSequenceRef.current) {
         operationRef.current = false;
         setLoading(false);
+        if (cursor) {
+          window.requestAnimationFrame(() => {
+            const target = historyMoreTriggerRef.current;
+            (target?.isConnected ? target : historyTriggerRef.current)?.focus({ preventScroll: true });
+          });
+        }
       }
     }
   };
@@ -576,6 +583,8 @@ export function ConversationHistoryPanel(props: {
           {history.hasMore && history.nextCursor ? (
             <div className="settings-inline-actions">
               <button
+                ref={historyMoreTriggerRef}
+                data-conversation-history-more="true"
                 type="button"
                 className="quiet-button"
                 disabled={loading}

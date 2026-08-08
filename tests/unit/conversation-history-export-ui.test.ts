@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentConversationExportRequest,
   AgentConversationExportResult,
-  AgentConversationHistoryListRequest
+  AgentConversationHistoryCursor,
+  AgentConversationHistoryListRequest,
+  AgentConversationHistoryListResult
 } from "@pige/contracts";
 import { ConversationHistoryPanel } from "../../apps/desktop/src/renderer/src/components/ConversationHistoryPanel";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
@@ -68,7 +70,7 @@ describe("ConversationHistoryPanel durable export", () => {
     expect(container.textContent).not.toMatch(/\/private\/|\.json/iu);
 
     await click(dom, buttonContaining(container, conversation.safePreview));
-    expect(opened).toHaveBeenCalledWith(conversation.conversationId, "history");
+    expect(opened).toHaveBeenCalledWith(conversation.conversationId, "history", conversation.tailEventId, undefined);
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -95,11 +97,51 @@ describe("ConversationHistoryPanel durable export", () => {
     await act(async () => root.unmount());
     dom.window.close();
   });
+
+  it("returns focus to the history trigger when the final page removes Load more", async () => {
+    const firstPage = conversation;
+    const secondPage = {
+      conversationId: "conv_20260731_export02",
+      updatedAt: "2026-07-30T10:00:00.000Z",
+      safePreview: "A second durable conversation.",
+      tailEventId: "evt_20260730_assistant01"
+    } as const;
+    const cursor = `conversation_history_cursor_${"a".repeat(32)}` as AgentConversationHistoryCursor;
+    let page = 0;
+    const history = async (request: AgentConversationHistoryListRequest): Promise<AgentConversationHistoryListResult> => {
+      page += 1;
+      return {
+        apiVersion: 1,
+        activeVaultId: request.activeVaultId,
+        status: "ready",
+        conversations: page === 1 ? [firstPage] : [secondPage],
+        hasMore: page === 1,
+        ...(page === 1 ? { nextCursor: cursor } : {})
+      };
+    };
+    const { dom, container, root } = await mount(async (request) => ({
+      ...identity(request), status: "cancelled", tailEventId: request.expectedTailEventId
+    }), vi.fn(async () => true), history);
+
+    await click(dom, button(container, enMessages["conversation.history"]));
+    await click(dom, button(container, enMessages["conversation.historyMore"]));
+    await act(async () => { await settle(dom); });
+    await act(async () => {
+      await new Promise<void>((resolve) => dom.window.requestAnimationFrame(() => resolve()));
+    });
+    expect(container.textContent).toContain(secondPage.safePreview);
+    expect(container.querySelector("[data-conversation-history-more='true']")).toBeNull();
+    expect(dom.window.document.activeElement).toBe(button(container, enMessages["conversation.history"]));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
 });
 
 async function mount(
   exportConversation: (request: AgentConversationExportRequest) => Promise<AgentConversationExportResult>,
-  onOpenConversation: (conversationId: string, view: "current" | "history") => Promise<boolean>
+  onOpenConversation: (conversationId: string, view: "current" | "history") => Promise<boolean>,
+  historyLoader?: (request: AgentConversationHistoryListRequest) => Promise<AgentConversationHistoryListResult>
 ) {
   const dom = new JSDOM("<!doctype html><html><body><div id=\"root\"></div></body></html>", {
     pretendToBeVisual: true,
@@ -114,14 +156,14 @@ async function mount(
     configurable: true,
     value: {
       agent: {
-        conversationHistory: async (request: AgentConversationHistoryListRequest) => ({
+        conversationHistory: historyLoader ?? (async (request: AgentConversationHistoryListRequest) => ({
           apiVersion: 1,
           activeVaultId: request.activeVaultId,
-          status: "ready",
+          status: "ready" as const,
           currentConversationId: conversation.conversationId,
           conversations: [conversation],
           hasMore: false
-        }),
+        })),
         exportConversation
       }
     }
