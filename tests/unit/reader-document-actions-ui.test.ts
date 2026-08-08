@@ -179,7 +179,9 @@ describe("Reader document actions", () => {
 
     expect(onCommitted).not.toHaveBeenCalled();
     expect(harness.container.querySelector('[role="alertdialog"]')).toBeNull();
-    expect(button(harness.container, "More actions").disabled).toBe(false);
+    const replacementTrigger = button(harness.container, "More actions");
+    expect(replacementTrigger.disabled).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacementTrigger);
     await harness.unmount();
   });
 
