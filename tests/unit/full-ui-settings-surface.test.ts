@@ -2019,7 +2019,9 @@ describe("full UI Settings surface", () => {
     expect(page.textContent).toContain("Source, files, and warnings stay visible");
 
     await act(async () => {
-      buttonNamed(row, "Disable: Review notes").click();
+      const disableButton = buttonNamed(row, "Disable: Review notes");
+      disableButton.focus();
+      disableButton.click();
       await settle(dom);
     });
     expect(disable).toHaveBeenCalledWith({
@@ -2032,6 +2034,7 @@ describe("full UI Settings surface", () => {
     expect(disabledStatus.classList.contains("neutral")).toBe(true);
     expect(disabledStatus.classList.contains("is-enabled")).toBe(false);
     expect(buttonNamed(row, "Enable: Review notes").disabled).toBe(false);
+    expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Enable: Review notes"));
     expect(page.textContent).toContain("The Skill is disabled for new Agent runs.");
 
     await act(async () => {
@@ -3218,11 +3221,14 @@ describe("full UI Settings surface", () => {
     const row = requireElement(page.querySelector<HTMLElement>('[data-skill-id="review-notes"]'));
 
     await act(async () => {
-      buttonNamed(row, "Disable: Review notes").click();
+      const disableButton = buttonNamed(row, "Disable: Review notes");
+      disableButton.focus();
+      disableButton.click();
       await settle(dom);
     });
     expect(row.textContent).toContain("Enabled");
     expect(page.textContent).toContain("Another Skill Registry change is in progress. Try again.");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Disable: Review notes"));
 
     await act(async () => {
       buttonNamed(row, "Disable: Review notes").click();
@@ -3231,6 +3237,7 @@ describe("full UI Settings surface", () => {
     expect(row.textContent).toContain("Enabled");
     expect(page.textContent).toContain("Skill Registry could not save this change. Nothing was changed.");
     expect(page.textContent).not.toContain("registry.json");
+    expect(dom.window.document.activeElement).toBe(buttonNamed(row, "Disable: Review notes"));
 
     await act(async () => root.unmount());
     dom.window.close();

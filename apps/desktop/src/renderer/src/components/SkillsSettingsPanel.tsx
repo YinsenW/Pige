@@ -5,11 +5,14 @@ import { PigeIcon } from "./PigeIcon";
 import { SkillTrashRestorePanel, formatSkillByteSize } from "./SkillTrashRestorePanel";
 import { ExternalSkillUpdateDiff } from "./ExternalSkillUpdateDiff";
 import {
+  queueInstalledFocus as queueInstalledFocusRef,
+  type InstalledLifecycleKind,
+  type PendingInstalledFocus
+} from "./SkillsFocus";
+import {
   createSkillInstallRequestId, createSkillLifecycleRequestId, currentSkillVaultId,
   loadCurrentSkillRegistry, matchesSkillLifecycleIdentity
 } from "./skill-settings-api";
-
-type InstalledLifecycleKind = "disable" | "enable" | "export" | "uninstall" | "update";
 
 interface InstalledLifecycleAction { readonly kind: InstalledLifecycleKind; readonly skillId: string; }
 interface UninstallConfirmation { readonly skill: SkillSummary; readonly expectedRevision: number; }
@@ -54,10 +57,7 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
   const installOperationRef = useRef(0);
   const stagedReviewRef = useRef<StagedSkillReview | null>(null);
   const pendingFocusRef = useRef<"trigger" | "url" | "markdown" | "zip" | null>(null);
-  const pendingInstalledFocusRef = useRef<{
-    readonly skillId: string | null;
-    readonly action?: InstalledLifecycleKind;
-  } | undefined>(undefined);
+  const pendingInstalledFocusRef = useRef<PendingInstalledFocus | undefined>(undefined);
   const installTriggerRef = useRef<HTMLButtonElement | null>(null);
   const markdownTriggerRef = useRef<HTMLButtonElement | null>(null);
   const zipTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -199,12 +199,6 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
       // The body-free lifecycle status remains authoritative even if refresh is unavailable.
     }
   };
-  const queueInstalledFocus = (skillId?: string, action?: InstalledLifecycleKind): void => {
-    pendingInstalledFocusRef.current = {
-      skillId: skillId ?? null,
-      ...(action ? { action } : {})
-    };
-  };
   const releaseStagedReview = (review: StagedSkillReview): void => {
     setCurrentStagedReview(null);
     if (review.kind === "update") { setInstallOpen(false); queueInstalledFocus(review.skillId, "update"); }
@@ -220,6 +214,10 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
     uninstallConfirmationActiveRef.current = false;
     setUninstallConfirmation(null);
     deferFocus(() => trigger?.isConnected && trigger.focus());
+  };
+
+  const queueInstalledFocus = (skillId?: string, action?: InstalledLifecycleKind): void => {
+    queueInstalledFocusRef(pendingInstalledFocusRef, skillId, action);
   };
 
   const disableSkill = async (skill: SkillSummary): Promise<void> => {
@@ -238,11 +236,13 @@ export function SkillsSettingsPanel(props: { readonly t: (key: string) => string
       });
       if (!isCurrentLifecycleAction(sequence)) return;
       if (result.status === "failed") {
+        queueInstalledFocus(skill.id);
         setStatusKey(result.error.code === "skill.registry_busy"
           ? "skills.registryBusy"
           : "skills.registryUnavailable");
         return;
       }
+      queueInstalledFocus(skill.id);
       adoptRegistry(result.registry);
       setStatusKey(result.status === "committed"
         ? "skills.disableCompleted"
