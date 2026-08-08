@@ -7,6 +7,7 @@ import {
   DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RECENT_ERRORS_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_RECONNECT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_WORKFLOW_SUMMARY_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
   DiagnosticsClearLocalResultSchema,
@@ -19,6 +20,8 @@ import {
   DiagnosticsRecentErrorsResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
+  DiagnosticsSupportBundleDestinationRepairRequestSchema,
+  DiagnosticsSupportBundleDestinationRepairResultSchema,
   DiagnosticsWorkflowSummarySchema,
   DiagnosticsHealthSchema,
   type DiagnosticsClearLocalRequest,
@@ -32,6 +35,8 @@ import {
   type DiagnosticsRecentErrorsResult,
   type DiagnosticsSupportBundleMutationRequest,
   type DiagnosticsSupportBundleMutationResult,
+  type DiagnosticsSupportBundleDestinationRepairRequest,
+  type DiagnosticsSupportBundleDestinationRepairResult,
   type DiagnosticsWorkflowSummary,
   type SupportBundlePreview
 } from "@pige/schemas";
@@ -51,6 +56,7 @@ export interface RegisterDiagnosticsIpcOptions {
   readonly start: (request: DiagnosticsExportSupportBundleRequest, destinationPath: string) => Awaitable<DiagnosticsExportSupportBundleResult>;
   readonly cancel: (request: DiagnosticsSupportBundleMutationRequest) => Awaitable<DiagnosticsSupportBundleMutationResult>;
   readonly retry: (request: DiagnosticsSupportBundleMutationRequest) => Awaitable<DiagnosticsSupportBundleMutationResult>;
+  readonly reconnectDestination: (request: DiagnosticsSupportBundleDestinationRepairRequest, destinationPath: string) => Awaitable<DiagnosticsSupportBundleDestinationRepairResult>;
   readonly reveal: (request: DiagnosticsRevealSupportBundleRequest) => Awaitable<DiagnosticsRevealSupportBundleResult>;
   readonly clear: (request: DiagnosticsClearLocalRequest) => Awaitable<DiagnosticsClearLocalResult>;
 }
@@ -109,6 +115,31 @@ export function registerDiagnosticsIpc(options: RegisterDiagnosticsIpcOptions): 
   options.ipcMain.handle(DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL, async (event, input: unknown) => {
     return mutation(options, event.sender, input, "retry");
   });
+  options.ipcMain.handle(DIAGNOSTICS_RECONNECT_SUPPORT_BUNDLE_CHANNEL, async (event, input: unknown) => {
+    const request = DiagnosticsSupportBundleDestinationRepairRequestSchema.parse(input);
+    if (!options.isTrustedSender(event.sender)) return failedDestinationRepair(request);
+    try {
+      const before = DiagnosticsWorkflowSummarySchema.parse(await options.workflowSummary());
+      if (before.revision !== request.expectedRevision || before.scopeContextId !== request.scopeContextId ||
+        before.activeVaultId !== request.activeVaultId) {
+        return DiagnosticsSupportBundleDestinationRepairResultSchema.parse({
+          ...request, status: "stale", workflow: before
+        });
+      }
+      const destinationPath = await options.chooseDestination(event.sender);
+      if (!options.isTrustedSender(event.sender)) return failedDestinationRepair(request);
+      if (!destinationPath) {
+        return DiagnosticsSupportBundleDestinationRepairResultSchema.parse({
+          ...request, status: "cancelled", workflow: DiagnosticsWorkflowSummarySchema.parse(await options.workflowSummary())
+        });
+      }
+      const result = DiagnosticsSupportBundleDestinationRepairResultSchema.parse(
+        await options.reconnectDestination(request, destinationPath)
+      );
+      assertDestinationRepairIdentity(request, result);
+      return result;
+    } catch { return failedDestinationRepair(request); }
+  });
   options.ipcMain.handle(DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL, async (event, input: unknown) => {
     const request = DiagnosticsRevealSupportBundleRequestSchema.parse(input);
     if (!options.isTrustedSender(event.sender)) return failedReveal(request);
@@ -151,6 +182,10 @@ function failedMutation(request: DiagnosticsSupportBundleMutationRequest): Diagn
   return DiagnosticsSupportBundleMutationResultSchema.parse({ ...request, status: "failed" });
 }
 
+function failedDestinationRepair(request: DiagnosticsSupportBundleDestinationRepairRequest): DiagnosticsSupportBundleDestinationRepairResult {
+  return DiagnosticsSupportBundleDestinationRepairResultSchema.parse({ ...request, status: "failed" });
+}
+
 function failedReveal(request: DiagnosticsRevealSupportBundleRequest): DiagnosticsRevealSupportBundleResult {
   return DiagnosticsRevealSupportBundleResultSchema.parse({ ...request, status: "failed" });
 }
@@ -166,6 +201,17 @@ function assertMutationIdentity(request: DiagnosticsSupportBundleMutationRequest
   if (result.requestId !== request.requestId || result.jobId !== request.jobId ||
     result.scopeContextId !== request.scopeContextId || result.expectedRevision !== request.expectedRevision) {
     throw new Error("Diagnostics mutation identity changed.");
+  }
+}
+
+function assertDestinationRepairIdentity(
+  request: DiagnosticsSupportBundleDestinationRepairRequest,
+  result: DiagnosticsSupportBundleDestinationRepairResult
+): void {
+  if (result.requestId !== request.requestId || result.jobId !== request.jobId ||
+    result.activeVaultId !== request.activeVaultId || result.scopeContextId !== request.scopeContextId ||
+    result.expectedRevision !== request.expectedRevision) {
+    throw new Error("Diagnostics destination repair identity changed.");
   }
 }
 

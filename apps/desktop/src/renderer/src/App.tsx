@@ -68,7 +68,8 @@ import { PiPackagesSettingsPanel } from "./components/PiPackagesSettingsPanel";
 import { PigePolicySettingsPanel } from "./components/PigePolicySettingsPanel";
 import { MaintenanceSettingsPanel } from "./components/MaintenanceSettingsPanel";
 import { ManualUpdateDownloadAction } from "./components/ManualUpdateDownloadAction";
-import { DiagnosticsJobCard, SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
+import { SupportBundlePreviewCard, supportBundlePreviewIsFullyProjected } from "./components/DiagnosticsWorkflowCards";
+import { DiagnosticsSupportBundleDestinationRepair } from "./components/DiagnosticsSupportBundleDestinationRepair";
 import { DiagnosticsEventExportComposer } from "./components/DiagnosticsEventSelection";
 import { DiagnosticsRecentErrorsPanel } from "./components/DiagnosticsRecentErrorsPanel";
 import { ActivityHistorySettingsPanel } from "./components/ActivityHistorySettingsPanel";
@@ -8247,7 +8248,7 @@ export function SystemSettingsPanel(props: {
   readonly onSupportBundlePreviewChange: (preview: SupportBundlePreview | null) => void;
   readonly t: (key: string) => string;
 }): React.JSX.Element {
-  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "clear" | null>(null);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState<"refresh" | "preview" | "export" | "cancel" | "reveal" | "destination" | "clear" | null>(null);
   const [diagnosticsWorkflow, setDiagnosticsWorkflow] = useState<DiagnosticsWorkflowSummary | null>(null), [clearConfirming, setClearConfirming] = useState(false);
   const [recommendedEventIds, setRecommendedEventIds] = useState<readonly string[] | undefined>();
   const [notice, setNotice] = useState<{ readonly kind: "success" | "error"; readonly key: string } | null>(null);
@@ -8819,18 +8820,10 @@ export function SystemSettingsPanel(props: {
           ) : null}
         </div>
 
-        {diagnosticsWorkflow?.job ? (
-          <DiagnosticsJobCard
-            job={diagnosticsWorkflow.job}
-            busy={Boolean(diagnosticsBusy)}
-            onCancel={() => void cancelSupportBundleExport()}
-            onRetry={() => void retrySupportBundleExport()}
-            onReveal={() => void revealSupportBundle()}
-            revealTriggerRef={revealTriggerRef}
-            onChooseDestination={() => void previewSupportBundleRef.current?.()}
-            t={props.t}
-          />
-        ) : null}
+        <DiagnosticsSupportBundleDestinationRepair workflow={diagnosticsWorkflow} busy={Boolean(diagnosticsBusy)}
+          onBusyChange={(busy) => setDiagnosticsBusy(busy ? "destination" : null)} onWorkflowChange={setDiagnosticsWorkflow}
+          onNotice={setNotice} onCancel={() => void cancelSupportBundleExport()} onRetry={() => void retrySupportBundleExport()}
+          onReveal={() => void revealSupportBundle()} revealTriggerRef={revealTriggerRef} t={props.t} />
 
         {props.supportBundlePreview ? (
           <SupportBundlePreviewCard

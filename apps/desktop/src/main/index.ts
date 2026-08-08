@@ -4180,6 +4180,7 @@ registerDiagnosticsIpc({
   start: (request, destinationPath) => getDiagnosticsLifecycleService().start(request, destinationPath),
   cancel: (request) => getDiagnosticsLifecycleService().cancel(request),
   retry: (request) => getDiagnosticsLifecycleService().retry(request),
+  reconnectDestination: (request, destinationPath) => getDiagnosticsLifecycleService().reconnectDestination(request, destinationPath),
   reveal: (request) => getDiagnosticsLifecycleService().reveal(request, (destinationPath) => {
     shell.showItemInFolder(destinationPath);
   }),

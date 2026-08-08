@@ -12,6 +12,8 @@ import {
   DiagnosticsRevealSupportBundleResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
+  DiagnosticsSupportBundleDestinationRepairRequestSchema,
+  DiagnosticsSupportBundleDestinationRepairResultSchema,
   DiagnosticsWorkflowSummarySchema,
   JobRecordSchema,
   SupportBundlePreviewSchema,
@@ -24,6 +26,8 @@ import {
   type DiagnosticsRevealSupportBundleResult,
   type DiagnosticsSupportBundleMutationRequest,
   type DiagnosticsSupportBundleMutationResult,
+  type DiagnosticsSupportBundleDestinationRepairRequest,
+  type DiagnosticsSupportBundleDestinationRepairResult,
   type DiagnosticsSupportBundleJobSummary,
   type DiagnosticsWorkflowSummary,
   type JobRecord,
@@ -35,6 +39,12 @@ import { reviewDiagnosticsPrivateExcerpt } from "./diagnostics-support-preview";
 import { JobExecutionCoordinator } from "./job-execution-coordinator";
 import { JobRecordStore, type JobRecordSnapshot } from "./job-record-store";
 import { acquireVaultWriterLease, type VaultWriterLease } from "./vault-writer-lease";
+import {
+  DiagnosticsSupportBundleRecoveryService,
+  createDiagnosticsSupportBundleRecoveryPort,
+  type DiagnosticsRegistry,
+  type SupportBundleBinding
+} from "./diagnostics-support-bundle-recovery-service";
 
 const REGISTRY_NAME = "registry.json";
 const BINDING_NAME = "binding.json";
@@ -45,31 +55,6 @@ const MAX_BINDING_BYTES = 64 * 1024;
 const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024;
 const JOB_FILE_PATTERN = /^job_\d{8}_[a-z0-9]{8,}\.json$/u;
 const ACTIVE_STATES = new Set(["queued", "running", "cancel_requested"]);
-
-interface DiagnosticsRegistry {
-  readonly schemaVersion: 1;
-  readonly revision: number;
-  readonly machineScopeId: string;
-  readonly jobIds: readonly string[];
-}
-
-interface SupportBundleBinding {
-  readonly schemaVersion: 1;
-  readonly jobId: string;
-  readonly requestId: string;
-  readonly previewId: string;
-  readonly scopeContextId: string;
-  readonly activeVaultId: string | null;
-  readonly expectedRevision: number;
-  readonly eventSelectionRevision?: string;
-  readonly selectedDiagnosticEventIds?: readonly string[];
-  readonly destinationPath: string;
-  readonly contentSha256: string;
-  readonly contentBytes: number;
-  readonly createdAt: string;
-  readonly state: "prepared" | "published";
-  readonly publishedAt?: string;
-}
 
 interface ClearReceipt {
   readonly schemaVersion: 1;
@@ -103,6 +88,7 @@ export class DiagnosticsLifecycleService {
   readonly #lease: VaultWriterLease;
   readonly #jobs: JobRecordStore;
   readonly #coordinator: JobExecutionCoordinator;
+  readonly #destinationRecovery: DiagnosticsSupportBundleRecoveryService;
   readonly #previews = new Map<string, SupportBundlePreview>();
   readonly #previewProviderMetadata = new Map<string, DiagnosticsProviderMetadata>();
   readonly #executions = new Map<string, AbortController>();
@@ -124,6 +110,20 @@ export class DiagnosticsLifecycleService {
     this.#lease = acquireVaultWriterLease(this.#root);
     this.#jobs = new JobRecordStore({ rootPath: this.#jobsRoot, assertWriterLease: () => this.#assertHeld() });
     this.#coordinator = new JobExecutionCoordinator(this.#jobs, { now: this.#now });
+    this.#destinationRecovery = new DiagnosticsSupportBundleRecoveryService(createDiagnosticsSupportBundleRecoveryPort({
+      readRegistry: () => this.#readRegistry(),
+      readJob: (jobId) => this.#readOptionalJob(jobId),
+      readBinding: (jobId) => this.#binding(jobId),
+      currentContext: (registry) => this.#currentContext(registry),
+      destinationState: (binding) => this.#destinationState(binding),
+      assertHeld: () => this.#assertHeld(),
+      writeBinding: (binding) => this.#writeBinding(binding),
+      prepareRetry: (snapshot) => { this.#coordinator.prepareRetry(snapshot, {
+        reason: "destination_repaired", message: "The same support bundle Job is queued for the newly selected destination."
+      }); },
+      bumpRegistry: (registry) => { this.#bumpRegistry(registry); },
+      schedule: (jobId) => this.#schedule(jobId)
+    }));
     this.#prepareRegistry();
     this.#recoverPreparedClears();
     this.#recoverJobs();
@@ -287,6 +287,28 @@ export class DiagnosticsLifecycleService {
     return this.#mutate(requestInput, "retry");
   }
 
+  reconnectDestination(
+    requestInput: DiagnosticsSupportBundleDestinationRepairRequest,
+    destinationPath: string
+  ): DiagnosticsSupportBundleDestinationRepairResult {
+    const request = DiagnosticsSupportBundleDestinationRepairRequestSchema.parse(requestInput);
+    const identity = request;
+    try {
+      const result = this.#destinationRecovery.reconnect({
+        ...request,
+        destinationPath
+      });
+      const workflow = this.#project(this.#readRegistry());
+      return DiagnosticsSupportBundleDestinationRepairResultSchema.parse({
+        ...identity,
+        status: result.status,
+        ...(result.status === "failed" ? {} : { workflow })
+      });
+    } catch {
+      return DiagnosticsSupportBundleDestinationRepairResultSchema.parse({ ...identity, status: "failed" });
+    }
+  }
+
   reveal(
     requestInput: DiagnosticsRevealSupportBundleRequest,
     revealDestination: (destinationPath: string) => void
@@ -403,7 +425,9 @@ export class DiagnosticsLifecycleService {
           return mutationResult(identity, "ineligible", this.#project(registry));
         }
       } else {
-        if (snapshot.job.state !== "failed_retryable") return mutationResult(identity, "ineligible", this.#project(registry));
+        if (snapshot.job.state !== "failed_retryable" || snapshot.job.error?.userAction === "choose_path") {
+          return mutationResult(identity, "ineligible", this.#project(registry));
+        }
         const binding = this.#binding(snapshot.job.id);
         const destination = this.#destinationState(binding);
         if (destination === "exact") {
@@ -747,7 +771,8 @@ function revealResult(
 
 function projectJob(job: JobRecord): DiagnosticsSupportBundleJobSummary {
   const completedUnits = Math.min(3, Math.max(0, Math.trunc(job.progress?.completedUnits ?? 0)));
-  const repairAction = job.state === "failed_retryable" ? "retry"
+  const repairAction = job.state === "failed_retryable" && job.error?.userAction === "choose_path" ? "choose_destination"
+    : job.state === "failed_retryable" ? "retry"
     : job.state === "failed_final" ? "choose_destination"
       : new Set(["completed", "completed_with_warnings", "cancelled"]).has(job.state) ? "clear" : "none";
   return {
@@ -763,7 +788,7 @@ function projectJob(job: JobRecord): DiagnosticsSupportBundleJobSummary {
     updatedAt: job.updatedAt,
     ...(job.finishedAt ? { finishedAt: job.finishedAt } : {}),
     canCancel: job.state === "queued" || job.state === "running" || job.state === "cancel_requested",
-    canRetry: job.state === "failed_retryable",
+    canRetry: job.state === "failed_retryable" && job.error?.userAction !== "choose_path",
     canReveal: job.state === "completed" || job.state === "completed_with_warnings",
     repairAction,
     ...(job.error ? { error: job.error } : {})
@@ -796,7 +821,7 @@ function failFinal(
 ): JobRecordSnapshot {
   return jobs.compareAndSwap(snapshot, JobRecordSchema.parse({
     ...snapshot.job,
-    state: "failed_final",
+    state: "failed_retryable",
     updatedAt: now,
     finishedAt: now,
     error: diagnosticsError(code, false, action),

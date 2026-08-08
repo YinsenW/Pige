@@ -61,6 +61,8 @@ import type {
   DiagnosticsRevealSupportBundleResult,
   DiagnosticsSupportBundleMutationRequest,
   DiagnosticsSupportBundleMutationResult,
+  DiagnosticsSupportBundleDestinationRepairRequest,
+  DiagnosticsSupportBundleDestinationRepairResult,
   DiagnosticsWorkflowSummary,
   ExportSupportBundleRequest,
   CancelSupportBundleExportRequest,
@@ -520,6 +522,7 @@ import {
   DIAGNOSTICS_EXPORT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_CANCEL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
+  DIAGNOSTICS_RECONNECT_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_REVEAL_SUPPORT_BUNDLE_CHANNEL,
   DIAGNOSTICS_RECENT_ERRORS_CHANNEL,
   DiagnosticsClearLocalRequestSchema,
@@ -534,6 +537,8 @@ import {
   DiagnosticsRevealSupportBundleResultSchema,
   DiagnosticsSupportBundleMutationRequestSchema,
   DiagnosticsSupportBundleMutationResultSchema,
+  DiagnosticsSupportBundleDestinationRepairRequestSchema,
+  DiagnosticsSupportBundleDestinationRepairResultSchema,
   DiagnosticsWorkflowSummarySchema,
   SupportBundlePreviewSchema,
   BACKUP_CONTINUE_INCOMPLETE_CHANNEL,
@@ -3537,6 +3542,13 @@ const api: PigeDesktopApi = {
       DiagnosticsSupportBundleMutationResultSchema.parse(await ipcRenderer.invoke(
         DIAGNOSTICS_RETRY_SUPPORT_BUNDLE_CHANNEL,
         DiagnosticsSupportBundleMutationRequestSchema.parse(request)
+      )),
+    reconnectSupportBundleDestination: async (
+      request: DiagnosticsSupportBundleDestinationRepairRequest
+    ): Promise<DiagnosticsSupportBundleDestinationRepairResult> =>
+      DiagnosticsSupportBundleDestinationRepairResultSchema.parse(await ipcRenderer.invoke(
+        DIAGNOSTICS_RECONNECT_SUPPORT_BUNDLE_CHANNEL,
+        DiagnosticsSupportBundleDestinationRepairRequestSchema.parse(request)
       )),
     revealSupportBundle: async (
       request: DiagnosticsRevealSupportBundleRequest

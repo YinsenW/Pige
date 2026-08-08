@@ -116,6 +116,8 @@ import type {
   DiagnosticsSupportBundleJobSummary,
   DiagnosticsSupportBundleMutationRequest,
   DiagnosticsSupportBundleMutationResult,
+  DiagnosticsSupportBundleDestinationRepairRequest,
+  DiagnosticsSupportBundleDestinationRepairResult,
   DiagnosticsWorkflowSummary,
   CollectionAddNullableColumnRequest,
   CollectionAddNullableColumnResult,
@@ -719,6 +721,8 @@ export type {
   DiagnosticsSupportBundleJobSummary,
   DiagnosticsSupportBundleMutationRequest,
   DiagnosticsSupportBundleMutationResult,
+  DiagnosticsSupportBundleDestinationRepairRequest,
+  DiagnosticsSupportBundleDestinationRepairResult,
   DiagnosticsWorkflowSummary,
   PigeError,
   PigeErrorAction,
@@ -3080,6 +3084,9 @@ export interface PigeDesktopApi {
     readonly retrySupportBundleExport: (
       request: DiagnosticsSupportBundleMutationRequest
     ) => Promise<DiagnosticsSupportBundleMutationResult>;
+    readonly reconnectSupportBundleDestination: (
+      request: DiagnosticsSupportBundleDestinationRepairRequest
+    ) => Promise<DiagnosticsSupportBundleDestinationRepairResult>;
     readonly revealSupportBundle: (
       request: DiagnosticsRevealSupportBundleRequest
     ) => Promise<DiagnosticsRevealSupportBundleResult>;

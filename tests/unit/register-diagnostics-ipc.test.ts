@@ -26,6 +26,14 @@ const revealRequest = {
   scopeContextId: workflow.scopeContextId,
   expectedRevision: workflow.revision
 };
+const destinationRepairRequest = {
+  apiVersion: 1 as const,
+  requestId: "diagrepairreq_abcdefghijklmnop",
+  activeVaultId: workflow.activeVaultId,
+  jobId: "job_20260730_abcdefghijklmnop",
+  scopeContextId: workflow.scopeContextId,
+  expectedRevision: workflow.revision
+};
 
 function harness(options: { trusted?: boolean; destination?: string; revision?: number; replay?: boolean } = {}) {
   const handlers = new Map<string, Handler>();
@@ -34,6 +42,7 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
   const summary = { ...workflow, revision: options.revision ?? workflow.revision };
   const start = vi.fn((request: typeof exportRequest) => ({ ...request, status: "started" as const, workflow: summary }));
   const reveal = vi.fn((request: typeof revealRequest) => ({ ...request, status: "revealed" as const, workflow: summary }));
+  const reconnectDestination = vi.fn((request: typeof destinationRepairRequest) => ({ ...request, status: "resumed" as const, workflow: summary }));
   const chooseDestination = vi.fn(async () => selected);
   registerDiagnosticsIpc({
     ipcMain: { handle: (channel, handler) => handlers.set(channel, handler as Handler) } as Pick<IpcMain, "handle">,
@@ -61,12 +70,13 @@ function harness(options: { trusted?: boolean; destination?: string; revision?: 
     start,
     cancel: (request) => ({ ...request, status: "accepted", workflow: summary }),
     retry: (request) => ({ ...request, status: "accepted", workflow: summary }),
+    reconnectDestination,
     reveal,
     clear: (request) => ({ ...request, status: "busy", workflow: summary,
       health: { status: "ok", checkedAt: "2026-07-30T00:00:00.000Z", localOnly: true, recentErrorCount: 0, checks: [] } })
   });
   const event = { sender } as IpcMainInvokeEvent;
-  return { handlers, event, start, chooseDestination, reveal };
+  return { handlers, event, start, chooseDestination, reconnectDestination, reveal };
 }
 
 describe("diagnostics IPC", () => {
@@ -135,5 +145,22 @@ describe("diagnostics IPC", () => {
     expect(await untrusted.handlers.get("diagnostics.revealSupportBundle")!(untrusted.event, revealRequest))
       .toEqual({ ...revealRequest, status: "failed" });
     expect(untrusted.reveal).not.toHaveBeenCalled();
+  });
+
+  it("keeps destination repair pathless and reuses the exact Job", async () => {
+    const destination = "/private/main-owned/repaired-support.json";
+    const app = harness({ destination });
+    const result = await app.handlers.get("diagnostics.reconnectSupportBundleDestination")!(app.event, destinationRepairRequest);
+    expect(result).toEqual({ ...destinationRepairRequest, status: "resumed", workflow });
+    expect(app.chooseDestination).toHaveBeenCalledWith(app.event.sender);
+    expect(app.reconnectDestination).toHaveBeenCalledWith(destinationRepairRequest, destination);
+    expect(JSON.stringify(result)).not.toContain(destination);
+  });
+
+  it("cancels destination repair without calling the owner", async () => {
+    const app = harness();
+    const result = await app.handlers.get("diagnostics.reconnectSupportBundleDestination")!(app.event, destinationRepairRequest);
+    expect(result).toEqual({ ...destinationRepairRequest, status: "cancelled", workflow });
+    expect(app.reconnectDestination).not.toHaveBeenCalled();
   });
 });
