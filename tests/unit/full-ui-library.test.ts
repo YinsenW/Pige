@@ -2040,6 +2040,8 @@ describe("full UI Library", () => {
     expect(JSON.stringify(requests[0])).not.toMatch(/path|markdown|contentHash/iu);
     expect(container.textContent).toContain("The page was not renamed. Your title is preserved; review it and try again.");
     expect(input.value).toBe("  Renamed   Library Note  ");
+    await settle(dom); await settle(dom);
+    expect(dom.window.document.activeElement).toBe(input);
     mode = "committed"; await clickButton(dom, buttonNamed(container, "Rename")); await waitFor(dom, () => adopted.length === 1);
     expect(adopted[0]?.summary.title).toBe("Renamed Library Note"); expect(container.querySelector(".note-reader")).not.toBeNull();
     await act(async () => root.unmount()); dom.window.close();
