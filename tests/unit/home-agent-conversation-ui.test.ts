@@ -3,7 +3,7 @@ import path from "node:path";
 import { createElement } from "react";
 import { act } from "react";
 import { JSDOM } from "jsdom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentConversationRequest,
   AgentConversationEarlierPage,
@@ -286,6 +286,50 @@ describe("Home durable Agent conversation UI", () => {
       await settle(dom);
     });
     expect(opened).toBe(1);
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("keeps the model connection action single-flight while opening Settings", async () => {
+    const dom = createDom();
+    const { createRoot } = await import("react-dom/client");
+    const container = requireElement(dom.window.document.getElementById("root"));
+    const root = createRoot(container);
+    let calls = 0;
+    let resolveOpen!: () => void;
+    const openModels = vi.fn(() => {
+      calls += 1;
+      return new Promise<void>((resolve) => { resolveOpen = resolve; });
+    });
+    await act(async () => {
+      root.render(createElement(HomeJobAction, {
+        job: sourceWaitingForModelJob(),
+        sourceWaitingForModel: true,
+        ownsSourceModelAction: true,
+        retryEligible: false,
+        onOpenModels: openModels,
+        onOpenLocalCapabilities: () => undefined,
+        onCancelJob: () => undefined,
+        onRetryJob: () => undefined,
+        t: (key: string) => key
+      }));
+      await settle(dom);
+    });
+    const connect = buttons(container, "home.connectModel")[0]!;
+    await act(async () => {
+      connect.click();
+      connect.click();
+      await settle(dom);
+    });
+    expect(calls).toBe(1);
+    expect(connect.disabled).toBe(true);
+    expect(connect.getAttribute("aria-busy")).toBe("true");
+    await act(async () => {
+      resolveOpen();
+      await settle(dom);
+    });
+    expect(connect.disabled).toBe(false);
+    expect(connect.hasAttribute("aria-busy")).toBe(false);
     await act(async () => root.unmount());
     dom.window.close();
   });
