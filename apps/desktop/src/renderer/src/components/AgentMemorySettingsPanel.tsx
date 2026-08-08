@@ -17,6 +17,11 @@ type PendingAction =
     }
   | { readonly kind: "export" | "reset" };
 
+type PendingMemoryFocus = {
+  readonly memoryId: string;
+  readonly action: "disable" | "enable" | "delete";
+};
+
 interface MemoryEditDraft {
   readonly activeVaultId: string;
   readonly memoryId: string;
@@ -78,6 +83,7 @@ export function AgentMemorySettingsPanel(
   const editCompositionRef = useRef(false);
   const editTitleRef = useRef<HTMLInputElement>(null);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingMemoryFocusRef = useRef<PendingMemoryFocus | null>(null);
   const panelHeadingRef = useRef<HTMLHeadingElement>(null);
   const settledFocusRequestRef = useRef<string | null>(null);
   const restoreEditFocusRef = useRef<string | null>(null);
@@ -123,6 +129,7 @@ export function AgentMemorySettingsPanel(
     setSummary(null);
     setStatusKey(null);
     setPendingAction(null);
+    pendingMemoryFocusRef.current = null;
     setEditDraft(null);
     editCompositionRef.current = false;
     restoreEditFocusRef.current = null;
@@ -212,6 +219,19 @@ export function AgentMemorySettingsPanel(
     if (memoryId) editTriggerRefs.current.get(memoryId)?.focus();
   }, [editDraft?.activeVaultId, editDraft?.memoryId]);
 
+  useEffect(() => {
+    const pendingFocus = pendingMemoryFocusRef.current;
+    if (!pendingFocus || pendingAction !== null || editDraft !== null) return;
+    pendingMemoryFocusRef.current = null;
+    const row = panelHeadingRef.current?.ownerDocument.querySelector<HTMLElement>(
+      `[data-memory-id="${pendingFocus.memoryId}"]`,
+    );
+    const action = row?.querySelector<HTMLButtonElement>(
+      `[data-memory-action="${pendingFocus.action}"]`,
+    ) ?? row?.querySelector<HTMLButtonElement>("[data-memory-action]");
+    (action ?? panelHeadingRef.current)?.focus();
+  }, [editDraft, pendingAction, summary]);
+
   const beginAction = (action: PendingAction): number | null => {
     if (operationActiveRef.current) return null;
     const sequence = operationSequenceRef.current + 1;
@@ -275,6 +295,7 @@ export function AgentMemorySettingsPanel(
       return;
     const sequence = beginAction({ kind, memoryId: record.id });
     if (sequence === null) return;
+    pendingMemoryFocusRef.current = { memoryId: record.id, action: kind };
     const requestedVaultId = requestedSummary.activeVaultId;
     const requestId = createMemoryRequestId();
     try {
@@ -803,6 +824,7 @@ export function AgentMemorySettingsPanel(
                   <button
                     className="settings-button"
                     type="button"
+                    data-memory-action={record.status === "active" ? "disable" : "enable"}
                     aria-label={`${props.t(record.status === "active" ? "memory.disable" : "memory.enable")}: ${record.title}`}
                     disabled={busy || editDraft !== null}
                     title={props.t(
@@ -834,6 +856,7 @@ export function AgentMemorySettingsPanel(
                   <button
                     className="settings-button"
                     type="button"
+                    data-memory-action="delete"
                     aria-label={`${props.t("memory.delete")}: ${record.title}`}
                     disabled={busy || editDraft !== null}
                     title={props.t("memory.deleteDescription")}
