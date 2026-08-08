@@ -24,6 +24,16 @@ import type { DocumentParserPort } from "./document-parser-service";
 import type { KnowledgeActivityRecoveryResult } from "./knowledge-activity-service";
 import type { OcrPort } from "./ocr-service";
 import { acquireSourceRefreshLocator, readCurrentSourceRecordSnapshot } from "./source-file-access";
+import {
+  hashSourceRefreshFile,
+  includeCurrentRefreshOutputs,
+  removeSourceRefreshChildOperations,
+  resolveSourceRefreshVaultFile,
+  restoreSourceRefreshBeforeFiles,
+  snapshotSourceRefreshAfterFiles,
+  snapshotSourceRefreshBeforeFiles,
+  toSourceRefreshVaultRelative
+} from "./source-refresh-output-store";
 import { SourcePageService } from "./source-page-service";
 import { createObservedFileSnapshot, type VerifiedFileSnapshot } from "./verified-file-snapshot";
 import { createChangedSourceRelinkOperation } from "./source-relink-operation";
@@ -360,7 +370,7 @@ export class SourceRefreshService {
     if (!current || !receipt.afterRevision || sourceRevision(current) !== receipt.afterRevision) {
       return { status: "stale", operationId: operation.id };
     }
-    restoreBeforeFiles(vaultPath, receipt, current);
+    restoreSourceRefreshBeforeFiles(vaultPath, receipt.files, receipt.beforeRecord, current);
     writeSourceRecord(vaultPath, receipt.sourceId, receipt.beforeRecord, recordFileChecksum(vaultPath, receipt.sourceId));
     const undo = createUndoOperation(operation, receipt);
     writeOperation(vaultPath, undo);
@@ -374,7 +384,7 @@ export class SourceRefreshService {
     let recovered = 0;
     let failed = 0;
     const relinkedSourceIds = new Set<string>();
-    for (const receipt of listReceipts(vaultPath)) {
+    for (let receipt of listReceipts(vaultPath)) {
       if (receipt.state === "applied") {
         if (receipt.relinkOperation) relinkedSourceIds.add(receipt.sourceId);
         continue;
@@ -384,9 +394,14 @@ export class SourceRefreshService {
         if (receipt.state === "prepared") {
           const current = readCurrentSourceRecordSnapshot(vaultPath, receipt.sourceId)?.record;
           if (current && current.metadata.sourceRefreshInFlight === receipt.operationId) {
-            restoreBeforeFiles(vaultPath, receipt, current);
+            receipt = {
+              ...receipt,
+              files: includeCurrentRefreshOutputs(vaultPath, receipt.files, current)
+            };
+            restoreSourceRefreshBeforeFiles(vaultPath, receipt.files, receipt.beforeRecord, current);
             writeSourceRecord(vaultPath, receipt.sourceId, receipt.beforeRecord, recordFileChecksum(vaultPath, receipt.sourceId));
           }
+          removeSourceRefreshChildOperations(vaultPath, receipt.jobId, receipt.sourceId);
           writeFailedJob(vaultPath, receipt.jobId, "Source refresh was rolled back after restart.");
           writeReceipt(vaultPath, { ...receipt, state: "rolled_back" });
           recovered += 1;
@@ -440,8 +455,8 @@ export class SourceRefreshService {
     const inputPath = path.join(receiptRoot, `input${inputExtension}`);
     fs.copyFileSync(pending.snapshot.absolutePath, inputPath, fs.constants.COPYFILE_EXCL);
     if (process.platform !== "win32") fs.chmodSync(inputPath, 0o400);
-    const relativeInputPath = toVaultRelative(scope.vaultPath, inputPath);
-    const files = snapshotBeforeFiles(scope.vaultPath, operationId, jobId, beforeRecord);
+    const relativeInputPath = toSourceRefreshVaultRelative(scope.vaultPath, inputPath);
+    const files = snapshotSourceRefreshBeforeFiles(scope.vaultPath, receiptRoot, beforeRecord);
     const relinkOperation = pending.replacementOriginal
       ? createChangedSourceRelinkOperation({ requestId: pending.replacementOriginal.requestId,
           refreshOperationId: operationId, jobId, record: beforeRecord,
@@ -514,6 +529,28 @@ export class SourceRefreshService {
           readJob(scope.vaultPath, jobId)!
         );
         sourcePageConflict = result.sourcePageConflict;
+        if (intermediate.kind === "pdf_file" && result.needsOcr) {
+          const parsed = readCurrentSourceRecordSnapshot(scope.vaultPath, beforeRecord.id)?.record;
+          if (!parsed || parsed.metadata.sourceRefreshInFlight !== operationId) {
+            throw new PigeDomainError("source.refresh_target_changed", "The PDF source changed during parser publication.");
+          }
+          if (this.#ocr?.canOcr("pdf_file") !== true) {
+            throw new PigeDomainError("source.refresh_unavailable", "Local PDF OCR is unavailable for this refreshed source.");
+          }
+          receipt = {
+            ...receipt,
+            files: includeCurrentRefreshOutputs(scope.vaultPath, receipt.files, parsed)
+          };
+          writeReceipt(scope.vaultPath, receipt);
+          const ocr = await this.#ocr.ocrSource(
+            scope.vaultPath,
+            parsed,
+            sourceRecordPath(scope.vaultPath, parsed.id),
+            readJob(scope.vaultPath, jobId)!
+          );
+          sourcePageConflict ||= ocr.sourcePageConflict;
+        }
+        removeSourceRefreshChildOperations(scope.vaultPath, jobId, intermediate.id);
       } else {
         const page = this.#sourcePages.refreshForSource(
           scope.vaultPath,
@@ -543,7 +580,7 @@ export class SourceRefreshService {
       });
       delete (finalRecord.metadata as Record<string, unknown>).sourceRefreshInFlight;
       delete (finalRecord.metadata as Record<string, unknown>).sourceRefreshInput;
-      const afterFiles = snapshotAfterFiles(scope.vaultPath, operationId, receipt.files);
+      const afterFiles = snapshotSourceRefreshAfterFiles(scope.vaultPath, receiptRoot, receipt.files, published);
       receipt = {
         ...receipt,
         state: "ready",
@@ -568,9 +605,14 @@ export class SourceRefreshService {
     } catch (caught) {
       const current = readCurrentSourceRecordSnapshot(scope.vaultPath, beforeRecord.id)?.record;
       if (current?.metadata.sourceRefreshInFlight === operationId) {
-        restoreBeforeFiles(scope.vaultPath, receipt, current);
+        receipt = {
+          ...receipt,
+          files: includeCurrentRefreshOutputs(scope.vaultPath, receipt.files, current)
+        };
+        restoreSourceRefreshBeforeFiles(scope.vaultPath, receipt.files, receipt.beforeRecord, current);
         writeSourceRecord(scope.vaultPath, beforeRecord.id, beforeRecord, recordFileChecksum(scope.vaultPath, beforeRecord.id));
       }
+      removeSourceRefreshChildOperations(scope.vaultPath, jobId, beforeRecord.id);
       writeFailedJob(scope.vaultPath, jobId, "Source refresh failed; the previous revision remains active.");
       writeReceipt(scope.vaultPath, { ...receipt, state: "rolled_back" });
       throw caught;
@@ -661,13 +703,13 @@ function sourceRecordPath(vaultPath: string, sourceId: string): string {
 }
 
 function recordFileChecksum(vaultPath: string, sourceId: string): string {
-  return hashFile(sourceRecordPath(vaultPath, sourceId));
+  return hashSourceRefreshFile(sourceRecordPath(vaultPath, sourceId));
 }
 
 function writeSourceRecord(vaultPath: string, sourceId: string, record: SourceRecord, expectedChecksum: string): void {
   const target = sourceRecordPath(vaultPath, sourceId);
   const root = path.resolve(vaultPath, ".pige", "source-records");
-  if (!target.startsWith(`${root}${path.sep}`) || hashFile(target) !== expectedChecksum) {
+  if (!target.startsWith(`${root}${path.sep}`) || hashSourceRefreshFile(target) !== expectedChecksum) {
     throw new PigeDomainError("source.refresh_target_changed", "The Source Record changed before refresh could commit.");
   }
   const current = fs.lstatSync(target);
@@ -683,47 +725,11 @@ function writeSourceRecord(vaultPath: string, sourceId: string, record: SourceRe
   } finally {
     fs.closeSync(descriptor);
   }
-  if (hashFile(target) !== expectedChecksum) {
+  if (hashSourceRefreshFile(target) !== expectedChecksum) {
     fs.rmSync(temporary, { force: true });
     throw new PigeDomainError("source.refresh_target_changed", "The Source Record changed during refresh commit.");
   }
   fs.renameSync(temporary, target);
-}
-
-function snapshotBeforeFiles(
-  vaultPath: string,
-  operationId: string,
-  jobId: string,
-  record: SourceRecord
-): readonly ReceiptFile[] {
-  const paths = new Set(record.artifacts.map((artifact) => artifact.path));
-  if (record.knowledgePagePath) paths.add(record.knowledgePagePath);
-  if (isDocumentKind(record.kind)) {
-    const date = /^src_(\d{8})_/u.exec(record.id)?.[1];
-    const format = record.kind.replace("_file", "");
-    if (date) {
-      paths.add(`artifacts/extracted-text/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.txt`);
-      paths.add(`artifacts/metadata/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.${format}.json`);
-    }
-  } else if (record.kind === "image_file") {
-    const date = /^src_(\d{8})_/u.exec(record.id)?.[1];
-    if (date) {
-      paths.add(`artifacts/ocr/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.txt`);
-      paths.add(`artifacts/metadata/${date.slice(0, 4)}/${date.slice(4, 6)}/${record.id}.ocr.json`);
-      const childOperationId = imageRefreshOcrOperationId(jobId, record.id);
-      const operationDate = /^op_(\d{8})_/u.exec(childOperationId)![1]!;
-      paths.add(`.pige/operations/${operationDate.slice(0, 4)}/${operationDate.slice(4, 6)}/${childOperationId}.json`);
-    }
-  }
-  return [...paths].map((relativePath) => {
-    const absolute = resolveVaultFile(vaultPath, relativePath);
-    if (!fs.existsSync(absolute)) return { path: relativePath };
-    const checksum = hashFile(absolute);
-    const backup = backupPath(vaultPath, operationId, "before", relativePath);
-    ensurePrivateDirectory(path.dirname(backup));
-    fs.copyFileSync(absolute, backup, fs.constants.COPYFILE_EXCL);
-    return { path: relativePath, beforeBackup: toVaultRelative(vaultPath, backup), beforeChecksum: checksum };
-  });
 }
 
 function consumeImageRefreshOcrOperation(
@@ -738,7 +744,7 @@ function consumeImageRefreshOcrOperation(
   }
   const date = /^op_(\d{8})_/u.exec(operationId)?.[1];
   if (!date) throw new PigeDomainError("source.refresh_invalid", "Image refresh produced an invalid child Operation.");
-  const operationPath = resolveVaultFile(
+  const operationPath = resolveSourceRefreshVaultFile(
     vaultPath,
     `.pige/operations/${date.slice(0, 4)}/${date.slice(4, 6)}/${operationId}.json`
   );
@@ -757,40 +763,6 @@ function imageRefreshOcrOperationId(jobId: string, sourceId: string): string {
   if (!date) throw new PigeDomainError("source.refresh_invalid", "Image refresh Job identity is invalid.");
   const suffix = createHash("sha256").update(`${jobId}:${sourceId}:ocr-artifacts`).digest("hex").slice(0, 12);
   return `op_${date}_${suffix}`;
-}
-
-function snapshotAfterFiles(vaultPath: string, operationId: string, files: readonly ReceiptFile[]): readonly ReceiptFile[] {
-  return files.map((file) => {
-    const absolute = resolveVaultFile(vaultPath, file.path);
-    if (!fs.existsSync(absolute)) return file;
-    const checksum = hashFile(absolute);
-    const backup = backupPath(vaultPath, operationId, "after", file.path);
-    ensurePrivateDirectory(path.dirname(backup));
-    fs.copyFileSync(absolute, backup, fs.constants.COPYFILE_EXCL);
-    return { ...file, afterBackup: toVaultRelative(vaultPath, backup), afterChecksum: checksum };
-  });
-}
-
-function restoreBeforeFiles(vaultPath: string, receipt: SourceRefreshReceipt, current: SourceRecord): void {
-  for (const file of receipt.files) {
-    const target = resolveVaultFile(vaultPath, file.path);
-    const isPage = current.knowledgePagePath === file.path || receipt.beforeRecord.knowledgePagePath === file.path;
-    if (isPage && fs.existsSync(target)) {
-      const currentHash = hashFile(target);
-      const ownedHash = typeof current.metadata.knowledgePageChecksum === "string" ? current.metadata.knowledgePageChecksum : undefined;
-      if (currentHash !== file.beforeChecksum && currentHash !== file.afterChecksum && currentHash !== ownedHash) continue;
-    }
-    if (file.beforeBackup && file.beforeChecksum) {
-      const backup = resolveVaultFile(vaultPath, file.beforeBackup);
-      if (hashFile(backup) !== file.beforeChecksum) throw new PigeDomainError("source.refresh_receipt_changed", "The rollback evidence changed.");
-      ensurePrivateDirectory(path.dirname(target));
-      const temporary = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.restore`);
-      fs.copyFileSync(backup, temporary, fs.constants.COPYFILE_EXCL);
-      fs.renameSync(temporary, target);
-    } else if (fs.existsSync(target)) {
-      fs.rmSync(target, { force: true });
-    }
-  }
 }
 
 function createRunningJob(vaultId: string, jobId: string, record: SourceRecord, location: PendingPreview["location"]): JobRecord {
@@ -948,40 +920,8 @@ function listReceipts(vaultPath: string): readonly SourceRefreshReceipt[] {
   } catch { return []; }
 }
 
-function backupPath(vaultPath: string, operationId: string, lane: "before" | "after", relativePath: string): string {
-  const digest = createHash("sha256").update(relativePath).digest("hex");
-  return path.join(receiptDirectory(vaultPath, operationId), lane, `${digest}.bin`);
-}
-
-function resolveVaultFile(vaultPath: string, relativePath: string): string {
-  const root = path.resolve(vaultPath);
-  const resolved = path.resolve(root, relativePath);
-  if (!resolved.startsWith(`${root}${path.sep}`)) throw new PigeDomainError("source.refresh_path_unsafe", "A refresh receipt path escaped the vault.");
-  return resolved;
-}
-
-function toVaultRelative(vaultPath: string, absolutePath: string): string {
-  return path.relative(path.resolve(vaultPath), path.resolve(absolutePath)).split(path.sep).join("/");
-}
-
 function ensurePrivateDirectory(directory: string): void {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
-}
-
-function hashFile(filePath: string): string {
-  const stat = fs.lstatSync(filePath);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new PigeDomainError("source.refresh_file_unsafe", "A refresh-owned file is unsafe.");
-  const descriptor = fs.openSync(filePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
-  const hash = createHash("sha256");
-  const buffer = Buffer.allocUnsafe(1024 * 1024);
-  try {
-    let read = 0;
-    do {
-      read = fs.readSync(descriptor, buffer, 0, buffer.length, null);
-      if (read > 0) hash.update(buffer.subarray(0, read));
-    } while (read > 0);
-  } finally { fs.closeSync(descriptor); }
-  return `sha256:${hash.digest("hex")}`;
 }
 
 function safeExtension(filePath: string): string {
