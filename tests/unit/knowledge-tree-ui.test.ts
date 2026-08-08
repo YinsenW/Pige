@@ -171,7 +171,24 @@ describe("Knowledge Tree renderer", () => {
       ...base,
       roots: [{
         ...domain,
-        children: [{ ...topic, children: [denseConcept, ...topic.children.slice(1)] }]
+        metrics: {
+          ...domain.metrics,
+          fragmentPageCount: 800,
+          sourceCount: 600,
+          leafCount: 1_400,
+          weight: 1_400
+        },
+        children: [{
+          ...topic,
+          metrics: {
+            ...topic.metrics,
+            fragmentPageCount: 500,
+            sourceCount: 400,
+            leafCount: 900,
+            weight: 900
+          },
+          children: [denseConcept, ...topic.children.slice(1)]
+        }]
       }]
     };
     const mount = await mountTree(dom, tree, async () => undefined);

@@ -674,11 +674,15 @@ function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) =
     appendKnowledgeNode(nodes, node, "pige-root", { x: 450, y: 590 }, angle, 1, `root-${index}`, t);
   });
 
+  const detailDensities = nodes
+    .filter((node) => node.kind !== "root" && node.kind !== "domain" && node.kind !== "topic")
+    .map(evidenceDensity);
+
   return {
     nodes,
     byId: new Map(nodes.map((node) => [node.id, node])),
     maxWeight: Math.max(1, ...nodes.map((node) => node.weight)),
-    maxDensity: Math.max(1, ...nodes.map(evidenceDensity))
+    maxDensity: Math.max(1, ...detailDensities)
   };
 }
 
