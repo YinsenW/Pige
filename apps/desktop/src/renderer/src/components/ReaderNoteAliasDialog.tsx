@@ -45,19 +45,37 @@ export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; r
 }): React.JSX.Element {
   const [draft, setDraft] = useState(""), [pendingAlias, setPendingAlias] = useState<string | null>(null), [failed, setFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null), dialogRef = useRef<HTMLElement>(null), sequenceRef = useRef(0), ownerRef = useRef(props.ownerIdentity);
+  const removeButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const restoreFocusRef = useRef<{ readonly action: "add" | "remove"; readonly alias: string } | null>(null);
   ownerRef.current = props.ownerIdentity;
   useEffect(() => { sequenceRef.current += 1; setDraft(""); setPendingAlias(null); setFailed(false);
+    restoreFocusRef.current = null;
     (props.canAdd ? inputRef.current : dialogRef.current?.querySelector<HTMLElement>("button:not(:disabled)"))?.focus();
   }, [props.ownerIdentity, props.canAdd]);
+  const scheduleRestoreFocus = (): void => {
+    const request = restoreFocusRef.current;
+    if (!request) return;
+    const restore = (): void => {
+      const target = request.action === "remove" ? removeButtonRefs.current.get(request.alias) : inputRef.current;
+      restoreFocusRef.current = null;
+      target?.focus({ preventScroll: true });
+    };
+    window.requestAnimationFrame(() => window.requestAnimationFrame(restore));
+  };
   const alias = canonicalNoteAlias(draft), valid = Boolean(props.canAdd && alias && alias.length <= 120 && !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/u.test(alias));
   const cancel = (): void => { if (pendingAlias) return; props.onCancel(); window.requestAnimationFrame(() => props.returnFocusRef.current?.focus({ preventScroll: true })); };
   const change = async (action: "add" | "remove", value: string): Promise<void> => {
     if (pendingAlias || (action === "add" && !valid)) return; const sequence = ++sequenceRef.current, owner = props.ownerIdentity;
     setPendingAlias(value); setFailed(false);
     try { const outcome = await props.onChange(action, value); if (sequence !== sequenceRef.current || owner !== ownerRef.current) return;
-      if (outcome.status === "committed") { props.onCommitted(outcome.render); return; } setFailed(true); inputRef.current?.focus();
-    } catch { if (sequence === sequenceRef.current && owner === ownerRef.current) { setFailed(true); inputRef.current?.focus(); } }
-    finally { if (sequence === sequenceRef.current && owner === ownerRef.current) setPendingAlias(null); }
+      if (outcome.status === "committed") { props.onCommitted(outcome.render); return; }
+      setFailed(true); restoreFocusRef.current = { action, alias: value };
+    } catch { if (sequence === sequenceRef.current && owner === ownerRef.current) {
+      setFailed(true); restoreFocusRef.current = { action, alias: value };
+    } }
+    finally { if (sequence === sequenceRef.current && owner === ownerRef.current) {
+      setPendingAlias(null); scheduleRestoreFocus();
+    } }
   };
   return <div className="confirmation-backdrop"><section ref={dialogRef} className="confirmation-dialog" role="dialog" aria-modal="true"
     aria-labelledby="reader-note-alias-title" aria-describedby="reader-note-alias-description" aria-busy={pendingAlias !== null}
@@ -67,7 +85,7 @@ export function ReaderNoteAliasDialog(props: { readonly ownerIdentity: string; r
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); } }}>
     <div className="confirmation-copy"><h2 id="reader-note-alias-title">{props.labels.title}</h2><p id="reader-note-alias-description">{props.labels.description}</p></div>
     {props.aliases.length ? <div>{props.aliases.map((current) => <div className="settings-row" key={current}><span>{current}</span>
-      <button type="button" className="secondary" disabled={pendingAlias !== null} onClick={() => void change("remove", current)}>
+      <button type="button" className="secondary" ref={(element) => { if (element) removeButtonRefs.current.set(current, element); else removeButtonRefs.current.delete(current); }} disabled={pendingAlias !== null} onClick={() => void change("remove", current)}>
         {pendingAlias === current ? props.labels.pending : props.labels.remove}</button></div>)}</div> : <p>{props.labels.empty}</p>}
     <label>{props.labels.field}<input ref={inputRef} value={draft} maxLength={120} disabled={!props.canAdd || pendingAlias !== null} aria-invalid={failed}
       onChange={(event) => { setDraft(event.currentTarget.value); setFailed(false); }} /></label>

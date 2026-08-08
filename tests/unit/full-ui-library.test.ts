@@ -2078,7 +2078,15 @@ describe("full UI Library", () => {
     await clickButton(dom, buttonNamed(container, "Add alias")); await waitFor(dom, () => adopted.length === 1);
     expect(adopted[0]?.aliasing?.aliases).toEqual(["Second Name"]);
     await clickButton(dom, buttonWithLabel(container, "More note actions")); await clickButton(dom, buttonNamed(container, "Manage aliases"));
-    await clickButton(dom, buttonNamed(container, "Remove")); await waitFor(dom, () => adopted.length === 2);
+    mode = "conflict";
+    const removeTrigger = buttonNamed(container, "Remove");
+    await clickButton(dom, removeTrigger);
+    await waitFor(dom, () => container.textContent?.includes("The alias was not changed") === true);
+    await settle(dom); await settle(dom);
+    expect(container.textContent).toContain("Second Name");
+    expect(dom.window.document.activeElement).toBe(removeTrigger);
+    mode = "committed";
+    await clickButton(dom, removeTrigger); await waitFor(dom, () => adopted.length === 2);
     expect(requests.at(-1)).toMatchObject({ action: "remove", alias: "Second Name" });
     expect(adopted[1]?.aliasing?.aliases).toEqual([]);
     selected = { ...selected, aliasing: { aliases: Array.from({ length: 64 }, (_, index) => `Alias ${index + 1}`),
