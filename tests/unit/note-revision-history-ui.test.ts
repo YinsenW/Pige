@@ -62,6 +62,21 @@ describe("NoteRevisionHistoryDialog", () => {
     await harness.unmount();
   });
 
+  it("keeps keyboard focus inside the revision dialog", async () => {
+    const harness = await mount(renderNote(true), api("stale"));
+    await click(harness.container.querySelector<HTMLButtonElement>('[data-reader-action="history"]')!, harness.dom);
+    const dialog = harness.container.querySelector<HTMLElement>('[role="dialog"]')!;
+    const controls = [...dialog.querySelectorAll<HTMLButtonElement>("button")];
+    const first = controls[0]!;
+    const last = controls[controls.length - 1]!;
+    last.focus();
+    last.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(harness.dom.window.document.activeElement).toBe(first);
+    first.dispatchEvent(new harness.dom.window.KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    expect(harness.dom.window.document.activeElement).toBe(last);
+    await harness.unmount();
+  });
+
   it("rejects a committed render whose page type drifted", async () => {
     const methods = api("committed", "claim", "question");
     const onCommitted = vi.fn();

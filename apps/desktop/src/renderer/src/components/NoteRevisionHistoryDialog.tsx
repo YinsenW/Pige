@@ -20,6 +20,7 @@ export function NoteRevisionHistoryDialog(props: {
   const ownerIdentity = `${props.activeVaultId ?? ""}:${props.note.summary.pageId}:${renderContextId ?? ""}:${eligibility?.revision ?? ""}`;
   const ownerRef = useRef(ownerIdentity);
   ownerRef.current = ownerIdentity;
+  const dialogRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const requestActiveRef = useRef(false);
@@ -129,9 +130,32 @@ export function NoteRevisionHistoryDialog(props: {
       <PigeIcon name="activity" size={16} />
     </button>
     {open ? <div className="confirmation-backdrop">
-      <section className="confirmation-dialog" role="dialog" aria-modal="true"
+      <section ref={dialogRef} className="confirmation-dialog" role="dialog" aria-modal="true"
         aria-labelledby="note-history-title" aria-busy={status === "loading"}
-        onKeyDown={(event) => { if (event.key === "Escape" && status !== "loading") { event.preventDefault(); close(); } }}>
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && status !== "loading") {
+            event.preventDefault();
+            close();
+            return;
+          }
+          if (event.key !== "Tab") return;
+          const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+            "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex='-1'])"
+          ) ?? []);
+          if (controls.length === 0) {
+            event.preventDefault();
+            return;
+          }
+          const first = controls[0]!;
+          const last = controls[controls.length - 1]!;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}>
         <div className="confirmation-copy">
           <h2 id="note-history-title">{props.t("note.history.title")}</h2>
           <p>{props.t("note.history.description")}</p>
