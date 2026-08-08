@@ -2100,6 +2100,40 @@ describe("ManagedCollectionService", () => {
     expect(restored.schema.tables.some((table) => table.id === committed.tableId)).toBe(false);
     expect(restored.revision.change).toMatchObject({ kind: "collection_table_add_undo", tableId: committed.tableId,
       name: "Projects", undoOfOperationId: committed.operationId });
+    const operation = OperationRecordSchema.parse(readJson(operationPath));
+    const undoOperation = OperationRecordSchema.parse(readJson(
+      operationPathFor(fixture.vaultPath, undone.undoOperationId)
+    ));
+    const redo = new ManagedCollectionTableRedoService(port);
+    expect(redo.activityState(operation, undoOperation)).toEqual({ canRedo: true });
+    expect(redo.redo({ operationId: committed.operationId, expectedRevisionId: committed.snapshot.revisionId }))
+      .toMatchObject({ status: "stale", currentRevisionId: undone.revisionId });
+    const redone = redo.redo({ operationId: committed.operationId, expectedRevisionId: undone.revisionId });
+    expect(redone).toMatchObject({ status: "redone", operationId: committed.operationId,
+      undoOperationId: undone.undoOperationId, redoOperationId: expect.stringMatching(/^op_/),
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    if (redone.status !== "redone") throw new Error("Collection table add was not redone");
+    const afterRedo = readBundle(fixture.vaultPath, initial.manifest.datasetId)!;
+    expect(afterRedo.schema.tables.find((table) => table.id === committed.tableId)).toMatchObject({ name: "Projects",
+      rowCount: 0, columnCount: 1, columns: [{ name: "Name", nullable: true, logicalType: "string" }] });
+    expect(afterRedo.revision).toMatchObject({ change: { kind: "collection_table_add", tableId: committed.tableId },
+      redoOfOperationId: committed.operationId, undoOperationId: undone.undoOperationId });
+    const redoOperationPath = operationPathFor(fixture.vaultPath, redone.redoOperationId);
+    const redoOperation = OperationRecordSchema.parse(readJson(redoOperationPath));
+    expect(redoOperation.sourceRefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "operation", id: committed.operationId }),
+      expect.objectContaining({ kind: "operation", id: undone.undoOperationId })
+    ]));
+    expect(redo.activityState(operation, undoOperation))
+      .toEqual({ canRedo: false, redoUnavailableReason: "already_redone" });
+    fs.rmSync(redoOperationPath);
+    expect(new ManagedCollectionTableRedoService(port).recoverIncompleteRedos()).toEqual({ recovered: 1, failed: 0 });
+    const recoveredRedo = OperationRecordSchema.parse(readJson(redoOperationPath));
+    const reUndone = await restarted.undo(recoveredRedo, redone.revisionId);
+    expect(reUndone).toMatchObject({ status: "undone", operationId: redone.redoOperationId,
+      revisionId: expect.stringMatching(/^dataset_rev_/) });
+    expect(readBundle(fixture.vaultPath, initial.manifest.datasetId)!.schema.tables
+      .some((table) => table.id === committed.tableId)).toBe(false);
     await expect(restarted.add(request)).resolves.toMatchObject({ status: "stale" });
   }, 30_000);
 

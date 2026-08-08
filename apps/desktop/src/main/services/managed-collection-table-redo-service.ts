@@ -16,9 +16,13 @@ import {
   type OperationRecord
 } from "@pige/schemas";
 import {
+  createTableAddOperation,
+  createTableAddUndoOperationId,
   createTableTrashOperation,
   createTableTrashUndoOperationId,
+  readTableAddActivityBinding,
   readTableTrashActivityBinding,
+  type ManagedCollectionTableAddBinding,
   type ManagedCollectionTableTrashBinding
 } from "./managed-collection-table-service";
 import {
@@ -45,8 +49,23 @@ interface ManagedCollectionTableRedoVaultPort {
   activeVaultPath(): string | undefined;
 }
 
-interface TableRedoBinding extends ManagedCollectionTableTrashBinding {
+interface TableRedoVariant {
+  readonly name: "add" | "trash";
+  readonly originalChange: "collection_table_add" | "collection_table_trash";
+  readonly undoChange: "collection_table_add_undo" | "collection_table_trash_undo";
+  readonly undoOperationId: (operationId: string) => string;
+  readonly readBinding: (
+    vaultPath: string,
+    operation: OperationRecord
+  ) => ManagedCollectionTableAddBinding | ManagedCollectionTableTrashBinding | undefined;
+  readonly createOperation: (binding: BundleBinding, revision: DatasetRevision) => OperationRecord;
+}
+
+interface TableRedoBinding {
+  readonly bundle: BundleBinding;
+  readonly revision: DatasetRevision;
   readonly operation: OperationRecord;
+  readonly variant: TableRedoVariant;
 }
 
 interface PrivateRedoFields {
@@ -56,6 +75,24 @@ interface PrivateRedoFields {
 
 const OPERATION_ID = /^op_(\d{8})_[a-z0-9]{8,}$/u;
 const REVISION_ID = /^dataset_rev_(\d{8})_[a-z0-9]{12,}$/u;
+
+const TABLE_ADD_REDO: TableRedoVariant = {
+  name: "add",
+  originalChange: "collection_table_add",
+  undoChange: "collection_table_add_undo",
+  undoOperationId: createTableAddUndoOperationId,
+  readBinding: readTableAddActivityBinding,
+  createOperation: createTableAddOperation
+};
+
+const TABLE_TRASH_REDO: TableRedoVariant = {
+  name: "trash",
+  originalChange: "collection_table_trash",
+  undoChange: "collection_table_trash_undo",
+  undoOperationId: createTableTrashUndoOperationId,
+  readBinding: readTableTrashActivityBinding,
+  createOperation: createTableTrashOperation
+};
 
 export class ManagedCollectionTableRedoService {
   readonly #vaults: ManagedCollectionTableRedoVaultPort;
@@ -73,7 +110,7 @@ export class ManagedCollectionTableRedoService {
     const original = vaultPath ? readExactBinding(vaultPath, operation) : undefined;
     const undone = vaultPath ? readExactBinding(vaultPath, undo) : undefined;
     if (!vaultPath || !original || !undone || !isMatchingUndo(original, undone)) return undefined;
-    const redo = readOperation(vaultPath, createRedoOperationId(operation.id));
+    const redo = readOperation(vaultPath, createRedoIdentity(operation.id, undone.revision.id, original.variant).operationId);
     if (redo) return matchesRedoOperation(vaultPath, original, undone, redo)
       ? { canRedo: false, redoUnavailableReason: "already_redone" }
       : { canRedo: false, redoUnavailableReason: "content_changed" };
@@ -91,10 +128,10 @@ export class ManagedCollectionTableRedoService {
     if (!vaultPath) return { status: "not_found", operationId: request.operationId };
     const operation = readOperation(vaultPath, request.operationId);
     const original = operation ? readExactBinding(vaultPath, operation) : undefined;
-    if (!operation || !original || !isOriginalTrash(original)) {
+    if (!operation || !original || !isOriginal(original)) {
       return { status: "not_found", operationId: request.operationId };
     }
-    const undo = readOperation(vaultPath, createTableTrashUndoOperationId(operation.id));
+    const undo = readOperation(vaultPath, original.variant.undoOperationId(operation.id));
     const undone = undo ? readExactBinding(vaultPath, undo) : undefined;
     if (!undo || !undone || !isMatchingUndo(original, undone)) {
       return { status: "stale", operationId: operation.id };
@@ -109,11 +146,11 @@ export class ManagedCollectionTableRedoService {
     let failed = 0;
     for (const operation of readOperationRecords(vaultPath)) {
       const original = readExactBinding(vaultPath, operation);
-      if (!original || !isOriginalTrash(original)) continue;
-      const undo = readOperation(vaultPath, createTableTrashUndoOperationId(operation.id));
+      if (!original || !isOriginal(original)) continue;
+      const undo = readOperation(vaultPath, original.variant.undoOperationId(operation.id));
       const undone = undo ? readExactBinding(vaultPath, undo) : undefined;
       if (!undo || !undone || !isMatchingUndo(original, undone)) continue;
-      const identity = createRedoIdentity(operation.id, undone.revision.id);
+      const identity = createRedoIdentity(operation.id, undone.revision.id, original.variant);
       const current = readBundle(vaultPath, original.bundle.manifest.datasetId);
       const existingOperation = readOperation(vaultPath, identity.operationId);
       if (existingOperation && current?.manifest.activeRevision === identity.revisionId) continue;
@@ -141,7 +178,7 @@ export class ManagedCollectionTableRedoService {
     if (expectedRevisionId !== undefined && expectedRevisionId !== undone.revision.id) {
       return { status: "stale", operationId: original.operation.id, currentRevisionId: current.manifest.activeRevision };
     }
-    const identity = createRedoIdentity(original.operation.id, undone.revision.id);
+    const identity = createRedoIdentity(original.operation.id, undone.revision.id, original.variant);
     const existingOperation = readOperation(vaultPath, identity.operationId);
     if (existingOperation) {
       return matchesRedoOperation(vaultPath, original, undone, existingOperation) &&
@@ -176,7 +213,7 @@ export class ManagedCollectionTableRedoService {
     if (committed.manifest.activeRevision !== revision.id) {
       return { status: "stale", operationId: original.operation.id, currentRevisionId: committed.manifest.activeRevision };
     }
-    const redoOperation = createTableTrashOperation(committed, revision);
+    const redoOperation = original.variant.createOperation(committed, revision);
     writeJsonExclusive(operationPathFor(vaultPath, identity.operationId), redoOperation);
     const persisted = readOperation(vaultPath, identity.operationId);
     if (!persisted || !matchesRedoOperation(vaultPath, original, undone, persisted)) {
@@ -232,18 +269,20 @@ function publishRedoRevision(
 }
 
 function readExactBinding(vaultPath: string, operation: OperationRecord): TableRedoBinding | undefined {
-  const binding = readTableTrashActivityBinding(vaultPath, operation);
+  const variant = tableRedoVariant(operation);
+  if (!variant) return undefined;
+  const binding = variant.readBinding(vaultPath, operation);
   if (!binding || binding.revision.operationId !== operation.id) return undefined;
-  return { ...binding, operation };
+  return { ...binding, operation, variant };
 }
 
-function isOriginalTrash(binding: TableRedoBinding): boolean {
-  return binding.revision.change?.kind === "collection_table_trash" && !privateRedoFields(binding.revision);
+function isOriginal(binding: TableRedoBinding): boolean {
+  return binding.revision.change?.kind === binding.variant.originalChange && !privateRedoFields(binding.revision);
 }
 
 function isMatchingUndo(original: TableRedoBinding, undone: TableRedoBinding): boolean {
   const change = undone.revision.change;
-  return change?.kind === "collection_table_trash_undo" &&
+  return undone.variant === original.variant && change?.kind === original.variant.undoChange &&
     change.undoOfOperationId === original.operation.id &&
     undone.revision.datasetId === original.revision.datasetId &&
     undone.revision.parentRevisionId === original.revision.id;
@@ -259,12 +298,27 @@ function matchesRedoOperation(
   const fields = redo ? privateRedoFields(redo.revision) : undefined;
   const originalChange = original.revision.change;
   const redoChange = redo?.revision.change;
-  return !!redo && originalChange?.kind === "collection_table_trash" &&
-    redoChange?.kind === "collection_table_trash" && !!fields &&
+  const originalTableId = tableChangeTableId(originalChange);
+  const redoTableId = tableChangeTableId(redoChange);
+  return !!redo && redo.variant === original.variant && originalChange?.kind === original.variant.originalChange &&
+    redoChange?.kind === original.variant.originalChange && !!fields && !!originalTableId &&
     fields.redoOfOperationId === original.operation.id && fields.undoOperationId === undone.operation.id &&
     redo.revision.parentRevisionId === undone.revision.id &&
-    redoChange.tableId === originalChange.tableId &&
+    redoTableId === originalTableId &&
     redo.operation.kind === original.operation.kind;
+}
+
+function tableRedoVariant(operation: OperationRecord): TableRedoVariant | undefined {
+  return operation.kind === "add_collection_table" ? TABLE_ADD_REDO
+    : operation.kind === "trash_collection_table" ? TABLE_TRASH_REDO
+      : undefined;
+}
+
+function tableChangeTableId(change: DatasetRevision["change"]): string | undefined {
+  return change?.kind === "collection_table_add" || change?.kind === "collection_table_add_undo" ||
+    change?.kind === "collection_table_trash" || change?.kind === "collection_table_trash_undo"
+    ? change.tableId
+    : undefined;
 }
 
 function privateRedoFields(revision: DatasetRevision): PrivateRedoFields | undefined {
@@ -316,22 +370,22 @@ function rebindPayloadRevision(
   syncFile(payloadPath);
 }
 
-function createRedoIdentity(operationId: string, undoRevisionId: string): {
+function createRedoIdentity(operationId: string, undoRevisionId: string, variant: TableRedoVariant): {
   readonly revisionId: string;
   readonly operationId: string;
 } {
   const date = REVISION_ID.exec(undoRevisionId)?.[1];
   if (!date) throw payloadInvalid();
   return {
-    revisionId: `dataset_rev_${date}_${digest("pige:collection-table-trash-redo-revision:v1", operationId).slice(0, 20)}`,
-    operationId: createRedoOperationId(operationId)
+    revisionId: `dataset_rev_${date}_${digest(`pige:collection-table-${variant.name}-redo-revision:v1`, operationId).slice(0, 20)}`,
+    operationId: createRedoOperationId(operationId, variant)
   };
 }
 
-function createRedoOperationId(operationId: string): string {
+function createRedoOperationId(operationId: string, variant: TableRedoVariant): string {
   const date = OPERATION_ID.exec(operationId)?.[1];
   return date
-    ? `op_${date}_${digest("pige:collection-table-trash-redo-operation:v1", operationId).slice(0, 20)}`
+    ? `op_${date}_${digest(`pige:collection-table-${variant.name}-redo-operation:v1`, operationId).slice(0, 20)}`
     : "";
 }
 
