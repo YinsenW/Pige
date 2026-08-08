@@ -64,7 +64,10 @@ describe("JobDependencyRepairService", () => {
     await service.repairAndResume({
       request,
       readCurrentJob: () => current,
-      repair: async () => { order.push("repair"); },
+      repair: async () => {
+        order.push("repair");
+        current = job({ state: "queued", updatedAt: "2026-08-09T00:01:01.000Z", waitingDependency: undefined });
+      },
       resume: async () => { order.push("resume"); }
     });
     expect(order).toEqual(["repair", "resume"]);
@@ -76,6 +79,15 @@ describe("JobDependencyRepairService", () => {
       resume: async () => { order.push("must-not-resume"); }
     })).rejects.toThrow("repair failed");
     expect(order).not.toContain("must-not-resume");
+
+    current = job();
+    await expect(service.repairAndResume({
+      request,
+      readCurrentJob: () => current,
+      repair: async () => { /* owner returned without clearing the durable wait */ },
+      resume: async () => { order.push("incomplete-resume"); }
+    })).rejects.toThrow("did not clear the waiting state");
+    expect(order).not.toContain("incomplete-resume");
 
     current = job({ updatedAt: "2026-08-09T00:02:00.000Z" });
     await expect(service.repairAndResume({

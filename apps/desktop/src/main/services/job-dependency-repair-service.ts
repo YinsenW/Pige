@@ -64,11 +64,14 @@ export class JobDependencyRepairService {
   async repairAndResume(input: DependencyRepairExecution): Promise<"resumed"> {
     const current = this.assertRepairable(this.prepare(input.readCurrentJob(), input.request));
     await input.repair(current);
-    const afterRepair = this.assertRepairable(this.prepare(input.readCurrentJob(), input.request));
+    const afterRepair = input.readCurrentJob();
+    if (!afterRepair || afterRepair.id !== input.request.jobId || afterRepair.activeVaultId !== input.request.activeVaultId) {
+      throw new PigeDomainError("job.dependency_repair_stale", "The repaired Job no longer belongs to the requested vault.");
+    }
+    if (afterRepair.state === "waiting_dependency") {
+      throw new PigeDomainError("job.dependency_repair_incomplete", "The dependency repair did not clear the waiting state.");
+    }
     await input.resume();
-    // The resume callback owns the durable Job transition. This owner only
-    // permits it after both sides of the repair have passed the same CAS.
-    this.assertRepairable(afterRepair);
     return "resumed";
   }
 }
