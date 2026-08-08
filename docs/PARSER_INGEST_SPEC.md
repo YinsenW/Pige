@@ -125,6 +125,12 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ## 8. Adapter Requirements
 
+The bundled AnyDoc port is deliberately narrow: it converts semantic content only for the
+existing `pdf_file`, `docx_file`, and `pptx_file` source kinds from verified snapshot bytes.
+Its wider upstream format list does not expand Pige capture. Text, URLs, images, structured
+data, archives, and deferred media stay with the owners below; a new source kind requires its
+own preservation, safety, provenance, recovery, and, where applicable, Dataset contract.
+
 ### 8.1 Text And Markdown
 
 - Preserve original text as a managed text source or referenced file.
@@ -159,7 +165,9 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.3 PDF
 
-- Convert semantic Markdown from a verified PDF snapshot's bytes through bundled AnyDoc, while retaining PDF.js page locators.
+- Convert semantic Markdown from a verified PDF snapshot's bytes through bundled AnyDoc,
+  while retaining PDF.js page locators. AnyDoc owns semantic PDF text; PDF.js is a
+  provenance/visual bridge and does not publish a second semantic text artifact.
 - Render pages for OCR only when text is absent, sparse, or visibly image-heavy.
 - Keep page count and per-page warnings.
 - Current Phase 5 foundation pins `@firecrawl/anydoc` `0.1.7` for byte-only semantic conversion and retains `pdfjs-dist` `6.1.200` plus `@napi-rs/canvas` `1.0.2` for bounded PDF inspection and explicit candidate-page materialization. Neither path has network access, a hosted API, a CLI, or task-time downloads.
@@ -187,7 +195,11 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Extract headings, paragraphs, lists, tables, links, and images when feasible.
 - Preserve document structure without pretending layout is perfect.
 - DOCX/PPTX parsing shares one Office worker capped at 100 MiB input, 10,000 archive entries, 512 MiB expanded data, 10 MiB per selected XML part, 128 MiB selected XML total, 2,000 slides, 10,000,000 output characters, 60 seconds, and 512 MiB old-generation memory. Selected DOCX/PPTX raster media separately caps 20 targets, 16 MiB each, 64 MiB total, and 60 seconds.
-- Current Phase 5 adapter pins AnyDoc `0.1.7` for byte-only semantic Markdown/Document conversion, while Pige performs bounded OpenXML ZIP preflight across every DOCX XML/relationship part with yauzl `3.4.0`. Pige maps only AnyDoc Document assets back to verified local media references, never opens external parts, and never renders converted HTML in the product UI.
+- Current Phase 5 adapter pins AnyDoc `0.1.7` as the sole byte-only semantic
+  Markdown/Document converter for DOCX and PPTX, while Pige performs bounded OpenXML ZIP
+  preflight across every DOCX XML/relationship part with yauzl `3.4.0`. Pige maps only
+  AnyDoc Document assets back to verified local media references, never opens external parts,
+  and never renders converted HTML in the product UI.
 - DOCX output preserves heading/list/table/link structure as normalized text plus `block:N` units, redacts secret-like URL query values, records referenced embedded media, and emits `image:N` OCR candidates only for images reached from document content.
 - The bounded worker returns data only. Main-process Parser Service writes checksummed
   text/metadata Artifacts and safely refreshes the source projection. Only the enclosing
@@ -198,12 +210,22 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 
 ### 8.5 PPTX
 
-- Extract slide text, speaker notes, image references, and slide order.
-- OCR slide images when visible text is not otherwise recoverable.
-- Current Phase 5 adapter pins AnyDoc `0.1.7` for semantic PPTX Markdown and uses yauzl `3.4.0` plus fast-xml-parser `5.10.1` only over selected bounded OpenXML bridge parts. Presentation relationships determine slide order; Pige-owned speaker notes, external counts, `slide:N` units, and schema-v1 `slide:N/media:M` raster targets are preserved until AnyDoc proves equivalent provenance.
-- XML value coercion and entity processing are disabled, DOCTYPE is rejected, nesting is capped, internal relationship traversal is rejected, and external targets are recorded but never opened.
-- Image-bearing slides with sparse text return OCR candidates to Pi; they do not execute
-  or delay another semantic step themselves.
+- AnyDoc `0.1.7` is the sole PPTX semantic Markdown/Document converter. It owns the
+  supported slide text, tables, speaker notes, embedded-asset metadata, and supported
+  chart/diagram semantics. Pige MUST NOT independently extract or append PPTX user-visible
+  text or speaker notes to the AnyDoc semantic Artifact.
+- Pige's bounded OpenXML bridge owns only source safety and provenance: verified snapshot
+  preflight, relationship-derived effective slide order, safe `slide:N` locators, verified
+  local media bindings, and a count of ignored external relationships. It may classify a
+  visual coverage gap, but it must not publish another semantic PPTX text Artifact.
+- `yauzl` `3.4.0` and fast-xml-parser `5.10.1` are limited to that private preflight and
+  provenance bridge. XML value coercion and entity processing are disabled, DOCTYPE is
+  rejected, nesting is capped, internal relationship traversal is rejected, and external
+  targets are recorded but never opened.
+- Pi may select OCR only for a current bounded `slide:N`/media target whose AnyDoc semantic
+  result leaves visible content unrecovered. A selected full-slide pixel materializer is an
+  OCR-only bridge for visual/vector/chart/unsupported content; it is not an Office converter,
+  a second semantic parser, or a reason to duplicate AnyDoc output.
 
 ### 8.6 Images
 
@@ -218,7 +240,13 @@ After a new document-parser or direct-image OCR Artifact is persisted, its owner
 - Source checksum is verified before and after recognition. Valid deterministic Artifacts are reused after restart; stale derived output is regenerated; changed or path-escaping source evidence fails without invoking the adapter.
 - OCR text is stored once in `artifacts/ocr/`. A separate checksummed metadata sidecar stores engine/version, confidence, language hints, image dimensions, normalized bounding boxes, character spans, and warnings without copying the recognized body.
 - Source Page refresh and the body-free `create_artifact` Operation Record are idempotent. Empty OCR completes its child with warnings and leaves the Agent parent waiting without a note.
-- PDF pages use their reviewed materializer. DOCX and PPTX use the bounded Office worker to materialize only parser-selected raster media into private disposable inputs for the same native OCR adapter. Text and body-free metadata persist with `image:N/ocr:block:K` or `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and Source Page/Agent handoff. Full-slide, vector/chart, and unsupported or oversized targets remain waiting.
+- PDF pages use their reviewed materializer. DOCX and PPTX use the bounded Office worker to
+  materialize only Pi-selected raster media into private disposable inputs for the same native
+  OCR adapter. Text and body-free metadata persist with `image:N/ocr:block:K` or
+  `slide:N/media:M/ocr:block:K` locators, checksum reuse, Source Record revision checks, and
+  Source Page/Agent handoff. Selected PPTX full-slide pixels can enrich only visual coverage
+  gaps; they never replace or duplicate AnyDoc semantic output. Unsupported or oversized
+  targets remain waiting.
 
 ### 8.7 CSV, XLSX, And Database Files
 
@@ -370,6 +398,9 @@ Current handoff contract:
 - Capture persistence before parser failure.
 - Parser adapter fixtures for TXT, Markdown, URL, PDF, DOCX, PPTX, image, CSV, XLSX, and
   read-only SQLite.
+- AnyDoc-bound PDF/DOCX/PPTX fixtures prove that Pige emits one semantic Artifact, retains
+  only format-specific provenance bridges, never appends independently extracted slide text or
+  speaker notes, and routes only selected visual gaps to OCR.
 - Structured fixtures cover CSV dialect/encoding/null/type ambiguity, formula/macro and
   external-link workbooks, hostile database schemas, oversized cells/rows/columns,
   lossless reconstruction, stable IDs, deterministic revision hashes, and zero execution.

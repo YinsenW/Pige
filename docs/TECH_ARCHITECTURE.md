@@ -489,7 +489,9 @@ Suggested parser adapters:
 
 - Markdown and text: native file read.
 - PDF: bundled AnyDoc semantic Markdown conversion from a verified snapshot's bytes, with a separate bounded PDF.js + native Canvas page-locator and candidate-page materializer; Poppler/PDFium remains a replaceable future fallback behind the same port.
-- DOCX/PPTX: bundled AnyDoc semantic Markdown conversion from verified snapshot bytes, with Pige-owned bounded OpenXML preflight, relationship, media, slide-order, and speaker-notes bridges.
+- DOCX/PPTX: bundled AnyDoc semantic Markdown/Document conversion from verified snapshot
+  bytes. Pige owns bounded OpenXML preflight plus relationship, media, and slide-order
+  provenance bridges; it does not independently reconstruct semantic text or speaker notes.
 - Images: OCR service in v0.1 when a supported local engine is available.
 - Rendered PDF pages or presentation slides: OCR service when visible text is not otherwise recoverable.
 
@@ -507,6 +509,11 @@ Current document-parser implementation:
   vault and receive only verified views of the Job-bound ingress snapshot.
 - Main-process owners validate and atomically publish checksummed text/metadata/rendered
   Artifacts, Source Record/Page projections, and body-free Operation provenance.
+- The required semantic boundary makes AnyDoc the only converter for the current
+  PDF/DOCX/PPTX source kinds. Pige's PDF/OpenXML bridges retain source safety, locators,
+  media provenance, and selected visual OCR inputs only; the remaining Office cleanup must
+  remove any parallel semantic Artifact or text/notes append. AnyDoc's broader upstream
+  format list does not add Pige source kinds without a separate contract.
 - Exact adapters, limits, locators, reuse, OCR-candidate, conflict, and recovery behavior
   live in `docs/PARSER_INGEST_SPEC.md` and `docs/SOURCE_STORAGE_STRATEGY.md`; dependency
   pins live in section 16 and machine-readable manifests.
@@ -1802,7 +1809,7 @@ Waiver rules:
 | Undici (`web.undici`) | required | Main-process HTTP(S) URL capture with validated-address connection pinning. | https://github.com/nodejs/undici | Pin `8.7.0`; Node `>=22.19.0`; rerun SSRF, redirect, body-timeout, decompression-size, proxy/TLS, and packaged runtime smoke tests on update. | Explicit HTTP/1.1 (`allowH2: false`), manual per-hop redirects, and a fresh pinned Agent preserve the reviewed boundary; never expose the dispatcher to renderer or Skills. |
 | `@mozilla/readability` (`web.mozilla-readability`) | required | Clean article text and metadata extraction from fetched web pages. | https://github.com/mozilla/readability | Pin `0.6.0`; rerun representative/malformed/hostile/large-page and packaged-worker fixtures on update. | Apache-2.0; raw snapshot stays immutable and article HTML is never rendered as trusted UI. |
 | jsdom (`web.jsdom`; types `types.jsdom`) | required | Inert DOM runtime for Readability in the bounded web-extractor worker. | https://github.com/jsdom/jsdom | Pin runtime `29.1.1` and types `28.0.3`; review parser/security and Node-engine changes before update. | MIT; scripts and subresources remain disabled; local worker only. |
-| `@firecrawl/anydoc` (`parser.anydoc`) | required | Semantic local Markdown/Document conversion for the supported `pdf_file`, `docx_file`, and `pptx_file` source kinds. | https://github.com/firecrawl/anydoc | Pin exact `0.1.7`; rerun malformed/encrypted/resource-limit, DOCX block/asset, PPTX slide/notes/media, PDF native-text, artifact-reuse/restart, and Electron native-addon startup fixtures on macOS arm64/x64 and Windows x64. | MIT; Node `>=20`; bundled local N-API package. The byte-only adapter receives one verified private snapshot and never calls a hosted API, CLI, runtime downloader, or network service. |
+| `@firecrawl/anydoc` (`parser.anydoc`) | required | Sole semantic local Markdown/Document conversion for the supported `pdf_file`, `docx_file`, and `pptx_file` source kinds. | https://github.com/firecrawl/anydoc | Pin exact `0.1.7`; rerun malformed/encrypted/resource-limit, DOCX block/asset, PPTX semantic/notes/media, PDF native-text, artifact-reuse/restart, and Electron native-addon startup fixtures on macOS arm64/x64 and Windows x64. | MIT; Node `>=20`; bundled local N-API package. The byte-only adapter receives one verified private snapshot and never calls a hosted API, CLI, runtime downloader, or network service. Upstream legacy Office, OpenDocument, RTF, EPUB, CSV, and spreadsheet support does not expand Pige source kinds; CSV/XLSX stay Dataset-owned. |
 | `pdfjs-dist` (`parser.pdfjs-dist`) | required | PDF metadata/page locators and bounded rasterization of verified OCR candidate pages through separate worker adapters. | https://github.com/mozilla/pdf.js | Pin `6.1.200`; update only after corrupt/encrypted/multilingual/image-only/large-page fixtures and Electron worker packaging tests. | Apache-2.0; bundled local dependency. AnyDoc owns semantic Markdown conversion; PDF.js page inspection and pixel materialization retain independent protocols and limits. |
 | `@napi-rs/canvas` (`parser.napi-rs-canvas`) | required | Supply PDF.js Node primitives and bounded native Canvas/PNG encoding for the explicit page OCR materializer. | https://github.com/Brooooooklyn/canvas | Pin `1.0.2`; test native package inclusion and page-renderer startup on every macOS/Windows release target. | MIT; local-only native dependency; selected-page buffers remain in the worker and are released after transfer. |
 | Poppler utilities | candidate | Alternative PDF page materializer if PDF.js/native Canvas packaging, fidelity, or hostile-input evidence fails. | https://poppler.freedesktop.org | Bundle/pin binary per platform only if adopted; include license notices. | Local parser port; raw PDF remains immutable. |
@@ -1946,7 +1953,9 @@ Pin before implementing:
 
 - Markdown stack: CodeMirror 6 plus unified/remark/rehype packages.
 - Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
-- Semantic document conversion: `@firecrawl/anydoc` `0.1.7`; Pige's DOCX/PPTX relationship, notes, and media bridge continues to use yauzl `3.4.0` plus fast-xml-parser `5.10.1`.
+- Semantic document conversion: `@firecrawl/anydoc` `0.1.7`; Pige's DOCX/PPTX
+  relationship/media provenance bridge continues to use yauzl `3.4.0` plus
+  fast-xml-parser `5.10.1`, without a parallel semantic text or notes parser.
 - Backup/restore archive engine: yazl/yauzl.
 - Secret storage: schema-v2 machine-local app-data file, injected Electron `safeStorage`
   ciphertext when available, owner-only POSIX mode where supported, explicit portable/

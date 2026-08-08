@@ -642,11 +642,11 @@ Home and capture:
 - Plain text capture.
 - Markdown and plain text file ingest.
 - Web URL ingest with a preserved readable local snapshot and visible bounded-failure behavior.
-- PDF ingest with local text extraction.
-- Word `.docx` ingest.
-- PowerPoint `.pptx` best-effort ingest.
+- PDF ingest through local semantic conversion.
+- Word `.docx` ingest through local semantic conversion.
+- PowerPoint `.pptx` ingest through local semantic conversion.
 - Image and screenshot ingest with OCR where a supported local engine is available.
-- OCR fallback for image-heavy PDFs and PowerPoint slides.
+- OCR fallback for image-heavy PDF pages and selected visual-only PowerPoint slide content.
 - Local tool manager for explicitly installing and managing a supported optional OCR fallback.
 - Processing status visible in the home timeline.
 - Status states for queued, processing, failed, and exceptional intervention captures.
@@ -909,8 +909,31 @@ Safety and trust:
 
 ## 10. Input Handling Requirements
 
-Sections 10.1–10.6 define bounded capabilities, not a fixed workflow; section 11.1 owns
+Sections 10.0–10.7 define bounded capabilities, not a fixed workflow; section 11.1 owns
 Agent selection and degraded behavior.
+
+### 10.0 Format Ownership
+
+Pige's accepted source kinds are a product contract, not an automatic expansion of any
+bundled converter's upstream format list. The v0.1 conversion boundary is deliberately
+small:
+
+| Planned source family | Semantic or derived-content owner | Pige-owned boundary that remains |
+| --- | --- | --- |
+| Typed text, Markdown, and TXT | Pige's native text/Markdown path. | Preserve once, retain source identity, and keep untrusted-content handling. |
+| Web URLs | Pige's bounded URL capture and Readability path. | Network permission, SSRF controls, inert snapshot, and source provenance. |
+| PDF, DOCX, and PPTX | Bundled local AnyDoc `0.1.7` converts verified bytes to semantic Markdown/Document. | Source snapshot/CAS, PDF page locators, OpenXML preflight, relationship/media provenance, and selected local pixel OCR. |
+| Images and screenshots | Pige's local OCR adapters. | Image validation, capability lifecycle, confidence, locators, and source/artifact recovery. |
+| CSV, XLSX, and supported local databases | Pige's Dataset Service. | Lossless typed Dataset Bundle, no formula/macro/extension execution, bounded query, and exact data citations. |
+| ZIP archives | Pige's bounded archive-inventory owner. | One archive Source/Page, no extraction, recursion, execution, or model/network work. |
+| Audio and video | Preserve-and-wait source handling until the separate transcription capability exists. | No transcript, parser, model call, or network egress before that capability is available. |
+| Folder and Git repository sources | No generic v0.1 capture/conversion path; future support needs its own source contract. | No recursive import, execution, network access, or implicit parser selection. |
+| Unknown files | Not an accepted capture kind. | Reject rather than guessing a parser or treating the extension as authority. |
+
+AnyDoc support for additional legacy Office, OpenDocument, RTF, EPUB, or spreadsheet
+extensions does not by itself make those Pige input types. Adding one still requires an
+accepted source kind, preservation and recovery contract, input limits, provenance, and—for
+structured data—a Dataset contract.
 
 ### 10.1 Text
 
@@ -1005,7 +1028,10 @@ Requirements:
 
 ### 10.4 PDF
 
-PDF files should be preserved as source assets without modifying the original. Pige should extract text locally and preserve page references when possible.
+PDF files should be preserved as source assets without modifying the original. Bundled local
+AnyDoc owns semantic PDF-to-Markdown conversion; Pige independently preserves page
+references and materializes only selected visual gaps for local OCR. AnyDoc Markdown does
+not replace Pige's page-locator or rendered-page provenance.
 
 Minimum output:
 
@@ -1018,15 +1044,25 @@ Minimum output:
 
 ### 10.5 Word And PowerPoint
 
-Word and PowerPoint support should be included in the first highly usable release as best-effort local extraction. Perfect fidelity is not required, but the user should be able to drop common `.docx` and `.pptx` files and receive useful extracted text plus preserved originals.
+Word and PowerPoint support should be included in the first highly usable release as
+best-effort local semantic conversion. Bundled local AnyDoc is the sole semantic converter
+for Pige's supported `.docx` and `.pptx` source kinds: it produces the Markdown/Document
+content, including supported structure, tables, speaker notes, and embedded-asset metadata.
+Pige preserves source and slide/document provenance, but must not maintain a second Office
+semantic parser or append separately extracted text or speaker notes to AnyDoc output.
+
+Perfect visual fidelity is not required. Pige may materialize selected document media or
+PowerPoint slide pixels only when AnyDoc's semantic output leaves a visual coverage gap for
+local OCR. That materializer is an OCR bridge, not a second Office converter.
 
 Minimum output:
 
 - Source record.
 - Managed file copy or original-path reference according to source storage strategy.
-- Extracted text.
+- One checksummed local semantic text artifact from AnyDoc.
 - Extracted images when the source format exposes embedded image assets or a page/slide render path is available.
-- OCR output from embedded or rendered images when ordinary text extraction misses important visible text.
+- OCR output from selected embedded or rendered pixels when the semantic artifact misses
+  important visible text.
 - Source summary Markdown page.
 - Wiki updates.
 
@@ -1036,9 +1072,10 @@ Images and screenshots should be first-class capture inputs in v0.1 when a local
 
 OCR should also act as a fallback inside document parsing:
 
-- If a PDF page has no embedded text, render the page and OCR it.
-- If a PDF page has very little embedded text but substantial visible text, add OCR as a second pass.
-- If a PowerPoint slide contains screenshots or image-only text, OCR those regions or rendered slide images.
+- If a PDF page's semantic artifact has no recoverable text, render the page and OCR it.
+- If a PDF page's semantic artifact has very little text but substantial visible text, add OCR as a second pass.
+- If a PowerPoint slide has visual-only content that its semantic artifact does not recover,
+  OCR selected embedded regions or rendered slide pixels.
 - If OCR confidence is low, keep partial text but attach a warning to the source page.
 
 Engine priority:
@@ -1072,6 +1109,9 @@ CSV, XLSX, and supported database files are first-class sources. Pige preserves 
 original before Pi decides whether to inspect, query, summarize, or materialize a
 Dataset. It MUST NOT flatten large tables into Markdown, execute workbook code, mutate
 an external database, or require users to choose storage/query engines.
+
+AnyDoc can convert CSV and Excel files to Markdown, but that output is not a replacement
+for Pige's lossless, typed Dataset path and is not a v0.1 structured-data authority.
 
 v0.1 minimum outcome:
 

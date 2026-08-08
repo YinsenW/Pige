@@ -2482,6 +2482,7 @@ References:
 
 Status: Accepted
 Date: 2026-08-08
+Revised: 2026-08-08
 Supersedes: D-20260710-Pdfjs-Worker-For-Embedded-Pdf-Text, D-20260710-Bounded-Office-Openxml-Worker
 
 Decision:
@@ -2493,9 +2494,11 @@ snapshot and calls only AnyDoc's in-memory `toMarkdownBytes`/`toDocument` APIs. 
 no Firecrawl hosted API, CLI, `npx`, runtime download, or network/OCR authority.
 
 Pige retains its own source identity, artifact CAS/restart behavior, OpenXML archive
-preflight, DOCX/PPTX relationship, speaker-note and media bridges, plus PDF.js page
-inspection/rendering/OCR-candidate and page-citation positioning. AnyDoc does not expand
-capture formats or replace page-level provenance that it cannot prove.
+preflight, DOCX/PPTX relationship/media provenance bridges, plus PDF.js page
+inspection/rendering/OCR-candidate and page-citation positioning. AnyDoc owns semantic
+PDF/DOCX/PPTX content; Pige must not reconstruct or append a second semantic text or
+speaker-notes artifact. AnyDoc does not expand capture formats or replace page/slide-level
+provenance that it cannot prove.
 
 Rationale:
 
@@ -2509,9 +2512,16 @@ Consequences:
 
 - Parser metadata identifies semantic artifacts as `anydoc@0.1.7`, so older parser
   outputs are safely revalidated and rebuilt through existing CAS/restart ownership.
+- Pige's PDF/OpenXML bridges may validate inputs, retain page/slide/media locators, and
+  materialize only selected visual coverage gaps for local OCR. They cannot publish a second
+  semantic Artifact, append independently extracted PPTX slide text or speaker notes, or turn
+  a visual renderer into an Office converter.
 - AnyDoc failures map to Pige's body-free unsupported, malformed, encrypted,
   resource-limit, missing-part, I/O, or generic parser outcomes; no upstream body or path
   crosses the adapter boundary.
+- AnyDoc's support for legacy Office, OpenDocument, RTF, EPUB, CSV, and spreadsheet formats
+  does not extend Pige's `pdf_file`/`docx_file`/`pptx_file` contract. Native text/URL/image,
+  Dataset, archive, and media paths retain their existing owners.
 - `fast-xml-parser` and `yauzl` remain for Pige-owned safe OpenXML/Dataset inspection;
   `pdfjs-dist` and `@napi-rs/canvas` remain for PDF page rendering and OCR. Mammoth and
   its JSZip conversion graph are not production dependencies.
@@ -2520,6 +2530,7 @@ Consequences:
 
 References:
 
+- `docs/PRD.md`
 - `docs/TECH_ARCHITECTURE.md`
 - `docs/PARSER_INGEST_SPEC.md`
 - `docs/SECURITY_THREAT_MODEL.md`
