@@ -235,7 +235,7 @@ import { SourceStoragePreferenceService } from "./services/source-storage-prefer
 import { PigePolicyService } from "./services/pige-policy-service";
 import { BackupTrashPreferenceService } from "./services/backup-trash-preference-service";
 import { CoalescedBatchDrainer } from "./services/background-job-drainer";
-import { CaptureService } from "./services/capture-service";
+import { CaptureService, isDeferredMediaSourceKind, supportedFileSourceKind } from "./services/capture-service";
 import { AcceptedFileIngressService } from "./services/accepted-file-ingress-service";
 import { AgentFileIngressRecoveryService } from "./services/agent-file-ingress-recovery-service";
 import { AgentTurnConversationStore } from "./services/agent-turn-conversation-store";
@@ -245,6 +245,7 @@ import { ReaderSourceRevealService } from "./services/reader-source-reveal-servi
 import { ReaderGeneratedNoteRevealService } from "./services/reader-generated-note-reveal-service";
 import { type CaptureJobExecutor } from "./services/capture-job-executor";
 import { HomeAgentAttachmentService } from "./services/home-agent-attachment-service";
+import { HomeAgentMediaCaptureService } from "./services/home-agent-media-capture-service";
 import { HomeAuthoredTextCaptureService } from "./services/home-authored-text-capture-service";
 import { DiagnosticsService } from "./services/diagnostics-service";
 import { CrashRecoveryService } from "./services/crash-recovery-service";
@@ -518,6 +519,7 @@ let captureService: CaptureService | undefined;
 let agentFileIngressRecoveryService: AgentFileIngressRecoveryService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
 let homeAgentAttachmentService: HomeAgentAttachmentService | undefined;
+let homeAgentMediaCaptureService: HomeAgentMediaCaptureService | undefined;
 let jobsService: JobsService | undefined;
 let jobCompactionService: JobCompactionService | undefined;
 let jobStateEventService: JobStateEventService | undefined;
@@ -1297,6 +1299,11 @@ const getHomeAgentAttachmentService = (): HomeAgentAttachmentService => {
     );
   }
   return homeAgentAttachmentService;
+};
+
+const getHomeAgentMediaCaptureService = (): HomeAgentMediaCaptureService => {
+  homeAgentMediaCaptureService ??= new HomeAgentMediaCaptureService(getVaultService(), getJobsService());
+  return homeAgentMediaCaptureService;
 };
 
 const getPermissionBrokerService = (): PermissionBrokerService => {
@@ -2926,6 +2933,8 @@ const resumeBackgroundJobs = async (): Promise<void> => {
           : `Compacted ${compaction.compacted} retained successful Job record(s).`
       });
     }
+    const mediaRecovery = getHomeAgentMediaCaptureService().recoverPending();
+    getCrashRecoveryService().observe({ jobsRecovered: mediaRecovery.recovered, jobsNeedRetry: mediaRecovery.failed });
     getJobsService().requeueWaitingParses();
     getJobsService().requeueWaitingOcr();
     getJobsService().requeueWaitingAgentIngest();
@@ -3323,6 +3332,35 @@ ipcMain.handle("agent.submitTurn", async (event, payload: unknown) => {
         ...reference,
         jobId: prepared.jobId
       })));
+      const containsDeferredMedia = preparedAttachments.entries.some((entry) =>
+        entry.kind === "file" && isDeferredMediaSourceKind(supportedFileSourceKind(entry.filePath))
+      );
+      if (containsDeferredMedia) {
+        const receipt = home.acceptPreparedSourceTurn(prepared);
+        const waiting = getHomeAgentMediaCaptureService().defer(prepared);
+        if (normalizedRequest.stagedItems === undefined) {
+          return AgentSubmitTurnResultSchema.parse({
+            ...waiting,
+            ...(preparedAttachments.rejectedFiles.length > 0
+              ? { rejectedFiles: preparedAttachments.rejectedFiles }
+              : {})
+          });
+        }
+        return AgentStagedSubmitTurnResultSchema.parse({
+          ...receipt,
+          acceptedItems: preparedAttachments.entries.map((entry, index) => ({
+            ordinal: entry.ordinal,
+            kind: entry.kind,
+            sourceId: prepared.sourceIds[index]!
+          })),
+          ...(preparedAttachments.rejectedFiles.length > 0
+            ? {
+                rejectedFiles: preparedAttachments.rejectedFiles,
+                rejectedItems: preparedAttachments.rejectedItems
+              }
+            : {})
+        });
+      }
       if (normalizedRequest.stagedItems === undefined) {
         const result = await home.submitPreparedSourceTurn(prepared, draftContext);
         return AgentSubmitTurnResultSchema.parse({
@@ -4508,6 +4546,7 @@ app.whenReady().then(async () => {
     captureService,
     new AcceptedFileIngressService(getVaultService())
   );
+  homeAgentMediaCaptureService = undefined;
   jobsService = new JobsService(
     getVaultService(),
     getAgentIngestService(),

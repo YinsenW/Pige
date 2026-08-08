@@ -925,6 +925,17 @@ describe("schemas", () => {
       proposalId: "proposal_20260728_schemaappend01",
       error: { ...waiting.error, code: "agent_runtime.turn_in_progress", messageKey: "errors.agent_runtime.turn_in_progress" }
     })).toThrow();
+    expect(AgentSubmitTurnResultSchema.parse({
+      ...waiting,
+      error: {
+        code: "capture.media_transcription_unavailable",
+        domain: "capture",
+        messageKey: "errors.capture.media_transcription_unavailable",
+        retryable: false,
+        severity: "info",
+        userAction: "none"
+      }
+    })).toMatchObject({ state: "waiting", modelUsage: "none" });
 
     const proposal = {
       proposalId: "proposal_20260728_schemaappend01",

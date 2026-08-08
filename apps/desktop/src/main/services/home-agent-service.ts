@@ -1100,7 +1100,7 @@ export class HomeAgentService {
       return { requeued: 0, processed: 0, completed: 0, waiting: 0, failed: 0 };
     }
     const { requeued } = this.#jobs.requeueWaitingTextAgentTurns();
-    const jobs = this.#jobs.listQueuedTextAgentTurns(limit);
+    const jobs = this.#jobs.listQueuedTextAgentTurns(limit).filter((job) => job.stage !== "waiting_for_tool");
     let completed = 0;
     let waiting = 0;
     let failed = 0;

@@ -108,11 +108,19 @@ const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   [".csv", "csv_file"], [".xlsx", "xlsx_file"],
   ...[".sqlite", ".sqlite3", ".db"].map((extension) => [extension, "sqlite_file"] as const),
   ...[".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff", ".bmp"]
-    .map((extension) => [extension, "image_file"] as const)
+    .map((extension) => [extension, "image_file"] as const),
+  ...[".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus"]
+    .map((extension) => [extension, "audio_file"] as const),
+  ...[".mp4", ".m4v", ".mov", ".webm"]
+    .map((extension) => [extension, "video_file"] as const)
 ]);
 
 export function supportedFileSourceKind(filePath: string): SourceKind | undefined {
   return FILE_KIND_BY_EXTENSION.get(path.extname(filePath).toLowerCase());
+}
+
+export function isDeferredMediaSourceKind(sourceKind: SourceKind | undefined): boolean {
+  return sourceKind === "audio_file" || sourceKind === "video_file";
 }
 
 export function safeAttachmentDisplayName(filePath: string): string {
@@ -450,9 +458,14 @@ export class CaptureService {
               ? "text_ready"
               : isStructuredFileSource(sourceKind)
                 ? "waiting_agent_dataset_tool"
+                : isDeferredMediaSourceKind(sourceKind)
+                  ? "waiting_media_transcription"
                 : "waiting_parser_or_ocr",
-            parserRequired: !isTextLikeFileSource(sourceKind) && !isStructuredFileSource(sourceKind),
+            parserRequired: !isTextLikeFileSource(sourceKind) &&
+              !isStructuredFileSource(sourceKind) &&
+              !isDeferredMediaSourceKind(sourceKind),
             ...(isStructuredFileSource(sourceKind) ? { datasetToolAvailable: true } : {}),
+            ...(isDeferredMediaSourceKind(sourceKind) ? { mediaTranscriptionStatus: "unavailable" } : {}),
             ...(sqliteSidecars.length > 0 ? { sqliteLiveSidecars: sqliteSidecars } : {})
           },
           createdAt: timestamp,

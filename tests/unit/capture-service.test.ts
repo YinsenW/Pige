@@ -459,7 +459,9 @@ describe("Agent-turn source preservation", () => {
   it.each([
     ["paper.pdf", "pdf_file", "waiting_parser_or_ocr", true],
     ["records.csv", "csv_file", "waiting_agent_dataset_tool", false],
-    ["archive.sqlite", "sqlite_file", "waiting_agent_dataset_tool", false]
+    ["archive.sqlite", "sqlite_file", "waiting_agent_dataset_tool", false],
+    ["meeting.m4a", "audio_file", "waiting_media_transcription", false],
+    ["clip.mp4", "video_file", "waiting_media_transcription", false]
   ] as const)("projects %s as a Pi-selectable typed source", async (name, kind, parserStatus, parserRequired) => {
     const { vaultPath, vault } = makeVault();
     const sourcePath = path.join(path.dirname(vaultPath), name);
@@ -476,7 +478,13 @@ describe("Agent-turn source preservation", () => {
 
     expect(record.kind).toBe(kind);
     expect(record.metadata).toMatchObject({ parserStatus, parserRequired });
-    if (!parserRequired) expect(record.metadata.datasetToolAvailable).toBe(true);
+    if (!parserRequired && kind !== "audio_file" && kind !== "video_file") {
+      expect(record.metadata.datasetToolAvailable).toBe(true);
+    }
+    if (kind === "audio_file" || kind === "video_file") {
+      expect(record.metadata.mediaTranscriptionStatus).toBe("unavailable");
+      expect(record.metadata.datasetToolAvailable).toBeUndefined();
+    }
   });
 
   it.each(["-journal", "-wal", "-shm"])(
