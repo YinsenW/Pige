@@ -7,6 +7,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { KnowledgeTreeResult, LibraryRelatedResult } from "@pige/contracts";
 import { KnowledgeTreePanel } from "../../apps/desktop/src/renderer/src/App";
+import { evidenceDensityBand } from "../../apps/desktop/src/renderer/src/components/KnowledgeTreeMapSemantics";
 import enMessages from "../../apps/desktop/src/renderer/src/locales/en/messages.json";
 
 const globalKeys = [
@@ -34,6 +35,13 @@ afterEach(() => {
 });
 
 describe("Knowledge Tree renderer", () => {
+  it("keeps evidence density bands bounded for sparse and dense nodes", () => {
+    expect(evidenceDensityBand(0)).toBe(0);
+    expect(evidenceDensityBand(2)).toBe(1);
+    expect(evidenceDensityBand(5)).toBe(2);
+    expect(evidenceDensityBand(6)).toBe(3);
+  });
+
   it("renders deterministic accessible weight and density semantics with source-backed navigation", async () => {
     const dom = createDom();
     const opened: Array<{ readonly pageId: string; readonly focusKey: string }> = [];
@@ -426,6 +434,28 @@ describe("Knowledge Tree renderer", () => {
     expect(requests).toHaveLength(4);
     expect(mount.container.querySelector('[data-knowledge-action="open-topic"]')).toBeNull();
     expect(mount.container.textContent).toContain("No child branches yet.");
+    await unmount(dom, mount.root);
+  });
+
+  it("restores the selected tree node focus when opening a related page fails", async () => {
+    const dom = createDom();
+    let openCalls = 0;
+    const mount = await mountTree(
+      dom,
+      readyTree(),
+      async () => {
+        openCalls += 1;
+        throw new Error("reader unavailable");
+      },
+      async (pageId) => relatedResult(pageId, "Related note")
+    );
+    const selected = treeItemNamed(mount.container, "Local-first");
+    await waitFor(dom, () => buttonNamed(mount.container, "Open: Related note") !== undefined);
+    await click(dom, buttonNamed(mount.container, "Open: Related note"));
+    await waitFor(dom, () => openCalls === 1 && dom.window.document.activeElement === selected);
+    expect(mount.container.querySelector(".knowledge-map-status")?.textContent)
+      .toBe("Local-first focused");
+
     await unmount(dom, mount.root);
   });
 

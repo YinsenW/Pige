@@ -21,9 +21,8 @@ import {
   searchKnowledgeTree,
   type KnowledgeTreeSearchMatch
 } from "./knowledge-tree-search-model";
-
+import { evidenceDensity, evidenceDensityBand, formatNodeSummary, searchKindLabel } from "./KnowledgeTreeMapSemantics";
 type TreeMode = "tree" | "network" | "list";
-
 type VisualNode = {
   readonly id: string;
   readonly parentId: string | null;
@@ -43,7 +42,6 @@ type VisualNode = {
   readonly pageId?: string;
   readonly focusKey?: string;
 };
-
 type VisualTree = {
   readonly nodes: readonly VisualNode[];
   readonly byId: ReadonlyMap<string, VisualNode>;
@@ -53,14 +51,12 @@ type VisualTree = {
   readonly fitZoom: number;
   readonly fitPan: { readonly x: number; readonly y: number };
 };
-
 type LayoutNode = Omit<VisualNode, "x" | "y" | "childCount"> & {
   readonly children: readonly LayoutNode[];
 };
 type ViewportAnnouncement =
   | { readonly kind: "focused"; readonly title: string }
   | { readonly kind: "zoom"; readonly percent: number };
-
 type PointerDrag = {
   readonly pointerId: number;
   readonly clientX: number;
@@ -101,6 +97,8 @@ export function KnowledgeTreeMap(props: {
   const searchOriginRef = useRef<string | null>(null);
   const searchCollapseOriginRef = useRef<ReadonlySet<string> | null>(null);
   const searchOwnerRef = useRef<string | null>(null);
+  const activeIdRef = useRef(activeId);
+  const treeOwnerRef = useRef(props.treeOwnerKey);
   const relatedSequenceRef = useRef(0);
   const relatedOwnerRef = useRef("");
   const onLoadRelatedRef = useRef(props.onLoadRelated);
@@ -108,6 +106,8 @@ export function KnowledgeTreeMap(props: {
   const normalizedQuery = normalizeKnowledgeTreeQuery(query);
   const transform = `translate(${pan.x} ${pan.y}) scale(${zoom})`;
   onLoadRelatedRef.current = props.onLoadRelated;
+  activeIdRef.current = activeId;
+  treeOwnerRef.current = props.treeOwnerKey;
   relatedOwnerRef.current = `${props.activeVaultId}:${active?.id ?? ""}:${active?.pageId ?? ""}`;
 
   useEffect(() => {
@@ -134,13 +134,11 @@ export function KnowledgeTreeMap(props: {
       }
     });
   }, [active?.id, active?.pageId, props.activeVaultId]);
-
   const nodeAllowedByMode = (node: VisualNode): boolean => {
     if (mode === "list" && node.level >= 3) return false;
     if (reviewOnly && node.status !== "needs_review" && node.kind !== "root") return false;
     return true;
   };
-
   const nodeVisibleInBranch = (node: VisualNode): boolean => {
     let parentId = node.parentId;
     while (parentId) {
@@ -167,7 +165,6 @@ export function KnowledgeTreeMap(props: {
   );
   const searchMatchIds = new Set(searchMatches.map(({ id }) => id));
   const searchAncestorKey = searchMatches.flatMap(({ ancestorIds }) => ancestorIds).join("\0");
-
   const nodeSearchMatch = (node: VisualNode): boolean =>
     !normalizedQuery || searchMatchIds.has(node.id);
   const nodeDimmed = (node: VisualNode): boolean => !nodeInteractive(node) || !nodeSearchMatch(node);
@@ -175,7 +172,6 @@ export function KnowledgeTreeMap(props: {
   const activeChildren = active && !collapsedIds.has(active.id)
     ? visual.nodes.filter((node) => node.parentId === active.id && nodeInteractive(node))
     : [];
-
   const setBranchCollapsed = (node: VisualNode, collapsed: boolean): void => {
     if (node.childCount === 0) return;
     setCollapsedIds((current) => {
@@ -186,7 +182,6 @@ export function KnowledgeTreeMap(props: {
       return next;
     });
   };
-
   const revealNode = (node: VisualNode): void => {
     const ancestors = new Set<string>();
     let parentId = node.parentId;
@@ -211,14 +206,12 @@ export function KnowledgeTreeMap(props: {
       pan: { x: 450 - node.x * nextZoom, y: 310 - node.y * nextZoom }
     };
   };
-
   useEffect(() => {
     setCollapsedIds((current) => {
       const next = new Set([...current].filter((id) => (visual.byId.get(id)?.childCount ?? 0) > 0));
       return next.size === current.size ? current : next;
     });
   }, [visual]);
-
   useEffect(() => {
     if (!normalizedQuery || searchOwnerRef.current !== props.treeOwnerKey) return;
     const ancestors = new Set(searchAncestorKey.split("\0").filter(Boolean));
@@ -230,7 +223,6 @@ export function KnowledgeTreeMap(props: {
       return next;
     });
   }, [normalizedQuery, props.treeOwnerKey, searchAncestorKey]);
-
   useEffect(() => {
     if (searchOwnerRef.current === null || searchOwnerRef.current === props.treeOwnerKey) return;
     searchOwnerRef.current = null;
@@ -239,14 +231,12 @@ export function KnowledgeTreeMap(props: {
     setQuery("");
     setSearchIndex(0);
   }, [props.treeOwnerKey]);
-
   useEffect(() => {
     if (!moreOpen) return;
     const move = (): void => moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     if (typeof window.requestAnimationFrame === "function") window.requestAnimationFrame(move);
     else move();
   }, [moreOpen]);
-
   useEffect(() => {
     const current = visual.byId.get(activeId);
     if (current && nodeInteractive(current)) return;
@@ -349,6 +339,18 @@ export function KnowledgeTreeMap(props: {
     revealNode(node);
     focusNode(node, !match.pageId);
     if (match.pageId && match.focusKey) void props.onOpenNote(match.pageId, match.focusKey);
+  };
+
+  const openNoteFromTree = async (pageId: string, focusKey: string): Promise<void> => {
+    const owner = props.treeOwnerKey;
+    const fallbackId = activeId;
+    try {
+      await props.onOpenNote(pageId, focusKey);
+    } catch {
+      if (treeOwnerRef.current !== owner || activeIdRef.current !== fallbackId) return;
+      const fallbackNode = visual.byId.get(fallbackId);
+      if (fallbackNode) focusNode(fallbackNode, true);
+    }
   };
 
   const closeMore = (restoreFocus = false): void => {
@@ -656,7 +658,7 @@ export function KnowledgeTreeMap(props: {
               data-knowledge-action="open-page"
               data-knowledge-open-key={active.focusKey}
               disabled={props.noteLoadingPageId === active.pageId}
-              onClick={() => void props.onOpenNote(active.pageId!, active.focusKey!)}
+              onClick={() => void openNoteFromTree(active.pageId!, active.focusKey!)}
             >
               {props.t("knowledgeTree.open")}
             </button>
@@ -693,7 +695,7 @@ export function KnowledgeTreeMap(props: {
               state={related.owner === relatedOwnerRef.current ? related.value : "loading"}
               ownerFocusKey={active.focusKey}
               noteLoadingPageId={props.noteLoadingPageId}
-              onOpenNote={props.onOpenNote}
+              onOpenNote={openNoteFromTree}
               t={props.t}
             />
           ) : null}
@@ -970,30 +972,4 @@ function nodeRadius(node: VisualNode, maxWeight: number, maxDensity: number): nu
     ? node.weight / maxWeight
     : evidenceDensity(node) / maxDensity);
   return Math.min(6.2, 1.65 + Math.pow(ratio, .52) * (node.level <= 1 ? 5 : 3.2));
-}
-
-function evidenceDensity(node: VisualNode): number {
-  return node.fragmentCount + node.sourceCount;
-}
-
-function evidenceDensityBand(density: number): 0 | 1 | 2 | 3 {
-  if (density <= 0) return 0;
-  if (density <= 2) return 1;
-  if (density <= 5) return 2;
-  return 3;
-}
-
-function searchKindLabel(t: (key: string) => string, node: VisualNode): string {
-  return t(`knowledgeTree.kind.${node.kind === "root" ? "concept" : node.kind}`);
-}
-
-function formatNodeSummary(t: (key: string) => string, node: VisualNode): string {
-  const summary = t("knowledgeTree.nodeSummary")
-    .replace("{title}", node.title)
-    .replace("{weight}", String(node.weight))
-    .replace("{fragments}", String(node.fragmentCount))
-    .replace("{sources}", String(node.sourceCount))
-    .replace("{leaves}", String(node.leafCount))
-    .replace("{density}", String(evidenceDensity(node)));
-  return node.status === "needs_review" ? `${summary} ${t("knowledgeTree.needsReview")}.` : summary;
 }
