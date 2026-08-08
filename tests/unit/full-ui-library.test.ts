@@ -4049,11 +4049,23 @@ function createDom(): JSDOM {
     configurable: true,
     value: (handle: number) => dom.window.clearTimeout(handle)
   });
-  Object.defineProperty(dom.window, "pige", { configurable: true, value: { notes: {
-    unlinkRelation: vi.fn(), setQuestionState: vi.fn(), searchQuestionAnswers: vi.fn(),
-    changeQuestionAnswer: vi.fn(), searchClaimContradictions: vi.fn(), changeClaimContradiction: vi.fn(),
-    searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn()
-  } } });
+  Object.defineProperty(dom.window, "pige", { configurable: true, value: {
+    notes: {
+      unlinkRelation: vi.fn(), setQuestionState: vi.fn(), searchQuestionAnswers: vi.fn(),
+      changeQuestionAnswer: vi.fn(), searchClaimContradictions: vi.fn(), changeClaimContradiction: vi.fn(),
+      searchConceptParents: vi.fn(), changeConceptParent: vi.fn(), revealGenerated: vi.fn(),
+      readEntityIdentifiers: vi.fn((request: {
+        readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string;
+        readonly currentPageId: string; readonly renderContextId: string; readonly expectedRevision: string;
+      }) => Promise.resolve({ ...request, status: "failed" as const })),
+      listSourceDerived: vi.fn((request: { readonly apiVersion: 1; readonly requestId: string }) =>
+        Promise.resolve({ apiVersion: 1 as const, requestId: request.requestId, status: "failed" as const }))
+    },
+    sources: {
+      listTrash: vi.fn((request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string }) =>
+        Promise.resolve({ ...request, status: "ready" as const, sources: [] }))
+    }
+  } });
   return dom;
 }
 
