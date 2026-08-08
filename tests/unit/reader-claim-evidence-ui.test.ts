@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { JSDOM } from "jsdom";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { NoteChangeClaimEvidenceResult } from "@pige/contracts";
 import { ReaderClaimEvidence } from "../../apps/desktop/src/renderer/src/components/ReaderClaimEvidence";
 
 const globalKeys = ["window", "document", "navigator", "Node", "HTMLElement", "HTMLInputElement", "Event", "InputEvent",
@@ -48,6 +49,33 @@ describe("ReaderClaimEvidence", () => {
     expect(harness.dom.window.document.activeElement).toBe(remove);
     await harness.unmount();
   });
+
+  it("restores section focus after a pending confirmation owner changes", async () => {
+    const changeResult = deferred<NoteChangeClaimEvidenceResult>();
+    const change = vi.fn(async () => changeResult.promise);
+    const harness = await mount(vi.fn(), change, [candidate, { ...candidate,
+      sourcePageId: "page_20260802_secondsource", sourceId: "src_20260802_secondsource", title: "Second source" }]);
+    const oldRemove = button(harness, "remove");
+    oldRemove.focus();
+    await act(async () => { oldRemove.click(); await settle(); });
+    await act(async () => { button(harness, "confirm").click(); await settle(); });
+    expect(change).toHaveBeenCalledTimes(1);
+    Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true,
+      value: (callback: FrameRequestCallback) => { harness.dom.window.setTimeout(() => callback(0), 0); return 1; } });
+    await act(async () => harness.root.render(createElement(ReaderClaimEvidence, { activeVaultId: "vault_20260802_claimevidence",
+      note: note([{ ...candidate, sourcePageId: "page_20260802_newsource", sourceId: "src_20260802_newsource", title: "New source" }], "b"),
+      search: vi.fn(), change, onCommitted: harness.committed, t: (key: string) => key.replace("note.claimEvidence.", "") })));
+    for (let i = 0; i < 4; i += 1) await act(async () => { await settle(); });
+    const section = harness.container.querySelector("section")!;
+    expect(harness.container.textContent).toContain("New source");
+    expect(harness.container.textContent).not.toContain("Evidence source");
+    expect(harness.dom.window.document.activeElement).toBe(section);
+    const request = change.mock.calls[0]![0];
+    changeResult.resolve({ ...request, status: "stale" });
+    await act(async () => { await changeResult.promise; await settle(); });
+    expect(harness.dom.window.document.activeElement).toBe(section);
+    await harness.unmount();
+  });
 });
 
 const candidate = { sourcePageId: "page_20260802_evidencesource", sourceId: "src_20260802_evidencesource",
@@ -65,19 +93,20 @@ async function mount(search: Parameters<typeof ReaderClaimEvidence>[0]["search"]
   const container = dom.window.document.getElementById("root")!, committed = vi.fn(), root = createRoot(container);
   await act(async () => root.render(createElement(ReaderClaimEvidence, { activeVaultId: "vault_20260802_claimevidence",
     note: note(items), search, change, onCommitted: committed, t: (key: string) => key.replace("note.claimEvidence.", "") })));
-  return { dom, container, committed, unmount: async () => act(async () => root.unmount()) };
+  return { dom, root, container, committed, unmount: async () => act(async () => root.unmount()) };
 }
-function note(items: readonly typeof candidate[]) { return { summary: { pageId: "page_20260802_claimevidence", title: "Claim",
+function note(items: readonly typeof candidate[], revision = "a") { return { summary: { pageId: "page_20260802_claimevidence", title: "Claim",
   pageType: "claim" as const, status: "active" as const, pagePath: "wiki/claim.md",
   createdAt: "2026-08-02T09:00:00.000Z", updatedAt: "2026-08-02T09:00:00.000Z", sourceIds: items.map(({ sourceId }) => sourceId) },
-  html: "<h1>Claim</h1>", byteSize: 80, renderContextId: "notectx_0123456789abcdef0123456789abcdef",
-  claimEvidence: { canEdit: true, revision: `noteeditrev_${"a".repeat(64)}`, items } }; }
+  html: "<h1>Claim</h1>", byteSize: 80, renderContextId: `notectx_${revision.repeat(32)}`,
+  claimEvidence: { canEdit: true, revision: `noteeditrev_${revision.repeat(64)}`, items } }; }
 function button(harness: { container: HTMLElement }, text: string): HTMLButtonElement { return [...harness.container.querySelectorAll("button")]
   .find((node) => node.textContent === text) as HTMLButtonElement; }
 function input(harness: { container: HTMLElement }, placeholder: string): HTMLInputElement {
   return harness.container.querySelector(`input[placeholder="${placeholder}"]`)!;
 }
 async function settle(): Promise<void> { await Promise.resolve(); await new Promise((resolve) => window.setTimeout(resolve, 0)); }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }
 function setInput(dom: JSDOM, input: HTMLInputElement, value: string): void {
   Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set?.call(input, value);
   input.dispatchEvent(new dom.window.InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }));
