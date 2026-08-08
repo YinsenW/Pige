@@ -22,17 +22,30 @@ export function ReaderNoteRelatedPanel(props: {
   const ownerIdentity = `${props.note.summary.pageId}:${props.note.renderContextId ?? "none"}:${props.note.trashEligibility?.revision ?? "none"}`;
   const ownerRef = useRef(ownerIdentity);
   const inFlightRef = useRef(false);
+  const restoreOwnerFocusRef = useRef(false);
+  const relatedRef = useRef<HTMLElement>(null);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
   const [confirmTarget, setConfirmTarget] = useState<LibraryRelatedPage | null>(null);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
   ownerRef.current = ownerIdentity;
   useEffect(() => {
+    const wasBusy = inFlightRef.current;
+    const wasFocused = document.activeElement instanceof HTMLElement && relatedRef.current?.contains(document.activeElement);
     inFlightRef.current = false;
     setConfirmTarget(null);
     setPending(false);
     setFailed(false);
+    if (wasBusy || wasFocused) restoreOwnerFocusRef.current = true;
   }, [ownerIdentity]);
+  useEffect(() => {
+    if (pending || !restoreOwnerFocusRef.current) return;
+    restoreOwnerFocusRef.current = false;
+    window.requestAnimationFrame(() => {
+      const target = triggerRefs.current.values().next().value ?? relatedRef.current;
+      target?.focus({ preventScroll: true });
+    });
+  }, [pending]);
 
   const restoreFocus = (pageId: string): void => {
     window.requestAnimationFrame(() => triggerRefs.current.get(pageId)?.focus({ preventScroll: true }));
@@ -81,7 +94,7 @@ export function ReaderNoteRelatedPanel(props: {
   };
 
   if (props.related === "loading" || props.related === "unavailable") {
-    return <aside className="note-related" aria-label={props.t("note.related")}><h2>{props.t("note.related")}</h2><p className="related-empty">
+    return <aside ref={relatedRef} tabIndex={-1} className="note-related" aria-label={props.t("note.related")}><h2>{props.t("note.related")}</h2><p className="related-empty">
       {props.related === "loading" ? props.t("note.relatedLoading") : props.t("note.relatedUnavailable")}
     </p></aside>;
   }
@@ -89,11 +102,11 @@ export function ReaderNoteRelatedPanel(props: {
   const backlinks = props.related?.backlinks ?? [];
   const total = (props.related?.totalOutgoing ?? 0) + (props.related?.totalBacklinks ?? 0);
   if (!props.related || total === 0) {
-    return <aside className="note-related" aria-label={props.t("note.related")}><h2>{props.t("note.related")}</h2><p className="related-empty">
+    return <aside ref={relatedRef} tabIndex={-1} className="note-related" aria-label={props.t("note.related")}><h2>{props.t("note.related")}</h2><p className="related-empty">
       {props.related?.degraded ? props.t("note.relatedUnavailable") : props.t("note.relatedEmpty")}
     </p></aside>;
   }
-  return <aside className="note-related" aria-label={props.t("note.related")}>
+  return <aside ref={relatedRef} tabIndex={-1} className="note-related" aria-label={props.t("note.related")}>
     <h2>{props.t("note.related")}</h2>
     <RelatedGroup title={props.t("note.outgoingLinks")} pages={outgoing} loadingPageId={props.loadingPageId}
       onOpen={props.onOpen} {...(props.onUnlink ? { onUnlink: (page: LibraryRelatedPage) => { setConfirmTarget(page); setFailed(false); } } : {})}

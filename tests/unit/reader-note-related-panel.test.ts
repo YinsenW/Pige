@@ -3,7 +3,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LibraryRelatedResult, NoteRenderResult, NoteUnlinkRelationRequest } from "@pige/contracts";
+import type { LibraryRelatedResult, NoteRenderResult, NoteUnlinkRelationRequest, NoteUnlinkRelationResult } from "@pige/contracts";
 import { ReaderNoteRelatedPanel } from "../../apps/desktop/src/renderer/src/components/ReaderNoteRelatedPanel";
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event", "MouseEvent", "requestAnimationFrame"] as const;
@@ -59,6 +59,40 @@ describe("Reader knowledge-page relationships", () => {
     expect(dom.window.document.querySelector("[role=alert]")?.textContent).toBe("The relationship could not be removed.");
     expect(button(dom, "Open")).toBeTruthy();
     expect(button(dom, "Unlink")).toBeTruthy();
+    await act(async () => root.unmount()); dom.window.close();
+  });
+
+  it("restores the current relation focus after an owner change fences a pending unlink", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const result = deferred<NoteUnlinkRelationResult>();
+    const submit = vi.fn(async () => result.promise);
+    await act(async () => { root.render(createElement(ReaderNoteRelatedPanel, {
+      note, activeVaultId: "vault_20260731_unlink", related, loadingPageId: null,
+      onOpen: async () => undefined, onUnlink: submit, t,
+    })); await settle(dom); });
+    await click(dom, button(dom, "Unlink"));
+    await click(dom, button(dom, "Remove relationship"));
+    expect(submit).toHaveBeenCalledOnce();
+    const request = submit.mock.calls[0]![0];
+    const nextNote = { ...note, renderContextId: "notectx_fedcba9876543210fedcba9876543210",
+      trashEligibility: { canTrash: true, revision: `sha256:${"b".repeat(64)}` } } satisfies NoteRenderResult;
+    const nextTarget = { ...related.outgoing[0]!, summary: { ...related.outgoing[0]!.summary,
+      pageId: "page_20260731_unlinknext", title: "Next target" } };
+    const nextRelated = { ...related, pageId: nextNote.summary.pageId, outgoing: [nextTarget] } satisfies LibraryRelatedResult;
+    await act(async () => { root.render(createElement(ReaderNoteRelatedPanel, {
+      note: nextNote, activeVaultId: "vault_20260731_unlink", related: nextRelated, loadingPageId: null,
+      onOpen: async () => undefined, onUnlink: submit, t,
+    })); await settle(dom); });
+    for (let i = 0; i < 3; i += 1) await act(async () => { await settle(dom); });
+    const replacement = button(dom, "Unlink");
+    expect(dom.window.document.body.textContent).toContain("Next target");
+    expect(dom.window.document.body.textContent).not.toContain("Target");
+    expect(dom.window.document.activeElement).toBe(replacement);
+    result.resolve({ ...request, status: "stale" });
+    await act(async () => { await result.promise; await settle(dom); });
+    expect(dom.window.document.body.textContent).toContain("Next target");
+    expect(dom.window.document.activeElement).toBe(replacement);
     await act(async () => root.unmount()); dom.window.close();
   });
 
@@ -142,3 +176,4 @@ async function click(dom: JSDOM, target: HTMLButtonElement): Promise<void> {
 async function settle(dom: JSDOM): Promise<void> {
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
 }
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((accept) => { resolve = accept; }); return { promise, resolve }; }
