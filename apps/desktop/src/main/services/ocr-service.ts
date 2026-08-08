@@ -28,10 +28,32 @@ import {
   inspectOfficeMediaOcrTarget,
   type PptxMediaOcrItemResult
 } from "./pptx-media-ocr-artifact-service";
-import { createVerifiedSourceFileSnapshotAsync } from "./source-file-access";
+import {
+  PptxSlideOcrArtifactAdapter,
+  inspectPptxSlideOcrTarget,
+  type PptxSlideOcrItemResult
+} from "./pptx-slide-ocr-artifact-adapter";
+import { createVerifiedSourceFileSnapshotAsync, verifyReadableSourceFileAsync } from "./source-file-access";
 import { createVerifiedFileSnapshot } from "./verified-file-snapshot";
 import { JobCancellationError, type JobExecutionControl } from "./job-execution-control";
 import { resolveOcrJobLanguageHints } from "./ocr-language-preference-service";
+import {
+  OFFICE_PARSER_ENGINE,
+  OFFICE_PARSER_ID,
+  OFFICE_PARSER_VERSION
+} from "./office-parser-types";
+import {
+  PPTX_SLIDE_MATERIALIZER_DEFAULT_LIMITS,
+  PPTX_SLIDE_MATERIALIZER_ID,
+  PPTX_SLIDE_MATERIALIZER_MAX_EDGE,
+  PPTX_SLIDE_MATERIALIZER_MAX_PIXELS,
+  PPTX_SLIDE_MATERIALIZER_MAX_PNG_BYTES_PER_SLIDE,
+  PPTX_SLIDE_MATERIALIZER_MAX_TOTAL_PNG_BYTES,
+  PPTX_SLIDE_MATERIALIZER_PROTOCOL_VERSION,
+  PPTX_SLIDE_MATERIALIZER_VERSION,
+  PptxSlideMaterializerService,
+  type PptxSlideMaterializerPort
+} from "./pptx-slide-materializer-core";
 
 export interface OcrPort {
   canOcr(sourceKind: SourceKind): boolean;
@@ -57,6 +79,11 @@ export interface NativeImageOcrAdapterPort {
     preferredLanguages: readonly string[],
     signal?: AbortSignal
   ): ReturnType<MacOSVisionOcrAdapter["recognize"]>;
+  recognizeBytes?(
+    bytes: Uint8Array,
+    preferredLanguages: readonly string[],
+    signal?: AbortSignal
+  ): ReturnType<MacOSVisionOcrAdapter["recognize"]>;
 }
 
 export class OcrService implements OcrPort {
@@ -66,6 +93,8 @@ export class OcrService implements OcrPort {
   readonly #pdfArtifacts: PdfOcrArtifactService;
   readonly #officeMedia: OfficeMediaMaterializerPort;
   readonly #officeArtifacts: OfficeMediaOcrArtifactService;
+  readonly #pptxSlideArtifacts: PptxSlideOcrArtifactAdapter;
+  readonly #pptxSlides: PptxSlideMaterializerPort;
 
   constructor(
     adapter: NativeImageOcrAdapterPort = new MacOSVisionOcrAdapter(),
@@ -73,7 +102,9 @@ export class OcrService implements OcrPort {
     pdfRenderer: PdfPageRendererPort = new PdfPageRendererService(),
     pdfArtifacts = new PdfOcrArtifactService(),
     officeMedia: OfficeMediaMaterializerPort = new OfficeMediaMaterializerWorkerAdapter(),
-    officeArtifacts = new OfficeMediaOcrArtifactService()
+    officeArtifacts = new OfficeMediaOcrArtifactService(),
+    pptxSlides: PptxSlideMaterializerPort = new PptxSlideMaterializerService(),
+    pptxSlideArtifacts: PptxSlideOcrArtifactAdapter = new PptxSlideOcrArtifactAdapter()
   ) {
     this.#adapter = adapter;
     this.#artifacts = artifacts;
@@ -81,13 +112,17 @@ export class OcrService implements OcrPort {
     this.#pdfArtifacts = pdfArtifacts;
     this.#officeMedia = officeMedia;
     this.#officeArtifacts = officeArtifacts;
+    this.#pptxSlideArtifacts = pptxSlideArtifacts;
+    this.#pptxSlides = pptxSlides;
   }
 
   canOcr(sourceKind: SourceKind): boolean {
     if (sourceKind === "image_file") return this.#adapter.isAvailable();
     if (sourceKind === "pdf_file") return this.#adapter.isAvailable() && this.#pdfRenderer.isAvailable();
-    return (sourceKind === "docx_file" || sourceKind === "pptx_file") &&
-      this.#adapter.isAvailable() && this.#officeMedia.isAvailable();
+    if (sourceKind === "pptx_file") {
+      return this.#pptxSlides.isAvailable() && this.#adapter.isAvailable() && hasRecognizeBytes(this.#adapter);
+    }
+    return sourceKind === "docx_file" && this.#adapter.isAvailable() && this.#officeMedia.isAvailable();
   }
 
   inspectSource(sourceRecord: SourceRecord): OcrSourceCapability {
@@ -129,6 +164,20 @@ export class OcrService implements OcrPort {
       };
     }
     if (parsedSource.kind === "docx_file" || parsedSource.kind === "pptx_file") {
+      if (parsedSource.kind === "pptx_file") {
+        const target = inspectPptxSlideOcrTarget(parsedSource);
+        if (!target.ready) return target;
+        if (hasOcrMetadataArtifact(parsedSource, "_pptx_slide_ocr_metadata")) {
+          return { ready: true, message: "Existing PPTX full-slide OCR output is ready for integrity verification and reuse." };
+        }
+        if (!this.#pptxSlides.isAvailable()) {
+          return { ready: false, message: "PPTX slide OCR is waiting for the bundled local Canvas materializer capability." };
+        }
+        if (!this.#adapter.isAvailable() || !hasRecognizeBytes(this.#adapter)) {
+          return { ready: false, message: "PPTX slides are selected; waiting for local OCR capability that accepts in-memory rendered pixels." };
+        }
+        return { ready: true, message: target.message };
+      }
       const format = parsedSource.kind === "docx_file" ? "DOCX" : "PPTX";
       const suffix = parsedSource.kind === "docx_file" ? "_docx_media_ocr_metadata" : "_pptx_media_ocr_metadata";
       const target = inspectOfficeMediaOcrTarget(parsedSource);
@@ -168,6 +217,9 @@ export class OcrService implements OcrPort {
       return this.#ocrPdf(vaultPath, parsedSource, sourceRecordPath, job, control);
     }
     if (parsedSource.kind === "docx_file" || parsedSource.kind === "pptx_file") {
+      if (parsedSource.kind === "pptx_file") {
+        return this.#ocrPptxSlides(vaultPath, parsedSource, sourceRecordPath, job, control);
+      }
       return this.#ocrOfficeMedia(vaultPath, parsedSource, sourceRecordPath, job, control);
     }
     throw new PigeDomainError("ocr.source_unsupported", "No local OCR path supports this source kind.");
@@ -316,6 +368,129 @@ export class OcrService implements OcrPort {
     return this.#pdfArtifacts.persistOcr(vaultPath, staging, sourceRecordPath, job, pageResults);
   }
 
+  async #ocrPptxSlides(
+    vaultPath: string,
+    sourceRecord: SourceRecord,
+    sourceRecordPath: string,
+    job: JobRecord,
+    control?: JobExecutionControl
+  ): Promise<OcrSourceResult> {
+    control?.throwIfCancellationRequested();
+    const inspection = inspectPptxSlideOcrTarget(sourceRecord);
+    if (inspection.ready) {
+      control?.reportProgress({
+        completedUnits: 0,
+        totalUnits: inspection.materializableSlideCount,
+        unit: "media"
+      });
+    }
+    const existing = await this.#pptxSlideArtifacts.readExistingPptxSlides(
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      job,
+      () => control?.markDurableCheckpoint("pptx_slide_ocr_existing_publication_started")
+    );
+    if (existing) return existing;
+    if (!this.#pptxSlides.isAvailable() || !this.#adapter.isAvailable() || !hasRecognizeBytes(this.#adapter)) {
+      throw new PigeDomainError("ocr.pptx.slide_capability_unavailable", this.inspectSource(sourceRecord).message);
+    }
+    const target = await this.#pptxSlideArtifacts.resolvePptxSlideTarget(vaultPath, sourceRecord);
+    if (!inspection.ready) {
+      control?.reportProgress({ completedUnits: 0, totalUnits: target.slideLocators.length, unit: "media" });
+    }
+    const sourceFile = await verifyReadableSourceFileAsync(vaultPath, sourceRecord);
+    const request = {
+      protocolVersion: PPTX_SLIDE_MATERIALIZER_PROTOCOL_VERSION,
+      requestId: `ocr_${job.id}_pptx_slide`,
+      filePath: sourceFile.absolutePath,
+      sourceChecksum: sourceFile.checksum,
+      parser: {
+        artifactId: target.parserMetadataArtifactId,
+        checksum: target.parserMetadataChecksum,
+        sourceChecksum: sourceFile.checksum,
+        parserId: OFFICE_PARSER_ID,
+        parserEngine: OFFICE_PARSER_ENGINE,
+        parserVersion: OFFICE_PARSER_VERSION,
+        slideLocators: target.slideLocators
+      },
+      slideLocators: target.slideLocators,
+      limits: PPTX_SLIDE_MATERIALIZER_DEFAULT_LIMITS
+    } as const;
+    control?.markDurableCheckpoint("pptx_slide_ocr_materializer_started");
+    let materialized: Awaited<ReturnType<PptxSlideMaterializerPort["materialize"]>>;
+    try {
+      materialized = await this.#pptxSlides.materialize(request);
+    } catch (caught) {
+      if (caught instanceof JobCancellationError) throw caught;
+      if (control?.signal.aborted) control.throwIfCancellationRequested();
+      if (isUnavailableOcrError(caught)) throw caught;
+      if (isDeterministicMediaOcrError(caught) || isDeterministicPptxMaterializerError(caught)) throw caught;
+      throw new PigeDomainError(
+        "ocr.pptx.slide_materializer_failed",
+        "The bounded PPTX slide materializer failed; the preserved parser artifacts remain retryable."
+      );
+    }
+    control?.throwIfCancellationRequested();
+    const slides = validateMaterializedSlides(
+      target.slideLocators,
+      materialized,
+      sourceFile.checksum,
+      target.parserMetadataChecksum
+    );
+    const results: PptxSlideOcrItemResult[] = [];
+    for (const slide of slides) {
+      control?.throwIfCancellationRequested();
+      try {
+        const result = await recognizePrivateBytes(
+          this.#adapter,
+          slide.png,
+          resolveOcrJobLanguageHints(job),
+          control?.signal
+        );
+        results.push({
+          slide: slide.slide,
+          locator: slide.locator,
+          renderChecksum: checksumBytes(slide.png),
+          renderSize: slide.png.byteLength,
+          width: slide.width,
+          height: slide.height,
+          result
+        });
+      } catch (caught) {
+        if (caught instanceof JobCancellationError) throw caught;
+        if (control?.signal.aborted) control.throwIfCancellationRequested();
+        if (isUnavailableOcrError(caught)) throw caught;
+        if (isDeterministicMediaOcrError(caught)) throw caught;
+        throw new PigeDomainError(
+          "ocr.pptx.slide_failed",
+          "Local OCR failed for a rendered PPTX slide; validated parser provenance remains retryable."
+        );
+      }
+      control?.reportProgress({
+        completedUnits: results.length,
+        totalUnits: slides.length,
+        unit: "media"
+      });
+    }
+    control?.throwIfCancellationRequested();
+    control?.markDurableCheckpoint("pptx_slide_ocr_commit_started");
+    return this.#pptxSlideArtifacts.persistPptxSlides(
+      vaultPath,
+      sourceRecord,
+      sourceRecordPath,
+      job,
+      results,
+      {
+        materializerId: materialized.materializerId,
+        materializerVersion: materialized.materializerVersion,
+        parserMetadataChecksum: materialized.parserMetadataChecksum,
+        warnings: materialized.warnings,
+        renderIncomplete: materialized.renderIncomplete
+      }
+    );
+  }
+
   async #ocrOfficeMedia(
     vaultPath: string,
     sourceRecord: SourceRecord,
@@ -404,14 +579,88 @@ function hasOcrMetadataArtifact(sourceRecord: SourceRecord, suffix: string): boo
   return sourceRecord.artifacts.some((artifact) => artifact.kind === "metadata" && artifact.id.endsWith(suffix));
 }
 
+function hasRecognizeBytes(adapter: NativeImageOcrAdapterPort): boolean {
+  return typeof adapter.recognizeBytes === "function";
+}
+
 function isUnavailableOcrError(caught: unknown): boolean {
   return caught instanceof PigeDomainError &&
-    /^(?:ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)|source\.external_unavailable)$/u.test(caught.code);
+    /^(?:ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)|ocr\.pptx\.(?:slide_capability_unavailable|bytes_adapter_unavailable)|source\.external_unavailable)$/u.test(caught.code);
 }
 
 function isDeterministicMediaOcrError(caught: unknown): boolean {
   return caught instanceof PigeDomainError &&
     /^ocr\.image\.(?:source_missing|not_regular|file_too_large|invalid|unsupported_format|multiframe_unsupported|dimensions_invalid|dimensions_too_large|decode_failed)$/u.test(caught.code);
+}
+
+function isDeterministicPptxMaterializerError(caught: unknown): boolean {
+  return caught instanceof PigeDomainError && /^parser\.pptx\./u.test(caught.code);
+}
+
+async function recognizePrivateBytes(
+  adapter: NativeImageOcrAdapterPort,
+  bytes: Uint8Array,
+  languages: readonly string[],
+  signal?: AbortSignal
+): ReturnType<NativeImageOcrAdapterPort["recognize"]> {
+  if (!adapter.recognizeBytes) {
+    throw new PigeDomainError("ocr.pptx.bytes_adapter_unavailable", "The selected local OCR adapter does not accept in-memory rendered slide pixels.");
+  }
+  return adapter.recognizeBytes(bytes, languages, signal);
+}
+
+function validateMaterializedSlides(
+  requestedLocators: readonly string[],
+  result: Awaited<ReturnType<PptxSlideMaterializerPort["materialize"]>>,
+  sourceChecksum: string,
+  parserMetadataChecksum: string
+) {
+  const requestedSlides = requestedLocators.map((locator) => Number(/^slide:(\d+)$/u.exec(locator)?.[1]));
+  if (
+    result.protocolVersion !== PPTX_SLIDE_MATERIALIZER_PROTOCOL_VERSION ||
+    result.materializerId !== PPTX_SLIDE_MATERIALIZER_ID ||
+    result.materializerVersion !== PPTX_SLIDE_MATERIALIZER_VERSION ||
+    result.sourceChecksum !== sourceChecksum ||
+    result.parserMetadataChecksum !== parserMetadataChecksum ||
+    result.requestedSlides.length !== requestedSlides.length ||
+    result.requestedSlides.some((slide, index) => slide !== requestedSlides[index]) ||
+    result.renderedSlides.length !== requestedSlides.length ||
+    result.renderedSlides.some((slide, index) => slide !== requestedSlides[index]) ||
+    result.slides.length !== requestedLocators.length
+  ) {
+    throw new PigeDomainError("ocr.pptx.materializer_result_invalid", "The PPTX slide materializer returned an invalid selected slide set.");
+  }
+  let totalBytes = 0;
+  for (let index = 0; index < requestedLocators.length; index += 1) {
+    const locator = requestedLocators[index];
+    const slide = result.slides[index];
+    const expectedSlide = requestedSlides[index];
+    if (
+      !locator ||
+      !slide ||
+      slide.slide !== expectedSlide ||
+      slide.locator !== `${locator}/render` ||
+      slide.mimeType !== "image/png" ||
+      !(slide.png instanceof Uint8Array) ||
+      slide.png.byteLength !== slide.pngByteSize ||
+      slide.png.byteLength <= 0 ||
+      slide.png.byteLength > PPTX_SLIDE_MATERIALIZER_MAX_PNG_BYTES_PER_SLIDE ||
+      !Number.isSafeInteger(slide.width) ||
+      !Number.isSafeInteger(slide.height) ||
+      slide.width <= 0 ||
+      slide.height <= 0 ||
+      slide.width > PPTX_SLIDE_MATERIALIZER_MAX_EDGE ||
+      slide.height > PPTX_SLIDE_MATERIALIZER_MAX_EDGE ||
+      slide.width * slide.height > PPTX_SLIDE_MATERIALIZER_MAX_PIXELS
+    ) {
+      throw new PigeDomainError("ocr.pptx.materializer_result_invalid", "A PPTX rendered slide failed the frozen pixel and PNG bounds.");
+    }
+    totalBytes += slide.png.byteLength;
+  }
+  if (totalBytes !== result.totalPngByteSize || totalBytes > PPTX_SLIDE_MATERIALIZER_MAX_TOTAL_PNG_BYTES) {
+    throw new PigeDomainError("ocr.pptx.materializer_result_invalid", "The PPTX rendered slide aggregate exceeded the frozen PNG bound.");
+  }
+  return result.slides;
 }
 
 function validateMaterializedMedia(

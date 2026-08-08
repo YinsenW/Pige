@@ -206,6 +206,9 @@ export class OfficeParserService {
         processedUnitCount: extraction.processedUnitCount,
         unitsWithText: extraction.unitsWithText,
         mediaCount: extraction.mediaReferences.length,
+        ocrCandidateSlideCount: extraction.format === "pptx"
+          ? extraction.ocrCandidateLocators.length
+          : undefined,
         ocrCandidateMediaCount: extraction.units
           .filter((unit) => unit.needsOcr)
           .reduce((total, unit) => total + (unit.mediaReferences?.length ?? 0), 0),

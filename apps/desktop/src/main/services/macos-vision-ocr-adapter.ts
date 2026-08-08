@@ -27,6 +27,7 @@ export interface OcrHelperRequest {
   readonly requestId: string;
   readonly operation: "probe" | "recognize";
   readonly inputPath?: string;
+  readonly inputBytesBase64?: string;
   readonly preferredLanguages?: readonly string[];
   readonly limits?: {
     readonly maxFileBytes: number;
@@ -95,6 +96,35 @@ export class MacOSVisionOcrAdapter {
       requestId: createRequestId(),
       operation: "recognize",
       inputPath,
+      preferredLanguages: normalizeLanguageHints(preferredLanguages),
+      limits: {
+        maxFileBytes: OCR_MAX_FILE_BYTES,
+        maxSourcePixels: OCR_MAX_SOURCE_PIXELS,
+        maxSourceDimension: OCR_MAX_SOURCE_DIMENSION,
+        maxDecodedDimension: OCR_MAX_DECODED_DIMENSION,
+        maxFrames: OCR_MAX_FRAMES,
+        maxBlocks: OCR_MAX_BLOCKS,
+        maxOutputCharacters: OCR_MAX_OUTPUT_CHARACTERS
+      }
+    };
+    const response = await this.#runner.run(helper, request, signal);
+    return parseRecognitionResponse(response, request.requestId);
+  }
+
+  async recognizeBytes(
+    bytes: Uint8Array,
+    preferredLanguages: readonly string[],
+    signal?: AbortSignal
+  ): Promise<NativeOcrResult> {
+    const helper = this.#requireHelper();
+    if (bytes.byteLength <= 0 || bytes.byteLength > OCR_MAX_FILE_BYTES) {
+      throw new PigeDomainError("ocr.image.file_too_large", "The rendered slide exceeds the OCR byte limit.");
+    }
+    const request: OcrHelperRequest = {
+      schemaVersion: MACOS_VISION_OCR_PROTOCOL_VERSION,
+      requestId: createRequestId(),
+      operation: "recognize",
+      inputBytesBase64: Buffer.from(bytes).toString("base64"),
       preferredLanguages: normalizeLanguageHints(preferredLanguages),
       limits: {
         maxFileBytes: OCR_MAX_FILE_BYTES,
@@ -203,7 +233,7 @@ export class JsonOcrHelperRunner implements OcrHelperRunner {
       });
 
       const payload = Buffer.from(JSON.stringify(request), "utf8");
-      if (payload.byteLength > 64 * 1024) {
+      if (payload.byteLength > 18 * 1024 * 1024) {
         child.kill("SIGKILL");
         finish(() => reject(new PigeDomainError("ocr.helper_request_too_large", "The OCR helper request exceeded its protocol limit.")));
         return;

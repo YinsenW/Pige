@@ -74,9 +74,10 @@ export function verifiedOfficeMediaParserTargets(
     const locatorBound = format === "pptx"
       ? candidateLocators.includes(unit.locator as string)
       : mediaReferences.every((media) => isRecord(media) && typeof media.locator === "string" && candidateLocators.includes(media.locator));
-    if (!locatorBound || mediaReferences.length === 0) {
+    if (!locatorBound || (format === "docx" && mediaReferences.length === 0)) {
       throw new PigeDomainError(`ocr.${format}.parser_metadata_invalid`, `A ${label} OCR candidate has no locator-correct media references.`);
     }
+    if (format === "pptx" && mediaReferences.length === 0) continue;
     candidateMediaCount += mediaReferences.length;
     for (let mediaOffset = 0; mediaOffset < mediaReferences.length; mediaOffset += 1) {
       const media = mediaReferences[mediaOffset];

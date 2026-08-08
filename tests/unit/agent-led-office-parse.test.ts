@@ -19,6 +19,7 @@ import {
   OcrService,
   type NativeImageOcrAdapterPort
 } from "../../apps/desktop/src/main/services/ocr-service";
+import type { PptxSlideMaterializerPort } from "../../apps/desktop/src/main/services/pptx-slide-materializer-core";
 import type { NativeOcrResult } from "../../apps/desktop/src/main/services/ocr-types";
 import type { OfficeMediaMaterializerPort } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { extractOfficeText } from "../../apps/desktop/src/main/services/office-parser-core";
@@ -251,8 +252,8 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       extraction: emptyPptxExtraction,
       ocrText: "Agent-selected PPTX OCR recovered slide evidence.",
       title: "Agent-selected PPTX OCR knowledge",
-      artifactSuffix: "_pptx_media_ocr_text",
-      citation: "#slide1-media1-ocr1"
+      artifactSuffix: "_pptx_slide_ocr_text",
+      citation: "#slide1-render-ocr1"
     }
   ])("runs Pi inspect -> parse -> OCR -> inspect -> publish for media-only $format", async ({
     format,
@@ -325,14 +326,18 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       expect(ocrChild).toMatchObject({ state: "completed", parentJobId: parent.id });
       expect(adapter.callCount).toBe(1);
       expect(source.metadata).toMatchObject({
-        ocrProcessedMediaCount: 1,
+        ...(format === "pptx" ? { ocrProcessedSlideCount: 1 } : { ocrProcessedMediaCount: 1 }),
         ocrStatus: "completed",
         needsOcr: false,
         agentTextReady: true
       });
       expect(source.artifacts.some((artifact) => artifact.id.endsWith(artifactSuffix))).toBe(true);
       expect(note).toContain(`# ${title}`);
-      expect(note).toContain(`[source:${captured.sourceId}${citation}]`);
+      if (format === "pptx") {
+        expect(note).toMatch(new RegExp(`\\[source:${captured.sourceId}#span_[a-f0-9]+\\]`));
+      } else {
+        expect(note).toContain(`[source:${captured.sourceId}${citation}]`);
+      }
       expect(readOperations(fixture.vaultPath).filter((operation) => operation.kind === "create_artifact")
         .map((operation) => operation.jobId)).toEqual(expect.arrayContaining([parseChild.id, ocrChild.id]));
       expect(network.calls).toBe(0);
@@ -348,8 +353,7 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       new OfficeParserService({ extract: async () => emptyPptxExtraction() })
     ]);
     const unavailableAdapter = new StaticNativeOcrAdapter(
-      validNativeOcrResult("This unavailable adapter must not run."),
-      false
+      validNativeOcrResult("This unavailable materializer must not run.")
     );
     const waitingRuntime = new RecordingRuntime(new PiAgentRuntimeAdapter({
       fauxResponses: [
@@ -364,7 +368,15 @@ describe("Agent-led Office parse tool", { timeout: 15_000 }, () => {
       waitingRuntime,
       parser,
       true,
-      new OcrService(unavailableAdapter, undefined, undefined, undefined, new StaticOfficeMediaMaterializer())
+      new OcrService(
+        unavailableAdapter,
+        undefined,
+        undefined,
+        undefined,
+        new StaticOfficeMediaMaterializer(),
+        undefined,
+        new UnavailablePptxSlideMaterializer()
+      )
     );
     waitingJobs.processQueuedCaptures({ jobIds: [captured.captureJobId] });
     const parentId = requireValue(waitingJobs.list({ classes: ["agent_ingest"], states: ["queued"] }).jobs[0]).id;
@@ -541,6 +553,11 @@ class StaticNativeOcrAdapter implements NativeImageOcrAdapterPort {
     this.callCount += 1;
     return this.result;
   }
+
+  async recognizeBytes(): Promise<NativeOcrResult> {
+    this.callCount += 1;
+    return this.result;
+  }
 }
 
 class StaticOfficeMediaMaterializer implements OfficeMediaMaterializerPort {
@@ -554,6 +571,16 @@ class StaticOfficeMediaMaterializer implements OfficeMediaMaterializerPort {
       materializerVersion: OFFICE_MEDIA_MATERIALIZER_VERSION,
       media: targets.map((target) => ({ ...target, bytes: Uint8Array.from(TINY_PNG) }))
     };
+  }
+}
+
+class UnavailablePptxSlideMaterializer implements PptxSlideMaterializerPort {
+  isAvailable(): boolean {
+    return false;
+  }
+
+  materialize(): Promise<never> {
+    return Promise.reject(new Error("The unavailable materializer must not run."));
   }
 }
 

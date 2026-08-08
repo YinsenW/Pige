@@ -16,6 +16,9 @@ import {
   OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS,
   OFFICE_MEDIA_MATERIALIZER_MAX_TOTAL_BYTES,
   OFFICE_MEDIA_OCR_EXTENSIONS,
+  OFFICE_PARSER_ENGINE,
+  OFFICE_PARSER_ID,
+  OFFICE_PARSER_VERSION,
   type OfficeMediaTarget
 } from "./office-parser-types";
 import {
@@ -35,7 +38,7 @@ export interface PptxMediaOcrTargetReady {
   readonly message: string;
 }
 
-const { writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomicAsync } = createContainedFileCommit({
+export const { writeJsonAtomic, writeJsonAtomicAsync, writeTextAtomicAsync } = createContainedFileCommit({
   prepareSync: assertSafeWriteParentSync,
   verifySync: assertRealPathContainedSync,
   prepare: assertSafeWriteParent,
@@ -69,12 +72,12 @@ export type OfficeMediaOcrTargetInspection = PptxMediaOcrTargetInspection;
 export type VerifiedOfficeMediaOcrTarget = VerifiedPptxMediaOcrTarget;
 export type OfficeMediaOcrItemResult = PptxMediaOcrItemResult;
 
-interface FileIntegrity {
+export interface FileIntegrity {
   readonly checksum: string;
   readonly size: number;
 }
 
-interface SourceRecordSnapshot {
+export interface SourceRecordSnapshot {
   readonly sourceRecord: SourceRecord;
   readonly fileChecksum: string;
 }
@@ -649,11 +652,11 @@ function createOperationId(jobId: string, sourceId: string, format: OfficeMediaO
   return `op_${dateKey}_${digest}`;
 }
 
-function parserMetadataArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+export function parserMetadataArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
   return `art_${sourceId.replace(/^src_/u, "")}_${format}_metadata`;
 }
 
-function parserTextArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
+export function parserTextArtifactId(sourceId: string, format: OfficeMediaOcrFormat): string {
   return `art_${sourceId.replace(/^src_/u, "")}_${format}_text`;
 }
 
@@ -665,13 +668,13 @@ function mediaOcrMetadataArtifactId(sourceId: string, format: OfficeMediaOcrForm
   return `art_${sourceId.replace(/^src_/u, "")}_${format}_media_ocr_metadata`;
 }
 
-function sourceDateBucket(sourceId: string): [string, string] {
+export function sourceDateBucket(sourceId: string): [string, string] {
   const dateKey = /^src_(\d{8})_/.exec(sourceId)?.[1];
   if (!dateKey) throw new PigeDomainError("ocr.source_id_invalid", "The source ID has no valid date bucket.");
   return [dateKey.slice(0, 4), dateKey.slice(4, 6)];
 }
 
-async function readVerifiedJsonArtifact(
+export async function readVerifiedJsonArtifact(
   vaultPath: string,
   artifact: SourceRecord["artifacts"][number],
   maxBytes: number
@@ -686,7 +689,7 @@ async function readVerifiedJsonArtifact(
   }
 }
 
-async function artifactFileMatches(vaultPath: string, artifact: SourceRecord["artifacts"][number]): Promise<boolean> {
+export async function artifactFileMatches(vaultPath: string, artifact: SourceRecord["artifacts"][number]): Promise<boolean> {
   return Boolean(await verifyArtifactFile(vaultPath, artifact));
 }
 
@@ -736,7 +739,7 @@ async function verifyArtifactFile(
   }
 }
 
-async function fileIntegrity(filePath: string, errorCode: string): Promise<FileIntegrity> {
+export async function fileIntegrity(filePath: string, errorCode: string): Promise<FileIntegrity> {
   const stat = await fs.promises.lstat(filePath);
   if (!stat.isFile() || stat.isSymbolicLink()) {
     throw new PigeDomainError(errorCode, "An Office media OCR artifact was not written as a regular file.");
@@ -752,7 +755,7 @@ async function checksumFile(filePath: string): Promise<string> {
   return `sha256:${hash.digest("hex")}`;
 }
 
-async function readCurrentSourceRecord(
+export async function readCurrentSourceRecord(
   vaultPath: string,
   sourceRecordPath: string,
   expectedSourceId: string,
@@ -810,7 +813,7 @@ async function readCurrentSourceRecord(
   }
 }
 
-function writeSourceRecordAtomic(
+export function writeSourceRecordAtomic(
   vaultPath: string,
   sourceRecordPath: string,
   sourceRecord: SourceRecord,
@@ -868,7 +871,7 @@ function resolveSourceRecordPath(vaultPath: string, sourceRecordPath: string): s
   return resolvedPath;
 }
 
-const resolveVaultRelativePath = createVaultRelativePathResolver(
+export const resolveVaultRelativePath = createVaultRelativePathResolver(
   () => new PigeDomainError("ocr.path_outside_vault", "The Office media OCR path escapes the active vault.")
 );
 
@@ -917,7 +920,7 @@ async function assertRealPathContained(vaultPath: string, filePath: string): Pro
   }
 }
 
-function assertRealPathContainedSync(vaultPath: string, filePath: string): void {
+export function assertRealPathContainedSync(vaultPath: string, filePath: string): void {
   const realVault = fs.realpathSync(vaultPath);
   const realFile = fs.realpathSync(filePath);
   if (!isContainedPath(realFile, realVault)) {

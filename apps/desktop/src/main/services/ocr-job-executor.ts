@@ -139,7 +139,7 @@ function inspectOcrSource(ocr: OcrPort | undefined, sourceRecord: SourceRecord):
 
 function createOcrCompletionMessage(result: OcrSourceResult, sourceKind: SourceKind): string {
   const label = sourceKind === "pdf_file" ? "PDF page OCR" :
-    sourceKind === "pptx_file" ? "PPTX media OCR" :
+    sourceKind === "pptx_file" ? "PPTX slide OCR" :
       sourceKind === "docx_file" ? "DOCX media OCR" : "Image OCR";
   if (result.sourcePageConflict) return `${label} completed; the edited source page was preserved and requires review before refresh.`;
   if (!result.agentTextReady) return `${label} completed without readable text. The preserved source remains available.`;
@@ -157,7 +157,7 @@ function createOcrDependencyMessage(sourceKind: SourceKind): string {
 function ocrFailure(caught: unknown, sourceKind: SourceKind): OcrFailure {
   const label = documentLabel(sourceKind);
   if (caught instanceof PigeDomainError) {
-    if (/^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) || caught.code === "parser.pdf_page_renderer.unavailable" || /^ocr\.(?:docx|pptx)\.target_not_ready$/u.test(caught.code)) {
+    if (/^ocr\.(?:adapter_unavailable|helper_unavailable|platform_unsupported)$/u.test(caught.code) || /^ocr\.pptx\.(?:slide_capability_unavailable|bytes_adapter_unavailable)$/u.test(caught.code) || caught.code === "parser.pdf_page_renderer.unavailable" || /^ocr\.(?:docx|pptx)\.target_not_ready$/u.test(caught.code)) {
       return { final: false, waiting: true, message: `Waiting for a healthy local OCR capability before retrying this preserved ${label}.` };
     }
     if (caught.code === "source.external_unavailable") return { final: false, waiting: true, message: `Waiting for the referenced original ${label} to be reconnected before local OCR can continue.` };
