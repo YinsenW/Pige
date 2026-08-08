@@ -29,11 +29,13 @@ export function ReaderQuestionStateControl(props: {
   const selectRef = useRef<HTMLSelectElement>(null);
 
   useEffect(() => {
+    const wasActive = activeRef.current;
     ownerIdentityRef.current = ownerIdentity;
     activeRef.current = false;
     setDraft(summary?.state ?? null);
     setPending(false);
     setNotice(null);
+    if (wasActive) restoreFocusRef.current = true;
   }, [ownerIdentity, summary?.state]);
 
   useEffect(() => {
