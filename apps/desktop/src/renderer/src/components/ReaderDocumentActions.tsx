@@ -341,10 +341,22 @@ export function ReaderDocumentActions(props: ReaderDocumentActionsProps): React.
         role="menu"
         aria-label={props.labels.menu}
         onKeyDown={(event) => {
-          if (event.key !== "Escape") return;
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setMenuOpen(false);
+            restoreTriggerFocus();
+            return;
+          }
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+          if (items.length === 0) return;
           event.preventDefault();
-          setMenuOpen(false);
-          restoreTriggerFocus();
+          const current = items.indexOf(event.target as HTMLButtonElement);
+          const next = event.key === "Home" ? 0
+            : event.key === "End" ? items.length - 1
+            : current < 0 ? 0
+            : (current + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+          items[next]?.focus({ preventScroll: true });
         }}
       >
         {props.canMerge ? (
