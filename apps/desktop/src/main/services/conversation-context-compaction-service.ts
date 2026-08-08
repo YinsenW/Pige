@@ -4,73 +4,178 @@ import { PigeDomainError } from "@pige/domain";
 import type { ConversationEvent } from "@pige/schemas";
 import type { AgentTurnConversationContextMessage } from "./agent-turn-conversation-store";
 
+// Main owns compaction. Pi Agent receives only the bounded result; the JSONL is never rewritten.
+export const CONVERSATION_CONTEXT_COMPACTION_OWNER = "main.agent_context" as const;
+export const CONVERSATION_CONTEXT_COMPACTION_CONSUMER = "pi_agent" as const;
 export const MAX_CONVERSATION_CONTEXT_MESSAGES = 16;
 export const MAX_CONVERSATION_CONTEXT_TEXT_BYTES = 64 * 1024;
+export const MAX_CONVERSATION_CONTEXT_TOKENS = 16 * 1024;
+
 const SUMMARY_HEADER = "[Earlier conversation context compacted by Pige]";
+const REFERENCE_GROUP_LABELS = [
+  "Source refs", "Page refs", "Job refs", "Proposal refs", "Operation refs", "Capture refs",
+  "Citation refs", "Output refs", "Dataset refs", "Dataset revision refs", "Dataset table refs",
+  "Dataset schema hashes", "Dataset query hashes", "Dataset result hashes", "Source revision hashes",
+  "Policy hashes"
+] as const;
 type TextConversationEvent = ConversationEvent & { readonly text: string };
 
-export function selectCompactedConversationContext(
-  events: readonly ConversationEvent[]
-): readonly AgentTurnConversationContextMessage[] {
+export interface ConversationContextCompactionPolicy {
+  readonly maxMessages?: number;
+  readonly maxTextBytes?: number;
+  readonly maxTokens?: number;
+}
+
+export interface ConversationContextCompactionSnapshot {
+  readonly owner: typeof CONVERSATION_CONTEXT_COMPACTION_OWNER;
+  readonly consumer: typeof CONVERSATION_CONTEXT_COMPACTION_CONSUMER;
+  readonly compacted: boolean;
+  readonly eventCount: number;
+  readonly messageCount: number;
+  readonly omittedMessageCount: number;
+  readonly firstEventId?: string;
+  readonly lastEventId?: string;
+  readonly contextHash: string;
+  readonly referenceCounts: Readonly<Record<string, number>>;
+}
+
+export interface CompactedConversationContext {
+  readonly messages: readonly AgentTurnConversationContextMessage[];
+  readonly snapshot: ConversationContextCompactionSnapshot;
+}
+
+export interface ConversationContextCompactionStatus {
+  readonly status: "not_needed" | "compacted";
+  readonly omittedMessageCount: number;
+}
+
+const DEFAULT_POLICY: Required<ConversationContextCompactionPolicy> = {
+  maxMessages: MAX_CONVERSATION_CONTEXT_MESSAGES,
+  maxTextBytes: MAX_CONVERSATION_CONTEXT_TEXT_BYTES,
+  maxTokens: MAX_CONVERSATION_CONTEXT_TOKENS
+};
+
+export function compactConversationContext(
+  events: readonly ConversationEvent[],
+  policy: ConversationContextCompactionPolicy = DEFAULT_POLICY
+): CompactedConversationContext {
+  const limits = normalizePolicy(policy);
   const messages: TextConversationEvent[] = [];
   for (const event of events) {
     if (isTextMessage(event)) messages.push(event);
   }
-  const recent = selectRecent(messages, MAX_CONVERSATION_CONTEXT_MESSAGES, MAX_CONVERSATION_CONTEXT_TEXT_BYTES);
-  const omittedCount = messages.length - recent.length;
-  if (omittedCount <= 0) return recent.map(toContextMessage);
 
-  let boundary = Math.max(omittedCount, messages.length - (MAX_CONVERSATION_CONTEXT_MESSAGES - 1));
+  const contextHash = hashEvents(events);
+  const refs = collectRefs(events);
+  const recent = selectRecent(messages, limits.maxMessages, limits.maxTextBytes, limits.maxTokens);
+  const omittedCount = messages.length - recent.length;
+  if (omittedCount <= 0) {
+    return {
+      messages: recent.map(toContextMessage),
+      snapshot: createSnapshot(events, messages, 0, false, contextHash, refs)
+    };
+  }
+
+  let boundary = Math.max(omittedCount, messages.length - Math.max(1, limits.maxMessages - 1));
   for (let attempt = 0; attempt <= messages.length; attempt += 1) {
-    const summary = createCompactionSummary(events, messages.slice(0, boundary));
+    const summary = createCompactionSummary(events, messages.slice(0, boundary), contextHash);
     const summaryBytes = Buffer.byteLength(summary.text, "utf8");
-    if (summaryBytes > MAX_CONVERSATION_CONTEXT_TEXT_BYTES) throw historyTooLarge();
-    const retained = selectRecent(messages, MAX_CONVERSATION_CONTEXT_MESSAGES - 1,
-      MAX_CONVERSATION_CONTEXT_TEXT_BYTES - summaryBytes);
+    const summaryTokens = estimateTokens(summary.text);
+    if (summaryBytes > limits.maxTextBytes || summaryTokens > limits.maxTokens) throw historyTooLarge();
+    const retained = selectRecent(
+      messages,
+      Math.max(0, limits.maxMessages - 1),
+      limits.maxTextBytes - summaryBytes,
+      limits.maxTokens - summaryTokens
+    );
     if (retained.length === 0) throw historyTooLarge();
     const nextBoundary = messages.length - retained.length;
-    if (nextBoundary === boundary) return [summary, ...retained.map(toContextMessage)];
+    if (nextBoundary === boundary) {
+      return {
+        messages: [summary, ...retained.map(toContextMessage)],
+        snapshot: createSnapshot(events, messages, messages.length - retained.length, true, contextHash, refs)
+      };
+    }
     boundary = nextBoundary;
   }
   throw historyTooLarge();
 }
 
+export function selectCompactedConversationContext(
+  events: readonly ConversationEvent[]
+): readonly AgentTurnConversationContextMessage[] {
+  return compactConversationContext(events).messages;
+}
+
+function createSnapshot(
+  events: readonly ConversationEvent[],
+  messages: readonly TextConversationEvent[],
+  omittedMessageCount: number,
+  compacted: boolean,
+  contextHash: string,
+  refs: ReadonlyArray<readonly [string, readonly string[]]>
+): ConversationContextCompactionSnapshot {
+  const firstEvent = events[0];
+  const lastEvent = events.at(-1);
+  return {
+    owner: CONVERSATION_CONTEXT_COMPACTION_OWNER,
+    consumer: CONVERSATION_CONTEXT_COMPACTION_CONSUMER,
+    compacted,
+    eventCount: events.length,
+    messageCount: messages.length,
+    omittedMessageCount,
+    ...(firstEvent ? { firstEventId: firstEvent.id } : {}),
+    ...(lastEvent ? { lastEventId: lastEvent.id } : {}),
+    contextHash,
+    referenceCounts: Object.fromEntries(
+      refs.map(([label, values]) => [referenceCountKey(label), values.length])
+    )
+  };
+}
+
 function createCompactionSummary(
   events: readonly ConversationEvent[],
-  omittedMessages: readonly ConversationEvent[]
+  omittedMessages: readonly ConversationEvent[],
+  contextHash: string
 ): AgentTurnConversationContextMessage {
-  const firstEvent = events[0], lastEvent = events.at(-1);
-  if (!firstEvent || !lastEvent) throw historyTooLarge();
+  const firstEvent = events[0];
+  const lastEvent = events.at(-1);
+  const firstOmitted = omittedMessages[0];
+  const lastOmitted = omittedMessages.at(-1);
+  if (!firstEvent || !lastEvent || !firstOmitted || !lastOmitted) throw historyTooLarge();
   const refs = collectRefs(events);
   const lines = [
     SUMMARY_HEADER,
-    `Omitted ${omittedMessages.length} earlier user/assistant messages from ${omittedMessages[0]!.createdAt} through ${omittedMessages.at(-1)!.createdAt}.`,
+    `Omitted ${omittedMessages.length} earlier user/assistant messages from ${firstOmitted.createdAt} through ${lastOmitted.createdAt}.`,
     `Durable history snapshot: ${events.length} events from ${firstEvent.id} through ${lastEvent.id}.`,
-    `Content digest: sha256:${createHash("sha256").update(JSON.stringify(events)).digest("hex")}.`,
+    `Content digest: ${contextHash}.`,
     "The complete durable conversation remains available in History; omitted message bodies are not authority.",
     ...refs.map(([label, values]) => `${label}: ${values.join(", ")}.`)
   ];
-  return { role: "assistant", createdAt: omittedMessages.at(-1)!.createdAt, text: lines.join("\n") };
+  return { role: "assistant", createdAt: lastOmitted.createdAt, text: lines.join("\n") };
 }
 
 function collectRefs(events: readonly ConversationEvent[]): ReadonlyArray<readonly [string, readonly string[]]> {
-  const groups = new Map<string, Set<string>>([
-    ["Source refs", new Set()], ["Page refs", new Set()],
-    ["Job refs", new Set()], ["Proposal refs", new Set()], ["Operation refs", new Set()],
-    ["Capture refs", new Set()], ["Citation refs", new Set()], ["Dataset refs", new Set()],
-    ["Dataset revision refs", new Set()], ["Dataset table refs", new Set()],
-    ["Dataset schema hashes", new Set()], ["Dataset query hashes", new Set()],
-    ["Dataset result hashes", new Set()], ["Source revision hashes", new Set()],
-    ["Policy hashes", new Set()]
-  ]);
+  const groups = new Map<string, Set<string>>(REFERENCE_GROUP_LABELS.map((label) => [label, new Set()]));
   for (const event of events) {
     add(groups, "Source refs", event.sourceId);
     add(groups, "Page refs", event.scope?.pageId);
+    add(groups, "Page refs", event.pageId);
     add(groups, "Job refs", event.jobId);
     add(groups, "Proposal refs", event.proposalId);
     add(groups, "Operation refs", event.operationId);
     add(groups, "Capture refs", event.captureId);
-    const policyHash = (event as ConversationEvent & { readonly policyHash?: unknown }).policyHash;
+    add(groups, "Output refs", event.contentHash);
+    const record = event as unknown as Record<string, unknown>;
+    addUnknownRefs(groups, "Source refs", record.sourceRef);
+    addUnknownRefs(groups, "Source refs", record.sourceRefs);
+    addUnknownRefs(groups, "Page refs", record.pageRef);
+    addUnknownRefs(groups, "Page refs", record.pageRefs);
+    addUnknownRefs(groups, "Output refs", record.outputRef);
+    addUnknownRefs(groups, "Output refs", record.outputRefs);
+    addUnknownRefs(groups, "Output refs", record.answerOutputRef);
+    addUnknownRefs(groups, "Output refs", record.answerOutputRefs);
+    const policyHash = record.policyHash;
     if (typeof policyHash === "string" && /^sha256:[a-f0-9]{64}$/u.test(policyHash)) add(groups, "Policy hashes", policyHash);
     for (const citation of event.answerCitations ?? []) {
       add(groups, "Citation refs", citation.refId);
@@ -102,23 +207,81 @@ function collectRefs(events: readonly ConversationEvent[]): ReadonlyArray<readon
     .filter(([, values]) => values.length > 0);
 }
 
+function addUnknownRefs(groups: Map<string, Set<string>>, label: string, value: unknown): void {
+  if (typeof value === "string") {
+    add(groups, label, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) addUnknownRefItem(groups, label, item);
+    return;
+  }
+  addUnknownRefItem(groups, label, value);
+}
+
+function addUnknownRefItem(groups: Map<string, Set<string>>, label: string, item: unknown): void {
+  if (typeof item === "string") {
+    add(groups, label, item);
+    return;
+  }
+  if (!item || typeof item !== "object") return;
+  const record = item as Record<string, unknown>;
+  for (const key of ["refId", "id", "outputId", "checksum", "hash"]) {
+    if (typeof record[key] === "string") add(groups, label, record[key]);
+  }
+}
+
 function add(groups: Map<string, Set<string>>, label: string, value: string | undefined): void {
   if (value) groups.get(label)!.add(value);
 }
 
+function normalizePolicy(policy: ConversationContextCompactionPolicy): Required<ConversationContextCompactionPolicy> {
+  const limits = { ...DEFAULT_POLICY, ...policy };
+  if (![limits.maxMessages, limits.maxTextBytes, limits.maxTokens].every((value) => Number.isSafeInteger(value) && value > 0)) {
+    throw historyTooLarge();
+  }
+  return limits;
+}
+
 function selectRecent(
-  messages: readonly TextConversationEvent[], limit: number, maxTextBytes: number
+  messages: readonly TextConversationEvent[],
+  limit: number,
+  maxTextBytes: number,
+  maxTokens: number
 ): TextConversationEvent[] {
   const selected: TextConversationEvent[] = [];
   let bytes = 0;
+  let tokens = 0;
   for (let index = messages.length - 1; index >= 0 && selected.length < limit; index -= 1) {
     const event = messages[index]!;
-    const nextBytes = Buffer.byteLength(event.text!, "utf8");
-    if (bytes + nextBytes > maxTextBytes) break;
+    const nextBytes = Buffer.byteLength(event.text, "utf8");
+    const nextTokens = estimateTokens(event.text);
+    if (bytes + nextBytes > maxTextBytes || tokens + nextTokens > maxTokens) break;
     selected.push(event);
     bytes += nextBytes;
+    tokens += nextTokens;
   }
   return selected.reverse();
+}
+
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(Array.from(text).length / 4));
+}
+
+function hashEvents(events: readonly ConversationEvent[]): string {
+  return `sha256:${createHash("sha256").update(JSON.stringify(events)).digest("hex")}`;
+}
+
+function referenceCountKey(label: string): string {
+  return label
+    .replace(/ refs$/u, "")
+    .replace(/ hashes$/u, "")
+    .replace(/ revision$/u, "Revision")
+    .replace(/ table$/u, "Table")
+    .replace(/ schema$/u, "Schema")
+    .replace(/ query$/u, "Query")
+    .replace(/ result$/u, "Result")
+    .replace(/ /gu, "");
 }
 
 function isTextMessage(event: ConversationEvent): event is TextConversationEvent {

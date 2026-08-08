@@ -2252,9 +2252,15 @@ export interface AgentConversationTurnSummary {
   readonly userEventId: string;
   readonly state: JobState;
   readonly updatedAt?: string | undefined;
+  readonly contextCompaction?: AgentConversationContextCompactionStatus;
   readonly proposalId?: string | undefined;
   readonly currentNoteAppendApplied?: true;
   readonly error?: PigeErrorSummary;
+}
+
+export interface AgentConversationContextCompactionStatus {
+  readonly status: "not_needed" | "compacted";
+  readonly omittedMessageCount: number;
 }
 
 export interface AgentConversationInitialTimeline {

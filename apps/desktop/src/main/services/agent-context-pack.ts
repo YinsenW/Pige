@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AgentRuntimePolicyContext } from "@pige/contracts";
 import type { JobRecord } from "@pige/schemas";
 import { PigeDomainError } from "@pige/domain";
+import type { ConversationContextCompactionSnapshot } from "./conversation-context-compaction-service";
 
 const SHA256_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const CONTEXT_ID_PATTERN = /^context_[a-f0-9]{16}$/u;
@@ -135,6 +136,7 @@ export function buildHomeAgentContextPack(input: {
   readonly policyContextId: string;
   readonly policyHash: string;
   readonly history: readonly AgentContextPackHistoryMessage[];
+  readonly contextSnapshot?: ConversationContextCompactionSnapshot;
   readonly memories: readonly AgentContextPackMemory[];
 }): BuiltAgentContextPack {
   const currentNote = input.job.inputRefs?.find(
@@ -149,12 +151,12 @@ export function buildHomeAgentContextPack(input: {
   const memories = [...input.memories]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id, "en-US"))
     .slice(0, 8);
-  const conversationHash = sha256(JSON.stringify({
+  const conversationHash = input.contextSnapshot?.contextHash ?? sha256(JSON.stringify({
     conversationId: input.conversationId,
     userEventId: input.userEventId,
     history: input.history
   }));
-  const compactedCount = readCompactedMessageCount(input.history[0]?.text);
+  const compactedCount = input.contextSnapshot?.omittedMessageCount || readCompactedMessageCount(input.history[0]?.text);
   const evidenceRefs = [
     ...(currentNote ? [{
       refId: "current_note",

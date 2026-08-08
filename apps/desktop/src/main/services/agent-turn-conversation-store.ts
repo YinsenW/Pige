@@ -29,7 +29,11 @@ import {
 import { conversationLanguageContinuity } from "./durable-language";
 import { assertMatchingConversationCaptureReference, createConversationCaptureReference,
   type ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
-import { selectCompactedConversationContext } from "./conversation-context-compaction-service";
+import {
+  compactConversationContext,
+  type CompactedConversationContext,
+  type ConversationContextCompactionStatus
+} from "./conversation-context-compaction-service";
 const MAX_TURN_TEXT_BYTES = 64 * 1024, MAX_CONVERSATION_FILE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_TIMELINE_MESSAGES = 50, MAX_TIMELINE_MESSAGES = 100;
 const MAX_TIMELINE_TEXT_BYTES = 256 * 1024;
@@ -277,6 +281,26 @@ export class AgentTurnConversationStore {
     turnOrLocator: PreservedAgentTurn | string,
     eventId?: string
   ): readonly AgentTurnConversationContextMessage[] {
+    const compacted = typeof turnOrLocator === "string"
+      ? this.readCompactedContextBeforeUserTurn(vaultPath, turnOrLocator, eventId ?? "")
+      : this.readCompactedContextBeforeUserTurn(vaultPath, turnOrLocator);
+    return compacted.messages;
+  }
+
+  readCompactedContextBeforeUserTurn(
+    vaultPath: string,
+    userTurn: PreservedAgentTurn
+  ): CompactedConversationContext;
+  readCompactedContextBeforeUserTurn(
+    vaultPath: string,
+    locator: string,
+    userEventId: string
+  ): CompactedConversationContext;
+  readCompactedContextBeforeUserTurn(
+    vaultPath: string,
+    turnOrLocator: PreservedAgentTurn | string,
+    eventId?: string
+  ): CompactedConversationContext {
     const locator = typeof turnOrLocator === "string" ? turnOrLocator : turnOrLocator.locator;
     const userEventId = typeof turnOrLocator === "string" ? eventId : turnOrLocator.event.id;
     if (!userEventId || !EVENT_ID_PATTERN.test(userEventId)) {
@@ -289,7 +313,30 @@ export class AgentTurnConversationStore {
       throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent context boundary was not found.");
     }
     const contextEvents = events.slice(0, matchingIndex);
-    return selectCompactedConversationContext(contextEvents);
+    return compactConversationContext(contextEvents);
+  }
+
+  readContextCompactionStatusBeforeUserTurn(
+    vaultPath: string,
+    userTurn: PreservedAgentTurn
+  ): ConversationContextCompactionStatus;
+  readContextCompactionStatusBeforeUserTurn(
+    vaultPath: string,
+    locator: string,
+    userEventId: string
+  ): ConversationContextCompactionStatus;
+  readContextCompactionStatusBeforeUserTurn(
+    vaultPath: string,
+    turnOrLocator: PreservedAgentTurn | string,
+    eventId?: string
+  ): ConversationContextCompactionStatus {
+    const snapshot = typeof turnOrLocator === "string"
+      ? this.readCompactedContextBeforeUserTurn(vaultPath, turnOrLocator, eventId ?? "").snapshot
+      : this.readCompactedContextBeforeUserTurn(vaultPath, turnOrLocator).snapshot;
+    return {
+      status: snapshot.compacted ? "compacted" : "not_needed",
+      omittedMessageCount: snapshot.omittedMessageCount
+    };
   }
 
   readConversationTimeline(

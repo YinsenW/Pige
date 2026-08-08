@@ -6,6 +6,7 @@ import {
 } from "../../apps/desktop/src/main/services/agent-context-pack";
 
 const POLICY_HASH = `sha256:${"a".repeat(64)}`;
+const CONVERSATION_CONTEXT_HASH = `sha256:${"e".repeat(64)}`;
 
 describe("Agent context pack", () => {
   it("serializes a mixed current-note, eight-attachment, memory and compacted-conversation pack without bodies", () => {
@@ -63,6 +64,18 @@ describe("Agent context pack", () => {
       createdAt: "2026-08-02T00:00:00.000Z",
       text: "PRIVATE RECENT TURN"
     }];
+    const contextSnapshot = {
+      owner: "main.agent_context" as const,
+      consumer: "pi_agent" as const,
+      compacted: true,
+      eventCount: 42,
+      messageCount: 18,
+      omittedMessageCount: 17,
+      firstEventId: "evt_20260801_contextpackfirst1",
+      lastEventId: "evt_20260802_contextpacklast01",
+      contextHash: CONVERSATION_CONTEXT_HASH,
+      referenceCounts: { Source: 2, Output: 1 }
+    };
 
     const first = buildHomeAgentContextPack({
       activeVaultId: "vault_20260802_contextpack01",
@@ -72,7 +85,8 @@ describe("Agent context pack", () => {
       policyContextId: "policy_contextpack01",
       policyHash: POLICY_HASH,
       memories,
-      history
+      history,
+      contextSnapshot
     });
     const second = buildHomeAgentContextPack({
       activeVaultId: "vault_20260802_contextpack01",
@@ -82,7 +96,8 @@ describe("Agent context pack", () => {
       policyContextId: "policy_contextpack01",
       policyHash: POLICY_HASH,
       memories,
-      history
+      history,
+      contextSnapshot
     });
 
     expect(AgentContextPackSchema.parse(JSON.parse(JSON.stringify(first.pack)))).toEqual(first.pack);
@@ -101,6 +116,7 @@ describe("Agent context pack", () => {
     expect(first.pack.memoryRefs).toEqual([
       expect.objectContaining({ id: "memory_20260802_preference01", trust: "memory" })
     ]);
+    expect(first.pack.conversationRefs[0]).toMatchObject({ checksum: CONVERSATION_CONTEXT_HASH });
     expect(first.durableRefs).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "tool", id: first.pack.contextPackId, role: "agent_context_pack" }),
       expect.objectContaining({ kind: "memory", id: "memory_20260802_preference01" }),

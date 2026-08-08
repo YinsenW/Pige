@@ -886,10 +886,12 @@ describe("desktop shell build contract", () => {
   it("strictly parses durable conversation pagination on both IPC sides", () => {
     const preloadSource = fs.readFileSync(path.resolve("apps/desktop/src/preload/index.ts"), "utf8");
     const mainSource = fs.readFileSync(path.resolve("apps/desktop/src/main/index.ts"), "utf8");
+    const schemasSource = fs.readFileSync(path.resolve("packages/schemas/src/index.ts"), "utf8");
     expect(preloadSource).toContain("AgentConversationRequestSchema.parse(normalizedRequest ?? {})");
     expect(preloadSource).toContain("AgentConversationResultSchema.optional().parse(result)");
     expect(mainSource).toContain("AgentConversationRequestSchema.parse(request ?? {})");
     expect(mainSource).toContain("AgentConversationResultSchema.optional().parse(");
+    expect(schemasSource).toContain("contextCompaction: AgentConversationContextCompactionStatusSchema.optional()");
   });
 
   it("freezes one bounded pathless conversation-history search beside the existing open path", () => {

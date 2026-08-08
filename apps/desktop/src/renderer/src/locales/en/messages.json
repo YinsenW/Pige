@@ -317,6 +317,7 @@
   "home.agentState.failed": "The Agent could not complete this request.",
   "home.agentState.running": "Pi Agent is working.",
   "home.agentState.waiting": "The Agent is waiting for setup or permission.",
+  "home.conversationContextCompacted": "Earlier context was shortened for this turn; your full conversation is preserved.",
   "home.assistantMessage": "Pige",
   "home.memoryContextIncluded": "Saved memory items included:",
   "home.copyMessage": "Copy response",

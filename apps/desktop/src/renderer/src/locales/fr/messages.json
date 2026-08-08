@@ -317,6 +317,7 @@
   "home.agentState.failed": "L’Agent n’a pas pu terminer cette demande.",
   "home.agentState.running": "Pi Agent travaille.",
   "home.agentState.waiting": "L’Agent attend une configuration ou une autorisation.",
+  "home.conversationContextCompacted": "Le contexte précédent a été raccourci pour ce tour ; votre conversation complète est préservée.",
   "home.assistantMessage": "Pige",
   "home.memoryContextIncluded": "Éléments de mémoire enregistrés inclus :",
   "home.copyMessage": "Copier la réponse",

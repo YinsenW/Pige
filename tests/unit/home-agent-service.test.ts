@@ -2755,6 +2755,62 @@ describe("Home Pi Agent service", () => {
     });
   });
 
+  it("projects bounded context compaction status without exposing bodies or storage identity", () => {
+    const fixture = makeFixture();
+    const conversations = new AgentTurnConversationStore();
+    let current = conversations.appendUserTurn(
+      fixture.vaultPath,
+      `Private early body ${"u".repeat(5_000)}`,
+      { inputKind: "typed_text", locale: "en" },
+      { clientTurnId: "turn_20260711_contextstatus01" }
+    );
+    for (let index = 0; index < 9; index += 1) {
+      const assistant = conversations.appendAssistantTurn(
+        fixture.vaultPath,
+        current,
+        `job_20260711_contextstatus${String(index).padStart(4, "0")}`,
+        `Private answer ${index} ${"a".repeat(5_000)}`
+      );
+      current = conversations.appendUserTurn(
+        fixture.vaultPath,
+        `Follow-up ${index} ${"u".repeat(5_000)}`,
+        { inputKind: "typed_text", locale: "en" },
+        {
+          clientTurnId: `turn_20260711_contextstatus${String(index + 1).padStart(4, "0")}`,
+          conversationId: current.event.conversationId,
+          expectedTailEventId: assistant.id
+        }
+      );
+    }
+    const jobs = new JobsService(fixture.vaults);
+    const job = jobs.createAgentTurnJob({
+      conversationEventId: current.event.id,
+      conversationLocator: current.locator,
+      inputHash: current.inputHash
+    });
+    const service = new HomeAgentService(
+      fixture.vaults,
+      makeModels(),
+      makeRetrievalPort(fixture.vault.vaultId),
+      jobs,
+      { run: async () => { throw new Error("Status projection must not run Pi Agent."); } },
+      undefined,
+      conversations
+    );
+
+    const timeline = service.conversation({ conversationId: current.event.conversationId });
+    expect(timeline?.latestTurn).toMatchObject({
+      jobId: job.id,
+      userEventId: current.event.id,
+      contextCompaction: {
+        status: "compacted",
+        omittedMessageCount: expect.any(Number)
+      }
+    });
+    expect(JSON.stringify(timeline?.latestTurn)).not.toContain("Private early body");
+    expect(JSON.stringify(timeline?.latestTurn)).not.toContain(".pige/conversations");
+  });
+
   it("preserves durable conversation messages when a pre-AR2 Job record is obsolete", () => {
     const fixture = makeFixture();
     const conversations = new AgentTurnConversationStore();
