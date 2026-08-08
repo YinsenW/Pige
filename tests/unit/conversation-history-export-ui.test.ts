@@ -68,7 +68,12 @@ describe("ConversationHistoryPanel durable export", () => {
     expect(container.textContent).not.toMatch(/\/private\/|\.json/iu);
 
     await click(dom, buttonContaining(container, conversation.safePreview));
-    expect(opened).toHaveBeenCalledWith(conversation.conversationId, "history");
+    expect(opened).toHaveBeenCalledWith(
+      conversation.conversationId,
+      "history",
+      conversation.tailEventId,
+      undefined
+    );
     await act(async () => root.unmount());
     dom.window.close();
   });

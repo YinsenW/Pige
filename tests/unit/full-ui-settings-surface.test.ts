@@ -5766,6 +5766,7 @@ describe("full UI Settings surface", () => {
       await settle(dom);
     });
     expect(refreshSpeechAvailability).toHaveBeenCalledOnce();
+    await act(async () => settle(dom));
     expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install resource"));
 
     await act(async () => {
@@ -5775,6 +5776,7 @@ describe("full UI Settings surface", () => {
     expect(installLanguageAsset).toHaveBeenCalledTimes(2);
     expect(container.querySelector('[role="alert"]')?.textContent)
       .toBe("Status unavailable");
+    await act(async () => settle(dom));
     expect(dom.window.document.activeElement).toBe(buttonNamed(container, "Install resource"));
 
     await act(async () => root.unmount());

@@ -2170,7 +2170,7 @@ describe("full UI Library", () => {
       expectedTargetUpdatedAt: target.updatedAt });
     expect(container.querySelector(".note-reader")).not.toBeNull();
     expect(container.querySelector("select")?.value).toBe(target.pageId);
-    expect(dom.window.document.activeElement).toBe(container.querySelector("select"));
+    await waitFor(dom, () => dom.window.document.activeElement === container.querySelector("select"));
     await act(async () => root.unmount()); dom.window.close();
   });
 

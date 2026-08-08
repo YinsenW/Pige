@@ -1220,6 +1220,7 @@ describe("Restore identity UI", () => {
     const { container, root } = await mountApp(dom, api);
 
     await openSettingsSection(dom, container, "Diagnostics");
+    await click(dom, requireElement(container.querySelector<HTMLInputElement>('[data-diagnostics-event-selection] input[type="checkbox"]')));
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -1261,6 +1262,7 @@ describe("Restore identity UI", () => {
     const { container, root } = await mountApp(dom, api);
 
     await openSettingsSection(dom, container, "Diagnostics");
+    await click(dom, requireElement(container.querySelector<HTMLInputElement>('[data-diagnostics-event-selection] input[type="checkbox"]')));
     await click(dom, button(container, "Preview and export…"));
     await waitFor(dom, () => container.textContent?.includes("Preview ready") ?? false);
     await click(dom, button(container, "Export Support Bundle"));
@@ -1769,6 +1771,15 @@ function supportBundlePreview(requestId: string) {
     scopeContextId: `diagctx_${"b".repeat(32)}` as const,
     expectedRevision: 1,
     activeVaultId: null,
+    eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
+    selectedDiagnosticEventIds: [`diagevent_${"b".repeat(32)}`],
+    selectedDiagnosticEvents: [{
+      eventId: `diagevent_${"b".repeat(32)}`,
+      recordedAt: "2026-07-31T00:00:00.000Z",
+      level: "warning" as const,
+      code: "jobs.recovery_failed",
+      redactedDetailCount: 0
+    }],
     selectedOptionalCategories: [],
     includedCategories: [{ id: "app_runtime", label: "App runtime", included: true,
       reason: "Required runtime diagnostics." }],
@@ -1790,6 +1801,16 @@ function supportBundleWorkflow(
     activeVaultId: null,
     localOnly: true as const,
     ownedArtifactCount: 0,
+    eventSelection: {
+      revision: `diagevents_${"a".repeat(64)}`,
+      events: [{
+        eventId: `diagevent_${"b".repeat(32)}`,
+        recordedAt: "2026-07-31T00:00:00.000Z",
+        level: "warning" as const,
+        code: "jobs.recovery_failed",
+        redactedDetailCount: 0
+      }]
+    },
     job: {
       jobId: "job_20260731_supportexport01",
       state,
