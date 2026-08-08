@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IpcMainInvokeEvent } from "electron";
 import type { AnalyticalSnapshotService } from "../../apps/desktop/src/main/services/analytical-snapshot-service";
+import type { AnalyticalSnapshotTrashService } from "../../apps/desktop/src/main/services/analytical-snapshot-trash-service";
 import { registerAnalyticalSnapshotIpc } from "../../apps/desktop/src/main/register-analytical-snapshot-ipc";
 
 type Handler = (event: IpcMainInvokeEvent, input: unknown) => unknown;
@@ -58,11 +59,30 @@ describe("registerAnalyticalSnapshotIpc", () => {
         columnIds: ["column_abcdefghijkl"], resultHash: `sha256:${"d".repeat(64)}`, preview
       } }))
     } as unknown as AnalyticalSnapshotService;
+    const trashService = {
+      listTrash: vi.fn((request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string }) => ({
+        ...request,
+        status: "ready" as const,
+        revision: `snapshottrashrev_${"e".repeat(64)}`,
+        snapshots: []
+      })),
+      trash: vi.fn((request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string; readonly snapshotId: string; readonly expectedOperationId: string }) => ({
+        ...request,
+        status: "committed" as const,
+        operationId
+      })),
+      restore: vi.fn((request: { readonly apiVersion: 1; readonly requestId: string; readonly activeVaultId: string; readonly snapshotId: string; readonly trashOperationId: string; readonly expectedTrashRevision: string }) => ({
+        ...request,
+        status: "committed" as const,
+        operationId
+      }))
+    } as unknown as AnalyticalSnapshotTrashService;
     registerAnalyticalSnapshotIpc({
       ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler as Handler); } },
       isTrustedSender: (sender) => sender.id === 7,
       getActiveVaultId: () => vaultId,
-      service
+      service,
+      trashService
     });
     const event = { sender: { id: 7 } } as IpcMainInvokeEvent;
     const list = await handlers.get("collections.analyticalSnapshots.list")!(event, {
@@ -82,21 +102,40 @@ describe("registerAnalyticalSnapshotIpc", () => {
       apiVersion: 1, requestId: "collection_request_snapshotipc000005", activeVaultId: vaultId, snapshotId, rowId
     });
     expect(cited).toMatchObject({ status: "ready", citation: { rowId } });
-    expect(JSON.stringify({ list, created, opened, cited })).not.toMatch(/path|payload|sqlite|secret|body/iu);
+    const trashListed = await handlers.get("collections.analyticalSnapshots.listTrash")!(event, {
+      apiVersion: 1, requestId: "collection_request_snapshotipc000007", activeVaultId: vaultId
+    });
+    const trashed = await handlers.get("collections.analyticalSnapshots.trash")!(event, {
+      apiVersion: 1, requestId: "collection_request_snapshotipc000008", activeVaultId: vaultId,
+      snapshotId, expectedOperationId: operationId
+    });
+    const restored = await handlers.get("collections.analyticalSnapshots.restore")!(event, {
+      apiVersion: 1, requestId: "collection_request_snapshotipc000009", activeVaultId: vaultId,
+      snapshotId, trashOperationId: operationId, expectedTrashRevision: `snapshottrashrev_${"e".repeat(64)}`
+    });
+    expect(trashListed).toMatchObject({ status: "ready", snapshots: [] });
+    expect(trashed).toMatchObject({ status: "committed", operationId });
+    expect(restored).toMatchObject({ status: "committed", operationId });
+    expect(JSON.stringify({ list, created, opened, cited, trashListed, trashed, restored })).not.toMatch(/path|payload|sqlite|secret|body/iu);
     expect(service.list).toHaveBeenCalledOnce();
     expect(service.create).toHaveBeenCalledOnce();
     expect(service.open).toHaveBeenCalledOnce();
     expect(service.openCitation).toHaveBeenCalledOnce();
+    expect(trashService.listTrash).toHaveBeenCalledOnce();
+    expect(trashService.trash).toHaveBeenCalledOnce();
+    expect(trashService.restore).toHaveBeenCalledOnce();
   });
 
   it("returns a body-free failed result and never calls Main for an untrusted sender", async () => {
     const handlers = new Map<string, Handler>();
     const service = { list: vi.fn(), create: vi.fn(), open: vi.fn(), openCitation: vi.fn() } as unknown as AnalyticalSnapshotService;
+    const trashService = { listTrash: vi.fn(), trash: vi.fn(), restore: vi.fn() } as unknown as AnalyticalSnapshotTrashService;
     registerAnalyticalSnapshotIpc({
       ipcMain: { handle: (channel, handler) => { handlers.set(channel, handler as Handler); } },
       isTrustedSender: () => false,
       getActiveVaultId: () => vaultId,
-      service
+      service,
+      trashService
     });
     const result = await handlers.get("collections.analyticalSnapshots.create")!({ sender: {} } as IpcMainInvokeEvent, {
       apiVersion: 1, requestId: "collection_request_snapshotipc000006", activeVaultId: vaultId,

@@ -75,6 +75,10 @@ describe("AnalyticalSnapshotTrashService", () => {
     expect(JSON.stringify(first)).not.toMatch(/path|checksum|body|payload/u);
 
     const restarted = new AnalyticalSnapshotTrashService(vaults, snapshots, () => new Date("2026-08-09T00:02:00.000Z"));
+    const trashOperationPath = operationPathFor(vaultPath, first.operationId);
+    fs.rmSync(trashOperationPath);
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 1, failed: 0 });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
     const listed = restarted.listTrash({ apiVersion: 1, requestId: "collection_request_snapshottrashlist01", activeVaultId: vaultId });
     expect(listed.status).toBe("ready");
     if (listed.status !== "ready" || first.status !== "committed") throw new Error("Snapshot trash inventory did not load");
@@ -98,6 +102,15 @@ describe("AnalyticalSnapshotTrashService", () => {
       status: "undone",
       canUndo: false
     });
+    expect(restarted.restore({
+      apiVersion: 1,
+      requestId: "collection_request_snapshotrestore01",
+      activeVaultId: vaultId,
+      snapshotId,
+      trashOperationId: first.operationId,
+      expectedTrashRevision: listed.revision
+    })).toMatchObject({ status: "committed", operationId: restoreOperationId });
+    expect(restarted.recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
     expect(restarted.restore({
       apiVersion: 1,
       requestId: "collection_request_snapshotrestore02",

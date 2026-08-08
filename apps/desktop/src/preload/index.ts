@@ -618,6 +618,9 @@ import {
   COLLECTION_ANALYTICAL_SNAPSHOT_CREATE_CHANNEL,
   COLLECTION_ANALYTICAL_SNAPSHOT_OPEN_CHANNEL,
   COLLECTION_ANALYTICAL_SNAPSHOT_CITATION_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_LIST_TRASH_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_TRASH_CHANNEL,
+  COLLECTION_ANALYTICAL_SNAPSHOT_RESTORE_CHANNEL,
   CollectionAddFormulaColumnRequestSchema,
   CollectionAddFormulaColumnResultSchema,
   CollectionAddRelationColumnRequestSchema,
@@ -682,6 +685,12 @@ import {
   CollectionAnalyticalSnapshotOpenResultSchema,
   CollectionAnalyticalSnapshotCitationRequestSchema,
   CollectionAnalyticalSnapshotCitationResultSchema,
+  CollectionAnalyticalSnapshotListTrashRequestSchema,
+  CollectionAnalyticalSnapshotListTrashResultSchema,
+  CollectionAnalyticalSnapshotTrashRequestSchema,
+  CollectionAnalyticalSnapshotTrashResultSchema,
+  CollectionAnalyticalSnapshotRestoreRequestSchema,
+  CollectionAnalyticalSnapshotRestoreResultSchema,
   CollectionAppendDefaultRowRequestSchema,
   CollectionAppendDefaultRowResultSchema,
   CollectionRenameColumnRequestSchema,
@@ -1209,6 +1218,12 @@ import type {
   CollectionAnalyticalSnapshotOpenResult,
   CollectionAnalyticalSnapshotCitationRequest,
   CollectionAnalyticalSnapshotCitationResult,
+  CollectionAnalyticalSnapshotListTrashRequest,
+  CollectionAnalyticalSnapshotListTrashResult,
+  CollectionAnalyticalSnapshotTrashRequest,
+  CollectionAnalyticalSnapshotTrashResult,
+  CollectionAnalyticalSnapshotRestoreRequest,
+  CollectionAnalyticalSnapshotRestoreResult,
   CollectionAppendDefaultRowRequest,
   CollectionAppendDefaultRowResult,
   CollectionRenameColumnRequest,
@@ -1352,6 +1367,48 @@ async function invokeCollectionAnalyticalSnapshotCitation(
     result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
     result.snapshotId !== parsedRequest.snapshotId || result.rowId !== parsedRequest.rowId
   ) throw new Error("Invalid Analytical Snapshot citation response identity.");
+  return result;
+}
+
+async function invokeCollectionAnalyticalSnapshotTrashList(
+  request: CollectionAnalyticalSnapshotListTrashRequest
+): Promise<CollectionAnalyticalSnapshotListTrashResult> {
+  const parsedRequest = CollectionAnalyticalSnapshotListTrashRequestSchema.parse(request);
+  const result = CollectionAnalyticalSnapshotListTrashResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ANALYTICAL_SNAPSHOT_LIST_TRASH_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId) {
+    throw new Error("Invalid Analytical Snapshot trash list response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAnalyticalSnapshotTrash(
+  request: CollectionAnalyticalSnapshotTrashRequest
+): Promise<CollectionAnalyticalSnapshotTrashResult> {
+  const parsedRequest = CollectionAnalyticalSnapshotTrashRequestSchema.parse(request);
+  const result = CollectionAnalyticalSnapshotTrashResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ANALYTICAL_SNAPSHOT_TRASH_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.snapshotId !== parsedRequest.snapshotId || result.expectedOperationId !== parsedRequest.expectedOperationId) {
+    throw new Error("Invalid Analytical Snapshot trash response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionAnalyticalSnapshotRestore(
+  request: CollectionAnalyticalSnapshotRestoreRequest
+): Promise<CollectionAnalyticalSnapshotRestoreResult> {
+  const parsedRequest = CollectionAnalyticalSnapshotRestoreRequestSchema.parse(request);
+  const result = CollectionAnalyticalSnapshotRestoreResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_ANALYTICAL_SNAPSHOT_RESTORE_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId || result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.snapshotId !== parsedRequest.snapshotId || result.trashOperationId !== parsedRequest.trashOperationId ||
+      result.expectedTrashRevision !== parsedRequest.expectedTrashRevision) {
+    throw new Error("Invalid Analytical Snapshot restore response identity.");
+  }
   return result;
 }
 
@@ -2757,6 +2814,9 @@ const api: PigeDesktopApi = {
     createAnalyticalSnapshot: invokeCollectionAnalyticalSnapshotCreate,
     openAnalyticalSnapshot: invokeCollectionAnalyticalSnapshotOpen,
     openAnalyticalSnapshotCitation: invokeCollectionAnalyticalSnapshotCitation,
+    listAnalyticalSnapshotTrash: invokeCollectionAnalyticalSnapshotTrashList,
+    trashAnalyticalSnapshot: invokeCollectionAnalyticalSnapshotTrash,
+    restoreAnalyticalSnapshot: invokeCollectionAnalyticalSnapshotRestore,
     listRevisionHistory: invokeCollectionListRevisionHistory,
     openRevisionHistory: invokeCollectionOpenRevisionHistory,
     restoreRevisionHistory: invokeCollectionRestoreRevisionHistory,

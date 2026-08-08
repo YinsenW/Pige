@@ -150,7 +150,7 @@ export class AnalyticalSnapshotTrashService {
   listTrash(request: CollectionAnalyticalSnapshotListTrashRequest): CollectionAnalyticalSnapshotListTrashResult {
     const parsed = CollectionAnalyticalSnapshotListTrashRequestSchema.parse(request);
     const vaultPath = this.#activeVaultPath(parsed.activeVaultId);
-    if (!vaultPath) return { ...request, status: "not_found" };
+    if (!vaultPath) return CollectionAnalyticalSnapshotListTrashResultSchema.parse({ ...parsed, status: "not_found" });
     try {
       const snapshots = readReceipts(vaultPath)
         .filter((receipt) => isRestorable(vaultPath, receipt))
@@ -178,17 +178,18 @@ export class AnalyticalSnapshotTrashService {
     try {
       const receipt = readReceiptByOperation(vaultPath, parsed.trashOperationId);
       if (!receipt) return restoreResult(identity, "not_found");
-      const inventory = this.listTrash({ apiVersion: 1, requestId: parsed.requestId, activeVaultId: parsed.activeVaultId });
-      if (inventory.status !== "ready") return restoreResult(identity, inventory.status === "not_found" ? "not_found" : "failed");
-      const candidate = inventory.snapshots.find((item) => item.trashOperationId === parsed.trashOperationId);
-      if (receipt.snapshotId !== parsed.snapshotId || inventory.revision !== parsed.expectedTrashRevision || !candidate) {
-        return restoreResult(identity, "stale");
-      }
+      if (receipt.snapshotId !== parsed.snapshotId) return restoreResult(identity, "stale");
       const restoreOperationId = restoreOperationIdFor(receipt);
       const existing = readOperation(vaultPath, restoreOperationId);
       if (existing) {
         if (!matchesRestoreOperation(receipt, existing) || !isRestored(vaultPath, receipt)) return restoreResult(identity, "stale");
         return restoreResult(identity, "committed", existing.id);
+      }
+      const inventory = this.listTrash({ apiVersion: 1, requestId: parsed.requestId, activeVaultId: parsed.activeVaultId });
+      if (inventory.status !== "ready") return restoreResult(identity, inventory.status === "not_found" ? "not_found" : "failed");
+      const candidate = inventory.snapshots.find((item) => item.trashOperationId === parsed.trashOperationId);
+      if (inventory.revision !== parsed.expectedTrashRevision || !candidate) {
+        return restoreResult(identity, "stale");
       }
       if (!isRestorable(vaultPath, receipt) || !this.#isCurrentSnapshot(parsed.activeVaultId, receipt)) {
         return restoreResult(identity, "ineligible");
@@ -238,7 +239,7 @@ export class AnalyticalSnapshotTrashService {
     return receipt ? operations.find((candidate) => candidate.id === restoreOperationIdFor(receipt) && matchesRestoreOperation(receipt, candidate)) : undefined;
   }
 
-  undo(operation: OperationRecord): KnowledgeActivityUndoResult {
+  undo(operation: OperationRecord, _expectedRevisionId?: string): KnowledgeActivityUndoResult {
     const vaultPath = this.#vaults.activeVaultPath();
     if (!vaultPath || operation.kind !== "trash_analytical_snapshot") return { status: "not_found", operationId: operation.id };
     const receipt = readReceiptByOperation(vaultPath, operation.id);
@@ -278,6 +279,7 @@ export class AnalyticalSnapshotTrashService {
     for (const receipt of readReceipts(vaultPath)) {
       try {
         const before = readOperation(vaultPath, receipt.operationId);
+        if (before && isSettledTrash(vaultPath, receipt)) continue;
         completeTrash(vaultPath, receipt);
         if (!before) recovered += 1;
       } catch {
@@ -520,6 +522,7 @@ function matchesCreateOperation(vaultPath: string, record: AnalyticalSnapshotRec
 function matchesTrashOperation(receipt: AnalyticalSnapshotTrashReceipt, operation: OperationRecord): boolean {
   return operation.id === receipt.operationId && operation.kind === "trash_analytical_snapshot" &&
     operation.targetRefs.some((ref) => ref.kind === "dataset" && ref.id === receipt.datasetId && ref.path === receipt.trashRelativePath) &&
+    operation.sourceRefs.some((ref) => ref.kind === "operation" && ref.id === receipt.sourceOperationId) &&
     operation.before?.id === receipt.revisionId && operation.before.path === receipt.originalRelativePath &&
     operation.after?.id === receipt.revisionId && operation.after.path === receipt.trashRelativePath;
 }
@@ -543,6 +546,14 @@ function isRestorable(vaultPath: string, receipt: AnalyticalSnapshotTrashReceipt
 function isRestored(vaultPath: string, receipt: AnalyticalSnapshotTrashReceipt): boolean {
   return !fs.existsSync(resolveRelative(vaultPath, receipt.trashRelativePath)) &&
     matchesRecordHash(resolveRelative(vaultPath, receipt.originalRelativePath), receipt.recordHash);
+}
+
+function isSettledTrash(vaultPath: string, receipt: AnalyticalSnapshotTrashReceipt): boolean {
+  const operation = readOperation(vaultPath, receipt.operationId);
+  if (!operation || !matchesTrashOperation(receipt, operation)) return false;
+  const restore = readOperation(vaultPath, restoreOperationIdFor(receipt));
+  return Boolean(restore && matchesRestoreOperation(receipt, restore) && isRestored(vaultPath, receipt)) ||
+    isRestorable(vaultPath, receipt);
 }
 
 function matchesRecordHash(filePath: string, expected: string): boolean {
