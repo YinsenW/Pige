@@ -59,6 +59,37 @@ describe("BackupConversationPreferenceService", () => {
     expect(JSON.stringify(committed)).not.toContain(value.root);
   });
 
+  it("adopts a legacy conversation-preference receipt without losing Undo authority", () => {
+    const value = fixture();
+    const before = value.service().summary();
+    const request = {
+      apiVersion: 1 as const,
+      requestId: "backupconversationreq_legacyabcdefghijkl",
+      activeVaultId: value.vault.vaultId,
+      expectedRevision: before.revision,
+      includeConversations: false
+    };
+    value.service().update(request);
+    const committed = operation(value);
+    const receiptFile = path.join(
+      value.vaultPath,
+      ".pige",
+      "backup-conversation-preference-receipts",
+      request.requestId,
+      "receipt.json"
+    );
+    const receipt = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+    receipt.beforeConfig = JSON.parse(Buffer.from(receipt.beforeBytes, "base64").toString("utf8"));
+    receipt.afterConfig = JSON.parse(Buffer.from(receipt.afterBytes, "base64").toString("utf8"));
+    delete receipt.preference;
+    delete receipt.beforeValue;
+    delete receipt.afterValue;
+    fs.writeFileSync(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`);
+
+    expect(value.service().update(request)).toMatchObject({ status: "updated", summary: { includeConversations: false } });
+    expect(value.service().activitySummary(committed)).toMatchObject({ status: "applied", canUndo: true });
+  });
+
   it("publishes an Activity and restores the exact prior setting through Undo and restart", () => {
     const value = fixture();
     const before = value.service().summary();
@@ -80,6 +111,25 @@ describe("BackupConversationPreferenceService", () => {
     expect(value.service().activitySummary(committed, undo)).toMatchObject({ status: "undone", canUndo: false });
     expect(value.service().undo(committed).status).toBe("already_undone");
     expect(value.service().recoverIncompleteOperations()).toEqual({ recovered: 0, failed: 0 });
+  });
+
+  it("redoes one exact conversation preference once after a matching Undo", () => {
+    const value = fixture(), before = value.service().summary();
+    value.service().update({
+      apiVersion: 1,
+      requestId: "backupconversationreq_redoabcdefghijkl",
+      activeVaultId: value.vault.vaultId,
+      expectedRevision: before.revision,
+      includeConversations: false
+    });
+    const forward = operation(value);
+    expect(value.service().undo(forward)).toMatchObject({ status: "undone" });
+    const undo = value.service().findUndoOperation(forward, fs.readdirSync(path.join(value.vaultPath, ".pige", "operations", "2026", "08"))
+      .map((file) => OperationRecordSchema.parse(JSON.parse(fs.readFileSync(path.join(value.vaultPath, ".pige", "operations", "2026", "08", file), "utf8")))));
+    expect(value.service().activityState(forward, undo)).toEqual({ canRedo: true });
+    expect(value.service().redo({ operationId: forward.id })).toMatchObject({ status: "redone", undoOperationId: undo!.id });
+    expect(readVaultConfig(value.vaultPath).backup.includeConversations).toBe(false);
+    expect(value.service().redo({ operationId: forward.id })).toMatchObject({ status: "already_redone" });
   });
 
   it("blocks update and Undo while Backup work is active and fails stale authority closed", () => {

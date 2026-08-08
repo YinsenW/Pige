@@ -2226,7 +2226,9 @@ const getNoteMarkdownEditorConflictService = (): NoteMarkdownEditorConflictServi
   return noteMarkdownEditorConflictService;
 };
 const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePort => {
+  const backupMemoryPreference = getBackupMemoryPreferenceService();
   const backupConversationPreference = getBackupConversationPreferenceService();
+  const backupTrashPreference = getBackupTrashPreferenceService();
   const sourceStoragePreference = getSourceStoragePreferenceService();
   const pigePolicy = getPigePolicyService();
   const trash = getNoteTrashService();
@@ -2237,12 +2239,12 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
   const topicRename = getLibraryTopicRenameService();
   return {
     activitySummary: (operation, undo) => {
-      const summary = pigePolicy.activitySummary(operation, undo) ?? sourceStoragePreference.activitySummary(operation, undo) ?? backupConversationPreference.activitySummary(operation, undo) ?? duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
-      const redo = summary && (sourceStoragePreference.activityState(operation, undo) ?? getNoteTrashRedoService().activityState(operation, undo));
+      const summary = pigePolicy.activitySummary(operation, undo) ?? sourceStoragePreference.activitySummary(operation, undo) ?? backupMemoryPreference.activitySummary(operation, undo) ?? backupConversationPreference.activitySummary(operation, undo) ?? backupTrashPreference.activitySummary(operation, undo) ?? duplicateTopics.activitySummary(operation, undo) ?? rename.activitySummary(operation, undo) ?? topicRename.activitySummary(operation, undo) ?? tagRename.activitySummary(operation, undo) ?? merge.activitySummary(operation, undo) ?? trash.activitySummary(operation, undo);
+      const redo = summary && (sourceStoragePreference.activityState(operation, undo) ?? backupMemoryPreference.activityState(operation, undo) ?? backupConversationPreference.activityState(operation, undo) ?? backupTrashPreference.activityState(operation, undo) ?? getNoteTrashRedoService().activityState(operation, undo));
       return summary && redo ? { ...summary, ...redo } : summary;
     },
-    findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? sourceStoragePreference.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
-    undo: (operation) => pigePolicy.activitySummary(operation) ? pigePolicy.undo(operation) : sourceStoragePreference.activitySummary(operation) ? sourceStoragePreference.undo(operation) : backupConversationPreference.activitySummary(operation) ? backupConversationPreference.undo(operation) : duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
+    findUndoOperation: (operation, operations) => pigePolicy.findUndoOperation(operation, operations) ?? sourceStoragePreference.findUndoOperation(operation, operations) ?? backupMemoryPreference.findUndoOperation(operation, operations) ?? backupConversationPreference.findUndoOperation(operation, operations) ?? backupTrashPreference.findUndoOperation(operation, operations) ?? duplicateTopics.findUndoOperation(operation, operations) ?? rename.findUndoOperation(operation, operations) ?? topicRename.findUndoOperation(operation, operations) ?? tagRename.findUndoOperation(operation, operations) ?? merge.findUndoOperation(operation, operations) ?? trash.findUndoOperation(operation, operations),
+    undo: (operation) => pigePolicy.activitySummary(operation) ? pigePolicy.undo(operation) : sourceStoragePreference.activitySummary(operation) ? sourceStoragePreference.undo(operation) : backupMemoryPreference.activitySummary(operation) ? backupMemoryPreference.undo(operation) : backupConversationPreference.activitySummary(operation) ? backupConversationPreference.undo(operation) : backupTrashPreference.activitySummary(operation) ? backupTrashPreference.undo(operation) : duplicateTopics.activitySummary(operation) ? duplicateTopics.undo(operation) : rename.activitySummary(operation) ? rename.undo(operation) : topicRename.activitySummary(operation) ? topicRename.undo(operation) : tagRename.activitySummary(operation) ? tagRename.undo(operation) : merge.activitySummary(operation) ? merge.undo(operation) : trash.undo(operation),
     recoverIncompleteOperations: () => {
       const purgeResult = getNoteTrashPurgeService().recoverIncompletePurges();
       const topicRenameResult = topicRename.recoverIncompleteOperations();
@@ -2251,12 +2253,14 @@ const createNotePageLifecycleActivityPort = (): KnowledgeActivityPageLifecyclePo
       const trashResult = trash.recoverIncompleteOperations();
       const duplicateTopicResult = duplicateTopics.recoverIncompleteOperations();
       const renameResult = rename.recoverIncompleteOperations();
+      const backupMemoryPreferenceResult = backupMemoryPreference.recoverIncompleteOperations();
       const backupConversationPreferenceResult = backupConversationPreference.recoverIncompleteOperations();
+      const backupTrashPreferenceResult = backupTrashPreference.recoverIncompleteOperations();
       const sourceStoragePreferenceResult = sourceStoragePreference.recoverIncompleteOperations();
       const pigePolicyResult = pigePolicy.recoverIncompleteOperations();
       return {
-        recovered: purgeResult.recovered + pigePolicyResult.recovered + sourceStoragePreferenceResult.recovered + backupConversationPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
-        failed: purgeResult.failed + pigePolicyResult.failed + sourceStoragePreferenceResult.failed + backupConversationPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
+        recovered: purgeResult.recovered + pigePolicyResult.recovered + sourceStoragePreferenceResult.recovered + backupMemoryPreferenceResult.recovered + backupConversationPreferenceResult.recovered + backupTrashPreferenceResult.recovered + duplicateTopicResult.recovered + renameResult.recovered + topicRenameResult.recovered + tagRenameResult.recovered + mergeResult.recovered + trashResult.recovered,
+        failed: purgeResult.failed + pigePolicyResult.failed + sourceStoragePreferenceResult.failed + backupMemoryPreferenceResult.failed + backupConversationPreferenceResult.failed + backupTrashPreferenceResult.failed + duplicateTopicResult.failed + renameResult.failed + topicRenameResult.failed + tagRenameResult.failed + mergeResult.failed + trashResult.failed
       };
     }
   };
@@ -3817,9 +3821,18 @@ ipcMain.handle("activity.redo", (_event, request: KnowledgeActivityRedoRequest) 
   const sourceStoragePreferenceResult = trashResult.status === "not_found"
     ? getSourceStoragePreferenceService().redo(request)
     : trashResult;
-  const sourceTrashResult = sourceStoragePreferenceResult.status === "not_found"
-    ? getSourceTrashRedoService().redo(request)
+  const backupMemoryPreferenceResult = sourceStoragePreferenceResult.status === "not_found"
+    ? getBackupMemoryPreferenceService().redo(request)
     : sourceStoragePreferenceResult;
+  const backupConversationPreferenceResult = backupMemoryPreferenceResult.status === "not_found"
+    ? getBackupConversationPreferenceService().redo(request)
+    : backupMemoryPreferenceResult;
+  const backupTrashPreferenceResult = backupConversationPreferenceResult.status === "not_found"
+    ? getBackupTrashPreferenceService().redo(request)
+    : backupConversationPreferenceResult;
+  const sourceTrashResult = backupTrashPreferenceResult.status === "not_found"
+    ? getSourceTrashRedoService().redo(request)
+    : backupTrashPreferenceResult;
   const renameResult = sourceTrashResult.status === "not_found" ? getNoteRenameService().redo(request) : sourceTrashResult;
   const topicResult = renameResult.status === "not_found" ? getLibraryTopicRenameService().redo(request) : renameResult;
   const tagResult = topicResult.status === "not_found" ? getLibraryTagRenameService().redo(request) : topicResult;
