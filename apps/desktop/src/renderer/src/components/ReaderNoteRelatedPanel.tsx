@@ -23,6 +23,7 @@ export function ReaderNoteRelatedPanel(props: {
   const ownerRef = useRef(ownerIdentity);
   const inFlightRef = useRef(false);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const dialogRef = useRef<HTMLElement | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<LibraryRelatedPage | null>(null);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -100,8 +101,15 @@ export function ReaderNoteRelatedPanel(props: {
       triggerRefs={triggerRefs.current} t={props.t} />
     <RelatedGroup title={props.t("note.backlinks")} pages={backlinks} loadingPageId={props.loadingPageId}
       onOpen={props.onOpen} triggerRefs={triggerRefs.current} t={props.t} />
-    {confirmTarget ? <div className="confirmation-backdrop"><section className="confirmation-dialog" role="alertdialog" aria-modal="true"
-      aria-labelledby="note-unlink-title" aria-describedby="note-unlink-description" aria-busy={pending}>
+    {confirmTarget ? <div className="confirmation-backdrop"><section ref={dialogRef} className="confirmation-dialog" role="alertdialog" aria-modal="true"
+      aria-labelledby="note-unlink-title" aria-describedby="note-unlink-description" aria-busy={pending} onKeyDown={(event) => {
+        if (event.key !== "Escape" || pending) return;
+        event.preventDefault();
+        const pageId = confirmTarget.summary.pageId;
+        setConfirmTarget(null);
+        setFailed(false);
+        restoreFocus(pageId);
+      }}>
       <div className="confirmation-copy"><h2 id="note-unlink-title">{props.t("note.unlink.title")}</h2>
         <p id="note-unlink-description">{props.t("note.unlink.description")}</p>
         {failed ? <p role="alert">{props.t("note.unlink.failed")}</p> : null}</div>
