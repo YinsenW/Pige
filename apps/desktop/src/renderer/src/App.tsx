@@ -8254,6 +8254,9 @@ export function SystemSettingsPanel(props: {
   const clearInFlightRef = useRef(false);
   const clearTriggerRef = useRef<HTMLButtonElement | null>(null);
   const clearCancelRef = useRef<HTMLButtonElement | null>(null);
+  const revealInFlightRef = useRef(false);
+  const revealTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreRevealFocusRef = useRef(false);
   const previewSupportBundleRef = useRef<(() => Promise<void>) | null>(null);
   const restoreClearFocusRef = useRef(false);
   const updateSummaryRevisionRef = useRef(-1);
@@ -8326,6 +8329,12 @@ export function SystemSettingsPanel(props: {
     restoreClearFocusRef.current = false;
     clearTriggerRef.current?.focus();
   }, [clearConfirming]);
+
+  useEffect(() => {
+    if (diagnosticsBusy !== null || !restoreRevealFocusRef.current) return;
+    restoreRevealFocusRef.current = false;
+    revealTriggerRef.current?.focus();
+  }, [diagnosticsBusy]);
 
   const restoreClearFocus = (): void => {
     restoreClearFocusRef.current = true;
@@ -8464,7 +8473,8 @@ export function SystemSettingsPanel(props: {
 
   const revealSupportBundle = async (): Promise<void> => {
     const workflow = diagnosticsWorkflow;
-    if (!workflow?.job?.canReveal || diagnosticsBusy) return;
+    if (!workflow?.job?.canReveal || diagnosticsBusy || revealInFlightRef.current) return;
+    revealInFlightRef.current = true;
     const requestId = `diagrevealsupportreq_${crypto.randomUUID().replaceAll("-", "")}`;
     setDiagnosticsBusy("reveal");
     setNotice(null);
@@ -8491,6 +8501,8 @@ export function SystemSettingsPanel(props: {
     } catch {
       setNotice({ kind: "error", key: "system.revealSupportBundleFailed" });
     } finally {
+      revealInFlightRef.current = false;
+      restoreRevealFocusRef.current = true;
       setDiagnosticsBusy(null);
     }
   };
@@ -8808,6 +8820,7 @@ export function SystemSettingsPanel(props: {
             onCancel={() => void cancelSupportBundleExport()}
             onRetry={() => void retrySupportBundleExport()}
             onReveal={() => void revealSupportBundle()}
+            revealTriggerRef={revealTriggerRef}
             onChooseDestination={() => void previewSupportBundleRef.current?.()}
             t={props.t}
           />

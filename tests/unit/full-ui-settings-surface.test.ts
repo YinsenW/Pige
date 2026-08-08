@@ -4381,15 +4381,20 @@ describe("full UI Settings surface", () => {
     expect(panel.textContent).not.toContain("Check for updates");
     expect(buttonNamed(panel, "Clear…").disabled).toBe(true);
     expect(buttonNamed(panel, "Show in folder")).not.toBeNull();
+    const revealButton = buttonNamed(panel, "Show in folder");
+    revealButton.focus();
     await act(async () => {
-      buttonNamed(panel, "Show in folder").click();
+      revealButton.click();
+      revealButton.click();
       await settle(dom);
     });
+    expect(revealSupportBundle).toHaveBeenCalledOnce();
     expect(revealSupportBundle).toHaveBeenCalledWith(expect.objectContaining({
       jobId: workflow.job.jobId,
       scopeContextId: workflow.scopeContextId,
       expectedRevision: workflow.revision
     }));
+    expect(dom.window.document.activeElement).toBe(buttonNamed(panel, "Show in folder"));
     const providerMetadata = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include provider metadata"]'));
     const privateExcerptToggle = requireElement(panel.querySelector<HTMLInputElement>('input[aria-label="Include a private excerpt"]'));
     expect(providerMetadata.checked).toBe(false);
