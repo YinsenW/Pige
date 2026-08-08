@@ -21,16 +21,24 @@ export function ReaderGeneratedNoteRevealAction(props: {
   const activeRef = useRef(false);
   const sequenceRef = useRef(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   ownerRef.current = ownerIdentity;
 
   useEffect(() => {
+    const wasActive = activeRef.current;
     sequenceRef.current += 1;
     activeRef.current = false;
     setPending(false);
     setNotice(null);
+    if (wasActive) restoreFocusRef.current = true;
   }, [ownerIdentity]);
+  useEffect(() => {
+    if (pending || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    window.requestAnimationFrame(() => triggerRef.current?.focus({ preventScroll: true }));
+  }, [pending]);
 
   if (!props.activeVaultId || !renderContextId || !eligibility?.canReveal) return null;
 
