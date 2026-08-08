@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CollectionRenameTableRequestSchema, CollectionRenameTableResultSchema } from "@pige/schemas";
+import {
+  CollectionRenameTableRequestSchema,
+  CollectionRenameTableResultSchema,
+  CollectionTrashTableRequestSchema,
+  CollectionTrashTableResultSchema
+} from "@pige/schemas";
 
 describe("Managed Collection table rename contract", () => {
   it("binds stable identity and accepts only authoritative body-free results", () => {
@@ -22,5 +27,20 @@ describe("Managed Collection table rename contract", () => {
       activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
       name: request.name, status: "committed", operationId: "op_20260802_abcdefghijkl",
       snapshot: { ...snapshot, tableName: "Wrong" } })).toThrow();
+  });
+});
+
+describe("Managed Collection table trash contract", () => {
+  it("binds only current immutable revision identity and never exposes table contents", () => {
+    const request = CollectionTrashTableRequestSchema.parse({ apiVersion: 1,
+      requestId: "collection_request_trashtablecontract", activeVaultId: "vault_20260802_tabletrash",
+      datasetId: "dataset_20260802_abcdefghijkl", tableId: "table_abcdefghijkl",
+      expectedRevisionId: "dataset_rev_20260802_abcdefghijkl" });
+    const committed = CollectionTrashTableResultSchema.parse({ apiVersion: 1, requestId: request.requestId,
+      activeVaultId: request.activeVaultId, datasetId: request.datasetId, tableId: request.tableId,
+      status: "committed", operationId: "op_20260802_abcdefghijkl", revisionId: "dataset_rev_20260802_bcdefghijklm" });
+    expect(committed).toMatchObject({ status: "committed", revisionId: "dataset_rev_20260802_bcdefghijklm" });
+    expect(() => CollectionTrashTableRequestSchema.parse({ ...request, path: "/tmp/private" })).toThrow();
+    expect(() => CollectionTrashTableResultSchema.parse({ ...committed, body: "private table contents" })).toThrow();
   });
 });

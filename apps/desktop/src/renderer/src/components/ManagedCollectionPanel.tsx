@@ -31,7 +31,7 @@ import {
 import { ManagedCollectionViewControls } from "./ManagedCollectionViewControls";
 import { ManagedCollectionFormulaColumnDialog } from "./ManagedCollectionFormulaColumnDialog";
 import { ManagedCollectionRelationDialog } from "./ManagedCollectionRelationDialog"; import { ManagedCollectionLookupDialog } from "./ManagedCollectionLookupDialog";
-import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction"; import { ManagedCollectionRevisionHistory } from "./ManagedCollectionRevisionHistory";
+import { ManagedCollectionRollupDialog } from "./ManagedCollectionRollupDialog"; import { ManagedCollectionRevealAction } from "./ManagedCollectionRevealAction"; import { ManagedCollectionTableRenameAction } from "./ManagedCollectionTableRenameAction"; import { ManagedCollectionTableTrashAction } from "./ManagedCollectionTableTrashAction"; import { ManagedCollectionRevisionHistory } from "./ManagedCollectionRevisionHistory";
 import {
   ManagedCollectionScalarCellEditor,
   formatCollectionCellValue,
@@ -613,7 +613,7 @@ export function ManagedCollectionPanel(props: {
           <p className="retrieval-eyebrow">{props.t("collection.title")}</p>
           <h1 id="managed-collection-title">{props.snapshot.title}</h1>
           <ManagedCollectionTableRenameAction activeVaultId={props.activeVaultId} snapshot={props.snapshot} blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null}
-            onRename={props.onRenameTable} onAdoptSnapshot={props.onAdoptSnapshot} onBusyChange={(active) => { viewControlsActiveRef.current = active; setViewControlsBusy(active); }} t={props.t} />
+            onRename={props.onRenameTable} onAdoptSnapshot={props.onAdoptSnapshot} onBusyChange={(active) => { viewControlsActiveRef.current = active; setViewControlsBusy(active); }} t={props.t} /><ManagedCollectionTableTrashAction activeVaultId={props.activeVaultId} snapshot={props.snapshot} blocked={busy || columnActionsBusy || viewControlsBusy || edit !== null || columnDraft !== null} onAdoptSnapshot={props.onAdoptSnapshot} onTrashed={props.onClose} onBusyChange={(active) => { viewControlsActiveRef.current = active; setViewControlsBusy(active); }} t={props.t} />
         </div>
         <div>
           <p className="muted dataset-answer-count">

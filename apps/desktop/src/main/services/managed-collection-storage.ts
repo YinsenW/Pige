@@ -187,6 +187,8 @@ export function readCollectionSnapshot(
       canAddRollupColumn: table.columns.length < MAX_OPEN_COLUMNS &&
         table.columns.some((column) => column.relation &&
           binding.schema.tables.some((candidate) => candidate.id === column.relation?.targetTableId)),
+      canTrashTable: binding.schema.tables.length > 1 && !binding.schema.tables.some((candidate) =>
+        candidate.id !== tableId && candidate.columns.some((column) => column.relation?.targetTableId === tableId)),
       views: projection.views ?? [],
       ...(projection.activeViewId ? { activeViewId: projection.activeViewId } : {})
     });

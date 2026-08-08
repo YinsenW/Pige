@@ -121,6 +121,11 @@ const renameTableRequest = {
   expectedRevisionId: "dataset_rev_20260727_abcdefghijkl",
   name: "People"
 } as const;
+const trashTableRequest = {
+  ...openRequest,
+  requestId: "collection_request_trashtableabcdef",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl"
+} as const;
 const createViewRequest = {
   ...openRequest,
   requestId: "collection_request_viewabcdefghijkl",
@@ -185,6 +190,7 @@ function makeHarness(options: {
   readonly updateRelationCollectionColumn?: (request: typeof updateRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly renameCollectionTable?: (request: typeof renameTableRequest) => unknown;
+  readonly trashCollectionTable?: (request: typeof trashTableRequest) => unknown;
   readonly createCollectionView?: (request: typeof createViewRequest) => unknown;
   readonly updateCollectionView?: (request: typeof updateViewRequest) => unknown;
   readonly renameCollectionView?: (request: typeof renameViewRequest) => unknown;
@@ -323,6 +329,10 @@ function makeHarness(options: {
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, name: request.name, status: "not_found"
   })));
+  const trashCollectionTable = vi.fn(options.trashCollectionTable ?? ((request) => ({
+    apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId, tableId: request.tableId, status: "not_found"
+  })));
   const trashCollectionColumn = vi.fn(options.trashCollectionColumn ?? ((request) => ({
     apiVersion: request.apiVersion,
     requestId: request.requestId,
@@ -384,6 +394,7 @@ function makeHarness(options: {
     updateRelationCollectionColumn,
     renameCollectionColumn,
     renameCollectionTable,
+    trashCollectionTable,
     createCollectionView,
     updateCollectionView,
     renameCollectionView,
@@ -415,6 +426,7 @@ function makeHarness(options: {
     updateRelationCollectionColumn,
     renameCollectionColumn,
     renameCollectionTable,
+    trashCollectionTable,
     createCollectionView,
     updateCollectionView,
     renameCollectionView,
@@ -447,6 +459,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateRollupColumn",
       "collections.renameColumn",
       "collections.renameTable",
+      "collections.trashTable",
       "collections.createView",
       "collections.renameView",
       "collections.updateView",
@@ -748,6 +761,7 @@ describe("registerManagedCollectionIpc", () => {
       addNullableCollectionColumn,
       renameCollectionColumn,
       renameCollectionTable,
+      trashCollectionTable,
       createCollectionView,
       trashCollectionColumn,
       trashCollectionRow
@@ -813,6 +827,8 @@ describe("registerManagedCollectionIpc", () => {
       .resolves.toMatchObject({ status: "not_found", requestId: renameColumnRequest.requestId });
     await expect(handlers.get("collections.renameTable")!({ sender: {} } as IpcMainInvokeEvent, renameTableRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: renameTableRequest.requestId, name: "People" });
+    await expect(handlers.get("collections.trashTable")!({ sender: {} } as IpcMainInvokeEvent, trashTableRequest))
+      .resolves.toMatchObject({ status: "not_found", requestId: trashTableRequest.requestId });
     await expect(handlers.get("collections.createView")!({ sender: {} } as IpcMainInvokeEvent, createViewRequest))
       .resolves.toMatchObject({ status: "not_found", requestId: createViewRequest.requestId });
     await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, trashColumnRequest))
@@ -825,6 +841,7 @@ describe("registerManagedCollectionIpc", () => {
     expect(addNullableCollectionColumn).toHaveBeenCalledWith(addColumnRequest);
     expect(renameCollectionColumn).toHaveBeenCalledWith(renameColumnRequest);
     expect(renameCollectionTable).toHaveBeenCalledWith(renameTableRequest);
+    expect(trashCollectionTable).toHaveBeenCalledWith(trashTableRequest);
     expect(createCollectionView).toHaveBeenCalledWith(createViewRequest);
     expect(trashCollectionColumn).toHaveBeenCalledWith(trashColumnRequest);
     expect(trashCollectionRow).toHaveBeenCalledWith(trashRowRequest);
@@ -1045,7 +1062,7 @@ describe("registerManagedCollectionIpc", () => {
   });
 
   it("rejects unknown request fields before service access", async () => {
-    const { handlers, openCollection, addNullableCollectionColumn, renameCollectionColumn, createCollectionView, trashCollectionColumn, trashCollectionRow } = makeHarness();
+    const { handlers, openCollection, addNullableCollectionColumn, renameCollectionColumn, createCollectionView, trashCollectionTable, trashCollectionColumn, trashCollectionRow } = makeHarness();
     await expect(handlers.get("collections.open")!({} as IpcMainInvokeEvent, {
       ...openRequest,
       path: "/private/data.sqlite"
@@ -1066,6 +1083,11 @@ describe("registerManagedCollectionIpc", () => {
       path: "/private/data.sqlite"
     })).rejects.toThrow();
     expect(createCollectionView).not.toHaveBeenCalled();
+    await expect(handlers.get("collections.trashTable")!({ sender: {} } as IpcMainInvokeEvent, {
+      ...trashTableRequest,
+      path: "/private/data.sqlite"
+    })).rejects.toThrow();
+    expect(trashCollectionTable).not.toHaveBeenCalled();
     await expect(handlers.get("collections.trashColumn")!({ sender: {} } as IpcMainInvokeEvent, {
       ...trashColumnRequest,
       path: "/private/data.sqlite"
