@@ -1105,10 +1105,11 @@ type DiagnosticsHealth = {
 };
 ```
 
-Canonical strict schemas are `DiagnosticsWorkflowSummary`, preview/export, shared
-cancel/retry mutation, and clear-local request/results in `@pige/schemas`. They bind
-request, machine/vault scope context, workflow revision and exact Job; readable outcomes
-return the authoritative workflow, while `failed` remains identity-only.
+Canonical strict schemas are `DiagnosticsWorkflowSummary`, recent-error query,
+preview/export, shared cancel/retry mutation, and clear-local request/results in
+`@pige/schemas`. They bind request, machine/vault scope context, workflow revision and
+exact Job; readable outcomes return the authoritative workflow, while `failed` remains
+identity-only.
 
 Rules:
 
@@ -1123,6 +1124,9 @@ Rules:
   trash-first, refuses an active export and never touches Vault data or user-created bundles.
 - Diagnostics APIs never return raw secrets. Default diagnostics also exclude full source bodies, full notes, full memory, and raw prompts/responses; an explicit support export may add only separately reviewed, redacted content categories.
 - Existing `diagnostics.previewSupportBundle` carries a bounded selection of 1–32 event IDs from at most 64 pathless redacted summaries; Main rechecks the event-selection revision immediately before preview/export and persists the exact selection for restart adoption.
+- `diagnostics.recentErrors` is a trusted read-only query returning at most ten redacted
+  error summaries plus the current selection revision. It exposes no raw logs, paths or retry
+  authority; its only follow-up is to seed the existing preview selection for explicit review.
 
 ### 6.10 Backup And Restore
 
