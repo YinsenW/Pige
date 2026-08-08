@@ -89,6 +89,8 @@ import type {
   CollectionUpdateRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
+  CollectionOpenRelatedRecordsRequest,
+  CollectionOpenRelatedRecordsResult,
   CollectionUpdateFormulaColumnRequest,
   CollectionUpdateFormulaColumnResult,
   ConversationLanguageContinuity,
@@ -2686,6 +2688,9 @@ export interface PigeDesktopApi {
     readonly editRelationCell: (
       request: CollectionEditRelationCellRequest
     ) => Promise<CollectionEditRelationCellResult>;
+    readonly openRelatedRecords: (
+      request: CollectionOpenRelatedRecordsRequest
+    ) => Promise<CollectionOpenRelatedRecordsResult>;
     readonly addLookupColumn: (
       request: CollectionAddLookupColumnRequest
     ) => Promise<CollectionAddLookupColumnResult>;

@@ -100,6 +100,16 @@ const editRelationRequest = {
   columnId: "column_relationabcdef",
   targetRowId: "row_targetabcdefgh"
 } as const;
+const openRelatedRequest = {
+  apiVersion: 1,
+  requestId: "collection_request_relatedopenipc01",
+  activeVaultId,
+  datasetId: openRequest.datasetId,
+  sourceTableId: openRequest.tableId,
+  sourceColumnId: "column_relationabcdef",
+  sourceRowId: "row_abcdefghijkl",
+  expectedRevisionId: "dataset_rev_20260727_abcdefghijkl"
+} as const;
 const updateRelationRequest = {
   ...openRequest,
   requestId: "collection_request_relationupdateipc",
@@ -195,6 +205,7 @@ function makeHarness(options: {
   readonly addRollupCollectionColumn?: (request: typeof addRollupRequest) => unknown;
   readonly updateRollupCollectionColumn?: (request: typeof updateRollupRequest) => unknown;
   readonly editRelationCollectionCell?: (request: typeof editRelationRequest) => unknown;
+  readonly openRelatedRecords?: (request: typeof openRelatedRequest) => unknown;
   readonly updateRelationCollectionColumn?: (request: typeof updateRelationRequest) => unknown;
   readonly renameCollectionColumn?: (request: typeof renameColumnRequest) => unknown;
   readonly addCollectionTable?: (request: typeof addTableRequest) => unknown;
@@ -310,6 +321,16 @@ function makeHarness(options: {
     datasetId: request.datasetId, tableId: request.tableId, rowId: request.rowId,
     columnId: request.columnId, targetRowId: request.targetRowId, status: "not_found"
   })));
+  const openRelatedRecords = vi.fn(options.openRelatedRecords ?? ((request) => ({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    sourceTableId: request.sourceTableId,
+    sourceColumnId: request.sourceColumnId,
+    sourceRowId: request.sourceRowId,
+    status: "not_found"
+  })));
   const updateRelationCollectionColumn = vi.fn(options.updateRelationCollectionColumn ?? ((request) => ({
     apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,
     datasetId: request.datasetId, tableId: request.tableId, columnId: request.columnId,
@@ -404,6 +425,7 @@ function makeHarness(options: {
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
+    openRelatedRecords,
     updateRelationCollectionColumn,
     renameCollectionColumn,
     addCollectionTable,
@@ -437,6 +459,7 @@ function makeHarness(options: {
     addRollupCollectionColumn,
     updateRollupCollectionColumn,
     editRelationCollectionCell,
+    openRelatedRecords,
     updateRelationCollectionColumn,
     renameCollectionColumn,
     addCollectionTable,
@@ -467,6 +490,7 @@ describe("registerManagedCollectionIpc", () => {
       "collections.updateFormulaColumn",
       "collections.addRelationColumn",
       "collections.editRelationCell",
+      "collections.openRelatedRecords",
       "collections.updateRelationColumn",
       "collections.addLookupColumn",
       "collections.addRollupColumn",
@@ -655,11 +679,15 @@ describe("registerManagedCollectionIpc", () => {
     await expect(accepted.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
     )).resolves.toMatchObject({ status: "not_found", targetRowId: editRelationRequest.targetRowId });
+    await expect(accepted.handlers.get("collections.openRelatedRecords")!(
+      { sender: {} } as IpcMainInvokeEvent, openRelatedRequest
+    )).resolves.toMatchObject({ status: "not_found", sourceRowId: openRelatedRequest.sourceRowId });
     await expect(accepted.handlers.get("collections.updateRelationColumn")!(
       { sender: {} } as IpcMainInvokeEvent, updateRelationRequest
     )).resolves.toMatchObject({ status: "not_found", targetDisplayColumnId: updateRelationRequest.targetDisplayColumnId });
     expect(accepted.addRelationCollectionColumn).toHaveBeenCalledWith(addRelationRequest);
     expect(accepted.editRelationCollectionCell).toHaveBeenCalledWith(editRelationRequest);
+    expect(accepted.openRelatedRecords).toHaveBeenCalledWith(openRelatedRequest);
     expect(accepted.updateRelationCollectionColumn).toHaveBeenCalledWith(updateRelationRequest);
 
     const untrusted = makeHarness({ isTrustedSender: () => false });
@@ -669,11 +697,15 @@ describe("registerManagedCollectionIpc", () => {
     await expect(untrusted.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
     )).resolves.toMatchObject({ status: "failed" });
+    await expect(untrusted.handlers.get("collections.openRelatedRecords")!(
+      { sender: {} } as IpcMainInvokeEvent, openRelatedRequest
+    )).resolves.toMatchObject({ status: "failed", sourceRowId: openRelatedRequest.sourceRowId });
     await expect(untrusted.handlers.get("collections.updateRelationColumn")!(
       { sender: {} } as IpcMainInvokeEvent, updateRelationRequest
     )).resolves.toMatchObject({ status: "failed" });
     expect(untrusted.addRelationCollectionColumn).not.toHaveBeenCalled();
     expect(untrusted.editRelationCollectionCell).not.toHaveBeenCalled();
+    expect(untrusted.openRelatedRecords).not.toHaveBeenCalled();
     expect(untrusted.updateRelationCollectionColumn).not.toHaveBeenCalled();
 
     const mismatched = makeHarness({
@@ -686,6 +718,19 @@ describe("registerManagedCollectionIpc", () => {
     });
     await expect(mismatched.handlers.get("collections.editRelationCell")!(
       { sender: {} } as IpcMainInvokeEvent, editRelationRequest
+    )).rejects.toThrow("response identity did not match");
+    const mismatchedRelated = makeHarness({ openRelatedRecords: (request) => ({
+      apiVersion: request.apiVersion,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      datasetId: request.datasetId,
+      sourceTableId: request.sourceTableId,
+      sourceColumnId: request.sourceColumnId,
+      sourceRowId: "row_otherrelatedabc",
+      status: "not_found"
+    }) });
+    await expect(mismatchedRelated.handlers.get("collections.openRelatedRecords")!(
+      { sender: {} } as IpcMainInvokeEvent, openRelatedRequest
     )).rejects.toThrow("response identity did not match");
     const mismatchedUpdate = makeHarness({ updateRelationCollectionColumn: (request) => ({
       apiVersion: request.apiVersion, requestId: request.requestId, activeVaultId: request.activeVaultId,

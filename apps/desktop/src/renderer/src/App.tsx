@@ -2781,6 +2781,7 @@ export function App(): React.JSX.Element {
             onTrashRow={trashCollectionRow}
             onAdoptSnapshot={adoptCollectionSnapshot}
             onEditCell={editCollectionCell}
+            onOpenRelatedRecords={window.pige.collections.openRelatedRecords}
             onReload={reloadSelectedCollection}
             onLoadMoreRows={loadMoreCollectionRows}
             t={t}

@@ -20,6 +20,8 @@ import type {
   CollectionUpdateRollupColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
+  CollectionOpenRelatedRecordsRequest,
+  CollectionOpenRelatedRecordsResult,
   CollectionUpdateRelationColumnRequest,
   CollectionUpdateRelationColumnResult,
   CollectionListResult,
@@ -1012,6 +1014,64 @@ describe("ManagedCollectionPanel", () => {
     expect(requests.at(-1)?.targetRowId).toBeNull();
     expect(buttonNamed(container, "Edit relation: Company, row 1").textContent?.trim()).toBe("Not linked");
 
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
+  it("opens the exact related row from a relation cell without replacing the source table", async () => {
+    const dom = createDom();
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    const source = relationSourceSnapshot("dataset_rev_20260729_relatedopen01", false);
+    const initial = withRelationColumn(source, relationAddRequest(source), "row_relationtarget01", "Acme", source.revisionId);
+    const target = relationTargetSnapshot(initial.revisionId, [relationTargetRow("row_relationtarget01", "Acme")]);
+    const requests: CollectionOpenRelatedRecordsRequest[] = [];
+    await act(async () => {
+      root.render(createElement(RelationCollectionHarness, {
+        initialSnapshot: initial,
+        onOpenRelatedRecords: async (request) => {
+          requests.push(request);
+          return requests.length === 1
+            ? {
+                ...relatedRecordIdentity(request),
+                status: "ready",
+                targetTableId: target.tableId,
+                targetRowId: "row_relationtarget01",
+                snapshot: target
+              } satisfies CollectionOpenRelatedRecordsResult
+            : {
+                ...relatedRecordIdentity(request),
+                status: "failed"
+              } satisfies CollectionOpenRelatedRecordsResult;
+        }
+      }));
+      await settle(dom);
+    });
+    const container = dom.window.document.querySelector("#root")!;
+    const openTrigger = buttonNamed(container, "Open related record");
+    await click(dom, openTrigger);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      activeVaultId: "vault_20260727_collection01",
+      datasetId: initial.datasetId,
+      sourceTableId: initial.tableId,
+      sourceColumnId: "column_relationlink01",
+      sourceRowId: "row_relationsource01",
+      expectedRevisionId: initial.revisionId
+    });
+    expect(container.textContent).toContain("Related record");
+    expect(container.textContent).toContain("Companies");
+    expect(container.textContent).toContain("Acme");
+    const targetRow = requireElement(container.querySelector<HTMLElement>('[data-related-row-id="row_relationtarget01"]'));
+    expect(targetRow.getAttribute("aria-current")).toBe("true");
+    expect(dom.window.document.activeElement).toBe(targetRow);
+    await click(dom, buttonNamed(requireElement(container.querySelector(".managed-collection-related-record")), "Back"));
+    expect(container.querySelector(".managed-collection-related-record")).toBeNull();
+    expect(container.textContent).toContain("Customers");
+    expect(dom.window.document.activeElement).toBe(openTrigger);
+    await click(dom, openTrigger);
+    expect(requests).toHaveLength(2);
+    expect(container.textContent).toContain("Pige could not open the related record.");
+    expect(dom.window.document.activeElement).toBe(openTrigger);
     await act(async () => root.unmount());
     dom.window.close();
   });
@@ -2651,6 +2711,7 @@ function FormulaCollectionHarness(props: {
 function RelationCollectionHarness(props: {
   readonly initialSnapshot: CollectionSnapshot;
   readonly onSnapshot?: (snapshot: CollectionSnapshot) => void;
+  readonly onOpenRelatedRecords?: (request: CollectionOpenRelatedRecordsRequest) => Promise<CollectionOpenRelatedRecordsResult>;
 }): React.JSX.Element {
   const [snapshot, setSnapshot] = useState(props.initialSnapshot);
   return createElement(ManagedCollectionPanel, {
@@ -2671,6 +2732,7 @@ function RelationCollectionHarness(props: {
       return true;
     },
     onEditCell: async (request) => ({ ...editIdentity(request), status: "failed" }),
+    onOpenRelatedRecords: props.onOpenRelatedRecords,
     onReload: async () => snapshot,
     t
   });
@@ -2785,6 +2847,18 @@ function relationAddRequest(snapshot: CollectionSnapshot): CollectionAddRelation
     targetTableId: "table_relationtarget01",
     targetDisplayColumnId: "column_relationname01"
   };
+}
+
+function relatedRecordIdentity(request: CollectionOpenRelatedRecordsRequest) {
+  return {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    sourceTableId: request.sourceTableId,
+    sourceColumnId: request.sourceColumnId,
+    sourceRowId: request.sourceRowId
+  } as const;
 }
 
 function withRelationColumn(

@@ -268,6 +268,7 @@
     ["apps/desktop/src/main/services/local-tool-manager-service.ts", 1254, "REWRITE", "Tool lifecycle returns typed outcomes; shared Job coordinator owns transitions.", "AR3"],
     ["apps/desktop/src/main/services/dataset-service.ts", 1204, "KEEP", "Durable Dataset identity/revision owner.", "AR3"],
     ["apps/desktop/src/main/services/job-record-store.ts", 1184, "KEEP", "Single durable Job record storage owner.", "AR3"],
+    ["apps/desktop/src/renderer/src/components/ManagedCollectionPanel.tsx", 1154, "REWRITE", "Split relation navigation, formula/view and row-edit interaction state into bounded Collection UI owners while retaining Main-authoritative revision fences.", "AR4"],
     ["apps/desktop/src/main/services/pi-package-manager-service.ts", 1124, "REWRITE", "Package transaction remains deterministic; high-risk installation confirmation is external.", "AR3"],
     ["apps/desktop/src/main/services/agent-turn-conversation-store.ts", 1124, "KEEP", "Reference-based durable conversation storage owner.", "AR3"],
     ["apps/desktop/src/main/services/dataset-query-core.ts", 1103, "KEEP", "Deterministic selected-tool query core.", "AR2"],

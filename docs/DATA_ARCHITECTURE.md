@@ -109,6 +109,9 @@ making their cells writable. Relation retarget, referenced scalar edit and looku
 propagate through dependent formulas in the same immutable revision; exact payload Undo and restart retain
 the same derived values. Inbound targets block trash; descriptor changes use
 immutable schema/payload/stats CAS/forward Undo. Imports stay read-only.
+Opening a relation cell is a separate read-only path: Main re-proves its current source revision,
+descriptor, target row and target table, then returns only a bounded target snapshot and stable row ID.
+Null, dangling or drifted links fail closed; this navigation creates no revision, Operation, Activity or Undo.
 
 ```ts
 type DatasetEvidenceRef = {

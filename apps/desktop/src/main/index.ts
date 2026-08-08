@@ -296,6 +296,7 @@ import { KnowledgeHealthDuplicateTopicService } from "./services/knowledge-healt
 import { KnowledgeHealthUnsourcedClaimService } from "./services/knowledge-health-unsourced-claim-service";
 import { ManagedCollectionService } from "./services/managed-collection-service";
 import { ManagedCollectionTableService } from "./services/managed-collection-table-service";
+import { ManagedCollectionRelatedRecordService } from "./services/managed-collection-related-record-service";
 import { ManagedCollectionTableRedoService } from "./services/managed-collection-table-redo-service";
 import { ManagedCollectionRedoService } from "./services/managed-collection-redo-service";
 import { ManagedCollectionRevealService } from "./services/managed-collection-reveal-service";
@@ -535,6 +536,7 @@ let knowledgeHealthDuplicateTopicService: KnowledgeHealthDuplicateTopicService |
 let knowledgeHealthUnsourcedClaimService: KnowledgeHealthUnsourcedClaimService | undefined;
 let managedCollectionService: ManagedCollectionService | undefined;
 let managedCollectionTableService: ManagedCollectionTableService | undefined;
+let managedCollectionRelatedRecordService: ManagedCollectionRelatedRecordService | undefined;
 let managedCollectionTableRedoService: ManagedCollectionTableRedoService | undefined;
 let managedCollectionRedoService: ManagedCollectionRedoService | undefined;
 let managedCollectionViewService: ManagedCollectionViewService | undefined;
@@ -2465,6 +2467,8 @@ const getManagedCollectionService = (): ManagedCollectionService => {
 
 const getManagedCollectionTableService = (): ManagedCollectionTableService =>
   managedCollectionTableService ??= new ManagedCollectionTableService(getVaultService());
+const getManagedCollectionRelatedRecordService = (): ManagedCollectionRelatedRecordService =>
+  managedCollectionRelatedRecordService ??= new ManagedCollectionRelatedRecordService(getVaultService());
 const getManagedCollectionTableRedoService = (): ManagedCollectionTableRedoService =>
   managedCollectionTableRedoService ??= new ManagedCollectionTableRedoService(getVaultService());
 
@@ -3577,6 +3581,7 @@ registerManagedCollectionIpc({
   addRelationCollectionColumn: (request) => getManagedCollectionService().addRelationColumn(request),
   updateRelationCollectionColumn: (request) => getManagedCollectionService().updateRelationColumn(request),
   editRelationCollectionCell: (request) => getManagedCollectionService().editRelationCell(request),
+  openRelatedRecords: (request) => getManagedCollectionRelatedRecordService().open(request),
   addLookupCollectionColumn: (request) => getManagedCollectionService().addLookupColumn(request),
   updateLookupCollectionColumn: (request) => getManagedCollectionService().updateLookupColumn(request),
   addRollupCollectionColumn: (request) => getManagedCollectionService().addRollupColumn(request),
@@ -4464,6 +4469,7 @@ app.whenReady().then(async () => {
   );
   proposalService = new ProposalService(getVaultService());
   managedCollectionService = new ManagedCollectionService(getVaultService());
+  managedCollectionRelatedRecordService = new ManagedCollectionRelatedRecordService(getVaultService());
   managedCollectionTableRedoService = new ManagedCollectionTableRedoService(getVaultService());
   managedCollectionRedoService = new ManagedCollectionRedoService(getVaultService());
   managedCollectionViewService = new ManagedCollectionViewService(getVaultService());

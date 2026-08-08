@@ -584,6 +584,7 @@ import {
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
+  COLLECTION_OPEN_RELATED_RECORDS_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL,
@@ -609,6 +610,8 @@ import {
   CollectionUpdateRelationColumnResultSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
+  CollectionOpenRelatedRecordsRequestSchema,
+  CollectionOpenRelatedRecordsResultSchema,
   CollectionAddLookupColumnRequestSchema,
   CollectionAddLookupColumnResultSchema,
   CollectionUpdateLookupColumnRequestSchema,
@@ -1123,6 +1126,8 @@ import type {
   CollectionUpdateRelationColumnResult,
   CollectionEditRelationCellRequest,
   CollectionEditRelationCellResult,
+  CollectionOpenRelatedRecordsRequest,
+  CollectionOpenRelatedRecordsResult,
   CollectionAddLookupColumnRequest,
   CollectionAddLookupColumnResult,
   CollectionUpdateLookupColumnRequest,
@@ -1574,6 +1579,24 @@ async function invokeCollectionEditRelationCell(
       result.rowId !== parsedRequest.rowId || result.columnId !== parsedRequest.columnId ||
       result.targetRowId !== parsedRequest.targetRowId) {
     throw new Error("Invalid Managed Collection relation-cell response identity.");
+  }
+  return result;
+}
+
+async function invokeCollectionOpenRelatedRecords(
+  request: CollectionOpenRelatedRecordsRequest
+): Promise<CollectionOpenRelatedRecordsResult> {
+  const parsedRequest = CollectionOpenRelatedRecordsRequestSchema.parse(request);
+  const result = CollectionOpenRelatedRecordsResultSchema.parse(
+    await ipcRenderer.invoke(COLLECTION_OPEN_RELATED_RECORDS_CHANNEL, parsedRequest)
+  );
+  if (result.requestId !== parsedRequest.requestId ||
+      result.activeVaultId !== parsedRequest.activeVaultId ||
+      result.datasetId !== parsedRequest.datasetId ||
+      result.sourceTableId !== parsedRequest.sourceTableId ||
+      result.sourceColumnId !== parsedRequest.sourceColumnId ||
+      result.sourceRowId !== parsedRequest.sourceRowId) {
+    throw new Error("Invalid Managed Collection related-record response identity.");
   }
   return result;
 }
@@ -2618,6 +2641,7 @@ const api: PigeDesktopApi = {
     addRelationColumn: invokeCollectionAddRelationColumn,
     updateRelationColumn: invokeCollectionUpdateRelationColumn,
     editRelationCell: invokeCollectionEditRelationCell,
+    openRelatedRecords: invokeCollectionOpenRelatedRecords,
     addLookupColumn: invokeCollectionAddLookupColumn,
     updateLookupColumn: invokeCollectionUpdateLookupColumn,
     addRollupColumn: invokeCollectionAddRollupColumn,

@@ -4,6 +4,7 @@ import {
   COLLECTION_ADD_RELATION_COLUMN_CHANNEL,
   COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL,
   COLLECTION_EDIT_RELATION_CELL_CHANNEL,
+  COLLECTION_OPEN_RELATED_RECORDS_CHANNEL,
   COLLECTION_ADD_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_UPDATE_LOOKUP_COLUMN_CHANNEL,
   COLLECTION_ADD_ROLLUP_COLUMN_CHANNEL,
@@ -25,6 +26,8 @@ import {
   CollectionUpdateRelationColumnResultSchema,
   CollectionEditRelationCellRequestSchema,
   CollectionEditRelationCellResultSchema,
+  CollectionOpenRelatedRecordsRequestSchema,
+  CollectionOpenRelatedRecordsResultSchema,
   CollectionAddLookupColumnRequestSchema,
   CollectionAddLookupColumnResultSchema,
   CollectionUpdateLookupColumnRequestSchema,
@@ -81,6 +84,8 @@ import {
   type CollectionUpdateRelationColumnResult,
   type CollectionEditRelationCellRequest,
   type CollectionEditRelationCellResult,
+  type CollectionOpenRelatedRecordsRequest,
+  type CollectionOpenRelatedRecordsResult,
   type CollectionAddLookupColumnRequest,
   type CollectionAddLookupColumnResult,
   type CollectionUpdateLookupColumnRequest,
@@ -176,6 +181,9 @@ interface RegisterManagedCollectionIpcOptions {
   readonly editRelationCollectionCell?: (
     request: CollectionEditRelationCellRequest
   ) => CollectionEditRelationCellResult | Promise<CollectionEditRelationCellResult>;
+  readonly openRelatedRecords?: (
+    request: CollectionOpenRelatedRecordsRequest
+  ) => CollectionOpenRelatedRecordsResult | Promise<CollectionOpenRelatedRecordsResult>;
   readonly addLookupCollectionColumn?: (
     request: CollectionAddLookupColumnRequest
   ) => CollectionAddLookupColumnResult | Promise<CollectionAddLookupColumnResult>;
@@ -364,6 +372,19 @@ function failedEditRelationCell(
     rowId: request.rowId,
     columnId: request.columnId,
     targetRowId: request.targetRowId,
+    status: "failed"
+  });
+}
+
+function failedOpenRelatedRecords(request: CollectionOpenRelatedRecordsRequest): CollectionOpenRelatedRecordsResult {
+  return CollectionOpenRelatedRecordsResultSchema.parse({
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    datasetId: request.datasetId,
+    sourceTableId: request.sourceTableId,
+    sourceColumnId: request.sourceColumnId,
+    sourceRowId: request.sourceRowId,
     status: "failed"
   });
 }
@@ -736,6 +757,23 @@ export function registerManagedCollectionIpc(options: RegisterManagedCollectionI
     }
     return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
       ? result : failedEditRelationCell(parsed);
+  });
+
+  options.ipcMain.handle(COLLECTION_OPEN_RELATED_RECORDS_CHANNEL, async (event, request: unknown) => {
+    const parsed = CollectionOpenRelatedRecordsRequestSchema.parse(request);
+    if (!options.isTrustedSender(event.sender) || options.getActiveVaultId() !== parsed.activeVaultId ||
+        !options.openRelatedRecords) return failedOpenRelatedRecords(parsed);
+    let rawResult: CollectionOpenRelatedRecordsResult;
+    try { rawResult = await options.openRelatedRecords(parsed); }
+    catch { return failedOpenRelatedRecords(parsed); }
+    const result = CollectionOpenRelatedRecordsResultSchema.parse(rawResult);
+    if (result.requestId !== parsed.requestId || result.activeVaultId !== parsed.activeVaultId ||
+        result.datasetId !== parsed.datasetId || result.sourceTableId !== parsed.sourceTableId ||
+        result.sourceColumnId !== parsed.sourceColumnId || result.sourceRowId !== parsed.sourceRowId) {
+      throw new Error("Managed Collection related-record response identity did not match the request.");
+    }
+    return options.isTrustedSender(event.sender) && options.getActiveVaultId() === parsed.activeVaultId
+      ? result : failedOpenRelatedRecords(parsed);
   });
 
   options.ipcMain.handle(COLLECTION_UPDATE_RELATION_COLUMN_CHANNEL, async (event, request: unknown) => {
