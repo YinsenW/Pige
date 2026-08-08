@@ -2282,6 +2282,8 @@
   "settings.general.startupLibrary": "Library",
   "settings.general.startupStale": "The saved startup destination changed. Your choice is still selected; retry to save it.",
   "settings.general.startupFailed": "The startup destination could not be saved. Your choice is still selected.",
+  "settings.general.startupLoadFailed": "The startup destination could not be loaded. Try again.",
+  "settings.general.startupRetry": "Retry",
   "settings.general.startupTitle": "On launch",
   "settings.general.subtitle": "Choose startup behavior and review how Pige manages its window.",
   "settings.general.title": "General",

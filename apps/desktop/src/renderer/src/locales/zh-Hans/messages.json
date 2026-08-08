@@ -2282,6 +2282,8 @@
   "settings.general.startupLibrary": "资料库",
   "settings.general.startupStale": "已保存的启动位置发生了变化。你的选择仍会保留，请重试保存。",
   "settings.general.startupFailed": "无法保存启动位置。你的选择仍会保留。",
+  "settings.general.startupLoadFailed": "无法加载启动位置，请重试。",
+  "settings.general.startupRetry": "重试",
   "settings.general.startupTitle": "启动时",
   "settings.general.subtitle": "选择启动行为，并查看 Pige 如何管理窗口。",
   "settings.general.title": "通用",

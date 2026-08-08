@@ -576,6 +576,48 @@ describe("full UI Settings surface", () => {
     dom.window.close();
   });
 
+  it("offers a body-free startup retry after the initial read fails and restores select focus", async () => {
+    const dom = createDom();
+    installAnimationFrame(dom);
+    let loadCalls = 0;
+    const startupDestinationApi = {
+      load: vi.fn(async () => {
+        loadCalls += 1;
+        if (loadCalls === 1) throw new Error("/private/startup-settings.json");
+        return { apiVersion: 1 as const, destination: "library" as const, revision: 3 };
+      }),
+      set: vi.fn()
+    };
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => {
+      root.render(createElement(GeneralSettingsPanel, {
+        alwaysOnTop: false,
+        alwaysOnTopBusy: false,
+        onAlwaysOnTopChange: async () => undefined,
+        onOpenAppearance: () => undefined,
+        startupDestinationApi,
+        settingsProfileTransferApi: createSettingsProfileTransferApi(),
+        t
+      }));
+      await settle(dom);
+    });
+    await waitFor(dom, () => dom.window.document.body.textContent?.includes("The startup destination could not be loaded. Try again.") === true);
+    expect(dom.window.document.body.textContent).not.toContain("/private/startup-settings.json");
+    const retry = buttonNamed(dom.window.document, "Retry");
+    retry.focus();
+    await act(async () => {
+      retry.click();
+      await settle(dom);
+      await settle(dom);
+    });
+    await waitFor(dom, () => loadCalls === 2 && dom.window.document.querySelector<HTMLSelectElement>('select[aria-label="On launch"]')?.disabled === false);
+    expect(dom.window.document.querySelector<HTMLSelectElement>('select[aria-label="On launch"]')?.value).toBe("library");
+    await waitFor(dom, () => dom.window.document.activeElement === dom.window.document.querySelector('select[aria-label="On launch"]'));
+
+    await act(async () => root.unmount());
+    dom.window.close();
+  });
+
   it("fences startup destination changes and preserves the attempted choice on stale", async () => {
     const dom = createDom();
     let resolveMutation: ((result: import("@pige/contracts").StartupDestinationMutationResult) => void) | undefined;
@@ -7479,6 +7521,14 @@ function piPackage(
 
 async function settle(dom: JSDOM): Promise<void> {
   await new Promise<void>((resolve) => dom.window.setTimeout(resolve, 0));
+}
+
+async function waitFor(dom: JSDOM, predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await settle(dom);
+  }
+  throw new Error("Timed out waiting for Settings UI state.");
 }
 
 function skillRegistry(

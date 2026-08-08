@@ -2282,6 +2282,8 @@
   "settings.general.startupLibrary": "ライブラリ",
   "settings.general.startupStale": "保存済みの起動先が変更されました。選択内容は保持されています。もう一度保存してください。",
   "settings.general.startupFailed": "起動先を保存できませんでした。選択内容は保持されています。",
+  "settings.general.startupLoadFailed": "起動先を読み込めませんでした。もう一度お試しください。",
+  "settings.general.startupRetry": "再試行",
   "settings.general.startupTitle": "起動時",
   "settings.general.subtitle": "起動時の動作を選び、Pige のウィンドウ管理を確認します。",
   "settings.general.title": "一般",

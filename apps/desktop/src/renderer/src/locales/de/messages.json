@@ -2282,6 +2282,8 @@
   "settings.general.startupLibrary": "Bibliothek",
   "settings.general.startupStale": "Das gespeicherte Startziel wurde geändert. Ihre Auswahl bleibt erhalten; versuchen Sie erneut zu speichern.",
   "settings.general.startupFailed": "Das Startziel konnte nicht gespeichert werden. Ihre Auswahl bleibt erhalten.",
+  "settings.general.startupLoadFailed": "Das Startziel konnte nicht geladen werden. Versuchen Sie es erneut.",
+  "settings.general.startupRetry": "Erneut versuchen",
   "settings.general.startupTitle": "Beim Start",
   "settings.general.subtitle": "Wählen Sie das Startverhalten und prüfen Sie, wie Pige sein Fenster verwaltet.",
   "settings.general.title": "Allgemein",
