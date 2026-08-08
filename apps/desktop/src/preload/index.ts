@@ -80,6 +80,8 @@ import type {
   PermissionSetDefaultModeResult,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
+  JobDependencyRepairResult,
   JobActionRequest,
   JobActionResult,
   JobChangedEvent,
@@ -764,6 +766,9 @@ import {
   JOB_CHANGED_EVENT_CHANNEL,
   JobCancelRequestSchema,
   JobCancelResultSchema,
+  JOB_REPAIR_DEPENDENCY_CHANNEL,
+  JobDependencyRepairRequestSchema,
+  JobDependencyRepairResultSchema,
   JobChangedEventSchema,
   PERMISSIONS_CHANGED_CHANNEL,
   PERMISSIONS_REVOKE_GRANT_CHANNEL,
@@ -2493,6 +2498,17 @@ const api: PigeDesktopApi = {
         ("job" in result && result.job.id !== request.jobId)
       ) {
         throw new Error("The Job cancellation response identity does not match the request.");
+      }
+      return result;
+    },
+    repairDependency: async (value: JobDependencyRepairRequest): Promise<JobDependencyRepairResult> => {
+      const request = JobDependencyRepairRequestSchema.parse(value);
+      const result = JobDependencyRepairResultSchema.parse(await ipcRenderer.invoke(
+        JOB_REPAIR_DEPENDENCY_CHANNEL,
+        request
+      ));
+      if (result.requestId !== request.requestId || result.activeVaultId !== request.activeVaultId || result.jobId !== request.jobId) {
+        throw new Error("The Job dependency repair response identity does not match the request.");
       }
       return result;
     },

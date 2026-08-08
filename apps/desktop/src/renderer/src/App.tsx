@@ -2000,6 +2000,28 @@ export function App(): React.JSX.Element {
     return false;
   };
 
+  const repairDependencyJob = async (job: JobSummary): Promise<boolean> => {
+    const activeVaultId = activeVaultIdRef.current;
+    if (!activeVaultId || job.state !== "waiting_dependency") return false;
+    const result = await window.pige.jobs.repairDependency({
+      apiVersion: 1,
+      requestId: `jobrepairreq_${crypto.randomUUID().replaceAll("-", "").toLowerCase()}`,
+      activeVaultId,
+      jobId: job.id,
+      expectedUpdatedAt: job.updatedAt
+    });
+    if (activeVaultIdRef.current !== activeVaultId || result.jobId !== job.id || result.activeVaultId !== activeVaultId) {
+      return false;
+    }
+    if (result.status === "repaired") {
+      setCaptureToast({ kind: "success", message: t("home.jobRequeued"), queuedJobId: job.id });
+      await refreshVaultState();
+      return true;
+    }
+    setCaptureToast({ kind: "error", message: t("error.generic") });
+    return false;
+  };
+
   const loadMoreActivityHistory = async (): Promise<boolean> => {
     const current = activityListRef.current;
     const vaultId = activeVaultIdRef.current;
@@ -3009,6 +3031,7 @@ export function App(): React.JSX.Element {
               submitFiles(files, inputKind, text, clientTurnId, "home")}
             onCancelJob={cancelJob}
             onRetryJob={retryJob}
+            onRepairDependency={repairDependencyJob}
             onHomeStateChanged={refreshVaultState}
             onSetDefaultModel={setHomeDefaultModel}
             onVoiceAssetInstallActiveChange={updateVoiceAssetInstallOwnership}
@@ -4681,6 +4704,7 @@ function HomeComposer(props: {
   ) => Promise<AgentSubmitTurnResult | undefined>;
   readonly onCancelJob: (jobId: string) => Promise<unknown>;
   readonly onRetryJob: (jobId: string) => Promise<unknown>;
+  readonly onRepairDependency: (job: JobSummary) => Promise<unknown>;
   readonly onHomeStateChanged: () => Promise<void>;
   readonly onSetDefaultModel: (modelProfileId: string) => Promise<boolean>;
   readonly onVoiceAssetInstallActiveChange: (active: boolean) => void;
@@ -6447,6 +6471,10 @@ function HomeComposer(props: {
               const sourceWaitingForModel = isSourceWaitingForModel(currentJob);
               const ownsSourceModelAction = sourceWaitingForModel && currentJob.id === sourceModelActionOwner?.id;
               const repair = sourceRepairAction(currentJob);
+              const dependencyRepair = currentJob.state === "waiting_dependency" && currentJob.waitingDependency &&
+                currentJob.waitingDependency.requiredAction !== "unavailable"
+                ? { label: props.t("home.retryJob"), pendingLabel: props.t("home.jobWaiting"), onActivate: () => props.onRepairDependency(currentJob) }
+                : undefined;
               return <HomeJobAction
                 compact
                 job={currentJob}
@@ -6454,6 +6482,7 @@ function HomeComposer(props: {
                 ownsSourceModelAction={ownsSourceModelAction}
                 retryEligible={currentJob.state === "failed_retryable" && currentJob.class !== "retrieval_query"}
                 {...(repair ? { repair } : {})}
+                {...(dependencyRepair ? { dependencyRepair } : {})}
                 onOpenModels={props.onOpenModels} onOpenLocalCapabilities={props.onOpenLocalCapabilities}
                 onCancelJob={props.onCancelJob}
                 onRetryJob={props.onRetryJob}
@@ -6477,6 +6506,10 @@ function HomeComposer(props: {
               const sourceWaitingForModel = isSourceWaitingForModel(job);
               const ownsSourceModelAction = sourceWaitingForModel && job.id === sourceModelActionOwner?.id;
               const repair = sourceRepairAction(job);
+              const dependencyRepair = job.state === "waiting_dependency" && job.waitingDependency &&
+                job.waitingDependency.requiredAction !== "unavailable"
+                ? { label: props.t("home.retryJob"), pendingLabel: props.t("home.jobWaiting"), onActivate: () => props.onRepairDependency(job) }
+                : undefined;
             const statusMessageKey = jobStateMessageKey(job);
             const sourceName = job.sourceDisplayName ?? props.t("home.processingItem");
             const totalUnits = job.progress?.totalUnits;
@@ -6519,6 +6552,7 @@ function HomeComposer(props: {
                   ownsSourceModelAction={ownsSourceModelAction}
                   retryEligible={job.state === "failed_retryable" && job.class !== "retrieval_query"}
                   {...(repair ? { repair } : {})}
+                  {...(dependencyRepair ? { dependencyRepair } : {})}
                   onOpenModels={props.onOpenModels} onOpenLocalCapabilities={props.onOpenLocalCapabilities}
                   onCancelJob={props.onCancelJob}
                   onRetryJob={props.onRetryJob}

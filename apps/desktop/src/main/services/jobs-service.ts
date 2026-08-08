@@ -435,6 +435,11 @@ export class JobsService {
     return this.#readJobSnapshot(vaultPath, jobId)?.job.class;
   }
 
+  readJob(jobId: string): JobRecord | undefined {
+    const vaultPath = this.#vaults.activeVaultPath();
+    return vaultPath ? this.#readJobSnapshot(vaultPath, jobId)?.job : undefined;
+  }
+
   inspectCancelCurrentness(request: JobCancelRequest):
     | { readonly status: "current" | "stale"; readonly job: JobSummary }
     | { readonly status: "not_found" } {

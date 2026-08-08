@@ -14,6 +14,8 @@ import {
   DatasetRevisionSchema,
   DatasetSchemaRecordSchema,
   JobClassSchema,
+  JobDependencyRepairRequestSchema,
+  JobDependencyRepairResultSchema,
   JobRecordSchema,
   JobStateSchema,
   OperationRecordSchema,
@@ -322,6 +324,38 @@ describe("durable contract schemas", () => {
     expect(() => JobRecordSchema.parse({ ...record, state: undefined, status: "queued" })).toThrow();
     expect(() => JobRecordSchema.parse({ ...record, status: "completed" })).toThrow("Unrecognized key");
     expect(() => JobRecordSchema.parse({ ...record, undocumentedLifecycleFlag: true })).toThrow("Unrecognized key");
+  });
+
+  it("keeps dependency repair identity strict and result body-free on closed outcomes", () => {
+    const request = JobDependencyRepairRequestSchema.parse({
+      apiVersion: 1,
+      requestId: "jobrepairreq_0123456789abcdef",
+      activeVaultId: "vault_20260710_abcdef12",
+      jobId: "job_20260710_abcdef12",
+      expectedUpdatedAt: timestamp
+    });
+    expect(request).not.toHaveProperty("dependencyId");
+    expect(JobDependencyRepairResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      jobId: request.jobId,
+      status: "stale"
+    })).toEqual({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      jobId: request.jobId,
+      status: "stale"
+    });
+    expect(() => JobDependencyRepairResultSchema.parse({
+      apiVersion: 1,
+      requestId: request.requestId,
+      activeVaultId: request.activeVaultId,
+      jobId: request.jobId,
+      status: "failed",
+      path: "/private/secret/tool"
+    })).toThrow();
   });
 
   it("binds Dataset manifests, revisions, schemas, and payloads to stable durable identities", () => {

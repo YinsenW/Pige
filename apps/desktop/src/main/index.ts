@@ -24,6 +24,7 @@ import type {
   HighRiskConfirmationResolveRequest,
   JobCancelRequest,
   JobCancelResult,
+  JobDependencyRepairRequest,
   JobActionRequest,
   JobActionResult,
   JobsListRequest,
@@ -101,6 +102,7 @@ import {
   HighRiskConfirmationResolveRequestSchema,
   HighRiskConfirmationResolveResultSchema,
   JOB_CHANGED_EVENT_CHANNEL,
+  JOB_REPAIR_DEPENDENCY_CHANNEL,
   AddManualProviderRequestSchema,
   AddPresetProviderRequestSchema,
   MODEL_OPEN_API_KEY_MANAGEMENT_CHANNEL,
@@ -110,6 +112,8 @@ import {
   DeleteManualModelRequestSchema,
   JobCancelRequestSchema,
   JobCancelResultSchema,
+  JobDependencyRepairRequestSchema,
+  JobDependencyRepairResultSchema,
   RefreshProviderModelsRequestSchema,
   AgentSubmitTurnIpcPayloadSchema,
   AgentSubmitTurnRequestSchema,
@@ -451,6 +455,7 @@ import { guardSettingAction, type SettingActionConfirmation } from "./services/s
 import { getSettingsRegistry } from "./services/settings-registry";
 import { ToolchainService } from "./services/toolchain-service";
 import { ToolchainRepairService } from "./services/toolchain-repair-service";
+import { JobDependencyRepairService } from "./services/job-dependency-repair-service";
 import { SpeechService } from "./services/speech-service";
 import { TaskProcessSessionService } from "./services/task-process-session-service";
 import {
@@ -524,6 +529,7 @@ let settingsProfileTransferService: SettingsProfileTransferService | undefined;
 let appearanceServiceUnsubscribe: (() => void) | undefined;
 let toolchainService: ToolchainService | undefined;
 let toolchainRepairService: ToolchainRepairService | undefined;
+let jobDependencyRepairService: JobDependencyRepairService | undefined;
 let captureService: CaptureService | undefined;
 let agentFileIngressRecoveryService: AgentFileIngressRecoveryService | undefined;
 let managedCopyRootService: ManagedCopyRootService | undefined;
@@ -1246,6 +1252,11 @@ const getToolchainRepairService = (): ToolchainRepairService => {
     openReleases: (url) => shell.openExternal(url)
   });
   return toolchainRepairService;
+};
+
+const getJobDependencyRepairService = (): JobDependencyRepairService => {
+  jobDependencyRepairService ??= new JobDependencyRepairService();
+  return jobDependencyRepairService;
 };
 
 const recoverReadyLocalCapabilities = (): ToolchainHealth =>
@@ -3515,6 +3526,46 @@ ipcMain.handle("jobs.retry", async (_event, request: JobActionRequest) => {
     getJobClassExecutorRegistry().require(result.job.class).schedule?.(result.job.id);
   }
   return result;
+});
+ipcMain.handle(JOB_REPAIR_DEPENDENCY_CHANNEL, async (_event, value: JobDependencyRepairRequest) => {
+  const request = JobDependencyRepairRequestSchema.parse(value);
+  const jobs = getJobsService();
+  const preparation = getJobDependencyRepairService().prepare(jobs.readJob(request.jobId), request);
+  const identity = {
+    apiVersion: request.apiVersion,
+    requestId: request.requestId,
+    activeVaultId: request.activeVaultId,
+    jobId: request.jobId
+  };
+  if (preparation.status !== "ready") {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: preparation.status });
+  }
+  if (preparation.dependencyKind !== "local_tool" && preparation.dependencyKind !== "runtime_capability") {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: "ineligible" });
+  }
+  try {
+    // Recheck the existing capability owner first; only that owner may clear
+    // waiting_dependency and schedule the durable Job again.
+    recoverReadyLocalCapabilities();
+    const resumed = jobs.readJob(request.jobId);
+    if (!resumed || resumed.activeVaultId !== request.activeVaultId || resumed.state === "waiting_dependency") {
+      return JobDependencyRepairResultSchema.parse({ ...identity, status: "failed" });
+    }
+    return JobDependencyRepairResultSchema.parse({
+      ...identity,
+      status: "repaired",
+      job: {
+        id: resumed.id,
+        state: resumed.state,
+        updatedAt: resumed.updatedAt,
+        dependencyKind: preparation.dependencyKind,
+        requiredAction: preparation.requiredAction,
+        messageKey: preparation.messageKey
+      }
+    });
+  } catch {
+    return JobDependencyRepairResultSchema.parse({ ...identity, status: "failed" });
+  }
 });
 registerSourceReconnectIpc({
   ipcMain,
