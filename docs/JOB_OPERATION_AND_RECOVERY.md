@@ -193,7 +193,8 @@ revision. Dataset query stays read-only. Collection row/field mutation revalidat
 manifest/revision/schema/payload/target, publishes immutable revision, then switches manifest last.
 Saved-view create/rename/trash binds view/revision without changing rows/Dataset revision. Operations
 bind before/after identity; replay adopts, recovery adds only a missing Operation, and Undo writes
-forward, including restore. Drift is inert.
+forward, including restore. Relation-cell target navigation instead re-proves its source and target
+identity as a read only boundary; it creates no Job, revision, Operation, Activity or Undo. Drift is inert.
 
 A confirmed Markdown/TXT/PDF/DOCX/PPTX source refresh creates one parse Job bound to the
 opaque preview candidate and expected source revision. Confirmation rechecks candidate

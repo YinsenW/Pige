@@ -649,6 +649,10 @@ Dataset boundary:
   accepts current numeric scalar, numeric lookup/rollup or acyclic Pige-formula operands. Main rejects
   direct/indirect cycles and recomputes downstream formulas in stable topological order after base-cell edit,
   relation retarget or derived-definition update. CAS/Undo exposes no path/query.
+- `collections.openRelatedRecords` binds the active Vault, Dataset, source table/column/row and expected
+  revision. Main re-proves the current relation descriptor, target row ID and target table before returning
+  only that bounded target snapshot and stable row ID; null, dangling, stale or ineligible bindings fail
+  closed. This read creates no revision, Job, Operation, Activity item or Undo authority.
 - `collections.renameTable` binds the active Dataset revision, stable table ID and bounded display name.
   Main publishes an immutable revision and reversible Activity while preserving source names, rows,
   columns, formulas, relations and views; stale/duplicate results return only the safe current snapshot.
