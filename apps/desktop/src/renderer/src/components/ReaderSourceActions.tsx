@@ -105,6 +105,7 @@ export function ReaderSourceActions(props: {
   const ownerIdentityRef = useRef(props.ownerIdentity);
   const pendingRef = useRef<PendingSourceAction | null>(null);
   const triggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const sectionRef = useRef<HTMLDivElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingSourceAction | null>(null);
   const [notice, setNotice] = useState<{
     readonly sourceId: string;
@@ -168,10 +169,11 @@ export function ReaderSourceActions(props: {
       }
       const restoreFocus = (): void => {
         const trigger = triggerRefs.current.get(`${action}:${source.sourceId}`);
-        if (trigger?.isConnected) trigger.focus();
+        const target = trigger?.isConnected ? trigger : sectionRef.current;
+        target?.focus({ preventScroll: true });
       };
       if (typeof window.requestAnimationFrame === "function") {
-        window.requestAnimationFrame(restoreFocus);
+        window.requestAnimationFrame(() => window.requestAnimationFrame(restoreFocus));
       } else {
         window.setTimeout(restoreFocus, 0);
       }
@@ -199,7 +201,10 @@ export function ReaderSourceActions(props: {
       if (pendingRef.current === pending) {
         pendingRef.current = null;
         setPendingAction(null);
-        window.requestAnimationFrame(() => triggerRefs.current.get(`reconnect:${value.source.sourceId}`)?.focus());
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+          const trigger = triggerRefs.current.get(`reconnect:${value.source.sourceId}`);
+          (trigger?.isConnected ? trigger : sectionRef.current)?.focus({ preventScroll: true });
+        }));
       }
     }
   };
@@ -207,7 +212,7 @@ export function ReaderSourceActions(props: {
   if (eligibleSources.length === 0) return null;
 
   return (
-    <div aria-label={props.labels.region}>
+    <div ref={sectionRef} tabIndex={-1} role="group" aria-label={props.labels.region}>
       {eligibleSources.map((source) => {
         const outcome = notice?.sourceId === source.sourceId ? notice : null;
         return (
