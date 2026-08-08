@@ -16,8 +16,8 @@ export type ManagedCollectionRelatedRecordRequest = CollectionOpenRelatedRecords
 export type ManagedCollectionRelatedRecordResult = CollectionOpenRelatedRecordsResult;
 
 export interface ManagedCollectionRelatedRecordVaultPort {
-  readonly current(): { readonly vaultId: string } | undefined;
-  readonly activeVaultPath(): string | undefined;
+  current(): { readonly vaultId: string } | undefined;
+  activeVaultPath(): string | undefined;
 }
 
 /** Main-owned, bounded navigation from one relation cell to its target Dataset table. */
