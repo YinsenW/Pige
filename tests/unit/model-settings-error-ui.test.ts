@@ -33,6 +33,22 @@ afterEach(() => {
 });
 
 describe("Models error ownership", () => {
+  it("projects only the safe credential-protection state and its reconnect boundary", async () => {
+    const dom = createDom();
+    const summary: ModelProviderSettingsSummary = {
+      ...presetSummary(),
+      credentialStorage: { mode: "unavailable" }
+    };
+    const mount = await mountPanel(dom, summary, modelApi({}));
+
+    expect(mount.container.textContent).toContain(enMessages["models.credentialStorage"]);
+    expect(mount.container.textContent).toContain(enMessages["models.credentialStorageStatus.unavailable"]);
+    expect(mount.container.textContent).toContain(enMessages["models.credentialStorageDescription.unavailable"]);
+    expect(mount.container.textContent).not.toContain("provider_secret_");
+
+    await unmount(dom, mount.root);
+  });
+
   it("connects the reviewed DeepSeek Anthropic service through the existing preset flow", async () => {
     const dom = createDom();
     const summary = deepSeekAnthropicSummary();

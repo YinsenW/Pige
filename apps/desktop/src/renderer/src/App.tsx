@@ -9702,6 +9702,12 @@ export function ModelSettingsPanel(props: ModelSettingsPanelProps): React.JSX.El
     <section className="settings-page model-settings-page" aria-label={props.t("nav.models")}>
       {heading(props.t("models.title"), props.t("models.subtitle"))}
       {summaryFailure}
+      {summary ? (
+        <section className="settings-section">
+          <h2 className="settings-section-title">{props.t("models.credentialStorage")}</h2>
+          <div className="settings-card"><div className="settings-row"><span className="settings-row-copy"><strong>{props.t(`models.credentialStorageStatus.${summary.credentialStorage?.mode ?? "portable"}`)}</strong><span>{props.t(`models.credentialStorageDescription.${summary.credentialStorage?.mode ?? "portable"}`)}</span></span><span className="settings-status neutral">{props.t("privacy.localOnly")}</span></div></div>
+        </section>
+      ) : null}
       {providerMutationStatus?.kind === "provider_deleted" ? (
         <div
           ref={providerDeletedStatusRef}

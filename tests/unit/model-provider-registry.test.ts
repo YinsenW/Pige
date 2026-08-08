@@ -535,7 +535,7 @@ describe("model provider registry", () => {
     expect(fs.existsSync(path.join(root, "provider-connect-transaction.json"))).toBe(false);
   });
 
-  it("never invokes the retired OS encryption adapter for new or runtime credential access", async () => {
+  it("uses OS protection for new and runtime provider credential access", async () => {
     const crypto: SecretCryptoAdapter = {
       ...fakeCrypto,
       encryptString: vi.fn(fakeCrypto.encryptString),
@@ -545,14 +545,14 @@ describe("model provider registry", () => {
     await registry.addPresetProvider({ presetId: "openai", apiKey: "first-secret" });
     await registry.addPresetProvider({ presetId: "openai", apiKey: "second-secret" });
 
-    expect(crypto.encryptString).not.toHaveBeenCalled();
-    expect(crypto.decryptString).not.toHaveBeenCalled();
+    expect(crypto.encryptString).toHaveBeenCalled();
+    expect(crypto.decryptString).toHaveBeenCalled();
     expect(registry.summary().defaultBinding.state).toBe("ready");
     expect(fs.readFileSync(path.join(root, "provider-profiles.json"), "utf8")).not.toContain("second-secret");
     expect(fs.readFileSync(path.join(root, "model-profiles.json"), "utf8")).not.toContain("second-secret");
     expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("second-secret");
-    expect(crypto.encryptString).not.toHaveBeenCalled();
-    expect(crypto.decryptString).not.toHaveBeenCalled();
+    expect(crypto.encryptString).toHaveBeenCalled();
+    expect(crypto.decryptString).toHaveBeenCalled();
   });
 
   it("stores provider metadata and discovered model profiles without writing raw API keys to profile files", async () => {
@@ -579,7 +579,8 @@ describe("model provider registry", () => {
     expect(providerProfiles).not.toContain("sk-test-secret");
     expect(modelProfiles).not.toContain("sk-test-secret");
     expect(secrets).toContain('"schemaVersion": 2');
-    expect(secrets).toContain('"value": "sk-test-secret-123456789"');
+    expect(secrets).toContain('"storage": "os_protected"');
+    expect(secrets).not.toContain("sk-test-secret-123456789");
     if (process.platform !== "win32") {
       expect(fs.statSync(path.join(root, "secrets.json")).mode & 0o777).toBe(0o600);
     }
@@ -673,7 +674,7 @@ describe("model provider registry", () => {
     expect(fs.readFileSync(providersPath, "utf8")).toBe(legacyBytes);
   });
 
-  it("checks the selected runtime binding by secret reference without decrypting credentials", async () => {
+  it("fails closed when the selected runtime credential cannot be decrypted", async () => {
     const crypto: SecretCryptoAdapter = {
       ...fakeCrypto,
       encryptString: vi.fn(fakeCrypto.encryptString),
@@ -692,12 +693,18 @@ describe("model provider registry", () => {
 
     expect(registry.hasDefaultRuntimeBinding()).toBe(true);
     expect(registry.getDefaultRuntimeConfig()?.apiKey).toBe("sk-runtime-secret");
-    expect(crypto.encryptString).not.toHaveBeenCalled();
-    expect(crypto.decryptString).not.toHaveBeenCalled();
+    expect(crypto.encryptString).toHaveBeenCalled();
+    expect(crypto.decryptString).toHaveBeenCalled();
 
-    fs.writeFileSync(path.join(root, "secrets.json"), '{"schemaVersion":1,"secrets":[]}\n', "utf8");
+    const persistedSecrets = JSON.parse(fs.readFileSync(path.join(root, "secrets.json"), "utf8")) as {
+      readonly secrets: Array<{ encryptedValue?: string }>;
+    };
+    persistedSecrets.secrets[0]!.encryptedValue = Buffer.from("wrong-ciphertext", "utf8").toString("base64");
+    fs.writeFileSync(path.join(root, "secrets.json"), `${JSON.stringify(persistedSecrets)}\n`, "utf8");
     expect(registry.hasDefaultRuntimeBinding()).toBe(false);
-    expect(crypto.decryptString).not.toHaveBeenCalled();
+    expect(() => registry.getDefaultRuntimeConfig()).toThrowError(expect.objectContaining({
+      code: "secret_protection_unavailable"
+    }));
   });
 
   it("keeps retired keychain records inert until the user reconnects that Provider", () => {
@@ -730,9 +737,11 @@ describe("model provider registry", () => {
 
     secrets.replaceProviderSecret(ref, "reconnected-local-value");
     expect(secrets.readProviderSecret(ref)).toBe("reconnected-local-value");
+    expect(crypto.encryptString).toHaveBeenCalled();
     const stored = fs.readFileSync(path.join(root, "secrets.json"), "utf8");
     expect(stored).toContain('"schemaVersion": 2');
-    expect(stored).toContain('"value": "reconnected-local-value"');
+    expect(stored).toContain('"storage": "os_protected"');
+    expect(stored).not.toContain("reconnected-local-value");
     expect(stored).not.toContain("retired-keychain-ciphertext");
   });
 
