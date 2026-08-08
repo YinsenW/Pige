@@ -11,6 +11,8 @@ import type {
   CollectionRenameViewRequest, CollectionRenameViewResult,
   CollectionTrashViewRequest, CollectionTrashViewResult,
   CollectionOpenResult,
+  CollectionOpenRelatedRecordsRequest,
+  CollectionOpenRelatedRecordsResult,
   CollectionRevealRequest, CollectionRevealResult,
   CollectionOpenCitationResult,
   CollectionRenameColumnRequest, CollectionRenameColumnResult,
@@ -81,6 +83,66 @@ export function ManagedCollectionCitationPanel(props: CitationPanelProps): React
   </section>;
 }
 
+type RelatedRecordReady = Extract<CollectionOpenRelatedRecordsResult, { readonly status: "ready" }>;
+
+export function ManagedCollectionRelatedRecordPanel(props: {
+  readonly result: CollectionOpenRelatedRecordsResult;
+  readonly onClose: () => void;
+  readonly t: (key: string) => string;
+}): React.JSX.Element {
+  const panelRef = useRef<HTMLElement | null>(null);
+  const ready = props.result.status === "ready" ? props.result : undefined;
+  const snapshot = ready?.snapshot ?? (props.result.status === "empty" ? props.result.snapshot : undefined);
+  const statusMessage = props.result.status === "stale"
+    ? props.t("collection.relatedStale")
+    : props.result.status === "not_found" || props.result.status === "ineligible"
+      ? props.t("collection.relatedUnavailable")
+      : props.result.status === "failed"
+        ? props.t("collection.relatedFailed")
+        : props.result.status === "empty"
+          ? props.t("collection.relatedEmpty")
+          : undefined;
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const target = panel.querySelector<HTMLElement>('[data-related-target="true"]');
+    (target ?? panel).focus({ preventScroll: true });
+  }, [props.result]);
+  return (
+    <section ref={panelRef} className="settings-card settings-row tall managed-collection-related-record" aria-live="polite" aria-label={props.t("collection.relatedRecords")} tabIndex={-1}>
+      <header className="dataset-answer-header">
+        <div>
+          <p className="retrieval-eyebrow">{props.t("collection.relatedRecords")}</p>
+          <h2>{snapshot?.tableName ?? props.t("collection.relatedRecords")}</h2>
+        </div>
+        <button type="button" className="ghost back-button" onClick={props.onClose}>{props.t("collection.back")}</button>
+      </header>
+      {statusMessage ? <p className={props.result.status === "empty" ? "muted" : "settings-inline-status error"} role="status">{statusMessage}</p> : null}
+      {snapshot && ready ? <RelatedRecordTable ready={ready} t={props.t} /> : null}
+    </section>
+  );
+}
+
+function RelatedRecordTable(props: { readonly ready: RelatedRecordReady; readonly t: (key: string) => string }): React.JSX.Element {
+  return (
+    <div className="dataset-table-scroll" tabIndex={0} aria-label={props.t("collection.relatedTable")}>
+      <table className="dataset-table">
+        <caption>{props.ready.snapshot.tableName}</caption>
+        <thead><tr>{props.ready.snapshot.columns.map((column) => <th scope="col" key={column.columnId}>{column.label}</th>)}</tr></thead>
+        <tbody>{props.ready.snapshot.rows.map((row) => (
+          <tr key={row.rowId} data-related-row-id={row.rowId} data-related-target={row.rowId === props.ready.targetRowId ? "true" : undefined} tabIndex={-1} aria-current={row.rowId === props.ready.targetRowId ? "true" : undefined}>
+            {props.ready.snapshot.columns.map((column) => {
+              const cell = row.cells.find((candidate) => candidate.columnId === column.columnId);
+              return <td key={column.columnId}>{cell ? formatCollectionCellValue(cell.value) : "-"}</td>;
+            })}
+          </tr>
+        ))}</tbody>
+      </table>
+      {props.ready.snapshot.truncated ? <p className="muted retrieval-warning">{props.t("dataset.truncated")}</p> : null}
+    </div>
+  );
+}
+
 type EditNotice =
   | { readonly kind: "saved" }
   | { readonly kind: "row_added" }
@@ -126,6 +188,7 @@ export function ManagedCollectionPanel(props: {
   readonly onTrashView: (request: CollectionTrashViewRequest) => Promise<CollectionTrashViewResult>;
   readonly onAdoptSnapshot: (snapshot: CollectionSnapshot, expectedRevisionId: string, expectedTableId?: string) => boolean;
   readonly onEditCell: (request: CollectionCellEditRequest) => Promise<CollectionCellEditResult>;
+  readonly onOpenRelatedRecords?: (request: CollectionOpenRelatedRecordsRequest) => Promise<CollectionOpenRelatedRecordsResult>;
   readonly onReload: () => Promise<CollectionSnapshot | null>;
   readonly onLoadMoreRows?: (rowCursor: string) => Promise<CollectionOpenResult | null>;
   readonly t: (key: string) => string;
@@ -141,11 +204,15 @@ export function ManagedCollectionPanel(props: {
   const [cellFocusRequest, setCellFocusRequest] = useState<CellIdentity | null>(null);
   const [formulaEditRequest, setFormulaEditRequest] = useState<{ readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
   const [relationEditRequest, setRelationEditRequest] = useState<{ readonly kind: "cell" | "definition"; readonly rowId?: string; readonly columnId: string; readonly ownerKey: string; readonly revisionId: string } | null>(null);
+  const [relatedRecordResult, setRelatedRecordResult] = useState<CollectionOpenRelatedRecordsResult | null>(null);
+  const [relatedRecordBusy, setRelatedRecordBusy] = useState(false);
   const [visibleRows, setVisibleRows] = useState<CollectionSnapshot["rows"]>(props.snapshot.rows);
   const [nextRowCursor, setNextRowCursor] = useState(props.nextRowCursor);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsLoadFailed, setRowsLoadFailed] = useState(false);
   const requestSequence = useRef(0);
+  const relatedRequestSequence = useRef(0);
+  const relatedActiveRef = useRef<number | null>(null);
   const appendActiveRef = useRef<number | null>(null);
   const appendTriggerRef = useRef<HTMLButtonElement | null>(null);
   const trashActiveRef = useRef<{ readonly sequence: number; readonly rowId: string } | null>(null);
@@ -158,6 +225,8 @@ export function ManagedCollectionPanel(props: {
   const relationActiveRef = useRef(false); const lookupActiveRef = useRef(false); const rollupActiveRef = useRef(false);
   const viewControlsActiveRef = useRef(false);
   const editTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const relatedRecordTriggerRefs = useRef(new Map<string, HTMLButtonElement>());
+  const relatedRecordOriginKeyRef = useRef<string | null>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const pendingFocusRef = useRef<CellIdentity | null>(null);
   const pendingAppendFocusRef = useRef(false);
@@ -184,6 +253,8 @@ export function ManagedCollectionPanel(props: {
   paginationKeyRef.current = paginationKey;
   useEffect(() => {
     requestSequence.current += 1;
+    relatedRequestSequence.current += 1;
+    relatedActiveRef.current = null;
     appendActiveRef.current = null;
     trashActiveRef.current = null;
     columnActiveRef.current = null;
@@ -199,6 +270,7 @@ export function ManagedCollectionPanel(props: {
     pendingTrashFocusRef.current = null;
     pendingColumnTriggerFocusRef.current = false;
     pendingColumnEditorFocusRef.current = false;
+    relatedRecordOriginKeyRef.current = null;
     setEdit(null);
     setColumnDraft(null);
     setNotice(null);
@@ -211,6 +283,8 @@ export function ManagedCollectionPanel(props: {
     setCellFocusRequest(null);
     setFormulaEditRequest(null);
     setRelationEditRequest(null);
+    setRelatedRecordResult(null);
+    setRelatedRecordBusy(false);
   }, [ownerKey]);
   useEffect(() => {
     rowsLoadActiveRef.current = false;
@@ -238,6 +312,14 @@ export function ManagedCollectionPanel(props: {
     setCellFocusRequest(null);
     (button ?? panelRef.current)?.focus();
   }, [cellFocusRequest, props.snapshot.revisionId]);
+  useLayoutEffect(() => {
+    const result = relatedRecordResult;
+    if (!result || result.status === "ready" || result.status === "empty") return;
+    const trigger = relatedRecordOriginKeyRef.current
+      ? relatedRecordTriggerRefs.current.get(relatedRecordOriginKeyRef.current)
+      : undefined;
+    (trigger ?? panelRef.current)?.focus({ preventScroll: true });
+  }, [relatedRecordResult]);
   useLayoutEffect(() => {
     if (busy) return;
     if (pendingTrashFocusRef.current) {
@@ -490,6 +572,50 @@ export function ManagedCollectionPanel(props: {
   };
 
   const hasTrashActions = visibleRows.some((row) => row.canTrash);
+
+  const openRelatedRecords = async (identity: CellIdentity): Promise<void> => {
+    const openRelatedRecordsHandler = props.onOpenRelatedRecords;
+    if (!openRelatedRecordsHandler || busy || columnActionsBusy || viewControlsBusy || columnDraft || relatedActiveRef.current !== null) return;
+    const sequence = relatedRequestSequence.current + 1;
+    relatedRequestSequence.current = sequence;
+    relatedActiveRef.current = sequence;
+    relatedRecordOriginKeyRef.current = cellKey(identity);
+    const request: CollectionOpenRelatedRecordsRequest = {
+      apiVersion: 1,
+      requestId: createCollectionRequestId(),
+      activeVaultId: props.activeVaultId,
+      datasetId: props.snapshot.datasetId,
+      sourceTableId: props.snapshot.tableId,
+      sourceColumnId: identity.columnId,
+      sourceRowId: identity.rowId,
+      expectedRevisionId: props.snapshot.revisionId
+    };
+    const expectedOwnerKey = ownerKey;
+    setRelatedRecordBusy(true);
+    setRelatedRecordResult(null);
+    try {
+      const result = await openRelatedRecordsHandler(request);
+      if (sequence !== relatedRequestSequence.current || ownerKeyRef.current !== expectedOwnerKey ||
+          !collectionRelatedRecordIdentityMatches(request, result)) return;
+      setRelatedRecordResult(result);
+    } catch {
+      if (sequence === relatedRequestSequence.current && ownerKeyRef.current === expectedOwnerKey) {
+        setRelatedRecordResult({ ...request, status: "failed" });
+      }
+    } finally {
+      if (relatedActiveRef.current === sequence) relatedActiveRef.current = null;
+      if (sequence === relatedRequestSequence.current && ownerKeyRef.current === expectedOwnerKey) setRelatedRecordBusy(false);
+    }
+  };
+
+  const closeRelatedRecords = (): void => {
+    const trigger = relatedRecordOriginKeyRef.current
+      ? relatedRecordTriggerRefs.current.get(relatedRecordOriginKeyRef.current)
+      : undefined;
+    relatedRecordOriginKeyRef.current = null;
+    setRelatedRecordResult(null);
+    (trigger ?? panelRef.current)?.focus({ preventScroll: true });
+  };
 
   const loadMoreRows = async (): Promise<void> => {
     const cursor = nextRowCursor;
@@ -864,23 +990,38 @@ export function ManagedCollectionPanel(props: {
                           </button>
                         </form>
                       ) : column.relation && column.canEditRelation && typeof cellValue === "object" && cellValue?.kind === "relation" ? (
-                        <button
-                          type="button"
-                          className="ghost"
-                          disabled={busy || columnActionsBusy || viewControlsBusy || columnDraft !== null}
-                          ref={(element) => {
-                            if (element) editTriggerRefs.current.set(cellKey(identity), element);
-                            else editTriggerRefs.current.delete(cellKey(identity));
-                          }}
-                          aria-label={`${props.t("collection.editRelation")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
-                          onClick={() => {
-                            if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current) return;
-                            setNotice(null);
-                            setRelationEditRequest({ kind: "cell", ...identity, ownerKey, revisionId: props.snapshot.revisionId });
-                          }}
-                        >
-                          {formatCollectionCellValue(cellValue) || props.t("collection.relationEmpty")}
-                        </button>
+                        <div className="managed-collection-relation-actions">
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={busy || columnActionsBusy || viewControlsBusy || columnDraft !== null || relatedRecordBusy}
+                            ref={(element) => {
+                              if (element) editTriggerRefs.current.set(cellKey(identity), element);
+                              else editTriggerRefs.current.delete(cellKey(identity));
+                            }}
+                            aria-label={`${props.t("collection.editRelation")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
+                            onClick={() => {
+                              if (busy || columnActionsActiveRef.current || viewControlsActiveRef.current || columnDraft || appendActiveRef.current !== null || columnActiveRef.current !== null || trashActiveRef.current || relatedActiveRef.current !== null) return;
+                              setNotice(null);
+                              setRelationEditRequest({ kind: "cell", ...identity, ownerKey, revisionId: props.snapshot.revisionId });
+                            }}
+                          >
+                            {formatCollectionCellValue(cellValue) || props.t("collection.relationEmpty")}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            disabled={busy || columnActionsBusy || viewControlsBusy || columnDraft !== null || relatedRecordBusy}
+                            ref={(element) => {
+                              if (element) relatedRecordTriggerRefs.current.set(cellKey(identity), element);
+                              else relatedRecordTriggerRefs.current.delete(cellKey(identity));
+                            }}
+                            aria-label={`${props.t("collection.openRelatedRecords")}: ${column.label}, ${props.t("collection.row")} ${rowIndex + 1}`}
+                            onClick={() => void openRelatedRecords(identity)}
+                          >
+                            {relatedRecordBusy ? props.t("collection.openingRelatedRecord") : props.t("collection.openRelatedRecords")}
+                          </button>
+                        </div>
                       ) : cell.editable && isCollectionScalarValue(cellValue) ? (
                         <button
                           type="button"
@@ -937,6 +1078,7 @@ export function ManagedCollectionPanel(props: {
           </tbody>
         </table>
       </div>
+      {relatedRecordResult ? <ManagedCollectionRelatedRecordPanel result={relatedRecordResult} onClose={closeRelatedRecords} t={props.t} /> : null}
       {visibleRows.length === 0 ? <p className="muted">{props.t("collection.empty")}</p> : null}
       {rowsLoadFailed ? <p className="muted retrieval-warning" role="status">{props.t("collection.rowsLoadFailed")}</p> : null}
       {nextRowCursor ? (
@@ -967,6 +1109,18 @@ function collectionPaginationIdentity(activeVaultId: string, snapshot: Collectio
     activeView?.filter ?? null,
     activeView?.sort ?? null
   ]);
+}
+
+function collectionRelatedRecordIdentityMatches(
+  request: CollectionOpenRelatedRecordsRequest,
+  result: CollectionOpenRelatedRecordsResult
+): boolean {
+  return result.requestId === request.requestId &&
+    result.activeVaultId === request.activeVaultId &&
+    result.datasetId === request.datasetId &&
+    result.sourceTableId === request.sourceTableId &&
+    result.sourceColumnId === request.sourceColumnId &&
+    result.sourceRowId === request.sourceRowId;
 }
 
 function createCollectionRequestId(): `collection_request_${string}` {
