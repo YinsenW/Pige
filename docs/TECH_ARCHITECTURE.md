@@ -1119,9 +1119,10 @@ Agent/Skill boundaries; `docs/AGENT_RUNTIME_POLICY_CONTEXT.md` owns runtime effe
 Responsibilities:
 
 - Store preferences in their declared scope and export them without secrets.
-- Load API keys from non-portable machine-local app data without OS-keychain access;
-  restrict the file to the local OS user where supported and exclude it from Vaults,
-  Markdown, logs, diagnostics and default backups.
+- Load API keys from non-portable machine-local app data through injected Electron
+  `safeStorage` when available; restrict the file to the local OS user where supported,
+  project only its safe state, and exclude it from Vaults, Markdown, logs, diagnostics and
+  default backups.
 
 Settings categories:
 
@@ -1949,8 +1950,9 @@ Pin before implementing:
 - Web extraction: exact `@mozilla/readability` `0.6.0`, jsdom `29.1.1`, Undici `8.7.0`, and `@types/jsdom` `28.0.3`.
 - PPTX extraction: yauzl `3.4.0` plus fast-xml-parser `5.10.1`; JSZip remains Mammoth-transitive only.
 - Backup/restore archive engine: yazl/yauzl.
-- Secret storage: schema-v2 machine-local app-data file, owner-only POSIX mode where
-  supported, inert schema-v1 ciphertext, and reconnect without keychain access.
+- Secret storage: schema-v2 machine-local app-data file, injected Electron `safeStorage`
+  ciphertext when available, owner-only POSIX mode where supported, explicit portable/
+  unavailable state, protected-decrypt fail-closed behavior, and inert schema-v1 ciphertext.
 - Vector index backend: sqlite-vec behind `VectorIndexDriver`, or a documented fallback if packaging validation fails.
 - Packaging/update stack: electron-builder `26.15.3` plus electron-updater `6.8.9` with the immutable GitHub Releases alpha feed.
 - Security scanning: Dependabot, CodeQL, and npm audit in CI.

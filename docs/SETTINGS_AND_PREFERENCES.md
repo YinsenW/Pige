@@ -68,7 +68,7 @@ OS app data/
   settings.json                  machine-local non-secret settings
   provider-profiles.json          provider metadata without secrets
   model-profiles.json             model IDs and selected default model
-  secrets.json                    machine-local API keys and tokens; local-user access only
+  secrets.json                    machine-local API keys/tokens; OS-protected ciphertext when available
   local-capabilities.json         local tool/model/package status
   vault-bindings.json             vault_id -> machine-specific paths
   jobs/                           machine-local job records
@@ -144,7 +144,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Index rebuild requested | Index & Maintenance | `runtime_transient` job | Local Database Service | job record | Job backup policy | `none` | Starts a rebuildable `index_rebuild` job; unlike Reset Local Database, this does not delete derived state first |
 | Index/chunk health status | Index & Maintenance | `derived_status` | Local Database Service | SQLite/app data | No | `none` | Recomputed |
 | Provider template/profile metadata, preset identity, protocol, and Endpoint binding | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` | Journaled Connect or confirmed compatible/custom profile edit; startup rollback |
-| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS app data `secrets.json` | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement |
+| Provider credential when required | Models | `secret` | Settings and Secrets Service | OS app data `secrets.json`; Electron `safeStorage` when available | No | `explicit_warning` | After validated Connect or confirmed, revision-fenced replacement; protected decrypt failure requires reconnect |
 | Provider model inventory: exact ID, source, enabled state, optional alias/capabilities | Models | `machine_local` | Model Provider Registry | OS app data | No by default | `explicit_confirmation` for manual removal, otherwise `none` | Journaled Refresh; atomic manual/alias/enabled updates and revision-fenced manual removal with startup recovery |
 | Provider discovery/generation health | Models | `runtime_transient` | Model Provider Registry, Renderer | None | No | `none` | Session-local; discovery and generation truth remain separate |
 | Global Default Pi Agent model | Models | `machine_local` | Model Provider Registry, Agent Orchestrator | OS app data | No by default | `none` | New calls; must reference an enabled model |
@@ -161,7 +161,7 @@ it must preserve every declared field. Confirmation values use one canonical sch
 | Memory enabled state | Agent & Memory | `vault_portable` for vault memory | Agent Memory Service | `.pige/config.json` | Yes | `none` | New memory reads/writes |
 | Memory backup inclusion | Agent & Memory/Backup flow | `vault_portable` | Backup Service | `.pige/config.json` | Yes | `none` | Next backup |
 | Exceptional intervention policy (`confirmation.*` compatibility) | Agent & Memory | `vault_portable` | Agent Orchestrator, Change Proposal Service | `.pige/config.json` | Yes | `explicit_confirmation` | New jobs; cannot turn uncertainty into routine prompts |
-| Credential storage disclosure | Permissions & Privacy | `derived_status` | Settings and Secrets Service | None | No | `none` | Shows the fixed machine-local app-data policy |
+| Credential storage disclosure | Permissions & Privacy | `derived_status` | Settings and Secrets Service | None | No | `none` | Shows only `os_protected`, `portable`, or `unavailable`; it cannot expose or change credentials |
 | Permission mode/grants | Permissions & Privacy | `machine_vault_binding` | Permission Policy | OS app data | No | YOLO confirms | New effects |
 | Vault-scoped Skill enablement | Skills | `vault_portable` | Skill Registry Service | `.pige/skills/` metadata or `.pige/config.json` | Yes | `permission_broker` | New Agent runs |
 | Machine-local Skill enablement | Skills | `machine_local` | Skill Registry Service | OS app data | No | `permission_broker` | New Agent runs |
@@ -278,9 +278,8 @@ Allowed paths:
 
 Sensitive settings that always require explicit confirmation:
 
-- Provider credential replacement.
-- Provider credential storage mode or Provider/endpoint identity changes. The disclosed
-  Send behavior is not a content-policy setting.
+- Provider credential replacement or Provider/endpoint identity changes. The disclosed Send
+  behavior is not a content-policy setting; credential-storage mode is derived, not a setting.
 - YOLO enablement reuses confirmation; other mode/revoke actions are revision-fenced.
   Untrusted content cannot invoke them.
 - Provider profile changes.
@@ -401,6 +400,8 @@ Required tests:
 - No secret setting is stored in Markdown, SQLite, logs, prompts, diagnostics, operation records, or default backups.
 - The machine credential store rejects links, multiple-link files, oversized payloads,
   permission widening and root/file identity drift before a Provider secret is read or changed.
+- A schema-v2 portable record migrates without changing its reference when OS protection becomes
+  available; protected decrypt failure is explicit and never downgrades it to plaintext.
 - Active vault path and recent vault list never appear in `.pige/manifest.json`.
 - `.pige/config.json` contains only portable non-secret vault preferences.
 - External-root tests cover identity, disclosure, waits, restore, and warnings.

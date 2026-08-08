@@ -620,10 +620,11 @@ References:
 
 ### D-20260730-Machine-Local-App-Data-Secrets
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-30
 Revised: 2026-08-01
 Supersedes: D-20260709-Encrypted-Default-Secrets
+Superseded by: D-20260808-Provider-Secret-Protection
 
 Decision:
 
@@ -650,6 +651,43 @@ References:
 
 - `PRIVACY.md`
 - `docs/SECURITY_THREAT_MODEL.md`
+- `apps/desktop/src/main/services/secret-store.ts`
+
+### D-20260808-Provider-Secret-Protection
+
+Status: Accepted
+Date: 2026-08-08
+Supersedes: D-20260730-Machine-Local-App-Data-Secrets
+
+Decision:
+
+Provider credentials remain in the non-portable machine-local `secrets.json` owner. Main
+injects Electron `safeStorage`: schema-v2 records use OS-protected ciphertext when it is
+available, while Settings receives only `os_protected`, `portable`, or `unavailable`.
+
+Rationale:
+
+The prior no-keychain rule left supported platform protection unused and made the public
+storage contract diverge from the runtime boundary. The UI must disclose protection state
+without gaining a secret, ciphertext, path, or storage-mode mutation authority.
+
+Consequences:
+
+- A schema-v2 portable record migrates to ciphertext without changing its secret reference
+  when protection is available; restart resolves the same reference.
+- A protected decrypt/protection failure makes that credential unusable and requires
+  reconnect. It never downgrades ciphertext to plaintext.
+- Retired schema-v1 ciphertext remains inert and requires reconnect.
+- The owner-only no-follow file checks, backup/export exclusion, Provider-only use, and
+  raw-secret renderer/prompt/log/diagnostic boundary remain unchanged.
+
+References:
+
+- `PRIVACY.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/SETTINGS_AND_PREFERENCES.md`
+- `docs/PI_AGENT_AND_MODEL_PROVIDER_INTEGRATION.md`
+- `docs/API_AND_IPC_DESIGN.md`
 - `apps/desktop/src/main/services/secret-store.ts`
 
 ### D-20260709-Permissioned-External-Skills

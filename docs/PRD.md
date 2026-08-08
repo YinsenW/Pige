@@ -763,7 +763,8 @@ Models:
 - After BYOK setup, explicit Send transmits bounded selected context to the configured
   Provider with visible destination status and no second content-policy confirmation.
 - API keys are stored in machine-local Pige app data, excluded from Vaults and default
-  backups, and loaded without OS-keychain prompts.
+  backups, and use OS-protected storage when Electron provides it. Settings reports only a
+  safe protection state; unavailable protected credentials require reconnect.
 
 Local RAG:
 
@@ -1533,7 +1534,8 @@ Privacy promises:
 - API keys are stored only on the local machine, presented only to the configured
   provider for authentication, and never written into Markdown pages.
 - API keys use Pige's fixed machine-local app-data credential store. The store is not
-  portable, is excluded from default backups, and never invokes the OS keychain.
+  portable, is excluded from default backups, and uses Electron OS-protected ciphertext
+  when available; protected decrypt failure never falls back to plaintext.
 - Connecting and selecting a BYOK Provider Profile authorizes ordinary, private, and
   larger bounded calls to that destination. Setup discloses the boundary once; routine
   calls use non-blocking status instead of repeated prompts. Explicit Send transmits the

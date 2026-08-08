@@ -141,7 +141,9 @@ Rules:
 - Keys are secret-store-only; required/optional/none auth controls references. `none` uses
   an in-memory sentinel stripped before headers. Profiles stay out of backup.
 - Runtime credential resolution revalidates the bounded owner-only machine credential file
-  and supplies the selected key only to the reviewed protocol adapter. Restart reopens the
+  and supplies the selected key only to the reviewed protocol adapter. Electron `safeStorage`
+  protects schema-v2 records when available; a portable record migrates without changing its
+  reference, while protected decrypt failure makes the binding unusable. Restart reopens the
   same reference; Provider deletion removes it and later Pi resolution fails closed.
 - Schema rejects missing or non-`builtin_verified` boundary metadata and requires canonical
   HTTPS or loopback HTTP without userinfo/query/fragment. Taxonomy stays internal.

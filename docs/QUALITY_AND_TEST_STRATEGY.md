@@ -246,7 +246,9 @@ Tests must verify:
 - API keys are stored only through the secret store.
 - API keys do not appear in Markdown, SQLite, logs, conversation events, operation records, diagnostics, or default backups.
 - Provider profile DTOs return secret references or redacted status only, never raw keys.
-- Provider credentials load from non-portable machine-local app data without OS-keychain access.
+- Provider credentials use Main-injected OS protection when available; schema-v2 portable
+  migration, restart, safe status projection, and protected-decrypt failure must be covered
+  without exposing or downgrading a raw key.
 - Diagnostics export redacts provider/profile identifiers and excludes raw secrets.
 
 ## 6.1 Model Provider And Pi Agent Gates
