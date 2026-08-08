@@ -167,7 +167,10 @@ Vault fixtures:
 
 Security fixtures:
 
-- Malicious ZIP path traversal.
+- Generic Archive Source ZIPs: valid bounded inventory plus truncated, encrypted,
+  unsupported-compression, traversal/backslash/NUL/dot-segment, duplicate-normalized,
+  link/non-regular, count/expanded-size/depth/ratio-limit, source-drift, and restart/retry
+  fixtures proving zero extraction, recursion, execution, network, or model work.
 - Skill with scripts in staging.
 - Skill requesting shell/network/secret/delete capabilities.
 - Fake API key in source content.

@@ -5738,6 +5738,45 @@ References:
 - `docs/SOURCE_STORAGE_STRATEGY.md`
 - `docs/UI_PROTOTYPE.md`
 
+### D-20260808-Local-Zip-Archive-Inventory
+
+Status: Accepted
+Date: 2026-08-08
+
+Decision:
+
+Pige captures a user-selected local `.zip` as exactly one `archive` Source Record and one
+Source Page. The private `ZipArchiveInventoryService` uses the already bundled
+`yauzl@3.4.0` only for bounded central-directory inventory. It never extracts members,
+recurses into nested archives, creates member Sources or Pages, executes content, follows
+links, installs dependencies, or sends archive content to a model or network.
+
+Rationale:
+
+Users need to retain and inspect an archive as evidence without turning a file picker into an
+implicit import, extraction, execution, or decompression-bomb path. One checksum- and
+revision-bound inventory preserves provenance and makes retry/restart safe without making ZIP
+member paths renderer authority.
+
+Consequences:
+
+- Main accepts only a reproved regular snapshot under explicit count, expanded-size,
+  per-entry, name/depth, and compression-ratio limits; unsafe, encrypted, malformed, linked,
+  duplicate, or unsupported members fail before output.
+- A bounded private `metadata` Artifact records order-stable locators and exact source/limit
+  identity. Renderer projections expose only aggregate safe counts, sizes, and warnings.
+- Source drift discards output. Unavailable sources use existing reconnect waiting; malformed
+  input is final failure, and interrupted I/O is retryable only through the same reproved Job.
+- No new dependency, public IPC, renderer filesystem authority, or durable schema is created.
+
+References:
+
+- `docs/PRD.md`
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/SOURCE_STORAGE_STRATEGY.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/TECH_ARCHITECTURE.md`
+
 ### D-20260802-Portable-Safe-Preference-Transfer
 
 Status: Accepted

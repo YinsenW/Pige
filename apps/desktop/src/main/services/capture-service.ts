@@ -33,6 +33,7 @@ import { readBoundedSourceFileNoFollow, verifyReadableSourceFile } from "./sourc
 import { readVaultManifest } from "./vault-layout";
 import { ManagedCopyRootService, selectCaptureManagedCopyRoot } from "./managed-copy-root-service";
 import { authoredTextMetadataMatches, authoredTextSourceIdentity, type AuthoredTextProvenance } from "./home-authored-text-capture-service";
+import { ensureArchiveInventoryForExistingSource, isArchiveSourceKind, prepareArchiveSourceRecord } from "./archive-source-inventory-service";
 
 export interface CaptureVaultPort {
   current(): VaultSummary | undefined;
@@ -105,7 +106,7 @@ export interface AgentTurnUrlPreservationHooks {
 const FILE_KIND_BY_EXTENSION = new Map<string, SourceKind>([
   ...[".md", ".markdown"].map((extension) => [extension, "markdown_file"] as const),
   [".txt", "plain_text_file"], [".pdf", "pdf_file"], [".docx", "docx_file"], [".pptx", "pptx_file"],
-  [".csv", "csv_file"], [".xlsx", "xlsx_file"],
+  [".csv", "csv_file"], [".xlsx", "xlsx_file"], [".zip", "archive"],
   ...[".sqlite", ".sqlite3", ".db"].map((extension) => [extension, "sqlite_file"] as const),
   ...[".png", ".jpg", ".jpeg", ".webp", ".gif", ".tif", ".tiff", ".bmp"]
     .map((extension) => [extension, "image_file"] as const),
@@ -416,10 +417,11 @@ export class CaptureService {
           adoptedSnapshot,
           this.#managedRoots
         )) {
+          if (isArchiveSourceKind(sourceKind)) await ensureArchiveInventoryForExistingSource({ vaultPath, sourceRecordPath, archivePath: adoptedSnapshot.managedCopy?.destinationPath ?? boundSourcePath, expectedChecksum: adoptedSnapshot.checksum, expectedSize: adoptedSnapshot.size });
           sourceIds.push(sourceId);
           continue;
         }
-        const sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
+        let sourceRecord: SourceRecord = CurrentSourceRecordSchema.parse({
           id: sourceId,
           language: unknownLanguageFact("source_record"),
           kind: sourceKind,
@@ -454,16 +456,8 @@ export class CaptureService {
               agentTurnAttachmentSetHash: agentTurnBinding.attachmentSetHash
             }),
             originalExtension: extension,
-            parserStatus: isTextLikeFileSource(sourceKind)
-              ? "text_ready"
-              : isStructuredFileSource(sourceKind)
-                ? "waiting_agent_dataset_tool"
-                : isDeferredMediaSourceKind(sourceKind)
-                  ? "waiting_media_transcription"
-                : "waiting_parser_or_ocr",
-            parserRequired: !isTextLikeFileSource(sourceKind) &&
-              !isStructuredFileSource(sourceKind) &&
-              !isDeferredMediaSourceKind(sourceKind),
+            parserStatus: isTextLikeFileSource(sourceKind) ? "text_ready" : isStructuredFileSource(sourceKind) ? "waiting_agent_dataset_tool" : isDeferredMediaSourceKind(sourceKind) ? "waiting_media_transcription" : isArchiveSourceKind(sourceKind) ? "archive_inventory_pending" : "waiting_parser_or_ocr",
+            parserRequired: !isTextLikeFileSource(sourceKind) && !isStructuredFileSource(sourceKind) && !isDeferredMediaSourceKind(sourceKind) && !isArchiveSourceKind(sourceKind),
             ...(isStructuredFileSource(sourceKind) ? { datasetToolAvailable: true } : {}),
             ...(isDeferredMediaSourceKind(sourceKind) ? { mediaTranscriptionStatus: "unavailable" } : {}),
             ...(sqliteSidecars.length > 0 ? { sqliteLiveSidecars: sqliteSidecars } : {})
@@ -471,6 +465,7 @@ export class CaptureService {
           createdAt: timestamp,
           updatedAt: timestamp
         });
+        if (isArchiveSourceKind(sourceKind)) sourceRecord = (await prepareArchiveSourceRecord({ vaultPath, sourceRecord, archivePath: adoptedSnapshot.managedCopy?.destinationPath ?? boundSourcePath, expectedChecksum: adoptedSnapshot.checksum, expectedSize: adoptedSnapshot.size })).sourceRecord;
         writeJsonAtomic(resolveVaultPath(vaultPath, sourceRecordPath), sourceRecord);
         unpublishedSnapshot = undefined;
 

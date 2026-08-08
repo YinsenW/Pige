@@ -553,7 +553,7 @@ describe("Agent-turn source preservation", () => {
 
   it("rejects unsupported files without creating a source record", async () => {
     const { vaultPath, vault } = makeVault();
-    const sourcePath = path.join(path.dirname(vaultPath), "archive.zip");
+    const sourcePath = path.join(path.dirname(vaultPath), "unsupported.exe");
     fs.writeFileSync(sourcePath, "zip-placeholder", "utf8");
 
     const result = await makeService(vaultPath, vault).preserveFilesForAgentTurn({
@@ -566,7 +566,7 @@ describe("Agent-turn source preservation", () => {
     expect(result).toMatchObject({
       status: "rejected",
       sourceIds: [],
-      rejectedFiles: [{ displayName: "archive.zip", reason: "unsupported_type" }]
+      rejectedFiles: [{ displayName: "unsupported.exe", reason: "unsupported_type" }]
     });
     expect(findFileOptional(path.join(vaultPath, ".pige/source-records"), ".json")).toBeUndefined();
   });

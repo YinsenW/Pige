@@ -8,7 +8,7 @@ import { SourceRecordSchema, type SourceRecord } from "@pige/schemas";
 import { LegacyCaptureFixture } from "../helpers/legacy-capture-fixture";
 import { ingressSnapshotService } from "../../apps/desktop/src/main/services/ingress-snapshot-service";
 import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
-import { SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
+import { renderSourcePage, SourcePageService } from "../../apps/desktop/src/main/services/source-page-service";
 import {
   createVaultOnDisk,
   loadVaultSummary,
@@ -23,6 +23,37 @@ afterEach(() => {
 });
 
 describe("source page service", () => {
+  it("projects a bounded archive inventory without exposing archive paths or bodies", () => {
+    const fixture = makeTextFixture(false);
+    const archiveRecord = SourceRecordSchema.parse({
+      ...fixture.sourceRecord,
+      kind: "archive",
+      metadata: {
+        ...fixture.sourceRecord.metadata,
+        archiveInventoryStatus: "ready",
+        archiveInventoryEntryCount: 3,
+        archiveInventoryTotalUncompressedBytes: 2048,
+        archiveInventoryArtifactId: "art_archive_inventory"
+      }
+    });
+    const page = renderSourcePage({
+      pageId: "page_20260710_archive01",
+      pagePath: "sources/files/2026/page_20260710_archive01.md",
+      sourceRecord: archiveRecord,
+      sourceRecordPath: fixture.sourceRecordPath,
+      jobId: fixture.jobId,
+      title: "Evidence archive",
+      now: "2026-07-10T12:00:00.000Z",
+      vaultPath: fixture.vaultPath
+    });
+
+    expect(page).toContain("## Archive Inventory");
+    expect(page).toContain("Entries: 3");
+    expect(page).toContain("Expanded bytes: 2048");
+    expect(page).not.toContain(fixture.managedPath);
+    expect(page).not.toContain("Initial source text.");
+  });
+
   it("recovers a completed page write after a crash before checksum finalization", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "pige-source-page-test-"));
     tempRoots.push(root);

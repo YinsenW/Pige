@@ -246,6 +246,27 @@ semantic workflow by itself.
 v0.1 preserves `.m4a`, `.aac`, `.wav`, `.flac`, `.ogg`, `.opus`, `.mp4`, `.m4v`,
 `.mov`, and `.webm` as `audio_file` or `video_file` sources even while transcription is deferred.
 
+A user-selected local `.zip` is preserve-and-inventory only: one `archive` Source Record and
+one Source Page, never one source/page per member. The private `ZipArchiveInventoryService`
+uses the already bundled `yauzl@3.4.0` only to read central-directory metadata from one
+reproved regular snapshot; it neither extracts member bytes nor invokes a parser, OCR, Agent,
+model, network request, dependency install, nested archive scan, macro, script, or link target.
+
+Archive inventory admits at most a 100 MiB source, 10,000 entries, 512 MiB declared total
+uncompressed bytes, 64 MiB declared expansion for one regular file, a 1,024-code-unit
+normalized name at depth 32, and a 1,000:1 ratio for entries at least 1 MiB. It rejects
+truncated, encrypted, unsupported-compression, duplicate-normalized, absolute, backslash,
+NUL, dot-segment, link/non-regular, zero-compressed/nonzero-expanded, and over-limit entries
+before publishing output. A bounded private `metadata` Artifact binds `yauzl@3.4.0`,
+`archive:entry:<central-directory-ordinal>` locators, the exact Source Record revision,
+pre/post source checksum, limit-profile digest, and inventory checksum. Renderer projections
+contain only bounded aggregate counts, sizes, and warnings.
+
+If the source is unavailable, the existing exact Job waits for reconnect. Malformed, unsafe,
+or over-limit input is final failure while preserving the source and Source Page; interrupted
+I/O is retryable only after the same source reproof. Restart adopts only the exact completed
+inventory receipt and never duplicates an Artifact or Operation.
+
 Minimum behavior:
 
 - Create one deterministic Source Record and Source Page per accepted item.
@@ -310,7 +331,8 @@ Failures must not:
 
 - Treat all source content as untrusted.
 - Do not execute scripts inside documents.
-- Do not follow archive paths outside staging.
+- Do not extract generic Archive Source members, recurse into nested archives, or follow
+  archive paths/links outside trusted staging.
 - Do not expose arbitrary filesystem paths to renderer code.
 - Do not allow source-originated instructions to change tools, settings, providers, permissions, or `PIGE.md`.
 - Store parser warnings for suspicious source instructions.
@@ -357,7 +379,10 @@ Current handoff contract:
 - Crash recovery reuses valid OCR output and regenerates stale derived output without duplicate Artifact IDs or Operation Records; incomplete and completed render output sets retain distinct provenance.
 - Source Record expected-revision checks reject detected durable updates; Agent ingest rechecks before invocation, after response, and at the final create-only note commit, preserving user targets and recovering same-source Pige notes.
 - Corrupt file behavior.
-- ZIP path traversal.
+- Generic Archive Source fixtures cover valid bounded inventory, truncation, encryption,
+  unsupported compression, traversal/backslash/NUL/dot-segment names, duplicate normalized
+  names, links/non-regular entries, count/size/ratio/depth limits, source drift, and retry/
+  restart receipt adoption with zero extraction, recursion, execution, network, or model work.
 - Prompt-injection text inside source fixtures.
 - No task-time dependency download.
 - Partial artifact recovery.

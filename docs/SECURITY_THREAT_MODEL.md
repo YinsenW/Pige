@@ -220,13 +220,18 @@ Mitigations:
 - ImageIO/UTType and source revalidation fence format/frame/dimension/pixel/decode/path/
   symlink/checksum/protocol/time/output limits around Vision. TypeScript validates text/
   geometry; Operations and metadata never duplicate the OCR body.
-- Enforce size, file count, and path traversal checks for archives.
+- Generic Archive Source inventory reads only ZIP central-directory metadata from one reproved
+  regular snapshot. It rejects malformed/encrypted/unsupported entries, unsafe or duplicate
+  normalized names, links/non-regular members, and count, expanded-size, depth, or compression-
+  ratio limits before a bounded private metadata Artifact is published; it never extracts,
+  recurses, executes, opens link targets, downloads, or sends archive content to a model.
 - Preserve the source record and available source asset even when parsing fails.
 - Keep bundled parser tools updated through release process.
 
 Acceptance:
 
-- ZIP extraction cannot write outside staging.
+- ZIP extraction cannot write outside staging; generic Archive Source inventory extracts no
+  members and cannot publish after source revision/checksum drift.
 - Parser failure cannot corrupt vault pages.
 - A malformed image or helper failure cannot invoke shell/network behavior, overwrite the preserved source, escape the vault, or create Agent ingest from unvalidated text.
 - A hostile CSV/workbook/database cannot execute code, load an extension or external
