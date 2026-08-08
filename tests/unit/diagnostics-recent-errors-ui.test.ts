@@ -5,6 +5,7 @@ import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DiagnosticsRecentErrorsResult } from "@pige/contracts";
 import { DiagnosticsRecentErrorsCard } from "../../apps/desktop/src/renderer/src/components/DiagnosticsRecentErrorsCard";
+import { DiagnosticsRecentErrorsPanel } from "../../apps/desktop/src/renderer/src/components/DiagnosticsRecentErrorsPanel";
 
 const globals = ["window", "document", "navigator", "Node", "HTMLElement", "Event"] as const;
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
@@ -44,12 +45,56 @@ describe("DiagnosticsRecentErrorsCard", () => {
     expect(dom.window.document.querySelector("[role=alert]")?.textContent).toContain("system.recentErrorsUnavailable");
     await act(async () => root.unmount());
   });
+
+  it("keeps periodic refresh one-flight and ignores an echoed request mismatch", async () => {
+    const dom = installDom();
+    const pending = new Promise<DiagnosticsRecentErrorsResult>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const recentErrorsApi = vi.fn((request: { readonly requestId: string }) =>
+      Promise.resolve(recentErrorsResult(request.requestId))
+    );
+    recentErrorsApi.mockImplementationOnce(() => pending);
+    Object.defineProperty(dom.window, "pige", {
+      configurable: true,
+      value: { diagnostics: { recentErrors: recentErrorsApi } }
+    });
+    const intervalCallbacks: Array<() => void> = [];
+    vi.stubGlobal("setInterval", (callback: () => void) => {
+      intervalCallbacks.push(callback);
+      return 1;
+    });
+    vi.stubGlobal("clearInterval", vi.fn());
+    const root = createRoot(dom.window.document.querySelector("#root")!);
+    await act(async () => root.render(createElement(DiagnosticsRecentErrorsPanel, {
+      onPrepareSupport: vi.fn(), t: (key: string) => key
+    })));
+    expect(recentErrorsApi).toHaveBeenCalledOnce();
+    intervalCallbacks[0]?.();
+    intervalCallbacks[0]?.();
+    expect(recentErrorsApi).toHaveBeenCalledOnce();
+
+    resolveFirst(recentErrorsResult("diagrecentreq_wrongrequestid"));
+    await act(async () => await pending);
+    expect(dom.window.document.body.textContent).toContain("system.noRecentErrors");
+    intervalCallbacks[0]?.();
+    await act(async () => await Promise.resolve());
+    expect(recentErrorsApi).toHaveBeenCalledTimes(2);
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  });
 });
 
+let resolveFirst: (result: DiagnosticsRecentErrorsResult) => void = () => undefined;
+
 function recentErrors(): DiagnosticsRecentErrorsResult {
+  return recentErrorsResult("diagrecentreq_abcdefghijklmnop");
+}
+
+function recentErrorsResult(requestId: string): DiagnosticsRecentErrorsResult {
   return {
     apiVersion: 1,
-    requestId: "diagrecentreq_abcdefghijklmnop",
+    requestId,
     checkedAt: "2026-08-08T12:00:00.000Z",
     localOnly: true,
     eventSelectionRevision: `diagevents_${"a".repeat(64)}`,
