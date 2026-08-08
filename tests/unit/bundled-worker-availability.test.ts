@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DatasetIngestWorkerService } from "../../apps/desktop/src/main/services/dataset-ingest-worker-service";
 import { OfficeMediaMaterializerWorkerAdapter } from "../../apps/desktop/src/main/services/office-media-materializer-service";
 import { OfficeParserWorkerAdapter } from "../../apps/desktop/src/main/services/office-parser-service";
+import { PdfParserWorkerAdapter } from "../../apps/desktop/src/main/services/pdf-parser-service";
 
 describe("Bundled worker availability", () => {
   it("resolves public package entries when package metadata is not exported", () => {
@@ -17,6 +18,8 @@ describe("Bundled worker availability", () => {
     expect(new DatasetIngestWorkerService(undefined, undefined, resolveModule).isAvailable()).toBe(true);
     expect(new OfficeParserWorkerAdapter(undefined, undefined, resolveModule).isAvailable()).toBe(true);
     expect(new OfficeMediaMaterializerWorkerAdapter(undefined, undefined, resolveModule).isAvailable()).toBe(true);
+    expect(new PdfParserWorkerAdapter(undefined, undefined, resolveModule).isAvailable()).toBe(true);
+    expect(requested).toContain("@firecrawl/anydoc");
     expect(requested).toContain("fast-xml-parser");
     expect(requested).not.toContain("fast-xml-parser/package.json");
   });
@@ -25,5 +28,6 @@ describe("Bundled worker availability", () => {
     expect(new DatasetIngestWorkerService().isAvailable()).toBe(true);
     expect(new OfficeParserWorkerAdapter().isAvailable()).toBe(true);
     expect(new OfficeMediaMaterializerWorkerAdapter().isAvailable()).toBe(true);
+    expect(new PdfParserWorkerAdapter().isAvailable()).toBe(true);
   });
 });

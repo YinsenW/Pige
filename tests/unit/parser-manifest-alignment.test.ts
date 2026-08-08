@@ -2,8 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  ANYDOC_VERSION,
   FAST_XML_PARSER_VERSION,
-  MAMMOTH_VERSION,
   OFFICE_MEDIA_MATERIALIZER_MAX_BYTES_PER_ITEM,
   OFFICE_MEDIA_MATERIALIZER_MAX_TARGETS,
   OFFICE_MEDIA_MATERIALIZER_MAX_TOTAL_BYTES,
@@ -32,6 +32,14 @@ import {
   PDF_PAGE_RENDERER_VERSION,
   PDF_PAGE_RENDERER_WORKER_OLD_GENERATION_MB
 } from "../../apps/desktop/src/main/services/pdf-page-renderer-types";
+import {
+  PDF_PARSER_ENGINE,
+  PDF_PARSER_ID,
+  PDF_PARSER_MAX_BYTES,
+  PDF_PARSER_MAX_PAGES,
+  PDF_PARSER_TIMEOUT_MS,
+  PDF_PARSER_VERSION
+} from "../../apps/desktop/src/main/services/pdf-parser-types";
 
 const root = process.cwd();
 const manifestRoot = path.join(root, "resources/parser-manifests");
@@ -48,7 +56,7 @@ describe("parser and OCR release manifests", () => {
     };
 
     expect(Object.fromEntries(manifest.engines.map((engine) => [engine.id, engine.version]))).toEqual({
-      mammoth: MAMMOTH_VERSION,
+      anydoc: ANYDOC_VERSION,
       "fast-xml-parser": FAST_XML_PARSER_VERSION,
       yauzl: YAUZL_VERSION
     });
@@ -94,6 +102,30 @@ describe("parser and OCR release manifests", () => {
     });
     expect(fs.existsSync(path.join(root, manifest.workerPath))).toBe(true);
     expect(fs.existsSync(path.join(root, manifest.servicePath))).toBe(true);
+  });
+
+  it("binds the PDF semantic artifact identity to AnyDoc while retaining the page-locator bridge", () => {
+    const manifest = readManifest("pdfjs.parser.manifest.json") as {
+      id: string;
+      engine: string;
+      engineVersion: string;
+      sourceKinds: string[];
+      capabilities: string[];
+      limits: Record<string, number>;
+    };
+
+    expect(manifest).toMatchObject({
+      id: PDF_PARSER_ID,
+      engine: PDF_PARSER_ENGINE,
+      engineVersion: PDF_PARSER_VERSION,
+      sourceKinds: ["pdf_file"],
+      capabilities: expect.arrayContaining(["semantic_markdown", "page_locators_bridge", "ocr_handoff"]),
+      limits: {
+        maxBytes: PDF_PARSER_MAX_BYTES,
+        maxPages: PDF_PARSER_MAX_PAGES,
+        timeoutMs: PDF_PARSER_TIMEOUT_MS
+      }
+    });
   });
 
   it("lists every current parser/OCR manifest and leaves no empty provider-catalog placeholder", () => {

@@ -1,6 +1,12 @@
-export const PDF_PARSER_ID = "pdfjs_text";
-export const PDF_PARSER_ENGINE = "pdfjs-dist";
-export const PDF_PARSER_VERSION = "6.1.200";
+import {
+  ANYDOC_PARSER_ENGINE,
+  ANYDOC_PARSER_ID,
+  ANYDOC_PARSER_VERSION
+} from "./anydoc-converter";
+
+export const PDF_PARSER_ID = ANYDOC_PARSER_ID;
+export const PDF_PARSER_ENGINE = ANYDOC_PARSER_ENGINE;
+export const PDF_PARSER_VERSION = ANYDOC_PARSER_VERSION;
 export const PDF_PARSER_MAX_BYTES = 200 * 1024 * 1024;
 export const PDF_PARSER_MAX_PAGES = 2_000;
 export const PDF_PARSER_TIMEOUT_MS = 60_000;

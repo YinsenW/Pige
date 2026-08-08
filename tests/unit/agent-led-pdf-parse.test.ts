@@ -17,6 +17,7 @@ import { JobsService } from "../../apps/desktop/src/main/services/jobs-service";
 import type { ModelProviderRuntimeConfig } from "../../apps/desktop/src/main/services/model-provider-registry";
 import { extractPdfText } from "../../apps/desktop/src/main/services/pdf-parser-core";
 import { PdfParserService } from "../../apps/desktop/src/main/services/pdf-parser-service";
+import { PDF_PARSER_ENGINE } from "../../apps/desktop/src/main/services/pdf-parser-types";
 import {
   createPigeAgentToolCatalogHash,
   PiAgentRuntimeAdapter,
@@ -322,7 +323,7 @@ describe("Agent-led PDF parse tool", { timeout: 15_000 }, () => {
       ]);
       expect(source.metadata).toMatchObject({
         parserStatus: "parsed",
-        parserEngine: "pdfjs-dist",
+        parserEngine: PDF_PARSER_ENGINE,
         textCoverage: "high",
         agentTextReady: true
       });

@@ -2414,9 +2414,10 @@ References:
 
 ### D-20260710-Pdfjs-Worker-For-Embedded-Pdf-Text
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-10
 Revised: 2026-07-12
+Superseded by: D-20260808-AnyDoc-Local-Semantic-Document-Conversion
 
 Decision:
 
@@ -2446,9 +2447,10 @@ References:
 
 ### D-20260710-Bounded-Office-Openxml-Worker
 
-Status: Accepted
+Status: Superseded
 Date: 2026-07-10
 Revised: 2026-07-11
+Superseded by: D-20260808-AnyDoc-Local-Semantic-Document-Conversion
 
 Decision:
 
@@ -2475,6 +2477,54 @@ References:
 - `docs/RELEASE_ENGINEERING.md`
 - `docs/SECURITY_THREAT_MODEL.md`
 - `docs/TECH_ARCHITECTURE.md`
+
+### D-20260808-AnyDoc-Local-Semantic-Document-Conversion
+
+Status: Accepted
+Date: 2026-08-08
+Supersedes: D-20260710-Pdfjs-Worker-For-Embedded-Pdf-Text, D-20260710-Bounded-Office-Openxml-Worker
+
+Decision:
+
+Pige uses exact bundled `@firecrawl/anydoc` `0.1.7` as the local semantic
+Markdown/Document converter for the existing `pdf_file`, `docx_file`, and `pptx_file`
+source kinds. The adapter receives only bytes read from Pige's verified private source
+snapshot and calls only AnyDoc's in-memory `toMarkdownBytes`/`toDocument` APIs. It has
+no Firecrawl hosted API, CLI, `npx`, runtime download, or network/OCR authority.
+
+Pige retains its own source identity, artifact CAS/restart behavior, OpenXML archive
+preflight, DOCX/PPTX relationship, speaker-note and media bridges, plus PDF.js page
+inspection/rendering/OCR-candidate and page-citation positioning. AnyDoc does not expand
+capture formats or replace page-level provenance that it cannot prove.
+
+Rationale:
+
+One reviewed local N-API converter replaces Pige's former Mammoth and handwritten
+Office/PDF semantic conversion paths without weakening Pige's durable ownership,
+verified-snapshot boundary, or format-specific security controls. Keeping the locator and
+OCR bridges avoids substituting unproven document-level Markdown for required page/slide
+evidence.
+
+Consequences:
+
+- Parser metadata identifies semantic artifacts as `anydoc@0.1.7`, so older parser
+  outputs are safely revalidated and rebuilt through existing CAS/restart ownership.
+- AnyDoc failures map to Pige's body-free unsupported, malformed, encrypted,
+  resource-limit, missing-part, I/O, or generic parser outcomes; no upstream body or path
+  crosses the adapter boundary.
+- `fast-xml-parser` and `yauzl` remain for Pige-owned safe OpenXML/Dataset inspection;
+  `pdfjs-dist` and `@napi-rs/canvas` remain for PDF page rendering and OCR. Mammoth and
+  its JSZip conversion graph are not production dependencies.
+- Dependency manifests, NOTICE/SBOM, package-resource checks, and native addon release
+  smoke cover macOS arm64/x64 and Windows x64 before a dependency update is accepted.
+
+References:
+
+- `docs/TECH_ARCHITECTURE.md`
+- `docs/PARSER_INGEST_SPEC.md`
+- `docs/SECURITY_THREAT_MODEL.md`
+- `docs/PERFORMANCE_AND_RELIABILITY.md`
+- `docs/RELEASE_ENGINEERING.md`
 
 ### D-20260710-MacOS-Vision-Direct-Image-OCR
 

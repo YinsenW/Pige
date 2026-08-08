@@ -1,19 +1,19 @@
 {
   "schemaVersion": 1,
-  "id": "office_openxml",
+  "id": "anydoc@0.1.7",
   "engines": [
-    { "id": "mammoth", "version": "1.12.0", "sourceKinds": ["docx_file"] },
+    { "id": "anydoc", "version": "0.1.7", "sourceKinds": ["docx_file", "pptx_file"] },
     { "id": "fast-xml-parser", "version": "5.10.1", "sourceKinds": ["docx_file", "pptx_file"] },
     { "id": "yauzl", "version": "3.4.0", "sourceKinds": ["docx_file", "pptx_file"] }
   ],
   "capabilities": [
-    "semantic_text",
+    "semantic_markdown",
     "headings",
     "lists",
     "tables",
     "links",
     "slide_order",
-    "speaker_notes",
+    "speaker_notes_bridge",
     "media_references",
     "bounded_embedded_media_materialization",
     "pptx_media_ocr_locators",

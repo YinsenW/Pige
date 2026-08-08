@@ -8,7 +8,7 @@ These manifests describe Pige-owned parser and OCR adapters, their pinned engine
 
 Current manifests:
 
-- `pdfjs.parser.manifest.json`: bundled PDF.js text-extraction adapter.
+- `pdfjs.parser.manifest.json`: bundled AnyDoc semantic-PDF adapter with a separate PDF.js page-locator bridge.
 - `pdf-page-materializer.manifest.json`: bounded PDF.js + native Canvas page-to-PNG materializer for OCR handoff.
 - `office-openxml.parser.manifest.json`: bundled DOCX/PPTX semantic and OpenXML extraction adapter.
 - `web-readability.parser.manifest.json`: bundled inert HTML/Readability article extraction adapter.

@@ -239,7 +239,7 @@ for (const requiredName of [
   "@earendil-works/pi-ai",
   "pdfjs-dist",
   "@napi-rs/canvas",
-  "mammoth",
+  "@firecrawl/anydoc",
   "fast-xml-parser",
   "@mozilla/readability",
   "jsdom",

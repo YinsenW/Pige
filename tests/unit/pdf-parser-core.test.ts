@@ -34,7 +34,8 @@ describe("PDF parser core", () => {
       expect(result.text.slice(page.characterStart, page.characterEnd)).toBe(page.text);
     }
     expect(result.text).toContain("Pige keeps embedded PDF text local");
-    expect(result.text).toContain("--- Page 2 ---");
+    expect(result.text).toContain("The second page contains enough content");
+    expect(result.text).not.toContain("--- Page 2 ---");
     expect(result.textCoverage).toBe("high");
     expect(result.needsOcr).toBe(false);
     expect(result.agentTextReady).toBe(true);

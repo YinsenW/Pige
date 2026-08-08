@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { PigeDomainError } from "@pige/domain";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { convertAnyDocSnapshot } from "./anydoc-converter";
 import {
   PDF_PARSER_ENGINE,
   PDF_PARSER_ID,
@@ -80,16 +81,17 @@ export async function extractPdfText(request: PdfParserRequest): Promise<PdfExtr
     const title = normalizeMetadataTitle(metadata?.info && "Title" in metadata.info ? metadata.info.Title : undefined);
     const pagesWithText = pages.filter((page) => page.characterCount > 0).length;
     const meaningfulPages = pages.filter((page) => page.characterCount >= MIN_MEANINGFUL_PAGE_CHARACTERS).length;
-    const textCharacterCount = pages.reduce((total, page) => total + page.characterCount, 0);
-    const textCoverage = classifyCoverage(processedPageCount, meaningfulPages, textCharacterCount);
+    const locatorCharacterCount = pages.reduce((total, page) => total + page.characterCount, 0);
+    const textCoverage = classifyCoverage(processedPageCount, meaningfulPages, locatorCharacterCount);
     const ocrCandidatePages = pages.filter((page) => page.needsOcr).map((page) => page.page);
-    let text = "";
+    // PDF.js remains a bounded page-inspection and OCR/citation locator bridge.
+    // AnyDoc owns the durable semantic Markdown artifact.
+    const text = pagesWithText > 0
+      ? (await convertAnyDocSnapshot(request.filePath, "pdf", request.limits.maxBytes)).markdown
+      : "";
     const pagesWithOffsets = pages.map((page) => {
-      if (page.text.length === 0) return page;
-      text += `${text.length > 0 ? "\n\n" : ""}--- Page ${page.page} ---\n`;
-      const characterStart = text.length;
-      text += page.text;
-      return { ...page, characterStart, characterEnd: text.length };
+      const range = locatePageText(text, page.text);
+      return range ? { ...page, ...range } : page;
     });
     for (const page of pagesWithOffsets) {
       for (const warning of page.warnings) {
@@ -111,7 +113,7 @@ export async function extractPdfText(request: PdfParserRequest): Promise<PdfExtr
       pageCount: document.numPages,
       processedPageCount,
       pagesWithText,
-      textCharacterCount,
+      textCharacterCount: text.length,
       textCoverage,
       truncated,
       needsOcr: ocrCandidatePages.length > 0,
@@ -128,6 +130,13 @@ export async function extractPdfText(request: PdfParserRequest): Promise<PdfExtr
     await loadingTask.destroy().catch(() => undefined);
     throw normalizePdfError(caught);
   }
+}
+
+function locatePageText(text: string, pageText: string): Pick<PdfExtractionPage, "characterStart" | "characterEnd"> | undefined {
+  if (!text || !pageText) return undefined;
+  const exact = text.indexOf(pageText);
+  if (exact >= 0) return { characterStart: exact, characterEnd: exact + pageText.length };
+  return undefined;
 }
 
 async function readBoundedPdfData(filePath: string, maxBytes: number): Promise<Uint8Array> {

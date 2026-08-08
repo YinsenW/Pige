@@ -24,10 +24,10 @@
     },
     {
       "id": "pdf-parser",
-      "name": "PDF parser",
+      "name": "Document semantic parser",
       "required": true,
-      "bundledModule": "pdfjs-dist/package.json",
-      "repairHint": "The bundled PDF.js parser module is missing or damaged."
+      "bundledModule": "@firecrawl/anydoc",
+      "repairHint": "The bundled AnyDoc semantic parser module is missing or damaged."
     },
     {
       "id": "pdf-parser-runtime",
@@ -38,10 +38,10 @@
     },
     {
       "id": "office-docx-parser",
-      "name": "DOCX parser",
+      "name": "Office semantic parser",
       "required": true,
-      "bundledModule": "mammoth/package.json",
-      "repairHint": "The bundled DOCX parser module is missing or damaged."
+      "bundledModule": "@firecrawl/anydoc",
+      "repairHint": "The bundled AnyDoc semantic parser module is missing or damaged."
     },
     {
       "id": "office-openxml-parser",
