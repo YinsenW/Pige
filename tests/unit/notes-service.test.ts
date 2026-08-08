@@ -188,7 +188,7 @@ describe("notes service", () => {
     writePage({
       vaultPath, fileName: "claim.md", pageId, title: "Claim", pageType: "claim",
       sourceIds: ["src_20260801_claimsource"],
-      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []\n  supports: ["${supportedPageId}"]`
+      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: []\n  contradicts: []\n  supports: ["${supportedPageId}"]\n  supersedes: ["${supportedPageId}"]`
     });
     const notes = makeNotes(vaultPath, vault);
     const rendered = await notes.render({ pageId }, OWNER_ID);
@@ -197,6 +197,8 @@ describe("notes service", () => {
       revision: expect.stringMatching(/^noteeditrev_[a-f0-9]{64}$/u)
     });
     expect(rendered.claimSupports).toEqual({ canEdit: true, revision: rendered.claimConfidence!.revision,
+      items: [expect.objectContaining({ pageId: supportedPageId, title: "Supported Claim" })] });
+    expect(rendered.claimSupersessions).toEqual({ canEdit: true, revision: rendered.claimConfidence!.revision,
       items: [expect.objectContaining({ pageId: supportedPageId, title: "Supported Claim" })] });
     expect(notes.resolveManagedPageTarget(OWNER_ID, {
       activeVaultId: vault.vaultId, pageId, renderContextId: rendered.renderContextId!,

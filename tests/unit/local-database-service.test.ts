@@ -604,11 +604,11 @@ Beta conclusion.`
     const answer = "page_20260801_answernote";
     writePage(vaultPath, "wiki/claim-a.md", {
       id: claimA, title: "Claim A", type: "claim", sourceIds: ["src_20260801_claimalpha"], body: "Claim A.",
-      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: ["src_20260801_claimalpha#p1"]\n  contradicts: ["${claimB}"]\n  supports: ["${claimB}"]`
+      extraFrontmatter: `claim:\n  confidence: "medium"\n  evidence: ["src_20260801_claimalpha#p1"]\n  contradicts: ["${claimB}"]\n  supports: ["${claimB}"]\n  supersedes: ["${claimB}"]`
     });
     writePage(vaultPath, "wiki/claim-b.md", {
       id: claimB, title: "Claim B", type: "claim", sourceIds: ["src_20260801_claimbravo"], body: "Claim B.",
-      extraFrontmatter: "claim:\n  confidence: \"medium\"\n  evidence: [\"src_20260801_claimbravo#p1\"]\n  contradicts: []\n  supports: []"
+      extraFrontmatter: "claim:\n  confidence: \"medium\"\n  evidence: [\"src_20260801_claimbravo#p1\"]\n  contradicts: []\n  supports: []\n  supersedes: []"
     });
     writePage(vaultPath, "wiki/answer.md", {
       id: answer, title: "Answer", sourceIds: ["src_20260801_answernote"], body: "Grounded answer."
@@ -626,10 +626,12 @@ Beta conclusion.`
 
     expect(service.relatedPages(vaultPath, { pageId: claimA })?.outgoing).toMatchObject([
       { relationType: "contradicts", summary: { pageId: claimB } },
+      { relationType: "supersedes", summary: { pageId: claimB } },
       { relationType: "supports", summary: { pageId: claimB } }
     ]);
     expect(service.relatedPages(vaultPath, { pageId: claimB })?.backlinks).toMatchObject([
       { relationType: "contradicts", summary: { pageId: claimA } },
+      { relationType: "supersedes", summary: { pageId: claimA } },
       { relationType: "supports", summary: { pageId: claimA } }
     ]);
     expect(service.relatedPages(vaultPath, { pageId: "page_20260801_questionone" })?.outgoing).toMatchObject([

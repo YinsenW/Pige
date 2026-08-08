@@ -523,13 +523,19 @@ describe("desktop shell build contract", () => {
       schemasSource.indexOf("export const NoteAddTagRequestSchema")
     );
     expect(supportSchemas).toContain('NOTE_CHANGE_CLAIM_SUPPORT_CHANNEL = "notes.changeClaimSupport"');
+    expect(supportSchemas).toContain('NOTE_SEARCH_CLAIM_SUPERSESSIONS_CHANNEL = "notes.searchClaimSupersessions"');
+    expect(supportSchemas).toContain('NOTE_CHANGE_CLAIM_SUPERSESSION_CHANNEL = "notes.changeClaimSupersession"');
     expect(supportSchemas).toContain("renderContextId: NoteRenderContextIdSchema");
     expect(supportSchemas).toContain("expectedRevision: NoteEditorRevisionSchema");
     expect(supportSchemas).toContain("expectedTargetUpdatedAt");
     expect(contractsSource).toContain("readonly searchClaimSupports:");
     expect(contractsSource).toContain("readonly changeClaimSupport:");
+    expect(contractsSource).toContain("readonly searchClaimSupersessions:");
+    expect(contractsSource).toContain("readonly changeClaimSupersession:");
     expect(preloadSource).toContain("NoteSearchClaimSupportsRequestSchema.parse(request)");
     expect(preloadSource).toContain("NoteChangeClaimSupportResultSchema.parse(");
+    expect(preloadSource).toContain("NoteSearchClaimSupersessionsRequestSchema.parse(request)");
+    expect(preloadSource).toContain("NoteChangeClaimSupersessionResultSchema.parse(");
     for (const privateField of ["absolutePath", "pagePath", "body", "markdown", "checksum", "rawError"]) {
       expect(supportSchemas).not.toContain(privateField);
     }
