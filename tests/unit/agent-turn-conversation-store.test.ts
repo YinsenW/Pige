@@ -8,6 +8,10 @@ import type { AgentTurnAnswer } from "@pige/contracts";
 import type { ConversationEvent } from "@pige/schemas";
 import { AgentTurnConversationStore } from "../../apps/desktop/src/main/services/agent-turn-conversation-store";
 import { selectConversationTimelineMessages } from "../../apps/desktop/src/main/services/agent-conversation-pagination";
+import {
+  compactConversationContext,
+  conversationContextCompactionStatus
+} from "../../apps/desktop/src/main/services/conversation-context-compaction-service";
 import { readDurableAgentTurnAnswer } from "../../apps/desktop/src/main/services/durable-agent-turn-answer";
 
 const tempRoots: string[] = [];
@@ -826,9 +830,9 @@ describe("Agent turn conversation store", () => {
     const reader = new AgentTurnConversationStore();
     const transcriptPath = conversationPath(vaultPath, current.locator);
     const transcriptBefore = fs.readFileSync(transcriptPath, "utf8");
-    const compacted = reader.readCompactedContextBeforeUserTurn(vaultPath, current);
+    const compacted = compactConversationContext(reader.readConversationEventsBeforeUserTurn(vaultPath, current));
     const context = reader.readContextBeforeUserTurn(vaultPath, current);
-    const status = reader.readContextCompactionStatusBeforeUserTurn(vaultPath, current);
+    const status = conversationContextCompactionStatus(compacted);
     const restartedContext = new AgentTurnConversationStore().readContextBeforeUserTurn(vaultPath, current);
     const exact = reader.readConversationTimeline(vaultPath, current.event.conversationId, 5);
     const latest = reader.readLatestConversationTimeline(vaultPath, 5);

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -8,7 +8,6 @@ import type {
   AgentConversationHistoryListResult,
   AgentConversationInitialRequest,
   AgentConversationInitialTimeline,
-  AgentConversationContextCompactionStatus,
   AgentConversationRequest,
   AgentSubmitTurnRequest,
   AgentSubmitTurnAcceptedResult,
@@ -68,11 +67,13 @@ import type {
   AgentSourceToolSession
 } from "./agent-ingest-service";
 import { HOME_CAPTURE_AUTHORED_TEXT_TOOL_NAME, type HomeAuthoredTextCaptureService } from "./home-authored-text-capture-service";
+import type { ConversationCaptureReferenceInput } from "./agent-conversation-capture-reference";
 import {
-  captureReferenceTurnBinding,
-  type ConversationCaptureReferenceInput
-} from "./agent-conversation-capture-reference";
-import type { ConversationContextCompactionSnapshot } from "./conversation-context-compaction-service";
+  compactConversationContext,
+  createConversationContextHash,
+  readSafeConversationContextCompactionStatus,
+  type ConversationContextCompactionSnapshot
+} from "./conversation-context-compaction-service";
 import {
   DatasetQueryToolRequestSchema,
   type DatasetQueryCatalog,
@@ -859,7 +860,7 @@ export class HomeAgentService {
         preservedTurn.event.id,
         preservedTurn.inputHash
       );
-      const conversationContextSnapshot = this.#conversations.readCompactedContextBeforeUserTurn(vaultPath, activeTurn);
+      const conversationContextSnapshot = compactConversationContext(this.#conversations.readConversationEventsBeforeUserTurn(vaultPath, activeTurn));
       const conversationContext = conversationContextSnapshot.messages;
       const history = toPiAgentHistory(conversationContext);
       const conversationContextHash = createConversationContextHash(
@@ -1189,7 +1190,7 @@ export class HomeAgentService {
         if (!currentBinding) throw createUnavailableRuntimeError(this.#models.summary().defaultBinding);
         const preservedText = preservedEvent.text;
         session.modelInvocationStarted = false;
-        const conversationContextSnapshot = this.#conversations.readCompactedContextBeforeUserTurn(vaultPath, currentPreserved);
+        const conversationContextSnapshot = compactConversationContext(this.#conversations.readConversationEventsBeforeUserTurn(vaultPath, currentPreserved));
         const conversationContext = conversationContextSnapshot.messages;
         const history = toPiAgentHistory(conversationContext);
         const conversationContextHash = createConversationContextHash(
@@ -3332,10 +3333,6 @@ function toHomeModelUsage(provider: ProviderProfileSummary): Exclude<HomeAgentMo
     : "cloud";
 }
 
-function hashValue(value: string): string {
-  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
-}
-
 function collectPreparedAgentTurnSourceIds(job: JobRecord): readonly string[] {
   const sourceIds = (job.inputRefs ?? [])
     .filter((ref) => ref.kind === "source" && ref.role === "agent_turn_source" && ref.id)
@@ -3360,47 +3357,6 @@ function toPiAgentHistory(
   return messages.map(({ role, text, createdAt }) => ({ role, text, createdAt }));
 }
 
-function createConversationContextHash(
-  conversations: AgentTurnConversationStore,
-  vaultPath: string,
-  turn: PreservedAgentTurn,
-  history: readonly AgentTurnConversationContextMessage[],
-  contextSnapshot: ConversationContextCompactionSnapshot
-): string {
-  const binding = captureReferenceTurnBinding(conversations, vaultPath, turn);
-  return hashValue(JSON.stringify({
-    conversationId: turn.event.conversationId,
-    eventId: turn.event.id,
-    inputHash: turn.inputHash,
-    parentEventId: turn.event.parentEventId ?? null,
-    history,
-    contextSnapshot,
-    tailEventId: binding.tailEventId,
-    captureReferences: binding.captureReferences
-  }));
-}
-
-function readSafeConversationContextCompactionStatus(
-  conversations: AgentTurnConversationStore,
-  vaultPath: string,
-  job: JobRecord
-): AgentConversationContextCompactionStatus | undefined {
-  if (!job.conversationEventId) return undefined;
-  const conversationRef = job.inputRefs?.find(
-    (ref) => ref.kind === "conversation" && ref.role === "agent_turn_user_event" && ref.id === job.conversationEventId
-  );
-  if (!conversationRef?.locator) return undefined;
-  try {
-    return conversations.readContextCompactionStatusBeforeUserTurn(
-      vaultPath,
-      conversationRef.locator,
-      job.conversationEventId
-    );
-  } catch {
-    return undefined;
-  }
-}
-
 function assertConversationContextCurrent(
   conversations: AgentTurnConversationStore,
   vaultPath: string,
@@ -3413,7 +3369,7 @@ function assertConversationContextCurrent(
     turn.event.id,
     turn.inputHash
   );
-  const currentContextSnapshot = conversations.readCompactedContextBeforeUserTurn(vaultPath, currentTurn);
+  const currentContextSnapshot = compactConversationContext(conversations.readConversationEventsBeforeUserTurn(vaultPath, currentTurn));
   const currentContext = currentContextSnapshot.messages;
   if (
     createConversationContextHash(

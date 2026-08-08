@@ -6655,13 +6655,7 @@ function HomeComposer(props: {
             );
           })}
           {!viewingHistory && latestTurn?.contextCompaction?.status === "compacted" ? (
-            <p
-              className="conversation-context-status"
-              data-conversation-context-status="compacted"
-              role="status"
-            >
-              {props.t("home.conversationContextCompacted")}
-            </p>
+            <p className="conversation-context-status" data-conversation-context-status="compacted" role="status">{props.t("home.conversationContextCompacted")}</p>
           ) : null}
           {visibleOptimisticConversationTurns.map((turn) => (
             <article

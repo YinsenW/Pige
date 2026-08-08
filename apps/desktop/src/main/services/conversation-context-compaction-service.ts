@@ -1,8 +1,14 @@
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
+import type { AgentConversationContextCompactionStatus } from "@pige/contracts";
 import { PigeDomainError } from "@pige/domain";
-import type { ConversationEvent } from "@pige/schemas";
-import type { AgentTurnConversationContextMessage } from "./agent-turn-conversation-store";
+import type { ConversationEvent, JobRecord } from "@pige/schemas";
+import { captureReferenceTurnBinding } from "./agent-conversation-capture-reference";
+import type {
+  AgentTurnConversationContextMessage,
+  AgentTurnConversationStore,
+  PreservedAgentTurn
+} from "./agent-turn-conversation-store";
 
 // Main owns compaction. Pi Agent receives only the bounded result; the JSONL is never rewritten.
 export const CONVERSATION_CONTEXT_COMPACTION_OWNER = "main.agent_context" as const;
@@ -47,6 +53,71 @@ export interface CompactedConversationContext {
 export interface ConversationContextCompactionStatus {
   readonly status: "not_needed" | "compacted";
   readonly omittedMessageCount: number;
+}
+
+export function compactConversationContextBeforeUserTurn(
+  events: readonly ConversationEvent[],
+  userEventId: string
+): CompactedConversationContext {
+  if (!/^evt_\d{8}_[a-z0-9]{8,}$/u.test(userEventId)) {
+    throw new PigeDomainError("agent_runtime.turn_binding_invalid", "The Agent context event identity is invalid.");
+  }
+  const matchingIndexes = events.flatMap((event, index) => event.id === userEventId ? [index] : []);
+  const matchingIndex = matchingIndexes[0];
+  if (matchingIndexes.length !== 1 || matchingIndex === undefined || events[matchingIndex]?.type !== "user_message") {
+    throw new PigeDomainError("agent_runtime.turn_unavailable", "The Agent context boundary was not found.");
+  }
+  return compactConversationContext(events.slice(0, matchingIndex));
+}
+
+export function conversationContextCompactionStatus(
+  context: CompactedConversationContext
+): ConversationContextCompactionStatus {
+  return {
+    status: context.snapshot.compacted ? "compacted" : "not_needed",
+    omittedMessageCount: context.snapshot.omittedMessageCount
+  };
+}
+
+export function createConversationContextHash(
+  conversations: AgentTurnConversationStore,
+  vaultPath: string,
+  turn: PreservedAgentTurn,
+  history: readonly AgentTurnConversationContextMessage[],
+  contextSnapshot: ConversationContextCompactionSnapshot
+): string {
+  const binding = captureReferenceTurnBinding(conversations, vaultPath, turn);
+  return hashValue(JSON.stringify({
+    conversationId: turn.event.conversationId,
+    eventId: turn.event.id,
+    inputHash: turn.inputHash,
+    parentEventId: turn.event.parentEventId ?? null,
+    history,
+    contextSnapshot,
+    tailEventId: binding.tailEventId,
+    captureReferences: binding.captureReferences
+  }));
+}
+
+export function readSafeConversationContextCompactionStatus(
+  conversations: AgentTurnConversationStore,
+  vaultPath: string,
+  job: JobRecord
+): AgentConversationContextCompactionStatus | undefined {
+  if (!job.conversationEventId) return undefined;
+  const conversationRef = job.inputRefs?.find(
+    (ref) => ref.kind === "conversation" && ref.role === "agent_turn_user_event" && ref.id === job.conversationEventId
+  );
+  if (!conversationRef?.locator) return undefined;
+  try {
+    return conversationContextCompactionStatus(
+      compactConversationContext(
+        conversations.readConversationEventsBeforeUserTurn(vaultPath, conversationRef.locator, job.conversationEventId)
+      )
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 const DEFAULT_POLICY: Required<ConversationContextCompactionPolicy> = {
@@ -270,6 +341,10 @@ function estimateTokens(text: string): number {
 
 function hashEvents(events: readonly ConversationEvent[]): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(events)).digest("hex")}`;
+}
+
+function hashValue(value: string): string {
+  return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 function referenceCountKey(label: string): string {
