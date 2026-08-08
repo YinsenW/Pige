@@ -56,7 +56,8 @@ describe("Knowledge Tree renderer", () => {
     );
     expect(rootNode.dataset.knowledgeDensity).toBe("5");
     expect(rootNode.dataset.knowledgeLeafCount).toBe("5");
-    expect(rootNode.classList.contains("density-2")).toBe(true);
+    expect(rootNode.dataset.knowledgeLeaf).toBe("false");
+    expect(rootNode.classList.contains("density-2")).toBe(false);
     const meter = mount.container.querySelector<HTMLMeterElement>("meter.knowledge-tree-weight");
     expect(meter?.value).toBe(9);
     expect(meter?.max).toBe(9);
@@ -100,6 +101,7 @@ describe("Knowledge Tree renderer", () => {
     const conceptNode = treeItemNamed(mount.container, "Lexical retrieval");
     expect(conceptNode.dataset.knowledgeDensity).toBe("1");
     expect(conceptNode.dataset.knowledgeLeafCount).toBe("1");
+    expect(conceptNode.dataset.knowledgeLeaf).toBe("true");
     expect(conceptNode.classList.contains("density-1")).toBe(true);
     await click(dom, conceptNode);
     expect(conceptNode.getAttribute("aria-selected")).toBe("true");
@@ -270,6 +272,13 @@ describe("Knowledge Tree renderer", () => {
       ...base,
       roots: [{
         ...domain,
+        metrics: {
+          ...domain.metrics,
+          fragmentPageCount: 70,
+          sourceCount: 30,
+          leafCount: 10,
+          weight: 100
+        },
         children: [{ ...topic, children: [denseConcept, ...topic.children.slice(1)] }]
       }]
     };
@@ -281,10 +290,16 @@ describe("Knowledge Tree renderer", () => {
     expect(dense.dataset.knowledgeLeafCount).toBe("10");
     expect(dense.classList.contains("density-3")).toBe(true);
     expect(dense.classList.contains("needs-review")).toBe(true);
+    expect(dense.dataset.knowledgeLeaf).toBe("true");
     expect(Number(dense.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")))
       .toBeGreaterThan(Number(sparse.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r")));
+    expect(Number(dense.querySelector("circle:not(.knowledge-map-pulse)")?.getAttribute("r"))).toBeGreaterThan(4);
     expect(dense.getAttribute("aria-description")).toContain("6 fragments, 4 sources, 10 leaves. Evidence density 10.");
     expect(dense.getAttribute("aria-description")).toContain("Needs review.");
+
+    await click(dom, dense);
+    expect(dense.classList.contains("active")).toBe(true);
+    expect(dense.classList.contains("needs-review")).toBe(true);
 
     await unmount(dom, mount.root);
   });

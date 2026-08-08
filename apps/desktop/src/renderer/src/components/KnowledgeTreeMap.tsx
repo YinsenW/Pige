@@ -36,6 +36,7 @@ type VisualNode = {
   readonly fragmentCount: number;
   readonly sourceCount: number;
   readonly leafCount: number;
+  readonly isLeaf: boolean;
   readonly status: KnowledgeTreeNode["status"] | KnowledgeTreePageRef["status"] | "active";
   readonly siblingIndex: number;
   readonly siblingCount: number;
@@ -584,6 +585,7 @@ export function KnowledgeTreeMap(props: {
                 const densityBand = evidenceDensityBand(density);
                 const radius = nodeRadius(node, visual.maxWeight, visual.maxDensity);
                 const showLabel = node.kind !== "page" && (node.level <= 1 || node.id === activeId);
+                const densityClass = node.isLeaf ? ` density-${densityBand}` : "";
                 return (
                   <g
                     key={node.id}
@@ -591,7 +593,7 @@ export function KnowledgeTreeMap(props: {
                       if (element) nodeRefs.current.set(node.id, element);
                       else nodeRefs.current.delete(node.id);
                     }}
-                    className={`knowledge-map-node level-${Math.min(node.level, 4)} density-${densityBand}${node.status === "needs_review" ? " needs-review" : ""}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
+                    className={`knowledge-map-node level-${Math.min(node.level, 4)}${densityClass}${node.status === "needs_review" ? " needs-review" : ""}${node.id === activeId ? " active" : ""}${dimmed ? " is-dimmed" : ""}`}
                     role="treeitem"
                     aria-level={node.level + 1}
                     aria-posinset={node.siblingIndex + 1}
@@ -603,6 +605,7 @@ export function KnowledgeTreeMap(props: {
                     aria-selected={node.id === activeId}
                     data-knowledge-density={density}
                     data-knowledge-leaf-count={node.leafCount}
+                    data-knowledge-leaf={node.isLeaf ? "true" : "false"}
                     tabIndex={interactive && node.id === activeId ? 0 : -1}
                     transform={`translate(${node.x} ${node.y})`}
                     onClick={() => {
@@ -845,6 +848,7 @@ function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) =
     fragmentCount: roots.reduce((sum, node) => sum + node.metrics.fragmentPageCount, 0),
     sourceCount: roots.reduce((sum, node) => sum + node.metrics.sourceCount, 0),
     leafCount: roots.reduce((sum, node) => sum + node.metrics.leafCount, 0),
+    isLeaf: false,
     status: "active",
     siblingIndex: 0,
     siblingCount: 1,
@@ -858,7 +862,7 @@ function buildVisualTree(roots: readonly KnowledgeTreeNode[], t: (key: string) =
     nodes,
     byId: new Map(nodes.map((node) => [node.id, node])),
     maxWeight: Math.max(1, ...nodes.map((node) => node.weight)),
-    maxDensity: Math.max(1, ...nodes.map(evidenceDensity)),
+    maxDensity: Math.max(1, ...nodes.filter((node) => node.isLeaf).map(evidenceDensity)),
     layoutWidth,
     fitZoom,
     fitPan
@@ -909,6 +913,7 @@ function buildKnowledgeLayoutNode(
     fragmentCount: node.metrics.fragmentPageCount,
     sourceCount: node.metrics.sourceCount,
     leafCount: node.metrics.leafCount,
+    isLeaf: node.children.length === 0 && node.pageRefs.length === 0,
     status: node.status,
     siblingIndex,
     siblingCount,
@@ -935,6 +940,7 @@ function buildPageLayoutNode(
     fragmentCount: 1,
     sourceCount: page.sourceIds.length,
     leafCount: 1,
+    isLeaf: true,
     status: page.status,
     siblingIndex,
     siblingCount,
@@ -966,9 +972,7 @@ function branchWidth(node: VisualNode, maxWeight: number): number {
 
 function nodeRadius(node: VisualNode, maxWeight: number, maxDensity: number): number {
   if (node.kind === "root") return 6.8;
-  const ratio = Math.max(.08, node.kind === "domain" || node.kind === "topic"
-    ? node.weight / maxWeight
-    : evidenceDensity(node) / maxDensity);
+  const ratio = Math.max(.08, node.isLeaf ? evidenceDensity(node) / maxDensity : node.weight / maxWeight);
   return Math.min(6.2, 1.65 + Math.pow(ratio, .52) * (node.level <= 1 ? 5 : 3.2));
 }
 
