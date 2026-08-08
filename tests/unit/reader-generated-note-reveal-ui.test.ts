@@ -77,10 +77,14 @@ describe("ReaderGeneratedNoteRevealAction", () => {
       }));
       await settle(harness.dom);
     });
+    const replacement = harness.container.querySelector<HTMLButtonElement>("button")!;
+    await act(async () => { await settle(harness.dom); });
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
     const request = onReveal.mock.calls[0]![0];
     await act(async () => { pending.resolve({ ...request, status: "failed" }); await pending.promise; await settle(harness.dom); });
     expect(harness.container.querySelector('[role="status"]')).toBeNull();
     expect(harness.container.querySelector("button")?.hasAttribute("disabled")).toBe(false);
+    expect(harness.dom.window.document.activeElement).toBe(replacement);
     await harness.unmount();
   });
 });
