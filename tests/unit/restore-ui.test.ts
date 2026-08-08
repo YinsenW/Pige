@@ -1031,6 +1031,9 @@ describe("Restore identity UI", () => {
     const reconnect = button(container, "Choose new backup location");
     expect(container.textContent).toContain("The backup location is unavailable.");
     expect(container.textContent).not.toContain("A managed source location needs to be reconnected");
+    const jobStatus = container.querySelector<HTMLElement>(".backup-job-status");
+    expect(jobStatus?.getAttribute("role")).toBeNull();
+    expect(jobStatus?.querySelector('[role="status"]')?.textContent).toContain("The backup location is unavailable.");
     await act(async () => {
       reconnect.click();
       reconnect.click();
