@@ -173,6 +173,7 @@ Use entity pages for:
 Entity rules:
 
 - Entity pages should store canonical name, aliases, and identifiers where known.
+- Reader identifier edits are canonical, bounded current-page revisions: add/remove commits through the existing `update_page` Operation, and Activity Undo/restart recovery restores the exact prior Entity frontmatter.
 - Entity merges require identity, affected-link, base-hash, and recovery proof; otherwise preserve both.
 - The Agent must not infer sensitive personal facts without source evidence.
 

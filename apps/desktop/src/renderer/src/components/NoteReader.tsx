@@ -7,6 +7,7 @@ import type {
   NoteSetQuestionStateRequest, NoteSetQuestionStateResult,
   NoteSetClaimConfidenceRequest, NoteSetClaimConfidenceResult,
   NoteSetEntityTypeRequest, NoteSetEntityTypeResult,
+  NoteReadEntityIdentifiersRequest, NoteReadEntityIdentifiersResult, NoteChangeEntityIdentifierRequest, NoteChangeEntityIdentifierResult,
   NoteSearchEntityMentionsRequest, NoteSearchEntityMentionsResult, NoteChangeEntityMentionRequest, NoteChangeEntityMentionResult,
   NoteSearchQuestionAnswersRequest, NoteSearchQuestionAnswersResult,
   NoteChangeQuestionAnswerRequest, NoteChangeQuestionAnswerResult,
@@ -37,11 +38,8 @@ import { ReaderSelectionAskDialog, createReaderSelectionActionRequestId, createR
 import { ReaderNoteRelatedPanel, type NoteRelatedState } from "./ReaderNoteRelatedPanel";
 import { ReaderQuestionStateControl } from "./ReaderQuestionStateControl";
 import { ReaderClaimConfidenceControl } from "./ReaderClaimConfidenceControl";
-import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl"; import { ReaderEntityMentions } from "./ReaderEntityMentions";
-import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers";
-import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence";
-import { ReaderConceptParents } from "./ReaderConceptParents";
-import { ReaderTopicParents } from "./ReaderTopicParents";
+import { ReaderEntityTypeControl } from "./ReaderEntityTypeControl"; import { ReaderEntityMentions } from "./ReaderEntityMentions"; import { ReaderEntityIdentifiers } from "./ReaderEntityIdentifiers";
+import { ReaderQuestionAnswers } from "./ReaderQuestionAnswers"; import { ReaderClaimContradictions } from "./ReaderClaimContradictions"; import { ReaderClaimEvidence } from "./ReaderClaimEvidence"; import { ReaderConceptParents } from "./ReaderConceptParents"; import { ReaderTopicParents } from "./ReaderTopicParents";
 import { createReaderQuoteIntoCapture, type ReaderQuoteIntoCapture } from "../reader-quote-into-capture";
 export type { NoteRelatedState } from "./ReaderNoteRelatedPanel";
 function readerSelectionEndpoint(
@@ -103,6 +101,7 @@ export function NoteReader(props: {
   readonly onClaimConfidenceChanged?: (render: NoteRenderResult) => void;
   readonly onSetEntityType?: (request: NoteSetEntityTypeRequest) => Promise<NoteSetEntityTypeResult>;
   readonly onEntityTypeChanged?: (render: NoteRenderResult) => void;
+  readonly onReadEntityIdentifiers?: (request: NoteReadEntityIdentifiersRequest) => Promise<NoteReadEntityIdentifiersResult>; readonly onChangeEntityIdentifier?: (request: NoteChangeEntityIdentifierRequest) => Promise<NoteChangeEntityIdentifierResult>;
   readonly onSearchEntityMentions?: (request: NoteSearchEntityMentionsRequest) => Promise<NoteSearchEntityMentionsResult>; readonly onChangeEntityMention?: (request: NoteChangeEntityMentionRequest) => Promise<NoteChangeEntityMentionResult>;
   readonly onSearchQuestionAnswers?: (request: NoteSearchQuestionAnswersRequest) => Promise<NoteSearchQuestionAnswersResult>;
   readonly onChangeQuestionAnswer?: (request: NoteChangeQuestionAnswerRequest) => Promise<NoteChangeQuestionAnswerResult>;
@@ -946,6 +945,7 @@ export function NoteReader(props: {
       ) : null}
       {props.activeVaultId && props.onSearchEntityMentions && props.onChangeEntityMention && props.onEntityTypeChanged
         ? <ReaderEntityMentions activeVaultId={props.activeVaultId} note={props.note} search={props.onSearchEntityMentions} change={props.onChangeEntityMention} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
+      {props.activeVaultId && props.onReadEntityIdentifiers && props.onChangeEntityIdentifier && props.onEntityTypeChanged ? <ReaderEntityIdentifiers activeVaultId={props.activeVaultId} note={props.note} read={props.onReadEntityIdentifiers} change={props.onChangeEntityIdentifier} onCommitted={props.onEntityTypeChanged} t={props.t} /> : null}
       {props.activeVaultId && props.onSearchClaimContradictions && props.onChangeClaimContradiction && props.onQuestionStateChanged ? (
         <ReaderClaimContradictions activeVaultId={props.activeVaultId} note={props.note}
           search={props.onSearchClaimContradictions} change={props.onChangeClaimContradiction}

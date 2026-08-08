@@ -199,6 +199,10 @@ import {
   NoteRevealGeneratedRequestSchema,
   NoteRevealGeneratedResultSchema,
   NoteRenderResultSchema,
+  NoteReadEntityIdentifiersRequestSchema,
+  NoteReadEntityIdentifiersResultSchema,
+  NoteChangeEntityIdentifierRequestSchema,
+  NoteChangeEntityIdentifierResultSchema,
   NoteSearchEntityMentionsRequestSchema,
   NoteSearchEntityMentionsResultSchema,
   NoteChangeEntityMentionRequestSchema,
@@ -5536,6 +5540,21 @@ describe("schemas", () => {
     expect(() => NoteChangeEntityMentionRequestSchema.parse({ ...add, localPath: "/private/note.md" })).toThrow();
     expect(() => NoteChangeEntityMentionRequestSchema.parse({ ...add, expectedTargetUpdatedAt: undefined })).toThrow();
     expect(NoteChangeEntityMentionResultSchema.parse({ ...add, status: "stale" })).toMatchObject({ status: "stale" });
+  });
+
+  it("keeps Entity identifier reads and changes renderer-safe and revision-fenced", () => {
+    const identity = { apiVersion: 1 as const, requestId: "entityidentifierreq_abcdefghijklmnop",
+      activeVaultId: "vault_20260801_entities", currentPageId: "page_20260801_entity001",
+      renderContextId: "notectx_0123456789abcdef0123456789abcdef",
+      expectedRevision: `noteeditrev_${"a".repeat(64)}` };
+    expect(NoteReadEntityIdentifiersRequestSchema.parse(identity)).toEqual(identity);
+    expect(NoteReadEntityIdentifiersResultSchema.parse({ ...identity, status: "ready", identifiers: ["wikidata:Q42"],
+      canEdit: true, revision: identity.expectedRevision })).toMatchObject({ status: "ready", identifiers: ["wikidata:Q42"] });
+    const change = { ...identity, action: "add" as const, identifier: "orcid:0000-0002-1825-0097" };
+    expect(NoteChangeEntityIdentifierRequestSchema.parse(change)).toEqual(change);
+    expect(() => NoteChangeEntityIdentifierRequestSchema.parse({ ...change, body: "private" })).toThrow();
+    expect(() => NoteChangeEntityIdentifierRequestSchema.parse({ ...change, identifier: "  \u0000  " })).toThrow();
+    expect(NoteChangeEntityIdentifierResultSchema.parse({ ...change, status: "stale" })).toMatchObject({ status: "stale" });
   });
 
   it("keeps topic hierarchy search and mutation renderer-safe and revision-fenced", () => {
